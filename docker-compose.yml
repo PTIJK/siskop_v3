@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: siskop_db
+    environment:
+      POSTGRES_USER: siskop
+      POSTGRES_PASSWORD: siskop_password
+      POSTGRES_DB: siskop_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - siskop_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U siskop"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  siskop_pgdata:
