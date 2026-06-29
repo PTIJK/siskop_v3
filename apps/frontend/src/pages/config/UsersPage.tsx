@@ -47,8 +47,8 @@ export function UsersPage() {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [apiError, setApiError] = useState('');
 
-  const addForm = useForm({ resolver: zodResolver(addSchema) });
-  const editForm = useForm({ resolver: zodResolver(editSchema) });
+  const addForm = useForm<z.infer<typeof addSchema>>({ resolver: zodResolver(addSchema) });
+  const editForm = useForm<z.infer<typeof editSchema>>({ resolver: zodResolver(editSchema) });
 
   const fetchUsers = () => {
     setIsLoading(true);

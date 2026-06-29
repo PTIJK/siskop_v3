@@ -63,7 +63,7 @@ interface NavItemWithChildren {
   label: string;
   href: string;
   icon: React.ElementType;
-  module: keyof ReturnType<typeof usePermissions>['permissions'] & string;
+  module: 'dashboard' | 'members' | 'savings' | 'loans' | 'reports' | 'config' | 'users' | 'roles';
   action: 'read';
   children?: { label: string; href: string; icon?: React.ElementType }[];
 }
@@ -167,7 +167,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
           return (
             <NavItemComponent
               key={item.href}
-              item={item as NavItemWithChildren}
+              item={item as unknown as NavItemWithChildren}
               onClose={onClose}
             />
           );

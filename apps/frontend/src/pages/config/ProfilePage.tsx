@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -37,8 +37,10 @@ export function ProfilePage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(tenant?.logoUrl ?? null);
 
-  const profileForm = useForm({ resolver: zodResolver(profileSchema), defaultValues: { name: user?.name ?? '' } });
-  const passwordForm = useForm({ resolver: zodResolver(passwordSchema) });
+  type ProfileFormValues = z.infer<typeof profileSchema>;
+  type PasswordFormValues = z.infer<typeof passwordSchema>;
+  const profileForm = useForm<ProfileFormValues>({ resolver: zodResolver(profileSchema), defaultValues: { name: user?.name ?? '' } });
+  const passwordForm = useForm<PasswordFormValues>({ resolver: zodResolver(passwordSchema) });
 
   const onProfileSubmit = async (data: { name: string }) => {
     setProfileError('');

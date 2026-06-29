@@ -36,7 +36,7 @@ const MODULES: { key: Module; label: string; actions: { key: Action; label: stri
 
 const ALL_ACTIONS = ['create', 'read', 'update', 'delete', 'export'];
 
-function buildDefaultPermissions(): Permissions {
+function buildDefaultPermissions(): Record<string, Record<string, boolean>> {
   const p: Record<string, Record<string, boolean>> = {};
   for (const m of MODULES) {
     p[m.key] = {};
@@ -44,7 +44,7 @@ function buildDefaultPermissions(): Permissions {
       p[m.key][a] = false;
     }
   }
-  return p as Permissions;
+  return p;
 }
 
 export function RolesPage() {
@@ -76,7 +76,7 @@ export function RolesPage() {
 
   const openAdd = () => {
     setNewRoleName('');
-    setNewPerms(buildDefaultPermissions() as unknown as Record<string, Record<string, boolean>>);
+    setNewPerms(buildDefaultPermissions() as Record<string, Record<string, boolean>>);
     setApiError('');
     setAddDialog(true);
   };
