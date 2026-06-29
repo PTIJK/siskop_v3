@@ -1,0 +1,281 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── ENUMS ──────────────────────────────────────────────────────────────────────
+
+enum TenantType {
+  SYARIAH
+  KONVENSIONAL
+}
+
+enum SavingType {
+  POKOK
+  WAJIB
+  SUKARELA
+}
+
+enum RateType {
+  BUNGA
+  BAGI_HASIL
+  MARGIN
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+}
+
+enum LoanType {
+  SYARIAH
+  KONVENSIONAL
+}
+
+enum LoanStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  DEFAULTED
+}
+
+enum KOLCategory {
+  LANCAR
+  DALAM_PERHATIAN
+  KURANG_LANCAR
+  DIRAGUKAN
+  MACET
+}
+
+// ── PLATFORM ──────────────────────────────────────────────────────────────────
+
+model SubscriptionPackage {
+  id         String   @id @default(cuid())
+  name       String
+  price      Decimal  @db.Decimal(15, 2)
+  modules    String[]
+  maxUsers   Int
+  maxMembers Int
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  tenants Tenant[]
+}
+
+model Tenant {
+  id              String               @id @default(cuid())
+  name            String
+  slug            String               @unique
+  address         String
+  registrationNo  String               @unique
+  type            TenantType
+  cooperativeType String               @default("KSP")
+  logoUrl         String?
+  packageId       String?
+  package         SubscriptionPackage? @relation(fields: [packageId], references: [id])
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+
+  users         User[]
+  roles         Role[]
+  members       Member[]
+  savingConfigs SavingConfig[]
+  loanConfigs   LoanConfig[]
+  savings       Saving[]
+  loans         Loan[]
+  savingTxns    SavingTransaction[]
+  loanPayments  LoanPayment[]
+}
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+
+model Role {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  name        String
+  permissions Json
+  createdAt   DateTime @default(now())
+
+  users User[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id])
+  email        String
+  passwordHash String?
+  name         String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens      RefreshToken[]
+  savingTransactions SavingTransaction[]
+  loanPayments       LoanPayment[]
+
+  @@unique([tenantId, email])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ── MEMBER ────────────────────────────────────────────────────────────────────
+
+model Member {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  memberId      String   @unique
+  accountNumber String   @unique
+  fullName      String
+  nik           String
+  address       String
+  birthPlace    String
+  birthDate     DateTime
+  occupation    String
+  ktpPhotoUrl   String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  savings Saving[]
+  loans   Loan[]
+
+  @@unique([tenantId, nik])
+  @@index([tenantId])
+  @@index([fullName])
+}
+
+// ── SAVINGS ───────────────────────────────────────────────────────────────────
+
+model SavingConfig {
+  id         String     @id @default(cuid())
+  tenantId   String
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  name       String
+  type       SavingType
+  rateType   RateType
+  rate       Decimal    @db.Decimal(8, 4)
+  periodUnit String
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+
+  savings Saving[]
+}
+
+model Saving {
+  id             String       @id @default(cuid())
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id])
+  memberId       String
+  member         Member       @relation(fields: [memberId], references: [id])
+  savingConfigId String
+  savingConfig   SavingConfig @relation(fields: [savingConfigId], references: [id])
+  balance        Decimal      @default(0) @db.Decimal(15, 2)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  transactions SavingTransaction[]
+
+  @@index([tenantId])
+  @@index([memberId])
+}
+
+model SavingTransaction {
+  id            String          @id @default(cuid())
+  savingId      String
+  saving        Saving          @relation(fields: [savingId], references: [id])
+  tenantId      String
+  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  type          TransactionType
+  amount        Decimal         @db.Decimal(15, 2)
+  note          String?
+  createdBy     String
+  createdByUser User            @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime        @default(now())
+
+  @@index([savingId])
+  @@index([tenantId])
+  @@index([createdAt])
+}
+
+// ── LOANS ─────────────────────────────────────────────────────────────────────
+
+model LoanConfig {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  name          String
+  type          LoanType
+  rateType      RateType
+  rate          Decimal  @db.Decimal(8, 4)
+  maxTermMonths Int
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  loans Loan[]
+}
+
+model Loan {
+  id              String      @id @default(cuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id])
+  memberId        String
+  member          Member      @relation(fields: [memberId], references: [id])
+  loanConfigId    String
+  loanConfig      LoanConfig  @relation(fields: [loanConfigId], references: [id])
+  principalAmount Decimal     @db.Decimal(15, 2)
+  totalAmount     Decimal     @db.Decimal(15, 2)
+  termMonths      Int
+  monthlyPayment  Decimal     @db.Decimal(15, 2)
+  remainingAmount Decimal     @db.Decimal(15, 2)
+  status          LoanStatus  @default(ACTIVE)
+  kolCategory     KOLCategory @default(LANCAR)
+  disbursedAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  payments LoanPayment[]
+
+  @@index([tenantId])
+  @@index([memberId])
+  @@index([status])
+  @@index([kolCategory])
+}
+
+model LoanPayment {
+  id            String   @id @default(cuid())
+  loanId        String
+  loan          Loan     @relation(fields: [loanId], references: [id])
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  amount        Decimal  @db.Decimal(15, 2)
+  penalty       Decimal  @default(0) @db.Decimal(15, 2)
+  paidAt        DateTime
+  dueDate       DateTime
+  note          String?
+  createdBy     String
+  createdByUser User     @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@index([loanId])
+  @@index([tenantId])
+  @@index([dueDate])
+}
