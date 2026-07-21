@@ -53,13 +53,37 @@ Default: `page=1`, `limit=20`, `sortBy=createdAt`, `sortOrder=desc`.
 | LOAN_NOT_FOUND                | 404  | Loan ID does not exist in tenant                 |
 | MEMBER_HAS_NO_POKOK_SAVING    | 400  | Member not eligible — missing simpanan pokok     |
 | MEMBER_HAS_EXISTING_LOAN      | 409  | Member already has an active loan (warn, not block) |
-| PACKAGE_LIMIT_EXCEEDED        | 422  | Tenant's package does not allow creating another resource of this type |
+| PACKAGE_LIMIT_EXCEEDED        | 422  | Tenant's package does not allow creating another resource of this type (e.g. custom Simpanan config quota) |
 | FEATURE_NOT_ENTITLED          | 403  | Tenant's package does not include this feature (e.g. whitelabel) |
+| ROLE_IN_USE                   | 409  | Role cannot be deleted — still assigned to one or more users |
+| ROLE_NOT_FOUND                | 404  | Role ID does not exist in tenant |
+| NOTIFICATION_NOT_FOUND        | 404  | Notification ID does not exist |
+| CANNOT_DEACTIVATE_SELF        | 400  | Platform admin cannot deactivate their own account |
+| DOMAIN_ALREADY_USED           | 409  | Custom domain is already claimed by another tenant |
+
+## Route Namespacing — Host (Platform Admin) additions
+
+```
+GET    /api/admin/notifications              List notifications (isRead computed per requesting platform admin)
+GET    /api/admin/notifications/unread-count Unread count for the requesting platform admin
+POST   /api/admin/notifications/:id/read     Mark one notification read
+POST   /api/admin/notifications/read-all     Mark all notifications read
+
+GET    /api/admin/users                      List platform admin users
+POST   /api/admin/users                      Create a platform admin user
+PUT    /api/admin/users/:id                  Update a platform admin user
+DELETE /api/admin/users/:id                  Deactivate a platform admin user (soft delete)
+
+POST   /api/admin/tenants/:id/logo           Upload/replace a tenant's logo (Host-managed)
+```
 
 ## Route Namespacing
 
 ```
-/api/tenant/*     Tenant-scoped routes (pass through tenantMiddleware)
-/api/admin/*      Platform admin routes (PLATFORM_ADMIN role required, no tenantMiddleware)
 /api/auth/*       Auth routes (login, refresh, SSO callback — no authMiddleware)
+/api/admin/*      Platform admin routes (isPlatformAdmin required, no tenantMiddleware)
+/api/*            Tenant-scoped routes (dashboard, members, savings, loans, reports, config)
+                   — pass through tenantMiddleware + authMiddleware. NOTE: there is no
+                   `/api/tenant/` prefix; e.g. the members list is `GET /api/members`,
+                   not `GET /api/tenant/members`.
 ```

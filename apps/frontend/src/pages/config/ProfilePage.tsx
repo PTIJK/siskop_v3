@@ -45,7 +45,7 @@ export function ProfilePage() {
   const onProfileSubmit = async (data: { name: string }) => {
     setProfileError('');
     try {
-      await api.put('/api/tenant/config/profile', data);
+      await api.put('/api/config/profile', data);
       toast({ title: 'Profil berhasil diperbarui' });
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
@@ -56,7 +56,7 @@ export function ProfilePage() {
   const onPasswordSubmit = async (data: { currentPassword: string; newPassword: string }) => {
     setPasswordError('');
     try {
-      await api.put('/api/tenant/config/profile', { currentPassword: data.currentPassword, newPassword: data.newPassword });
+      await api.put('/api/config/profile', { currentPassword: data.currentPassword, newPassword: data.newPassword });
       toast({ title: 'Password berhasil diubah' });
       passwordForm.reset();
     } catch (err: unknown) {
@@ -70,7 +70,7 @@ export function ProfilePage() {
     const form = new FormData();
     form.append('logo', logoFile);
     try {
-      await api.post('/api/tenant/config/logo', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await api.post('/api/config/logo', form, { headers: { 'Content-Type': 'multipart/form-data' } });
       toast({ title: 'Logo berhasil diupload' });
     } catch (err: unknown) {
       toast({ title: 'Gagal upload logo', variant: 'destructive' });

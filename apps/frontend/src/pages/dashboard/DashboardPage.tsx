@@ -43,9 +43,9 @@ export function DashboardPage() {
 
   useEffect(() => {
     Promise.all([
-      api.get('/api/tenant/dashboard/summary'),
-      api.get('/api/tenant/dashboard/loan-chart?months=12'),
-      api.get('/api/tenant/dashboard/payment-chart?months=12'),
+      api.get('/api/dashboard/summary'),
+      api.get('/api/dashboard/loan-chart?months=12'),
+      api.get('/api/dashboard/payment-chart?months=12'),
     ])
       .then(([summaryRes, loanRes, paymentRes]) => {
         setSummary(summaryRes.data.data);

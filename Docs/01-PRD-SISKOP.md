@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 1.2.0 |
-| **Tanggal** | Juli 2026 |
+| **Versi** | 1.4.0 |
+| **Tanggal** | 21 Juli 2026 |
 | **Status** | Draft — disinkronkan dengan implementasi berjalan |
 | **Pemilik Produk** | CV Inovasi Jaya Karsa |
 
@@ -189,6 +189,39 @@ DENGAN KETENTUAN:
     yang akan datang otomatis mereset siklus pengingat dan membuka blokir akses
 ```
 
+### 5.10 Paket Langganan Bergranular Modul (Entitlement)
+```
+SEBAGAI platform owner
+SAYA INGIN paket langganan mengontrol bukan hanya modul apa yang terlihat,
+tapi juga batas dan sub-fitur di dalam modul tersebut
+AGAR saya bisa membedakan penawaran antar tier paket secara lebih detail
+DENGAN KETENTUAN:
+  - Setiap koperasi otomatis mendapat 3 jenis simpanan default (Pokok/Wajib/Sukarela)
+    saat registrasi, terlepas dari paket yang dipilih
+  - Paket dapat menetapkan batas jumlah konfigurasi simpanan custom tambahan
+    (kosong = tak terbatas); batas ini ditegakkan di backend, bukan hanya UI
+  - Paket dapat mengaktifkan/menonaktifkan fitur whitelabel (branding, domain
+    kustom, identitas pengirim email) untuk koperasi pada paket tersebut
+  - Jika paket koperasi diturunkan (downgrade) hingga di bawah kuota yang sedang
+    dipakai, data yang melebihi kuota TIDAK dihapus — dibekukan (read-only) dan
+    otomatis aktif kembali jika koperasi naik paket lagi
+```
+
+### 5.11 Notifikasi Platform (Host)
+
+```
+SEBAGAI platform owner
+SAYA INGIN menerima notifikasi in-app saat terjadi event penting di platform
+AGAR saya tidak perlu memantau setiap koperasi secara manual
+DENGAN KETENTUAN:
+  - Event yang memicu notifikasi: koperasi baru mendaftar, koperasi diblokir
+    otomatis karena tagihan lewat jatuh tempo, paket langganan koperasi diubah
+  - Notifikasi ditampilkan sebagai bell icon dengan badge jumlah belum dibaca
+    di topbar admin.siskop.com
+  - Status baca/belum dibaca bersifat per platform admin (bukan global) —
+    satu admin menandai baca tidak memengaruhi admin lain
+```
+
 ---
 
 ## 6. Functional Requirements
@@ -240,6 +273,8 @@ DENGAN KETENTUAN:
 | SAV-05 | Riwayat transaksi simpanan per anggota | Must Have |
 | SAV-06 | Saldo simpanan real-time | Must Have |
 | SAV-07 | Mendukung simpanan konvensional dan syariah | Must Have |
+| SAV-08 | Auto-seed 3 jenis simpanan default (Pokok/Wajib/Sukarela, `isDefault=true`) saat registrasi koperasi, terlepas dari paket langganan | Must Have |
+| SAV-09 | Batas jumlah konfigurasi simpanan custom (`isDefault=false`) sesuai `maxSavingConfigs` pada paket tenant; indikator kuota ditampilkan di layar Konfigurasi Simpanan, tombol "Tambah" nonaktif saat kuota tercapai | Must Have |
 
 ### 6.5 Modul Pinjaman/Pembiayaan
 | ID | Requirement | Prioritas |
@@ -254,6 +289,7 @@ DENGAN KETENTUAN:
 | LOAN-08 | Halaman monitoring anggota menunggak (`/loans/overdue`, urut MACET → LANCAR) | Must Have |
 | LOAN-09 | Dashboard khusus pinjaman/pembiayaan | Must Have |
 | LOAN-10 | Konfigurasi threshold KOL per tenant di system config | Must Have |
+| LOAN-11 | Filter daftar pinjaman berdasarkan jenis pembiayaan (`loanConfigId`) di halaman dashboard pinjaman | Must Have |
 
 **Default kategori KOL (mengikuti ketentuan OJK, dapat dikustomisasi per tenant):**
 
@@ -289,6 +325,8 @@ Jika tenant belum mengatur threshold kustom, sistem menggunakan default OJK di a
 | CFG-06 | Konfigurasi jenis simpanan + rate | Must Have |
 | CFG-07 | Konfigurasi jenis pembiayaan + bunga/margin | Must Have |
 | CFG-08 | Konfigurasi KOL category dan threshold | Must Have |
+| CFG-09 | Hapus role kustom | Must Have |
+| CFG-10 | Whitelabel: branding (warna utama, sembunyikan "Powered by SISKOP"), domain kustom, identitas pengirim email — hanya tampil/dapat diubah jika paket tenant `whitelabelEnabled`; nilai tersimpan tetap terlihat (read-only) saat fitur dibekukan akibat downgrade paket | Should Have — **domain kustom belum lengkap**: field & status badge (`PENDING`/`VERIFIED`/`FAILED`) sudah ada, tapi verifikasi DNS/CNAME otomatis dan provisioning sertifikat SSL per-domain belum diimplementasikan (lihat `Docs/specs/2026-07-21-paket-langganan-design.md` §9) — status akan selalu `PENDING`. Branding dan identitas pengirim email sudah fungsional penuh. |
 
 ### 6.8 Modul Platform Admin
 | ID | Requirement | Prioritas |
@@ -296,12 +334,15 @@ Jika tenant belum mengatur threshold kustom, sistem menggunakan default OJK di a
 | ADM-01 | Dashboard platform (total & tenant aktif, total anggota aktif, transaksi 30 hari terakhir) | Must Have |
 | ADM-02 | Daftar semua koperasi terdaftar (paginated) + detail & statistik per koperasi (jumlah anggota, simpanan, pinjaman, pinjaman aktif) | Must Have |
 | ADM-03 | Aktivasi/deaktivasi koperasi | Must Have |
-| ADM-04 | Manajemen paket langganan (nama, harga, batas maksimum user, batas maksimum anggota) | Must Have |
+| ADM-04 | Manajemen paket langganan (nama, harga, batas maksimum user, batas maksimum anggota, batas simpanan custom, toggle whitelabel) | Must Have |
 | ADM-05 | Konfigurasi daftar modul yang tersedia per paket | Must Have |
 | ADM-06 | URL khusus: `admin.siskop.com` | Must Have |
 | ADM-07 | Atur & tampilkan tanggal Tagihan Berikutnya per koperasi | Must Have |
 | ADM-08 | Email pengingat otomatis 30 hari & 7 hari sebelum jatuh tempo tagihan | Must Have |
 | ADM-09 | Blokir akses koperasi otomatis saat tagihan melewati jatuh tempo; pembaruan tanggal tagihan otomatis membuka blokir | Must Have |
+| ADM-10 | Manajemen user platform admin (list, tambah, nonaktifkan, aktifkan kembali); platform admin tidak bisa menonaktifkan akunnya sendiri | Must Have |
+| ADM-11 | Host dapat mengunggah/mengganti logo koperasi dari halaman detail tenant | Must Have |
+| ADM-12 | Notifikasi in-app (bell) untuk event platform-wide: koperasi baru terdaftar, koperasi diblokir karena tagihan, perubahan paket langganan; status baca per platform admin | Must Have |
 
 ---
 

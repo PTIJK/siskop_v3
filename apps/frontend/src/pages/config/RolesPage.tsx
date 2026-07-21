@@ -10,8 +10,9 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Checkbox } from '../../components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
+import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { useToast } from '../../components/hooks/use-toast';
-import { Plus, Edit2 } from 'lucide-react';
+import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { Permissions } from '@siskop/shared';
 
 interface Role {
@@ -60,10 +61,11 @@ export function RolesPage() {
   const [newPerms, setNewPerms] = useState<Record<string, Record<string, boolean>>>({});
   const [apiError, setApiError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
 
   const fetchRoles = () => {
     setIsLoading(true);
-    api.get('/api/tenant/config/roles').then((res) => setRoles(res.data.data)).finally(() => setIsLoading(false));
+    api.get('/api/config/roles').then((res) => setRoles(res.data.data)).finally(() => setIsLoading(false));
   };
 
   useEffect(() => { fetchRoles(); }, []);
@@ -95,7 +97,7 @@ export function RolesPage() {
     if (!editRole) return;
     setIsSaving(true);
     try {
-      await api.put(`/api/tenant/config/roles/${editRole.id}`, { name: editName, permissions: editPerms });
+      await api.put(`/api/config/roles/${editRole.id}`, { name: editName, permissions: editPerms });
       toast({ title: 'Role berhasil diperbarui' });
       setEditRole(null);
       fetchRoles();
@@ -106,12 +108,29 @@ export function RolesPage() {
     }
   };
 
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await api.delete(`/api/config/roles/${deleteTarget.id}`);
+      toast({ title: 'Role berhasil dihapus' });
+      setDeleteTarget(null);
+      fetchRoles();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
+      toast({
+        title: 'Gagal menghapus role',
+        description: axiosErr?.response?.data?.error?.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
   const saveNew = async () => {
     if (!newRoleName.trim()) { setApiError('Nama role wajib diisi'); return; }
     setApiError('');
     setIsSaving(true);
     try {
-      await api.post('/api/tenant/config/roles', { name: newRoleName, permissions: newPerms });
+      await api.post('/api/config/roles', { name: newRoleName, permissions: newPerms });
       toast({ title: 'Role berhasil ditambahkan' });
       setAddDialog(false);
       fetchRoles();
@@ -194,11 +213,23 @@ export function RolesPage() {
                       <p className="font-medium">{role.name}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">{permCount} izin aktif</p>
                     </div>
-                    {can('roles', 'update') && (
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(role)}>
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                    <div className="flex gap-1">
+                      {can('roles', 'update') && (
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(role)}>
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {can('roles', 'delete') && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeleteTarget(role)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -243,6 +274,17 @@ export function RolesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        title={`Hapus role "${deleteTarget?.name}"?`}
+        description="Role yang masih digunakan oleh pengguna tidak dapat dihapus. Pindahkan pengguna ke role lain terlebih dahulu."
+        confirmLabel="Hapus"
+        variant="destructive"
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

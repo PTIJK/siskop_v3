@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { adminService } from './admin.service';
+import { AppError } from '../../lib/errors';
 
 const PaginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -11,6 +12,18 @@ const UpdateTenantSchema = z.object({
   isActive: z.boolean().optional(),
   packageId: z.string().nullable().optional(),
   nextBillingDate: z.coerce.date().nullable().optional(),
+});
+
+const CreatePlatformAdminSchema = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+  password: z.string().min(8).regex(/[A-Z]/).regex(/[0-9]/),
+});
+
+const UpdatePlatformAdminSchema = z.object({
+  name: z.string().min(2).optional(),
+  email: z.string().email().optional(),
+  isActive: z.boolean().optional(),
 });
 
 const CreatePackageSchema = z.object({
@@ -65,6 +78,20 @@ export async function updateTenant(req: Request, res: Response, next: NextFuncti
   }
 }
 
+export async function uploadTenantLogo(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.file) throw new AppError('NO_FILE', 'File logo wajib diunggah', 400);
+    const tenant = await adminService.updateTenantLogo(req.params.id, req.file.path);
+    res.json({ success: true, data: tenant });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getTenantStats(
   req: Request,
   res: Response,
@@ -73,6 +100,125 @@ export async function getTenantStats(
   try {
     const data = await adminService.getTenantStats(req.params.id);
     res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const NotificationQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  unreadOnly: z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .transform((v) => v === 'true'),
+});
+
+export async function listNotifications(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { page, limit, unreadOnly } = NotificationQuerySchema.parse(req.query);
+    const result = await adminService.listNotifications(req.user.id, page, limit, unreadOnly);
+    res.json({ success: true, data: result.items, meta: result.meta });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getUnreadNotificationCount(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const count = await adminService.getUnreadNotificationCount(req.user.id);
+    res.json({ success: true, data: { count } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function markNotificationRead(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    await adminService.markNotificationRead(req.user.id, req.params.id);
+    res.json({ success: true, data: { message: 'Notifikasi ditandai sudah dibaca' } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function markAllNotificationsRead(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    await adminService.markAllNotificationsRead(req.user.id);
+    res.json({ success: true, data: { message: 'Semua notifikasi ditandai sudah dibaca' } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function listPlatformAdmins(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const data = await adminService.listPlatformAdmins();
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createPlatformAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const data = CreatePlatformAdminSchema.parse(req.body);
+    const admin = await adminService.createPlatformAdmin(
+      { tenantId: req.user.tenantId, roleId: req.user.roleId },
+      data
+    );
+    res.status(201).json({ success: true, data: admin });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updatePlatformAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const data = UpdatePlatformAdminSchema.parse(req.body);
+    const admin = await adminService.updatePlatformAdmin(req.params.id, data);
+    res.json({ success: true, data: admin });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deactivatePlatformAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    await adminService.deactivatePlatformAdmin(req.params.id, req.user.id);
+    res.json({ success: true, data: { message: 'Platform admin berhasil dinonaktifkan' } });
   } catch (err) {
     next(err);
   }

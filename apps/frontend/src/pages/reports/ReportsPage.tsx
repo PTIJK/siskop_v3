@@ -71,10 +71,10 @@ export function ReportsPage() {
     setIsLoading(true);
     try {
       if (activeTab === 'financial') {
-        const res = await api.get('/api/tenant/reports/financial', { params: { startDate: sd, endDate: ed } });
+        const res = await api.get('/api/reports/financial', { params: { startDate: sd, endDate: ed } });
         setFinancialReport(res.data.data);
       } else {
-        const res = await api.get('/api/tenant/reports/rat', { params: { startDate: sd, endDate: ed } });
+        const res = await api.get('/api/reports/rat', { params: { startDate: sd, endDate: ed } });
         setRatReport(res.data.data);
       }
     } catch (err) {
@@ -87,7 +87,7 @@ export function ReportsPage() {
   const downloadPDF = async () => {
     const { startDate: sd, endDate: ed } = getDateRange();
     const endpoint = activeTab === 'financial' ? 'financial' : 'rat';
-    const response = await api.get(`/api/tenant/reports/${endpoint}/pdf`, {
+    const response = await api.get(`/api/reports/${endpoint}/pdf`, {
       params: { startDate: sd, endDate: ed },
       responseType: 'blob',
     });

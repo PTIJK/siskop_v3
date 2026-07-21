@@ -77,13 +77,13 @@ export function NewLoanPage() {
   const termMonths = watch('termMonths');
 
   useEffect(() => {
-    api.get('/api/tenant/loans/configs').then((res) => {
+    api.get('/api/loans/configs').then((res) => {
       setConfigs(res.data.data.filter((c: LoanConfig) => c.isActive));
     });
 
     const prefillId = searchParams.get('memberId');
     if (prefillId) {
-      api.get(`/api/tenant/members/${prefillId}`).then((res) => {
+      api.get(`/api/members/${prefillId}`).then((res) => {
         const m = res.data.data;
         setSelectedMember({ id: m.id, memberId: m.memberId, fullName: m.fullName, accountNumber: m.accountNumber });
         const hasPokok = m.savings?.some((s: { savingConfig: { type: string }; isActive: boolean }) => s.savingConfig.type === 'POKOK' && s.isActive);
@@ -106,7 +106,7 @@ export function NewLoanPage() {
 
   const searchMembers = async (q: string) => {
     if (q.length < 2) { setMemberResults([]); return; }
-    const res = await api.get('/api/tenant/members', { params: { search: q, limit: 5 } });
+    const res = await api.get('/api/members', { params: { search: q, limit: 5 } });
     setMemberResults(res.data.data.items);
   };
 
@@ -114,7 +114,7 @@ export function NewLoanPage() {
     setSelectedMember(m);
     setMemberResults([]);
     setMemberSearch('');
-    const res = await api.get(`/api/tenant/members/${m.id}`);
+    const res = await api.get(`/api/members/${m.id}`);
     const member = res.data.data;
     const hasPokok = member.savings?.some((s: { savingConfig: { type: string }; isActive: boolean }) => s.savingConfig.type === 'POKOK' && s.isActive);
     setHasPokokSaving(hasPokok ?? false);
@@ -123,7 +123,7 @@ export function NewLoanPage() {
   const submitLoan = async (data: Step2Form, force = false) => {
     setApiError('');
     try {
-      const res = await api.post('/api/tenant/loans', {
+      const res = await api.post('/api/loans', {
         memberId: selectedMember!.id,
         loanConfigId: data.loanConfigId,
         principalAmount: parseFloat(data.principalAmount),

@@ -9,7 +9,16 @@ import { KOLBadge } from '../../components/shared/KOLBadge';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '../../components/ui/select';
 import { AlertTriangle, Plus } from 'lucide-react';
+
+interface LoanConfigOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
 
 interface Loan {
   id: string;
@@ -25,7 +34,7 @@ interface Loan {
   disbursedAt?: string;
 }
 
-function LoansTable({ status, search }: { status?: string; search: string }) {
+function LoansTable({ status, search, loanConfigId }: { status?: string; search: string; loanConfigId?: string }) {
   const navigate = useNavigate();
   const [data, setData] = useState<Loan[]>([]);
   const [total, setTotal] = useState(0);
@@ -34,11 +43,19 @@ function LoansTable({ status, search }: { status?: string; search: string }) {
 
   const limit = 20;
 
+  useEffect(() => { setPage(1); }, [status, search, loanConfigId]);
+
   useEffect(() => {
     setIsLoading(true);
     api
-      .get('/api/tenant/loans', {
-        params: { page, limit, search, ...(status ? { status } : {}) },
+      .get('/api/loans', {
+        params: {
+          page,
+          limit,
+          search,
+          ...(status ? { status } : {}),
+          ...(loanConfigId ? { loanConfigId } : {}),
+        },
       })
       .then((res) => {
         setData(res.data.data.items);
@@ -46,7 +63,7 @@ function LoansTable({ status, search }: { status?: string; search: string }) {
       })
       .catch(console.error)
       .finally(() => setIsLoading(false));
-  }, [page, search, status]);
+  }, [page, search, status, loanConfigId]);
 
   const columns: ColumnDef<Loan>[] = [
     {
@@ -90,12 +107,16 @@ export function LoansDashboardPage() {
   const { can } = usePermissions();
   const [overdueCount, setOverdueCount] = useState(0);
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [loanConfigs, setLoanConfigs] = useState<LoanConfigOption[]>([]);
 
   useEffect(() => {
-    api.get('/api/tenant/loans/overdue').then((res) => {
+    api.get('/api/loans/overdue').then((res) => {
       const items = res.data.data.items ?? res.data.data;
       setOverdueCount(Array.isArray(items) ? items.length : 0);
     }).catch(console.error);
+
+    api.get('/api/loans/configs').then((res) => setLoanConfigs(res.data.data)).catch(console.error);
   }, []);
 
   return (
@@ -127,6 +148,20 @@ export function LoansDashboardPage() {
         </div>
       )}
 
+      <div className="flex items-center gap-3">
+        <Select value={typeFilter || 'all'} onValueChange={(v) => setTypeFilter(v === 'all' ? '' : v)}>
+          <SelectTrigger className="w-56">
+            <SelectValue placeholder="Semua Jenis Pembiayaan" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Jenis Pembiayaan</SelectItem>
+            {loanConfigs.map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <Tabs defaultValue="all">
         <TabsList>
           <TabsTrigger value="all">Semua Pinjaman</TabsTrigger>
@@ -134,13 +169,13 @@ export function LoansDashboardPage() {
           <TabsTrigger value="completed">Lunas</TabsTrigger>
         </TabsList>
         <TabsContent value="all" className="mt-4">
-          <LoansTable search={search} />
+          <LoansTable search={search} loanConfigId={typeFilter} />
         </TabsContent>
         <TabsContent value="active" className="mt-4">
-          <LoansTable status="ACTIVE" search={search} />
+          <LoansTable status="ACTIVE" search={search} loanConfigId={typeFilter} />
         </TabsContent>
         <TabsContent value="completed" className="mt-4">
-          <LoansTable status="COMPLETED" search={search} />
+          <LoansTable status="COMPLETED" search={search} loanConfigId={typeFilter} />
         </TabsContent>
       </Tabs>
     </div>

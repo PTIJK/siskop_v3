@@ -60,6 +60,12 @@ enum DomainStatus {
   FAILED
 }
 
+enum NotificationType {
+  TENANT_REGISTERED
+  BILLING_BLOCKED
+  PACKAGE_CHANGED
+}
+
 // ── PLATFORM ──────────────────────────────────────────────────────────────────
 
 model SubscriptionPackage {
@@ -104,6 +110,7 @@ model Tenant {
   savingTxns       SavingTransaction[]
   loanPayments     LoanPayment[]
   whitelabelConfig WhitelabelConfig?
+  notifications    Notification[]
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
@@ -136,6 +143,7 @@ model User {
   refreshTokens      RefreshToken[]
   savingTransactions SavingTransaction[]
   loanPayments       LoanPayment[]
+  notificationReads  NotificationRead[]
 
   @@unique([tenantId, email])
 }
@@ -206,6 +214,36 @@ model WhitelabelConfig {
   emailSenderAddress String?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
+}
+
+// ── NOTIFICATIONS (platform admin, in-app) ─────────────────────────────────────
+
+model Notification {
+  id              String            @id @default(cuid())
+  type            NotificationType
+  title           String
+  message         String
+  relatedTenantId String?
+  relatedTenant   Tenant?           @relation(fields: [relatedTenantId], references: [id])
+  createdAt       DateTime          @default(now())
+
+  reads NotificationRead[]
+
+  @@index([createdAt])
+  @@index([relatedTenantId])
+}
+
+// Per-platform-admin read state. A row's absence means unread for that user.
+model NotificationRead {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
+
+  @@unique([notificationId, userId])
+  @@index([userId])
 }
 
 model Saving {

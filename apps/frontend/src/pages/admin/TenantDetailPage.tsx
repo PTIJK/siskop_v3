@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Users, PiggyBank, CreditCard, Activity, Pencil } from 'lucide-react';
+import { Users, PiggyBank, CreditCard, Activity, Pencil, Upload } from 'lucide-react';
 import api from '../../lib/api';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { StatCard } from '../../components/shared/StatCard';
@@ -35,6 +35,7 @@ interface TenantDetail {
   registrationNo: string;
   isActive: boolean;
   createdAt: string;
+  logoUrl?: string | null;
   nextBillingDate?: string | null;
   package?: { id: string; name: string } | null;
 }
@@ -65,6 +66,9 @@ export function TenantDetailPage() {
   const [billingDialogOpen, setBillingDialogOpen] = useState(false);
   const [billingDateInput, setBillingDateInput] = useState('');
   const [isSavingBilling, setIsSavingBilling] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -76,6 +80,7 @@ export function TenantDetailPage() {
     ])
       .then(([tenantRes, statsRes, packagesRes]) => {
         setTenant(tenantRes.data.data);
+        setLogoPreview(tenantRes.data.data.logoUrl ?? null);
         setStats(statsRes.data.data);
         setPackages(packagesRes.data.data);
       })
@@ -126,6 +131,26 @@ export function TenantDetailPage() {
       toast({ title: 'Gagal memperbarui tanggal tagihan', variant: 'destructive' });
     } finally {
       setIsSavingBilling(false);
+    }
+  };
+
+  const handleLogoUpload = async () => {
+    if (!logoFile || !tenant) return;
+    setIsUploadingLogo(true);
+    const form = new FormData();
+    form.append('logo', logoFile);
+    try {
+      const res = await api.post(`/api/admin/tenants/${tenant.id}/logo`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setTenant(res.data.data);
+      setLogoPreview(res.data.data.logoUrl ?? null);
+      setLogoFile(null);
+      toast({ title: 'Logo koperasi berhasil diperbarui' });
+    } catch {
+      toast({ title: 'Gagal upload logo', variant: 'destructive' });
+    } finally {
+      setIsUploadingLogo(false);
     }
   };
 
@@ -276,6 +301,43 @@ export function TenantDetailPage() {
               <dd className="mt-0.5 font-medium">{tenant.address}</dd>
             </div>
           </dl>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Logo Koperasi</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-start gap-4">
+            {logoPreview ? (
+              <img src={logoPreview} alt="Logo" className="h-16 w-16 rounded-md border object-contain" />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
+                Tanpa logo
+              </div>
+            )}
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-4 py-2.5 text-sm text-muted-foreground hover:border-primary hover:text-primary">
+                <Upload className="h-4 w-4" />
+                Pilih Logo (JPG, PNG, SVG — maks 2MB)
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/svg+xml"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); }
+                  }}
+                />
+              </label>
+              {logoFile && (
+                <Button size="sm" onClick={handleLogoUpload} disabled={isUploadingLogo}>
+                  {isUploadingLogo ? 'Mengunggah...' : 'Upload Logo'}
+                </Button>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 

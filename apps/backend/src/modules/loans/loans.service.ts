@@ -46,7 +46,7 @@ export class LoansService {
   // ── Loans ────────────────────────────────────────────────────────────────────
 
   async list(tenantId: string, query: LoanQuery) {
-    const { page, limit, search, status, kolCategory, memberId } = query;
+    const { page, limit, search, status, kolCategory, memberId, loanConfigId } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.LoanWhereInput = {
@@ -54,6 +54,7 @@ export class LoansService {
       ...(status ? { status: status as unknown as import('@prisma/client').LoanStatus } : {}),
       ...(kolCategory ? { kolCategory: kolCategory as unknown as import('@prisma/client').KOLCategory } : {}),
       ...(memberId ? { memberId } : {}),
+      ...(loanConfigId ? { loanConfigId } : {}),
       ...(search
         ? {
             OR: [

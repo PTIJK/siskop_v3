@@ -17,6 +17,7 @@ import {
   listRoles,
   createRole,
   updateRole,
+  deleteRole,
   getWhitelabel,
   upsertWhitelabel,
 } from './config.controller';
@@ -62,6 +63,7 @@ configRouter.delete('/users/:id', requirePermission('users', 'delete'), deactiva
 configRouter.get('/roles', requirePermission('roles', 'read'), listRoles);
 configRouter.post('/roles', requirePermission('roles', 'create'), createRole);
 configRouter.put('/roles/:id', requirePermission('roles', 'update'), updateRole);
+configRouter.delete('/roles/:id', requirePermission('roles', 'delete'), deleteRole);
 
 // Whitelabel — read allowed regardless of entitlement (frozen values stay visible);
 // writes require the tenant's package to have whitelabelEnabled

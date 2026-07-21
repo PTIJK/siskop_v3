@@ -232,6 +232,40 @@ describe('Loans Module', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.every((l: any) => l.status === 'ACTIVE')).toBe(true);
     });
+
+    it('filters by loanConfigId (jenis pembiayaan)', async () => {
+      const res = await api
+        .get(`/api/loans?loanConfigId=${loanConfigId}`)
+        .set('Host', `${tenant.slug}.localhost`)
+        .set('Cookie', adminCookies);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.every((l: any) => l.loanConfig?.name === 'Kredit Reguler' || l.loanConfigId === loanConfigId)).toBe(true);
+      expect(res.body.data.length).toBeGreaterThan(0);
+    });
+
+    it('returns empty list for a loanConfigId with no loans', async () => {
+      const otherConfig = await testPrisma.loanConfig.create({
+        data: {
+          tenantId: tenant.id,
+          name: 'Config Tanpa Pinjaman',
+          type: 'KONVENSIONAL',
+          rateType: 'BUNGA',
+          rate: 5,
+          maxTermMonths: 12,
+        },
+      });
+
+      const res = await api
+        .get(`/api/loans?loanConfigId=${otherConfig.id}`)
+        .set('Host', `${tenant.slug}.localhost`)
+        .set('Cookie', adminCookies);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.length).toBe(0);
+
+      await testPrisma.loanConfig.delete({ where: { id: otherConfig.id } });
+    });
   });
 
   // ── Get loan by ID ─────────────────────────────────────────────────────────

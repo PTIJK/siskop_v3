@@ -69,7 +69,7 @@ export function LoanDetailPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchLoan = () => {
-    api.get(`/api/tenant/loans/${id}`)
+    api.get(`/api/loans/${id}`)
       .then((res) => setLoan(res.data.data))
       .catch(console.error)
       .finally(() => setIsLoading(false));
@@ -84,7 +84,7 @@ export function LoanDetailPage() {
   const handlePayment = async () => {
     setIsSubmitting(true);
     try {
-      await api.post(`/api/tenant/loans/${id}/pay`, {
+      await api.post(`/api/loans/${id}/pay`, {
         amount: parseFloat(payAmount),
         penalty: parseFloat(penalty) || 0,
         paidAt: payDate,

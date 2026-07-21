@@ -45,7 +45,7 @@ export function MemberFormPage() {
 
   useEffect(() => {
     if (!isEdit) return;
-    api.get(`/api/tenant/members/${id}`).then((res) => {
+    api.get(`/api/members/${id}`).then((res) => {
       const m = res.data.data;
       reset({
         fullName: m.fullName,
@@ -72,10 +72,10 @@ export function MemberFormPage() {
     try {
       let memberId = id;
       if (isEdit) {
-        await api.put(`/api/tenant/members/${id}`, data);
+        await api.put(`/api/members/${id}`, data);
         toast({ title: 'Data anggota berhasil diperbarui' });
       } else {
-        const res = await api.post('/api/tenant/members', data);
+        const res = await api.post('/api/members', data);
         memberId = res.data.data.id;
         toast({ title: 'Anggota berhasil ditambahkan' });
       }
@@ -83,7 +83,7 @@ export function MemberFormPage() {
       if (ktpFile && memberId) {
         const form = new FormData();
         form.append('ktp', ktpFile);
-        await api.post(`/api/tenant/members/${memberId}/upload-ktp`, form, {
+        await api.post(`/api/members/${memberId}/upload-ktp`, form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
       }

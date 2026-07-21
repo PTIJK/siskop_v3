@@ -10,6 +10,7 @@ import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { TenantsPage } from './pages/admin/TenantsPage';
 import { TenantDetailPage } from './pages/admin/TenantDetailPage';
 import { PackagesPage } from './pages/admin/PackagesPage';
+import { AdminUsersPage } from './pages/admin/AdminUsersPage';
 
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/admin/tenants" element={<TenantsPage />} />
           <Route path="/admin/tenants/:id" element={<TenantDetailPage />} />
           <Route path="/admin/packages" element={<PackagesPage />} />
+          <Route path="/admin/users" element={<AdminUsersPage />} />
         </Route>
 
         {/* Tenant protected routes — all under AppLayout */}

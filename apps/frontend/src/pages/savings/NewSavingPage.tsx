@@ -57,11 +57,11 @@ export function NewSavingPage() {
   });
 
   useEffect(() => {
-    api.get('/api/tenant/savings/configs').then((res) => setConfigs(res.data.data.filter((c: SavingConfig) => c.isActive)));
+    api.get('/api/savings/configs').then((res) => setConfigs(res.data.data.filter((c: SavingConfig) => c.isActive)));
 
     const prefillId = searchParams.get('memberId');
     if (prefillId) {
-      api.get(`/api/tenant/members/${prefillId}`).then((res) => {
+      api.get(`/api/members/${prefillId}`).then((res) => {
         const m = res.data.data;
         setSelectedMember({ id: m.id, memberId: m.memberId, fullName: m.fullName, accountNumber: m.accountNumber });
         setValue('memberId', m.id);
@@ -71,14 +71,14 @@ export function NewSavingPage() {
 
   const searchMembers = async (q: string) => {
     if (q.length < 2) { setMemberResults([]); return; }
-    const res = await api.get('/api/tenant/members', { params: { search: q, limit: 5 } });
+    const res = await api.get('/api/members', { params: { search: q, limit: 5 } });
     setMemberResults(res.data.data.items);
   };
 
   const onSubmit = async (data: FormData) => {
     setApiError('');
     try {
-      const res = await api.post('/api/tenant/savings', {
+      const res = await api.post('/api/savings', {
         memberId: data.memberId,
         savingConfigId: data.savingConfigId,
         initialBalance: data.initialBalance ? parseFloat(data.initialBalance) : 0,

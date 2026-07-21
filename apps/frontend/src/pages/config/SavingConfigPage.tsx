@@ -57,7 +57,7 @@ export function SavingConfigPage() {
   });
 
   const fetchConfigs = () => {
-    api.get('/api/tenant/savings/configs').then((res) => setConfigs(res.data.data));
+    api.get('/api/savings/configs').then((res) => setConfigs(res.data.data));
   };
 
   useEffect(() => { fetchConfigs(); }, []);
@@ -84,10 +84,10 @@ export function SavingConfigPage() {
     setApiError('');
     try {
       if (editConfig) {
-        await api.put(`/api/tenant/savings/configs/${editConfig.id}`, data);
+        await api.put(`/api/savings/configs/${editConfig.id}`, data);
         toast({ title: 'Konfigurasi berhasil diperbarui' });
       } else {
-        await api.post('/api/tenant/savings/configs', data);
+        await api.post('/api/savings/configs', data);
         toast({ title: 'Konfigurasi berhasil ditambahkan' });
       }
       setAddDialog(false);
@@ -100,7 +100,7 @@ export function SavingConfigPage() {
 
   const toggleActive = async (c: SavingConfig) => {
     try {
-      await api.put(`/api/tenant/savings/configs/${c.id}`, { isActive: !c.isActive });
+      await api.put(`/api/savings/configs/${c.id}`, { isActive: !c.isActive });
       fetchConfigs();
     } catch {
       toast({ title: 'Gagal', variant: 'destructive' });

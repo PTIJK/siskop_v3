@@ -34,7 +34,7 @@ export function MembersPage() {
   useEffect(() => {
     setIsLoading(true);
     api
-      .get('/api/tenant/members', { params: { page, limit, search } })
+      .get('/api/members', { params: { page, limit, search } })
       .then((res) => {
         setData(res.data.data.items);
         setTotal(res.data.data.meta.total);

@@ -3,6 +3,7 @@ import { differenceInCalendarDays } from 'date-fns';
 import { formatTanggalIndonesia } from '@siskop/shared';
 import prisma from './prisma';
 import { sendMail } from './mailer';
+import { createNotification } from './notifications';
 
 type NoticeKind = 'REMINDER_30' | 'REMINDER_7' | 'BLOCKED';
 
@@ -54,6 +55,12 @@ export async function processBillingReminders(tenantId?: string): Promise<void> 
       if (tenant.isActive) {
         await prisma.tenant.update({ where: { id: tenant.id }, data: { isActive: false } });
         await notifyTenant(tenant, 'BLOCKED');
+        await createNotification({
+          type: 'BILLING_BLOCKED',
+          title: 'Akses koperasi diblokir',
+          message: `${tenant.name} diblokir otomatis karena tagihan langganan telah jatuh tempo`,
+          relatedTenantId: tenant.id,
+        });
       }
       continue;
     }

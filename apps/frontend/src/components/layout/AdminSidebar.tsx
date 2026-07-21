@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Package2, Shield, X, Menu } from 'lucide-react';
+import { LayoutDashboard, Building2, Package2, Users, Shield, X, Menu } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
 
@@ -7,6 +7,7 @@ const navItems = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard, end: true },
   { label: 'Koperasi', href: '/admin/tenants', icon: Building2 },
   { label: 'Paket Langganan', href: '/admin/packages', icon: Package2 },
+  { label: 'Platform Admin', href: '/admin/users', icon: Users },
 ];
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {

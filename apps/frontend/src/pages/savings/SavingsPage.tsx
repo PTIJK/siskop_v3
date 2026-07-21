@@ -37,7 +37,7 @@ export function SavingsPage() {
   useEffect(() => {
     setIsLoading(true);
     api
-      .get('/api/tenant/savings', {
+      .get('/api/savings', {
         params: { page, limit, search, ...(typeFilter ? { type: typeFilter } : {}) },
       })
       .then((res) => {

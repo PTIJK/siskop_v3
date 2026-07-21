@@ -52,20 +52,20 @@ export function UsersPage() {
 
   const fetchUsers = () => {
     setIsLoading(true);
-    api.get('/api/tenant/config/users')
+    api.get('/api/config/users')
       .then((res) => setData(res.data.data))
       .finally(() => setIsLoading(false));
   };
 
   useEffect(() => {
     fetchUsers();
-    api.get('/api/tenant/config/roles').then((res) => setRoles(res.data.data));
+    api.get('/api/config/roles').then((res) => setRoles(res.data.data));
   }, []);
 
   const onAddSubmit = async (data: z.infer<typeof addSchema>) => {
     setApiError('');
     try {
-      await api.post('/api/tenant/config/users', data);
+      await api.post('/api/config/users', data);
       toast({ title: 'Pengguna berhasil ditambahkan' });
       setAddDialog(false);
       addForm.reset();
@@ -79,7 +79,7 @@ export function UsersPage() {
   const onEditSubmit = async (data: z.infer<typeof editSchema>) => {
     if (!editUser) return;
     try {
-      await api.put(`/api/tenant/config/users/${editUser.id}`, data);
+      await api.put(`/api/config/users/${editUser.id}`, data);
       toast({ title: 'Role berhasil diubah' });
       setEditUser(null);
       fetchUsers();
@@ -91,9 +91,9 @@ export function UsersPage() {
   const toggleActive = async (user: User) => {
     try {
       if (user.isActive) {
-        await api.delete(`/api/tenant/config/users/${user.id}`);
+        await api.delete(`/api/config/users/${user.id}`);
       } else {
-        await api.put(`/api/tenant/config/users/${user.id}`, { isActive: true });
+        await api.put(`/api/config/users/${user.id}`, { isActive: true });
       }
       fetchUsers();
     } catch {

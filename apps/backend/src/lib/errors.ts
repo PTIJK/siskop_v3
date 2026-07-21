@@ -29,4 +29,5 @@ export const Errors = {
     new AppError('PACKAGE_LIMIT_EXCEEDED', message, 422),
   FEATURE_NOT_ENTITLED: (message = 'Fitur ini tidak termasuk dalam paket langganan Anda') =>
     new AppError('FEATURE_NOT_ENTITLED', message, 403),
+  ROLE_IN_USE: (message: string) => new AppError('ROLE_IN_USE', message, 409),
 };

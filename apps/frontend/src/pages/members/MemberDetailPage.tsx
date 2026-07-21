@@ -55,7 +55,7 @@ export function MemberDetailPage() {
 
   useEffect(() => {
     api
-      .get(`/api/tenant/members/${id}`)
+      .get(`/api/members/${id}`)
       .then((res) => setMember(res.data.data))
       .catch(console.error)
       .finally(() => setIsLoading(false));

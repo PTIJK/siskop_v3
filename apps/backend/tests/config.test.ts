@@ -260,4 +260,54 @@ describe('Config Module', () => {
       expect(res.body.data.name).toBe('Kasir');
     });
   });
+
+  describe('DELETE /api/config/roles/:id', () => {
+    it('deletes a role with no assigned users', async () => {
+      const role = await testPrisma.role.create({
+        data: {
+          tenantId: tenant.id,
+          name: 'Role Kosong',
+          permissions: { dashboard: { read: true } },
+        },
+      });
+
+      const res = await api
+        .delete(`/api/config/roles/${role.id}`)
+        .set('Host', `${tenant.slug}.localhost`)
+        .set('Cookie', adminCookies);
+
+      expect(res.status).toBe(200);
+      const found = await testPrisma.role.findUnique({ where: { id: role.id } });
+      expect(found).toBeNull();
+    });
+
+    it('returns 409 when the role still has users assigned', async () => {
+      const res = await api
+        .delete(`/api/config/roles/${tellerRole.id}`)
+        .set('Host', `${tenant.slug}.localhost`)
+        .set('Cookie', adminCookies);
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe('ROLE_IN_USE');
+    });
+
+    it('returns 403 when teller tries to delete a role', async () => {
+      const role = await testPrisma.role.create({
+        data: {
+          tenantId: tenant.id,
+          name: 'Role Untuk Ditolak',
+          permissions: { dashboard: { read: true } },
+        },
+      });
+
+      const res = await api
+        .delete(`/api/config/roles/${role.id}`)
+        .set('Host', `${tenant.slug}.localhost`)
+        .set('Cookie', tellerCookies);
+
+      expect(res.status).toBe(403);
+
+      await testPrisma.role.delete({ where: { id: role.id } });
+    });
+  });
 });

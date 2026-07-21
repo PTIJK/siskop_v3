@@ -173,6 +173,39 @@ describe('Admin Module (platform admin routes)', () => {
     });
   });
 
+  describe('POST /api/admin/tenants/:id/logo', () => {
+    it('uploads a logo and updates tenant.logoUrl', async () => {
+      const res = await api
+        .post(`/api/admin/tenants/${tenant.id}/logo`)
+        .set('Cookie', platformAdminCookies)
+        .attach('logo', Buffer.from('fake-image-content'), { filename: 'logo.png', contentType: 'image/png' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.logoUrl).toBeTruthy();
+
+      const updated = await testPrisma.tenant.findUnique({ where: { id: tenant.id } });
+      expect(updated?.logoUrl).toBeTruthy();
+    });
+
+    it('rejects non-image file types', async () => {
+      const res = await api
+        .post(`/api/admin/tenants/${tenant.id}/logo`)
+        .set('Cookie', platformAdminCookies)
+        .attach('logo', Buffer.from('not an image'), { filename: 'logo.txt', contentType: 'text/plain' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 403 for non-platform-admin', async () => {
+      const res = await api
+        .post(`/api/admin/tenants/${tenant.id}/logo`)
+        .set('Cookie', regularAdminCookies)
+        .attach('logo', Buffer.from('fake-image-content'), { filename: 'logo.png', contentType: 'image/png' });
+
+      expect(res.status).toBe(403);
+    });
+  });
+
   describe('GET /api/admin/tenants/:id/stats', () => {
     it('returns tenant usage statistics', async () => {
       const res = await api
@@ -181,6 +214,87 @@ describe('Admin Module (platform admin routes)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+    });
+  });
+
+  // ── Platform admin users ─────────────────────────────────────────────────────
+
+  describe('GET /api/admin/users', () => {
+    it('returns list of platform admins only', async () => {
+      const res = await api
+        .get('/api/admin/users')
+        .set('Cookie', platformAdminCookies);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.every((u: any) => u.isPlatformAdmin)).toBe(true);
+      expect(res.body.data.some((u: any) => u.email === 'platform@admin-test.com')).toBe(true);
+    });
+  });
+
+  describe('POST /api/admin/users', () => {
+    let createdId: string;
+
+    it('creates a new platform admin', async () => {
+      const res = await api
+        .post('/api/admin/users')
+        .set('Cookie', platformAdminCookies)
+        .send({
+          name: 'Admin Baru',
+          email: `newadmin.${Date.now()}@platform-test.com`,
+          password: 'Admin123!',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.isPlatformAdmin).toBe(true);
+      createdId = res.body.data.id;
+    });
+
+    it('rejects duplicate email among platform admins', async () => {
+      const res = await api
+        .post('/api/admin/users')
+        .set('Cookie', platformAdminCookies)
+        .send({ name: 'Duplicate', email: 'platform@admin-test.com', password: 'Admin123!' });
+
+      expect(res.status).toBe(409);
+    });
+
+    afterAll(async () => {
+      if (createdId) await testPrisma.user.delete({ where: { id: createdId } });
+    });
+  });
+
+  describe('DELETE /api/admin/users/:id', () => {
+    it('deactivates a platform admin', async () => {
+      const target = await testPrisma.user.create({
+        data: {
+          tenantId: tenant.id,
+          roleId: (await testPrisma.role.findFirst({ where: { tenantId: tenant.id } }))!.id,
+          email: `todeactivate.${Date.now()}@platform-test.com`,
+          passwordHash: 'x',
+          name: 'To Deactivate',
+          isPlatformAdmin: true,
+          isActive: true,
+        },
+      });
+
+      const res = await api
+        .delete(`/api/admin/users/${target.id}`)
+        .set('Cookie', platformAdminCookies);
+
+      expect(res.status).toBe(200);
+      const found = await testPrisma.user.findUnique({ where: { id: target.id } });
+      expect(found?.isActive).toBe(false);
+    });
+
+    it('returns 400 when trying to deactivate your own account', async () => {
+      const me = await testPrisma.user.findFirst({ where: { email: 'platform@admin-test.com' } });
+      const res = await api
+        .delete(`/api/admin/users/${me!.id}`)
+        .set('Cookie', platformAdminCookies);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('CANNOT_DEACTIVATE_SELF');
     });
   });
 

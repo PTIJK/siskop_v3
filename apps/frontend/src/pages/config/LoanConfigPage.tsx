@@ -56,7 +56,7 @@ export function LoanConfigPage() {
   });
 
   const fetchConfigs = () => {
-    api.get('/api/tenant/loans/configs').then((res) => setConfigs(res.data.data));
+    api.get('/api/loans/configs').then((res) => setConfigs(res.data.data));
   };
 
   useEffect(() => { fetchConfigs(); }, []);
@@ -86,10 +86,10 @@ export function LoanConfigPage() {
     try {
       const payload = { ...data, maxTermMonths: parseInt(data.maxTermMonths) };
       if (editConfig) {
-        await api.put(`/api/tenant/loans/configs/${editConfig.id}`, payload);
+        await api.put(`/api/loans/configs/${editConfig.id}`, payload);
         toast({ title: 'Konfigurasi berhasil diperbarui' });
       } else {
-        await api.post('/api/tenant/loans/configs', payload);
+        await api.post('/api/loans/configs', payload);
         toast({ title: 'Konfigurasi berhasil ditambahkan' });
       }
       setAddDialog(false);
@@ -102,7 +102,7 @@ export function LoanConfigPage() {
 
   const toggleActive = async (c: LoanConfig) => {
     try {
-      await api.put(`/api/tenant/loans/configs/${c.id}`, { isActive: !c.isActive });
+      await api.put(`/api/loans/configs/${c.id}`, { isActive: !c.isActive });
       fetchConfigs();
     } catch {
       toast({ title: 'Gagal', variant: 'destructive' });

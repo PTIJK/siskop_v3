@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi** | 1.0.0 |
-| **Tanggal** | Juni 2026 |
-| **Status** | Draft |
+| **Versi** | 1.1.0 |
+| **Tanggal** | 21 Juli 2026 |
+| **Status** | Draft — disinkronkan dengan implementasi berjalan |
 
 ---
 
@@ -239,6 +239,12 @@ Validasi tambahan:
 
 ## 6. Modul Pinjaman/Pembiayaan
 
+### 6.0 Daftar Pinjaman & Filter
+
+**Endpoint:** `GET /api/loans?page=1&limit=20&status=&loanConfigId=&search=`
+
+`loanConfigId` (optional) menyaring daftar pinjaman berdasarkan jenis pembiayaan yang dipilih pada dropdown filter di halaman dashboard pinjaman. Jika kosong, semua jenis pembiayaan ditampilkan.
+
 ### 6.1 Konfigurasi Jenis Pembiayaan
 
 **Endpoint:** `POST /api/loans/configs`
@@ -420,6 +426,14 @@ Implementasi: Puppeteer render HTML template → export PDF stream.
 
 ### 8.2 Role & Permission Management
 
+**Endpoints:**
+- `GET /api/config/roles` — list role tenant
+- `POST /api/config/roles` — buat role baru
+- `PUT /api/config/roles/:id` — update permission matrix role
+- `DELETE /api/config/roles/:id` — hapus role kustom (`requirePermission('roles', 'delete')`)
+  - Ditolak dengan `409 ROLE_IN_USE` jika masih ada user yang memakai role tersebut
+  - `404 ROLE_NOT_FOUND` jika role tidak ditemukan di tenant
+
 **Permission Matrix per Modul:**
 ```json
 {
@@ -468,7 +482,41 @@ Setiap paket memiliki:
 - Harga per bulan
 - Batas jumlah user
 - Batas jumlah anggota
+- Batas jumlah konfigurasi simpanan custom (`maxSavingConfigs`, kosong = tak terbatas)
+- Toggle fitur whitelabel (`whitelabelEnabled`)
 - Daftar modul yang diaktifkan (array of module keys)
+
+### 9.4 Upload Logo Koperasi (Host-managed)
+
+**Endpoint:** `POST /api/admin/tenants/:id/logo`
+
+Multipart form upload (`multer`, field `logo`, jpg/png, max 2MB), mengikuti pola upload yang sama dengan `config.router.ts`. File disimpan di `uploads/logos/{tenantId}/logo-{timestamp}.{ext}` dan `Tenant.logoUrl` diperbarui. Digunakan oleh Host dari halaman detail tenant sebagai alternatif jika admin koperasi belum mengunggah logonya sendiri (CFG-02).
+
+### 9.5 Notifikasi Platform (In-App)
+
+**Endpoints:**
+- `GET /api/admin/notifications?page=&limit=` — list notifikasi, tiap item menyertakan `isRead` (dihitung per platform admin yang me-request)
+- `GET /api/admin/notifications/unread-count` — jumlah belum dibaca untuk platform admin yang me-request
+- `POST /api/admin/notifications/:id/read` — tandai satu notifikasi dibaca
+- `POST /api/admin/notifications/read-all` — tandai semua notifikasi dibaca
+
+**Event yang memicu notifikasi (`NotificationType`):**
+| Type | Trigger | Sumber |
+|------|---------|--------|
+| `TENANT_REGISTERED` | Koperasi baru mendaftar | `auth.service.ts` → `registerTenant` (dalam transaksi yang sama) |
+| `BILLING_BLOCKED` | Koperasi diblokir otomatis karena tagihan lewat jatuh tempo | `billing.ts` → `processBillingReminders` |
+| `PACKAGE_CHANGED` | Paket langganan koperasi diubah oleh platform admin | `admin.service.ts` → `updateTenant` (saat `packageId` berubah) |
+
+**Model penyimpanan status baca:** `Notification` (event log, shared antar semua platform admin) + `NotificationRead` (baris per user per notifikasi; ketiadaan baris = belum dibaca). Ini memastikan satu platform admin menandai baca tidak memengaruhi status baca admin lain.
+
+### 9.6 Manajemen User Platform Admin
+
+**Endpoints:**
+- `GET /api/admin/users` — list user dengan `isPlatformAdmin = true`
+- `POST /api/admin/users` — buat platform admin baru (mewarisi `tenantId`/`roleId` dari pembuatnya — bukan entitas tenant biasa)
+- `PUT /api/admin/users/:id` — update nama/email/`isActive` (dipakai juga untuk aktivasi kembali)
+- `DELETE /api/admin/users/:id` — nonaktifkan platform admin (soft delete)
+  - `400 CANNOT_DEACTIVATE_SELF` jika platform admin mencoba menonaktifkan akunnya sendiri
 
 ---
 
@@ -506,3 +554,12 @@ Semua list endpoint mendukung:
 | `MEMBER_HAS_EXISTING_LOAN` | Anggota sudah punya pinjaman aktif |
 | `INSUFFICIENT_BALANCE` | Saldo simpanan tidak mencukupi |
 | `VALIDATION_ERROR` | Input tidak valid (detail di `errors` field) |
+| `PACKAGE_LIMIT_EXCEEDED` | Paket tenant tidak mengizinkan penambahan resource ini (mis. kuota konfigurasi simpanan custom) |
+| `FEATURE_NOT_ENTITLED` | Paket tenant tidak mencakup fitur ini (mis. whitelabel) |
+| `ROLE_IN_USE` | Role tidak bisa dihapus — masih dipakai satu atau lebih user |
+| `ROLE_NOT_FOUND` | ID role tidak ditemukan di tenant |
+| `NOTIFICATION_NOT_FOUND` | ID notifikasi tidak ditemukan |
+| `CANNOT_DEACTIVATE_SELF` | Platform admin tidak bisa menonaktifkan akunnya sendiri |
+| `DOMAIN_ALREADY_USED` | Domain kustom sudah dipakai tenant lain |
+
+> Lihat juga `Docs/api-conventions.md` untuk daftar lengkap dan HTTP status masing-masing kode error di atas — dokumen ini fokus pada kapan tiap error dipicu.

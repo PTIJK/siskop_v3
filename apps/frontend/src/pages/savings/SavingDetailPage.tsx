@@ -52,8 +52,8 @@ export function SavingDetailPage() {
 
   const fetchData = () => {
     Promise.all([
-      api.get(`/api/tenant/savings/${id}`),
-      api.get(`/api/tenant/savings/${id}/transactions`),
+      api.get(`/api/savings/${id}`),
+      api.get(`/api/savings/${id}/transactions`),
     ])
       .then(([sRes, tRes]) => {
         setSaving(sRes.data.data);
@@ -70,7 +70,7 @@ export function SavingDetailPage() {
     setIsSubmitting(true);
     try {
       const endpoint = action === 'deposit' ? 'deposit' : 'withdraw';
-      await api.post(`/api/tenant/savings/${id}/${endpoint}`, {
+      await api.post(`/api/savings/${id}/${endpoint}`, {
         amount: parseFloat(amount),
         note: note || undefined,
       });

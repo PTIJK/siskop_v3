@@ -5,6 +5,7 @@ import { Tenant, User, Role } from '@prisma/client';
 import prisma from '../../lib/prisma';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../lib/jwt';
 import { AppError } from '../../lib/errors';
+import { createNotification } from '../../lib/notifications';
 import { RegisterTenantInput } from './auth.schema';
 
 export type UserWithRole = User & { role: Role };
@@ -157,6 +158,16 @@ export class AuthService {
           isActive: true,
         })),
       });
+
+      await createNotification(
+        {
+          type: 'TENANT_REGISTERED',
+          title: 'Koperasi baru terdaftar',
+          message: `${newTenant.name} baru saja mendaftar ke platform`,
+          relatedTenantId: newTenant.id,
+        },
+        tx
+      );
 
       return newTenant;
     });

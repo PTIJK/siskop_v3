@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../../lib/prisma';
-import { AppError } from '../../lib/errors';
+import { AppError, Errors } from '../../lib/errors';
 
 export class ConfigService {
   // ── Profile ──────────────────────────────────────────────────────────────────
@@ -129,6 +129,20 @@ export class ConfigService {
         ...(data.permissions ? { permissions: data.permissions as import('@prisma/client').Prisma.InputJsonValue } : {}),
       },
     });
+  }
+
+  async deleteRole(tenantId: string, roleId: string): Promise<void> {
+    const role = await prisma.role.findFirst({ where: { id: roleId, tenantId } });
+    if (!role) throw new AppError('ROLE_NOT_FOUND', 'Role tidak ditemukan', 404);
+
+    const usersWithRole = await prisma.user.count({ where: { roleId, tenantId } });
+    if (usersWithRole > 0) {
+      throw Errors.ROLE_IN_USE(
+        `Role ini masih digunakan oleh ${usersWithRole} pengguna. Pindahkan pengguna ke role lain sebelum menghapus.`
+      );
+    }
+
+    await prisma.role.delete({ where: { id: roleId } });
   }
 
   // ── Whitelabel ───────────────────────────────────────────────────────────────

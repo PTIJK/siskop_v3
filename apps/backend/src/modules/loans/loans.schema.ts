@@ -38,6 +38,7 @@ export const LoanQuerySchema = z.object({
   status: z.nativeEnum(LoanStatus).optional(),
   kolCategory: z.nativeEnum(KOLCategory).optional(),
   memberId: z.string().optional(),
+  loanConfigId: z.string().optional(),
 });
 
 export type CreateLoanConfigInput = z.infer<typeof CreateLoanConfigSchema>;

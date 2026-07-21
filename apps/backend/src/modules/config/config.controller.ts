@@ -149,6 +149,15 @@ export async function updateRole(req: Request, res: Response, next: NextFunction
   }
 }
 
+export async function deleteRole(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    await configService.deleteRole(req.tenant.id, req.params.id);
+    res.json({ success: true, data: { message: 'Role berhasil dihapus' } });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getWhitelabel(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const data = await configService.getWhitelabelConfig(req.tenant.id);

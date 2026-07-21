@@ -64,7 +64,7 @@ export function WhitelabelConfigPage() {
   const fetchConfig = () => {
     setIsLoading(true);
     api
-      .get('/api/tenant/config/whitelabel')
+      .get('/api/config/whitelabel')
       .then((res) => {
         const data: WhitelabelConfig | null = res.data.data;
         setConfig(data);
@@ -86,7 +86,7 @@ export function WhitelabelConfigPage() {
   const onSubmit = async (data: FormData) => {
     setApiError('');
     try {
-      const res = await api.put('/api/tenant/config/whitelabel', {
+      const res = await api.put('/api/config/whitelabel', {
         customDomain: data.customDomain || null,
         primaryColor: data.primaryColor || null,
         hideBranding: data.hideBranding,

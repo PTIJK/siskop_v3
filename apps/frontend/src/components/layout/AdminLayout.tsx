@@ -2,6 +2,7 @@ import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useAuth } from '../../hooks/useAuth';
 import { AdminSidebar } from './AdminSidebar';
+import { NotificationBell } from './NotificationBell';
 import { Toaster } from '../ui/toaster';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import {
@@ -18,6 +19,7 @@ const ADMIN_ROUTE_LABELS: Record<string, string> = {
   '/admin': 'Dashboard Platform',
   '/admin/tenants': 'Koperasi',
   '/admin/packages': 'Paket Langganan',
+  '/admin/users': 'Platform Admin',
 };
 
 function getInitials(name: string): string {
@@ -45,6 +47,8 @@ function AdminTopbar() {
           <Shield className="h-3 w-3" />
           Platform Admin
         </Badge>
+
+        <NotificationBell />
 
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent">
