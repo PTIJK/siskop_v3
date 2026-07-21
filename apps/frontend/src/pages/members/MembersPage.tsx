@@ -36,8 +36,8 @@ export function MembersPage() {
     api
       .get('/api/members', { params: { page, limit, search } })
       .then((res) => {
-        setData(res.data.data.items);
-        setTotal(res.data.data.meta.total);
+        setData(res.data.data);
+        setTotal(res.data.meta.total);
       })
       .catch(console.error)
       .finally(() => setIsLoading(false));

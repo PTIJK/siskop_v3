@@ -41,8 +41,8 @@ export function SavingsPage() {
         params: { page, limit, search, ...(typeFilter ? { type: typeFilter } : {}) },
       })
       .then((res) => {
-        setData(res.data.data.items);
-        setTotal(res.data.data.meta.total);
+        setData(res.data.data);
+        setTotal(res.data.meta.total);
       })
       .catch(console.error)
       .finally(() => setIsLoading(false));

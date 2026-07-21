@@ -57,7 +57,7 @@ export function SavingDetailPage() {
     ])
       .then(([sRes, tRes]) => {
         setSaving(sRes.data.data);
-        setTransactions(tRes.data.data.items ?? tRes.data.data);
+        setTransactions(tRes.data.data);
       })
       .catch(console.error)
       .finally(() => setIsLoading(false));

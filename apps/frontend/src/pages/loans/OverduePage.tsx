@@ -35,7 +35,7 @@ export function OverduePage() {
   useEffect(() => {
     api.get('/api/loans/overdue')
       .then((res) => {
-        const items = (res.data.data.items ?? res.data.data) as OverdueLoan[];
+        const items = res.data.data as OverdueLoan[];
         const sorted = [...items].sort((a, b) => KOL_ORDER.indexOf(a.kolCategory as KOLCategory) - KOL_ORDER.indexOf(b.kolCategory as KOLCategory));
         setData(sorted);
       })

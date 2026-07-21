@@ -58,8 +58,8 @@ function LoansTable({ status, search, loanConfigId }: { status?: string; search:
         },
       })
       .then((res) => {
-        setData(res.data.data.items);
-        setTotal(res.data.data.meta.total);
+        setData(res.data.data);
+        setTotal(res.data.meta.total);
       })
       .catch(console.error)
       .finally(() => setIsLoading(false));
@@ -112,8 +112,7 @@ export function LoansDashboardPage() {
 
   useEffect(() => {
     api.get('/api/loans/overdue').then((res) => {
-      const items = res.data.data.items ?? res.data.data;
-      setOverdueCount(Array.isArray(items) ? items.length : 0);
+      setOverdueCount(Array.isArray(res.data.data) ? res.data.data.length : 0);
     }).catch(console.error);
 
     api.get('/api/loans/configs').then((res) => setLoanConfigs(res.data.data)).catch(console.error);

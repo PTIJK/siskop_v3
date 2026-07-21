@@ -72,7 +72,7 @@ export function NewSavingPage() {
   const searchMembers = async (q: string) => {
     if (q.length < 2) { setMemberResults([]); return; }
     const res = await api.get('/api/members', { params: { search: q, limit: 5 } });
-    setMemberResults(res.data.data.items);
+    setMemberResults(res.data.data);
   };
 
   const onSubmit = async (data: FormData) => {
