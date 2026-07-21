@@ -28,6 +28,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/config/roles': 'Hak Akses',
   '/config/savings': 'Konfigurasi Simpanan',
   '/config/loans': 'Konfigurasi Pinjaman',
+  '/config/whitelabel': 'Whitelabel',
 };
 
 function getInitials(name: string): string {

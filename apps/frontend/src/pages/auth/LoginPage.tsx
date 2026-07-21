@@ -36,8 +36,12 @@ export function LoginPage() {
   const onSubmit = async (data: LoginForm) => {
     setApiError('');
     try {
-      await login(data.email, data.password);
-      navigate('/dashboard', { replace: true });
+      const authData = await login(data.email, data.password);
+      if (authData.user?.isPlatformAdmin) {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
       setApiError(axiosErr?.response?.data?.error?.message ?? 'Login gagal. Periksa email dan password Anda.');

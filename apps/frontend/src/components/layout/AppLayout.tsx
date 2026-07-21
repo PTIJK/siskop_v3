@@ -5,7 +5,7 @@ import { Topbar } from './Topbar';
 import { Toaster } from '../ui/toaster';
 
 export function AppLayout() {
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading, user } = useAuthStore();
 
   if (isLoading) {
     return (
@@ -19,6 +19,7 @@ export function AppLayout() {
   }
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user?.isPlatformAdmin) return <Navigate to="/admin" replace />;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

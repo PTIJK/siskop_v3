@@ -266,6 +266,24 @@ async function main() {
   }
 
   console.log('✅ Sample members created with simpanan pokok');
+
+  // 7. Create platform admin user
+  await prisma.user.upsert({
+    where: { tenantId_email: { tenantId: tenant.id, email: 'superadmin@siskop.com' } },
+    update: {},
+    create: {
+      id: 'platform_admin',
+      tenantId: tenant.id,
+      roleId: superAdminRole.id,
+      email: 'superadmin@siskop.com',
+      passwordHash: await bcrypt.hash('SuperAdmin123!', 12),
+      name: 'Platform Administrator',
+      isPlatformAdmin: true,
+      isActive: true,
+    },
+  });
+  console.log('✅ Platform admin created');
+
   console.log('');
   console.log('🎉 Seed completed!');
   console.log('');

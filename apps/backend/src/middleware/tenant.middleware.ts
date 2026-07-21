@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
-import { Tenant } from '@prisma/client';
+import { Tenant, SubscriptionPackage } from '@prisma/client';
+
+export type TenantWithPackage = Tenant & { package: SubscriptionPackage | null };
 
 declare global {
   namespace Express {
     interface Request {
-      tenant: Tenant;
+      tenant: TenantWithPackage;
     }
   }
 }
@@ -28,6 +30,7 @@ export async function tenantMiddleware(
 
     const tenant = await prisma.tenant.findUnique({
       where: { slug, isActive: true },
+      include: { package: true },
     });
 
     if (!tenant) {

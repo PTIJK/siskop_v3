@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { AppError } from './errors';
 
@@ -12,15 +13,19 @@ export interface JwtPayload {
 }
 
 export function signAccessToken(payload: JwtPayload): string {
-  return jwt.sign(payload as unknown as Record<string, unknown>, ACCESS_SECRET, {
-    expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as jwt.SignOptions['expiresIn'],
-  });
+  return jwt.sign(
+    { ...payload, jti: crypto.randomBytes(8).toString('hex') } as unknown as Record<string, unknown>,
+    ACCESS_SECRET,
+    { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as jwt.SignOptions['expiresIn'] }
+  );
 }
 
 export function signRefreshToken(payload: JwtPayload): string {
-  return jwt.sign(payload as unknown as Record<string, unknown>, REFRESH_SECRET, {
-    expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as jwt.SignOptions['expiresIn'],
-  });
+  return jwt.sign(
+    { ...payload, jti: crypto.randomBytes(16).toString('hex') } as unknown as Record<string, unknown>,
+    REFRESH_SECRET,
+    { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as jwt.SignOptions['expiresIn'] }
+  );
 }
 
 export function verifyAccessToken(token: string): JwtPayload {

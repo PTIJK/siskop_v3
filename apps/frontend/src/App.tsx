@@ -1,9 +1,15 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
+import { AdminLayout } from './components/layout/AdminLayout';
 import { ErrorBoundary } from './components/shared/ErrorBoundary';
 
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterTenantPage } from './pages/auth/RegisterTenantPage';
+
+import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+import { TenantsPage } from './pages/admin/TenantsPage';
+import { TenantDetailPage } from './pages/admin/TenantDetailPage';
+import { PackagesPage } from './pages/admin/PackagesPage';
 
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 
@@ -27,6 +33,7 @@ import { UsersPage } from './pages/config/UsersPage';
 import { RolesPage } from './pages/config/RolesPage';
 import { SavingConfigPage } from './pages/config/SavingConfigPage';
 import { LoanConfigPage } from './pages/config/LoanConfigPage';
+import { WhitelabelConfigPage } from './pages/config/WhitelabelConfigPage';
 
 export default function App() {
   return (
@@ -36,7 +43,15 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterTenantPage />} />
 
-        {/* Protected routes — all under AppLayout */}
+        {/* Platform admin routes — under AdminLayout */}
+        <Route element={<AdminLayout />}>
+          <Route path="/admin" element={<AdminDashboardPage />} />
+          <Route path="/admin/tenants" element={<TenantsPage />} />
+          <Route path="/admin/tenants/:id" element={<TenantDetailPage />} />
+          <Route path="/admin/packages" element={<PackagesPage />} />
+        </Route>
+
+        {/* Tenant protected routes — all under AppLayout */}
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
@@ -67,6 +82,7 @@ export default function App() {
           <Route path="/config/roles" element={<RolesPage />} />
           <Route path="/config/savings" element={<SavingConfigPage />} />
           <Route path="/config/loans" element={<LoanConfigPage />} />
+          <Route path="/config/whitelabel" element={<WhitelabelConfigPage />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

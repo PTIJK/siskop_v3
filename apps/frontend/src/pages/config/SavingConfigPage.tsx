@@ -24,6 +24,7 @@ interface SavingConfig {
   rateType: RateType;
   rate: string;
   period: string;
+  isDefault: boolean;
   isActive: boolean;
 }
 
@@ -60,6 +61,10 @@ export function SavingConfigPage() {
   };
 
   useEffect(() => { fetchConfigs(); }, []);
+
+  const maxSavingConfigs = tenant?.package?.maxSavingConfigs ?? null;
+  const customConfigCount = configs.filter((c) => !c.isDefault).length;
+  const quotaReached = maxSavingConfigs !== null && customConfigCount >= maxSavingConfigs;
 
   const openEdit = (c: SavingConfig) => {
     setEditConfig(c);
@@ -106,8 +111,20 @@ export function SavingConfigPage() {
     <div className="space-y-6">
       <PageHeader
         title="Konfigurasi Simpanan"
-        actions={<Button onClick={openAdd}><Plus className="mr-2 h-4 w-4" /> Tambah</Button>}
+        actions={
+          <span title={quotaReached ? `Batas ${maxSavingConfigs} simpanan custom pada paket Anda sudah tercapai` : undefined}>
+            <Button onClick={openAdd} disabled={quotaReached}>
+              <Plus className="mr-2 h-4 w-4" /> Tambah
+            </Button>
+          </span>
+        }
       />
+
+      <p className="text-sm text-muted-foreground">
+        {maxSavingConfigs === null
+          ? 'Simpanan custom: Tak terbatas'
+          : `${customConfigCount} dari ${maxSavingConfigs} simpanan custom terpakai`}
+      </p>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {configs.map((c) => (

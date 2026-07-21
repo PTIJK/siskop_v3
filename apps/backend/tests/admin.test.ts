@@ -124,6 +124,55 @@ describe('Admin Module (platform admin routes)', () => {
     });
   });
 
+  describe('PUT /api/admin/tenants/:id — billing date', () => {
+    it('updates nextBillingDate and resets reminder-sent flags', async () => {
+      // Seed reminder flags as if a previous cycle already sent them.
+      await testPrisma.tenant.update({
+        where: { id: tenant.id },
+        data: { billingReminder30SentAt: new Date(), billingReminder7SentAt: new Date() },
+      });
+
+      const future = new Date(Date.now() + 40 * 24 * 60 * 60 * 1000);
+      const res = await api
+        .put(`/api/admin/tenants/${tenant.id}`)
+        .set('Cookie', platformAdminCookies)
+        .send({ nextBillingDate: future.toISOString() });
+
+      expect(res.status).toBe(200);
+      expect(new Date(res.body.data.nextBillingDate).toDateString()).toBe(
+        future.toDateString()
+      );
+      expect(res.body.data.billingReminder30SentAt).toBeNull();
+      expect(res.body.data.billingReminder7SentAt).toBeNull();
+    });
+
+    it('reactivates a billing-blocked tenant when billing date is renewed to the future', async () => {
+      await testPrisma.tenant.update({
+        where: { id: tenant.id },
+        data: { isActive: false },
+      });
+
+      const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const res = await api
+        .put(`/api/admin/tenants/${tenant.id}`)
+        .set('Cookie', platformAdminCookies)
+        .send({ nextBillingDate: future.toISOString() });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.isActive).toBe(true);
+    });
+
+    it('clears nextBillingDate when set to null', async () => {
+      const res = await api
+        .put(`/api/admin/tenants/${tenant.id}`)
+        .set('Cookie', platformAdminCookies)
+        .send({ nextBillingDate: null });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.nextBillingDate).toBeNull();
+    });
+  });
+
   describe('GET /api/admin/tenants/:id/stats', () => {
     it('returns tenant usage statistics', async () => {
       const res = await api

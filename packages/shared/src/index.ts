@@ -43,6 +43,12 @@ export enum KOLCategory {
   MACET = 'MACET',
 }
 
+export enum DomainStatus {
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  FAILED = 'FAILED',
+}
+
 // ── Permission Types ─────────────────────────────────────────────────────────
 
 export interface Permissions {
@@ -75,8 +81,22 @@ export interface AuthUser {
   tenantId: string;
   roleId: string;
   role: AuthRole;
+  isPlatformAdmin?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SubscriptionPackage {
+  id: string;
+  name: string;
+  price: string;
+  modules: string[];
+  maxUsers: number;
+  maxMembers: number;
+  maxSavingConfigs: number | null;
+  whitelabelEnabled: boolean;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface Tenant {
@@ -89,6 +109,35 @@ export interface Tenant {
   cooperativeType: string;
   isActive: boolean;
   logoUrl?: string | null;
+  packageId?: string | null;
+  package?: SubscriptionPackage | null;
+  nextBillingDate?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavingConfig {
+  id: string;
+  tenantId: string;
+  name: string;
+  type: SavingType;
+  rateType: RateType;
+  rate: string;
+  periodUnit: string;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface WhitelabelConfig {
+  id: string;
+  tenantId: string;
+  customDomain?: string | null;
+  domainStatus: DomainStatus;
+  primaryColor?: string | null;
+  hideBranding: boolean;
+  emailSenderName?: string | null;
+  emailSenderAddress?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,7 +1,8 @@
 // prisma/schema.prisma
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["omitApi"]
 }
 
 datasource db {
@@ -53,44 +54,56 @@ enum KOLCategory {
   MACET
 }
 
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
 // ── PLATFORM ──────────────────────────────────────────────────────────────────
 
 model SubscriptionPackage {
-  id         String   @id @default(cuid())
-  name       String
-  price      Decimal  @db.Decimal(15, 2)
-  modules    String[]
-  maxUsers   Int
-  maxMembers Int
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  id                String   @id @default(cuid())
+  name              String
+  price             Decimal  @db.Decimal(15, 2)
+  modules           String[]
+  maxUsers          Int
+  maxMembers        Int
+  maxSavingConfigs  Int?
+  whitelabelEnabled Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
 
   tenants Tenant[]
 }
 
 model Tenant {
-  id              String               @id @default(cuid())
-  name            String
-  slug            String               @unique
-  address         String
-  registrationNo  String               @unique
-  type            TenantType
-  cooperativeType String               @default("KSP")
-  logoUrl         String?
-  packageId       String?
-  package         SubscriptionPackage? @relation(fields: [packageId], references: [id])
-  isActive        Boolean              @default(true)
-  createdAt       DateTime             @default(now())
+  id                      String               @id @default(cuid())
+  name                    String
+  slug                    String               @unique
+  address                 String
+  registrationNo          String               @unique
+  type                    TenantType
+  cooperativeType         String               @default("KSP")
+  logoUrl                 String?
+  packageId               String?
+  package                 SubscriptionPackage? @relation(fields: [packageId], references: [id])
+  isActive                Boolean              @default(true)
+  nextBillingDate         DateTime?
+  billingReminder30SentAt DateTime?
+  billingReminder7SentAt  DateTime?
+  createdAt               DateTime             @default(now())
 
-  users         User[]
-  roles         Role[]
-  members       Member[]
-  savingConfigs SavingConfig[]
-  loanConfigs   LoanConfig[]
-  savings       Saving[]
-  loans         Loan[]
-  savingTxns    SavingTransaction[]
-  loanPayments  LoanPayment[]
+  users            User[]
+  roles            Role[]
+  members          Member[]
+  savingConfigs    SavingConfig[]
+  loanConfigs      LoanConfig[]
+  savings          Saving[]
+  loans            Loan[]
+  savingTxns       SavingTransaction[]
+  loanPayments     LoanPayment[]
+  whitelabelConfig WhitelabelConfig?
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
@@ -107,17 +120,18 @@ model Role {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  tenantId     String
-  tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  roleId       String
-  role         Role     @relation(fields: [roleId], references: [id])
-  email        String
-  passwordHash String?
-  name         String
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  roleId          String
+  role            Role     @relation(fields: [roleId], references: [id])
+  email           String
+  passwordHash    String?
+  name            String
+  isActive        Boolean  @default(true)
+  isPlatformAdmin Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   refreshTokens      RefreshToken[]
   savingTransactions SavingTransaction[]
@@ -173,10 +187,25 @@ model SavingConfig {
   rateType   RateType
   rate       Decimal    @db.Decimal(8, 4)
   periodUnit String
+  isDefault  Boolean    @default(false)
   isActive   Boolean    @default(true)
   createdAt  DateTime   @default(now())
 
   savings Saving[]
+}
+
+model WhitelabelConfig {
+  id                 String       @id @default(cuid())
+  tenantId           String       @unique
+  tenant             Tenant       @relation(fields: [tenantId], references: [id])
+  customDomain       String?      @unique
+  domainStatus       DomainStatus @default(PENDING)
+  primaryColor       String?
+  hideBranding       Boolean      @default(false)
+  emailSenderName    String?
+  emailSenderAddress String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 }
 
 model Saving {

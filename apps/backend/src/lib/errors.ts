@@ -25,4 +25,8 @@ export const Errors = {
   INSUFFICIENT_BALANCE: () => new AppError('INSUFFICIENT_BALANCE', 'Saldo tidak mencukupi', 400),
   VALIDATION_ERROR: (details: unknown) =>
     new AppError('VALIDATION_ERROR', 'Data tidak valid', 422, details),
+  PACKAGE_LIMIT_EXCEEDED: (message = 'Paket langganan tidak mengizinkan penambahan data ini') =>
+    new AppError('PACKAGE_LIMIT_EXCEEDED', message, 422),
+  FEATURE_NOT_ENTITLED: (message = 'Fitur ini tidak termasuk dalam paket langganan Anda') =>
+    new AppError('FEATURE_NOT_ENTITLED', message, 403),
 };

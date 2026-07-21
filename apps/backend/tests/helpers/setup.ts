@@ -103,6 +103,7 @@ export async function loginAs(
 }
 
 export async function cleanupTenant(tenantId: string) {
+  await testPrisma.whitelabelConfig.deleteMany({ where: { tenantId } });
   await testPrisma.loanPayment.deleteMany({ where: { tenantId } });
   await testPrisma.loan.deleteMany({ where: { tenantId } });
   await testPrisma.savingTransaction.deleteMany({ where: { tenantId } });

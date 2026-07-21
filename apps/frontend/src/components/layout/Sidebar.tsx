@@ -51,13 +51,23 @@ const navItems = [
   },
 ];
 
-const configItem = {
-  label: 'Konfigurasi',
-  href: '/config/profile',
-  icon: Settings,
-  module: 'config' as const,
-  action: 'read' as const,
-};
+function buildConfigItem(whitelabelEnabled: boolean) {
+  return {
+    label: 'Konfigurasi',
+    href: '/config/profile',
+    icon: Settings,
+    module: 'config' as const,
+    action: 'read' as const,
+    children: [
+      { label: 'Profil', href: '/config/profile' },
+      { label: 'Konfigurasi Simpanan', href: '/config/savings' },
+      { label: 'Konfigurasi Pinjaman', href: '/config/loans' },
+      { label: 'Pengguna', href: '/config/users' },
+      { label: 'Hak Akses', href: '/config/roles' },
+      ...(whitelabelEnabled ? [{ label: 'Whitelabel', href: '/config/whitelabel' }] : []),
+    ],
+  };
+}
 
 interface NavItemWithChildren {
   label: string;
@@ -137,6 +147,7 @@ function NavItemComponent({ item, onClose }: { item: NavItemWithChildren; onClos
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { can } = usePermissions();
   const tenant = useAuthStore((s) => s.tenant);
+  const configItem = buildConfigItem(Boolean(tenant?.package?.whitelabelEnabled));
 
   return (
     <div className="flex h-full flex-col bg-slate-900">
@@ -177,21 +188,10 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       {/* Config at bottom */}
       {can(configItem.module, configItem.action) && (
         <div className="border-t border-slate-700 px-3 py-4">
-          <NavLink
-            to={configItem.href}
-            onClick={onClose}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
-                isActive
-                  ? 'border-l-2 border-primary bg-slate-700 text-white'
-                  : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-              )
-            }
-          >
-            <configItem.icon className="h-4 w-4 shrink-0" />
-            {configItem.label}
-          </NavLink>
+          <NavItemComponent
+            item={configItem as unknown as NavItemWithChildren}
+            onClose={onClose}
+          />
         </div>
       )}
     </div>
