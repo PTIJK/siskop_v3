@@ -33,6 +33,7 @@ const MODULES: { key: Module; label: string; actions: { key: Action; label: stri
   { key: 'config', label: 'Konfigurasi', actions: [{ key: 'read', label: 'Baca' }, { key: 'update', label: 'Edit' }] },
   { key: 'users', label: 'User', actions: [{ key: 'create', label: 'Buat' }, { key: 'read', label: 'Baca' }, { key: 'update', label: 'Edit' }, { key: 'delete', label: 'Hapus' }] },
   { key: 'roles', label: 'Role', actions: [{ key: 'create', label: 'Buat' }, { key: 'read', label: 'Baca' }, { key: 'update', label: 'Edit' }, { key: 'delete', label: 'Hapus' }] },
+  { key: 'accounting', label: 'Konfigurasi Akun', actions: [{ key: 'create', label: 'Buat' }, { key: 'read', label: 'Baca' }, { key: 'update', label: 'Edit' }, { key: 'delete', label: 'Hapus' }] },
 ];
 
 const ALL_ACTIONS = ['create', 'read', 'update', 'delete', 'export'];

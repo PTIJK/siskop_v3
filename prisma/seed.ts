@@ -32,6 +32,7 @@ async function main() {
     config: { read: true, update: true },
     users: { create: true, read: true, update: true, delete: true },
     roles: { create: true, read: true, update: true, delete: true },
+    accounting: { create: true, read: true, update: true, delete: true },
   };
 
   const superAdminRole = await prisma.role.upsert({
@@ -57,6 +58,7 @@ async function main() {
         config: { read: true, update: false },
         users: { create: false, read: true, update: false, delete: false },
         roles: { create: false, read: true, update: false, delete: false },
+        accounting: { create: false, read: false, update: false, delete: false },
       },
     },
   });
@@ -80,6 +82,7 @@ async function main() {
         config: { read: false, update: false },
         users: { create: false, read: false, update: false, delete: false },
         roles: { create: false, read: false, update: false, delete: false },
+        accounting: { create: false, read: false, update: false, delete: false },
       },
     },
   });
@@ -100,6 +103,7 @@ async function main() {
         config: { read: false, update: false },
         users: { create: false, read: false, update: false, delete: false },
         roles: { create: false, read: false, update: false, delete: false },
+        accounting: { create: false, read: false, update: false, delete: false },
       },
     },
   });

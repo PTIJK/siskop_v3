@@ -222,6 +222,37 @@ DENGAN KETENTUAN:
     satu admin menandai baca tidak memengaruhi admin lain
 ```
 
+### 5.12 Konfigurasi Akun (Chart of Accounts)
+```
+SEBAGAI admin koperasi
+SAYA INGIN mendefinisikan bagan akun (Chart of Accounts) dan memetakan jenis
+transaksi simpanan/pinjaman ke akun yang sesuai
+AGAR koperasi punya dasar akuntansi yang memenuhi SAK EP (berlaku sejak
+Permenkop UKM No. 2/2024, menggantikan PSAK 27) tanpa harus menunggu modul
+jurnal/neraca penuh
+DENGAN KETENTUAN:
+  - Modul ini digated oleh entitlement paket langganan (modul "accounting"),
+    sama seperti pola gating whitelabel (lihat 5.10)
+  - Akun bersifat hierarkis (header/group vs. detail yang bisa dipakai transaksi)
+    dan kode akun mengikuti konvensi prefiks kategori (1- Aset, 2- Kewajiban,
+    3- Ekuitas, 4- Pendapatan, 5- Beban), divalidasi di backend
+  - Tersedia template COA standar (20 akun) yang bisa diisi otomatis dengan
+    satu klik pada koperasi yang belum punya akun sama sekali
+  - Klasifikasi Simpanan Pokok/Wajib sebagai Ekuitas dan Simpanan Sukarela
+    sebagai Kewajiban adalah default template yang DAPAT diubah tenant —
+    bukan logika hardcoded di aplikasi
+  - Pemetaan transaksi ke akun bersifat opsional — SAV-01/LOAN-01 tetap
+    berfungsi normal jika akuntansi belum dikonfigurasi; kelengkapan pemetaan
+    ditampilkan sebagai indikator UI ("X dari Y jenis transaksi sudah
+    dipetakan"), bukan hard gate
+  - Akun bawaan (isDefault) dan akun yang masih dipakai pemetaan tidak bisa
+    dihapus/dinonaktifkan
+  - TIDAK termasuk: mesin jurnal/posting otomatis dan laporan keuangan
+    ter-generate dari ledger (Neraca, Laporan Hasil Usaha/SHU, Arus Kas,
+    Promosi Ekonomi Anggota) — fase berikutnya, lihat
+    `Docs/specs/2026-07-21-konfigurasi-akun-coa-design.md` §10
+```
+
 ---
 
 ## 6. Functional Requirements
@@ -327,6 +358,11 @@ Jika tenant belum mengatur threshold kustom, sistem menggunakan default OJK di a
 | CFG-08 | Konfigurasi KOL category dan threshold | Must Have |
 | CFG-09 | Hapus role kustom | Must Have |
 | CFG-10 | Whitelabel: branding (warna utama, sembunyikan "Powered by SISKOP"), domain kustom, identitas pengirim email — hanya tampil/dapat diubah jika paket tenant `whitelabelEnabled`; nilai tersimpan tetap terlihat (read-only) saat fitur dibekukan akibat downgrade paket | Should Have — **domain kustom belum lengkap**: field & status badge (`PENDING`/`VERIFIED`/`FAILED`) sudah ada, tapi verifikasi DNS/CNAME otomatis dan provisioning sertifikat SSL per-domain belum diimplementasikan (lihat `Docs/specs/2026-07-21-paket-langganan-design.md` §9) — status akan selalu `PENDING`. Branding dan identitas pengirim email sudah fungsional penuh. |
+| CFG-11 | Konfigurasi Akun: CRUD bagan akun (Chart of Accounts) hierarkis dengan kode ter-prefiks kategori (Aset/Kewajiban/Ekuitas/Pendapatan/Beban); hanya tampil/dapat diakses jika paket tenant menyertakan modul `"accounting"` | Must Have — lihat `Docs/specs/2026-07-21-konfigurasi-akun-coa-design.md` |
+| CFG-12 | Isi otomatis template COA standar (20 akun) dengan satu klik pada koperasi yang belum punya akun | Must Have |
+| CFG-13 | Pemetaan jenis transaksi simpanan/pinjaman (Setoran, Penarikan, Pencairan, Pembayaran Pokok, Pembayaran Bunga/Margin, Denda) ke akun debit/kredit, dengan validasi arah saldo normal per jenis transaksi | Must Have |
+| CFG-14 | Indikator kelengkapan pemetaan transaksi ("X dari Y jenis transaksi sudah dipetakan") — informasional, tidak memblokir transaksi simpanan/pinjaman yang sudah ada | Must Have |
+| CFG-15 | Proteksi akun bawaan (`isDefault=true`) dan akun yang masih dipakai pemetaan dari penghapusan/penonaktifan (`409 ACCOUNT_IN_USE`) | Must Have |
 
 ### 6.8 Modul Platform Admin
 | ID | Requirement | Prioritas |
@@ -381,7 +417,7 @@ Jika tenant belum mengatur threshold kustom, sistem menggunakan default OJK di a
 - Mobile app (iOS/Android) — direncanakan v2.0
 - Integrasi payment gateway untuk pembayaran online
 - Notifikasi SMS/WhatsApp otomatis
-- Fitur akuntansi lengkap (jurnal, neraca, buku besar)
+- Fitur akuntansi lengkap: mesin jurnal/posting otomatis dan laporan keuangan ter-generate dari ledger (Neraca, Laporan Perhitungan Hasil Usaha/SHU, Laporan Arus Kas, Laporan Promosi Ekonomi Anggota, Catatan Atas Laporan Keuangan) — **catatan**: konfigurasi bagan akun (Chart of Accounts) dan pemetaan transaksi ke akun (tanpa posting) SUDAH masuk scope v1.1 sebagai modul `"accounting"` berbayar terpisah (§5.12, §6.7 CFG-11–15); RPT-01/RPT-02 tetap berjalan seperti sebelumnya dan tidak tergantung pada modul ini — lihat `Docs/specs/2026-07-21-konfigurasi-akun-coa-design.md`
 - API publik untuk integrasi pihak ketiga
 - Multi-bahasa (selain Bahasa Indonesia)
 
@@ -392,4 +428,5 @@ Jika tenant belum mengatur threshold kustom, sistem menggunakan default OJK di a
 - Koperasi diasumsikan memiliki koneksi internet minimal 5 Mbps
 - User diasumsikan familiar dengan penggunaan browser web
 - Regulasi: sistem mengikuti ketentuan umum KSP di Indonesia (UU No. 25/1992 tentang Perkoperasian)
+- Permenkop UKM No. 2/2024 mewajibkan koperasi menyusun laporan keuangan mengikuti SAK EP (Standar Akuntansi Keuangan Entitas Privat, berlaku untuk periode mulai 1 Jan 2025), menggantikan PSAK 27 yang telah dicabut — mendasari modul Konfigurasi Akun (§5.12); template COA bawaan (§5.12) adalah titik awal yang wajar, bukan template tersertifikasi/teraudit — tenant (atau akuntan mereka) tetap bertanggung jawab menyesuaikannya dengan kewajiban pelaporan spesifik mereka
 - Untuk koperasi syariah, perhitungan menggunakan akad Murabahah (margin flat)

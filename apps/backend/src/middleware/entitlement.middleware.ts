@@ -38,3 +38,16 @@ export function requireWhitelabelEntitlement(
   }
   next();
 }
+
+/** Gate Konfigurasi Akun (COA) routes against the tenant's package.modules containing "accounting". */
+export function requireAccountingEntitlement(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  if (!req.tenant.package?.modules?.includes('accounting')) {
+    next(Errors.FEATURE_NOT_ENTITLED('Paket langganan Anda tidak mengaktifkan modul akuntansi'));
+    return;
+  }
+  next();
+}

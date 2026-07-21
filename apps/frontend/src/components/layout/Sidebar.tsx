@@ -51,7 +51,7 @@ const navItems = [
   },
 ];
 
-function buildConfigItem(whitelabelEnabled: boolean) {
+function buildConfigItem(whitelabelEnabled: boolean, accountingEnabled: boolean) {
   return {
     label: 'Konfigurasi',
     href: '/config/profile',
@@ -62,6 +62,7 @@ function buildConfigItem(whitelabelEnabled: boolean) {
       { label: 'Profil', href: '/config/profile' },
       { label: 'Konfigurasi Simpanan', href: '/config/savings' },
       { label: 'Konfigurasi Pinjaman', href: '/config/loans' },
+      ...(accountingEnabled ? [{ label: 'Konfigurasi Akun', href: '/config/accounts' }] : []),
       { label: 'Pengguna', href: '/config/users' },
       { label: 'Hak Akses', href: '/config/roles' },
       ...(whitelabelEnabled ? [{ label: 'Whitelabel', href: '/config/whitelabel' }] : []),
@@ -147,7 +148,10 @@ function NavItemComponent({ item, onClose }: { item: NavItemWithChildren; onClos
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { can } = usePermissions();
   const tenant = useAuthStore((s) => s.tenant);
-  const configItem = buildConfigItem(Boolean(tenant?.package?.whitelabelEnabled));
+  const configItem = buildConfigItem(
+    Boolean(tenant?.package?.whitelabelEnabled),
+    Boolean(tenant?.package?.modules?.includes('accounting'))
+  );
 
   return (
     <div className="flex h-full flex-col bg-slate-900">

@@ -3,7 +3,7 @@
 
 | | |
 |---|---|
-| **Versi** | 1.1.0 |
+| **Versi** | 1.2.0 |
 | **Tanggal** | 21 Juli 2026 |
 | **Database** | PostgreSQL |
 | **ORM** | Prisma |
@@ -203,6 +203,34 @@ erDiagram
     DateTime createdAt
   }
 
+  %% ── ACCOUNTING CONFIGURATION (Konfigurasi Akun / COA) ────
+  Account {
+    String          id            PK
+    String          tenantId      FK
+    String          code          UK
+    String          name
+    AccountCategory category
+    NormalBalance   normalBalance
+    String          parentId      FK
+    Boolean         isHeader
+    Boolean         isDefault
+    Boolean         isActive
+    DateTime        createdAt
+    DateTime        updatedAt
+  }
+
+  AccountMapping {
+    String                 id              PK
+    String                 tenantId        FK
+    MappingSourceType      sourceType
+    String                 sourceId
+    MappingTransactionKind transactionKind
+    String                 debitAccountId  FK
+    String                 creditAccountId FK
+    DateTime               createdAt
+    DateTime               updatedAt
+  }
+
   %% ── RELATIONSHIPS ─────────────────────────────────────────
   SubscriptionPackage ||--o{ Tenant          : "subscribed_to"
   Tenant              ||--o{ Role            : "has"
@@ -231,6 +259,12 @@ erDiagram
   Loan                ||--o{ LoanPayment     : "has"
 
   Notification        ||--o{ NotificationRead : "has"
+
+  Tenant              ||--o{ Account         : "configures"
+  Tenant              ||--o{ AccountMapping  : "configures"
+  Account             |o--o{ Account         : "parent_of"
+  Account             ||--o{ AccountMapping  : "debit_side"
+  Account             ||--o{ AccountMapping  : "credit_side"
 ```
 
 ---
@@ -485,6 +519,58 @@ Hanya tampil/dapat diubah jika `SubscriptionPackage.whitelabelEnabled=true` untu
 
 **Index:** `loanId`, `tenantId`, `dueDate`, `paidAt`
 
+### 2.13 Account
+
+Bagan akun (Chart of Accounts) per tenant. Bagian dari modul Konfigurasi Akun — lihat `Docs/specs/2026-07-21-konfigurasi-akun-coa-design.md`. Digated oleh entitlement paket (`"accounting"` di `SubscriptionPackage.modules[]`).
+
+| Kolom | Tipe | Constraint | Keterangan |
+|-------|------|------------|------------|
+| id | VARCHAR | PK, CUID | Primary key |
+| tenantId | VARCHAR | FK, NOT NULL | Koperasi pemilik |
+| code | VARCHAR | UNIQUE per tenant, NOT NULL, IMMUTABLE | Kode akun, mis. `1-1000`; prefiks harus sesuai kategori (1- Aset, 2- Kewajiban, 3- Ekuitas, 4- Pendapatan, 5- Beban), divalidasi di backend |
+| name | VARCHAR | NOT NULL | Nama akun; dapat diubah kapan saja (kode tidak) |
+| category | ENUM | NOT NULL | `ASET \| KEWAJIBAN \| EKUITAS \| PENDAPATAN \| BEBAN` |
+| normalBalance | ENUM | NOT NULL | `DEBIT \| KREDIT`, diturunkan dari `category` saat dibuat, disimpan untuk kemudahan query |
+| parentId | VARCHAR | FK, NULLABLE, self-relation | Akun induk (hierarki header/group) |
+| isHeader | BOOLEAN | DEFAULT false | `true` = akun header/group, tidak dapat dipakai langsung dalam pemetaan transaksi |
+| isDefault | BOOLEAN | DEFAULT false | `true` untuk akun hasil seed template standar; dilindungi dari penghapusan |
+| isActive | BOOLEAN | DEFAULT true | Soft-deactivate, bukan hard delete |
+| createdAt / updatedAt | TIMESTAMP | | Kolom audit standar |
+
+**Unique constraint:** `(tenantId, code)` · **Index:** `tenantId`, `category`, `parentId`
+
+Akun dengan `isDefault=true` atau yang masih direferensikan oleh `AccountMapping` (sisi debit maupun kredit) tidak dapat dihapus/dinonaktifkan (`409 ACCOUNT_IN_USE`).
+
+### 2.14 AccountMapping
+
+Memetakan sumber transaksi (satu `SavingConfig`, satu `LoanConfig`, atau default tenant-wide `SYSTEM`) ke akun debit/kredit yang akan digunakan saat mesin posting (Phase 2, belum diimplementasikan) menjurnal transaksi tersebut.
+
+| Kolom | Tipe | Constraint | Keterangan |
+|-------|------|------------|------------|
+| id | VARCHAR | PK, CUID | Primary key |
+| tenantId | VARCHAR | FK, NOT NULL | Koperasi pemilik |
+| sourceType | ENUM | NOT NULL | `SAVING_CONFIG \| LOAN_CONFIG \| SYSTEM` |
+| sourceId | VARCHAR | NULLABLE | FK ke `SavingConfig.id` atau `LoanConfig.id` bila scoped; `null` untuk `SYSTEM` |
+| transactionKind | ENUM | NOT NULL | `DEPOSIT \| WITHDRAWAL \| DISBURSEMENT \| PAYMENT_PRINCIPAL \| PAYMENT_INTEREST \| PAYMENT_PENALTY` |
+| debitAccountId | VARCHAR | FK → Account, NOT NULL | Akun sisi debit |
+| creditAccountId | VARCHAR | FK → Account, NOT NULL | Akun sisi kredit |
+| createdAt / updatedAt | TIMESTAMP | | Kolom audit standar |
+
+**Unique constraint:** `(tenantId, sourceType, sourceId, transactionKind)` · **Index:** `tenantId`
+
+Catatan: karena Postgres memperlakukan `NULL` sebagai nilai berbeda pada unique constraint, baris `SYSTEM` (`sourceId = null`) tidak ditegakkan unik secara database-level untuk `transactionKind` yang sama — aplikasi menangani upsert-nya secara manual (lihat `apps/backend/src/modules/config/coa.service.ts`).
+
+Setiap `transactionKind` punya kombinasi kategori debit/kredit yang diharapkan (divalidasi di backend, `422 MAPPING_ACCOUNT_CATEGORY_MISMATCH` jika dilanggar):
+
+| transactionKind | Kategori Debit | Kategori Kredit |
+|---|---|---|
+| DEPOSIT (Setoran) | ASET | EKUITAS atau KEWAJIBAN |
+| WITHDRAWAL (Penarikan) | EKUITAS atau KEWAJIBAN | ASET |
+| DISBURSEMENT (Pencairan) | ASET | ASET |
+| PAYMENT_PRINCIPAL (Pembayaran Pokok) | ASET | ASET |
+| PAYMENT_INTEREST (Pembayaran Bunga/Margin) | ASET | PENDAPATAN |
+| PAYMENT_PENALTY (Denda) | ASET | PENDAPATAN |
+
 ---
 
 ## 3. Enums
@@ -525,6 +611,31 @@ CREATE TYPE "NotificationType" AS ENUM (
   'TENANT_REGISTERED',
   'BILLING_BLOCKED',
   'PACKAGE_CHANGED'
+);
+
+-- Kategori akun (Chart of Accounts)
+CREATE TYPE "AccountCategory" AS ENUM (
+  'ASET',
+  'KEWAJIBAN',
+  'EKUITAS',
+  'PENDAPATAN',
+  'BEBAN'
+);
+
+-- Sisi saldo normal akun
+CREATE TYPE "NormalBalance" AS ENUM ('DEBIT', 'KREDIT');
+
+-- Sumber pemetaan transaksi ke akun
+CREATE TYPE "MappingSourceType" AS ENUM ('SAVING_CONFIG', 'LOAN_CONFIG', 'SYSTEM');
+
+-- Jenis transaksi yang dipetakan ke akun
+CREATE TYPE "MappingTransactionKind" AS ENUM (
+  'DEPOSIT',
+  'WITHDRAWAL',
+  'DISBURSEMENT',
+  'PAYMENT_PRINCIPAL',
+  'PAYMENT_INTEREST',
+  'PAYMENT_PENALTY'
 );
 ```
 
@@ -603,6 +714,34 @@ enum NotificationType {
   PACKAGE_CHANGED
 }
 
+enum AccountCategory {
+  ASET
+  KEWAJIBAN
+  EKUITAS
+  PENDAPATAN
+  BEBAN
+}
+
+enum NormalBalance {
+  DEBIT
+  KREDIT
+}
+
+enum MappingSourceType {
+  SAVING_CONFIG
+  LOAN_CONFIG
+  SYSTEM
+}
+
+enum MappingTransactionKind {
+  DEPOSIT
+  WITHDRAWAL
+  DISBURSEMENT
+  PAYMENT_PRINCIPAL
+  PAYMENT_INTEREST
+  PAYMENT_PENALTY
+}
+
 // ── PLATFORM ──────────────────────────────────────────────────────────────────
 
 model SubscriptionPackage {
@@ -648,6 +787,8 @@ model Tenant {
   loanPayments     LoanPayment[]
   whitelabelConfig WhitelabelConfig?
   notifications    Notification[]
+  accounts         Account[]
+  accountMappings  AccountMapping[]
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
@@ -882,6 +1023,52 @@ model LoanPayment {
   @@index([loanId])
   @@index([tenantId])
   @@index([dueDate])
+}
+
+// ── ACCOUNTING CONFIGURATION (Konfigurasi Akun / COA) ─────────────────────────
+
+model Account {
+  id            String          @id @default(cuid())
+  tenantId      String
+  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  code          String
+  name          String
+  category      AccountCategory
+  normalBalance NormalBalance
+  parentId      String?
+  parent        Account?        @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children      Account[]       @relation("AccountHierarchy")
+  isHeader      Boolean         @default(false)
+  isDefault     Boolean         @default(false)
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  debitMappings  AccountMapping[] @relation("DebitAccount")
+  creditMappings AccountMapping[] @relation("CreditAccount")
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([category])
+  @@index([parentId])
+}
+
+model AccountMapping {
+  id              String                 @id @default(cuid())
+  tenantId        String
+  tenant          Tenant                 @relation(fields: [tenantId], references: [id])
+  sourceType      MappingSourceType
+  sourceId        String?
+  transactionKind MappingTransactionKind
+  debitAccountId  String
+  debitAccount    Account                @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  creditAccountId String
+  creditAccount   Account                @relation("CreditAccount", fields: [creditAccountId], references: [id])
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@unique([tenantId, sourceType, sourceId, transactionKind])
+  @@index([tenantId])
 }
 ```
 

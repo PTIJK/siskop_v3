@@ -60,6 +60,11 @@ Default: `page=1`, `limit=20`, `sortBy=createdAt`, `sortOrder=desc`.
 | NOTIFICATION_NOT_FOUND        | 404  | Notification ID does not exist |
 | CANNOT_DEACTIVATE_SELF        | 400  | Platform admin cannot deactivate their own account |
 | DOMAIN_ALREADY_USED           | 409  | Custom domain is already claimed by another tenant |
+| ACCOUNT_CODE_INVALID_FORMAT   | 422  | Account code doesn't match the category-prefix convention for the given category (`1-` Aset, `2-` Kewajiban, `3-` Ekuitas, `4-` Pendapatan, `5-` Beban) |
+| ACCOUNT_CODE_DUPLICATE        | 409  | Account code already exists for this tenant |
+| ACCOUNT_IN_USE                | 409  | Account cannot be deleted/deactivated — it is `isDefault=true` or referenced by an `AccountMapping` |
+| ACCOUNT_NOT_FOUND             | 404  | Account ID does not exist in tenant |
+| MAPPING_ACCOUNT_CATEGORY_MISMATCH | 422 | Debit/credit account choice violates the expected normal-balance direction for the transaction kind |
 
 ## Route Namespacing — Host (Platform Admin) additions
 
@@ -75,6 +80,22 @@ PUT    /api/admin/users/:id                  Update a platform admin user
 DELETE /api/admin/users/:id                  Deactivate a platform admin user (soft delete)
 
 POST   /api/admin/tenants/:id/logo           Upload/replace a tenant's logo (Host-managed)
+```
+
+## Route Namespacing — Konfigurasi Akun (Accounting Configuration) additions
+
+Gated by the tenant's package entitlement (`"accounting"` in `SubscriptionPackage.modules[]`), else `403 FEATURE_NOT_ENTITLED`. See `Docs/specs/2026-07-21-konfigurasi-akun-coa-design.md`.
+
+```
+GET    /api/config/accounts?category=&page=&limit=&search=      List accounts (paginated, filterable by category)
+POST   /api/config/accounts                                     Create account
+PUT    /api/config/accounts/:id                                 Update account (name/isActive; code immutable after creation)
+DELETE /api/config/accounts/:id                                 Deactivate account (soft delete)
+POST   /api/config/accounts/seed-default                        Seed the standard COA template — no-op/blocked if tenant already has accounts
+
+GET    /api/config/account-mappings                             List mappings, joined with source config name + account names
+PUT    /api/config/account-mappings                              Upsert one mapping (sourceType + sourceId + transactionKind + debit/credit account)
+GET    /api/config/account-mappings/completeness                Count of expected vs. mapped transaction kinds (drives the UX completeness indicator)
 ```
 
 ## Route Namespacing

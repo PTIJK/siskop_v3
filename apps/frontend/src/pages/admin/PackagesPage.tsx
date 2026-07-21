@@ -37,6 +37,7 @@ interface PackageForm {
   maxMembers: string;
   maxSavingConfigs: string;
   whitelabelEnabled: boolean;
+  accountingEnabled: boolean;
 }
 
 const EMPTY_FORM: PackageForm = {
@@ -46,6 +47,7 @@ const EMPTY_FORM: PackageForm = {
   maxMembers: '',
   maxSavingConfigs: '',
   whitelabelEnabled: false,
+  accountingEnabled: false,
 };
 const DEFAULT_MODULES = ['members', 'savings', 'loans', 'reports', 'config'];
 
@@ -86,6 +88,7 @@ export function PackagesPage() {
       maxMembers: String(pkg.maxMembers),
       maxSavingConfigs: pkg.maxSavingConfigs === null ? '' : String(pkg.maxSavingConfigs),
       whitelabelEnabled: pkg.whitelabelEnabled,
+      accountingEnabled: pkg.modules.includes('accounting'),
     });
     setDialogOpen(true);
   };
@@ -100,7 +103,7 @@ export function PackagesPage() {
       const payload = {
         name: form.name,
         price: Number(form.price),
-        modules: DEFAULT_MODULES,
+        modules: form.accountingEnabled ? [...DEFAULT_MODULES, 'accounting'] : DEFAULT_MODULES,
         maxUsers: Number(form.maxUsers),
         maxMembers: Number(form.maxMembers),
         maxSavingConfigs: form.maxSavingConfigs === '' ? null : Number(form.maxSavingConfigs),
@@ -194,6 +197,12 @@ export function PackagesPage() {
                   <span>Whitelabel</span>
                   <Badge variant={pkg.whitelabelEnabled ? 'default' : 'secondary'}>
                     {pkg.whitelabelEnabled ? 'Aktif' : 'Nonaktif'}
+                  </Badge>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Modul Akuntansi</span>
+                  <Badge variant={pkg.modules.includes('accounting') ? 'default' : 'secondary'}>
+                    {pkg.modules.includes('accounting') ? 'Aktif' : 'Nonaktif'}
                   </Badge>
                 </div>
                 <div className="flex gap-2 pt-2">
@@ -292,6 +301,18 @@ export function PackagesPage() {
               />
               <Label htmlFor="pkg-whitelabel" className="cursor-pointer font-normal">
                 Aktifkan Whitelabel
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="pkg-accounting"
+                checked={form.accountingEnabled}
+                onCheckedChange={(checked) =>
+                  setForm((f) => ({ ...f, accountingEnabled: checked === true }))
+                }
+              />
+              <Label htmlFor="pkg-accounting" className="cursor-pointer font-normal">
+                Aktifkan Modul Akuntansi (Konfigurasi Akun)
               </Label>
             </div>
           </div>

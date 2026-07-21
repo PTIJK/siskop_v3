@@ -30,4 +30,13 @@ export const Errors = {
   FEATURE_NOT_ENTITLED: (message = 'Fitur ini tidak termasuk dalam paket langganan Anda') =>
     new AppError('FEATURE_NOT_ENTITLED', message, 403),
   ROLE_IN_USE: (message: string) => new AppError('ROLE_IN_USE', message, 409),
+  ACCOUNT_CODE_INVALID_FORMAT: (message: string) =>
+    new AppError('ACCOUNT_CODE_INVALID_FORMAT', message, 422),
+  ACCOUNT_CODE_DUPLICATE: (message = 'Kode akun sudah digunakan') =>
+    new AppError('ACCOUNT_CODE_DUPLICATE', message, 409),
+  ACCOUNT_IN_USE: (message = 'Akun tidak dapat dihapus atau dinonaktifkan karena masih digunakan') =>
+    new AppError('ACCOUNT_IN_USE', message, 409),
+  ACCOUNT_NOT_FOUND: () => new AppError('ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan', 404),
+  MAPPING_ACCOUNT_CATEGORY_MISMATCH: (message: string) =>
+    new AppError('MAPPING_ACCOUNT_CATEGORY_MISMATCH', message, 422),
 };

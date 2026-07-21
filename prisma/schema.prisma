@@ -66,6 +66,34 @@ enum NotificationType {
   PACKAGE_CHANGED
 }
 
+enum AccountCategory {
+  ASET
+  KEWAJIBAN
+  EKUITAS
+  PENDAPATAN
+  BEBAN
+}
+
+enum NormalBalance {
+  DEBIT
+  KREDIT
+}
+
+enum MappingSourceType {
+  SAVING_CONFIG
+  LOAN_CONFIG
+  SYSTEM
+}
+
+enum MappingTransactionKind {
+  DEPOSIT
+  WITHDRAWAL
+  DISBURSEMENT
+  PAYMENT_PRINCIPAL
+  PAYMENT_INTEREST
+  PAYMENT_PENALTY
+}
+
 // ── PLATFORM ──────────────────────────────────────────────────────────────────
 
 model SubscriptionPackage {
@@ -111,6 +139,8 @@ model Tenant {
   loanPayments     LoanPayment[]
   whitelabelConfig WhitelabelConfig?
   notifications    Notification[]
+  accounts         Account[]
+  accountMappings  AccountMapping[]
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
@@ -345,4 +375,50 @@ model LoanPayment {
   @@index([loanId])
   @@index([tenantId])
   @@index([dueDate])
+}
+
+// ── ACCOUNTING CONFIGURATION (Konfigurasi Akun / COA) ─────────────────────────
+
+model Account {
+  id            String          @id @default(cuid())
+  tenantId      String
+  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  code          String
+  name          String
+  category      AccountCategory
+  normalBalance NormalBalance
+  parentId      String?
+  parent        Account?        @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children      Account[]       @relation("AccountHierarchy")
+  isHeader      Boolean         @default(false)
+  isDefault     Boolean         @default(false)
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  debitMappings  AccountMapping[] @relation("DebitAccount")
+  creditMappings AccountMapping[] @relation("CreditAccount")
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([category])
+  @@index([parentId])
+}
+
+model AccountMapping {
+  id              String                 @id @default(cuid())
+  tenantId        String
+  tenant          Tenant                 @relation(fields: [tenantId], references: [id])
+  sourceType      MappingSourceType
+  sourceId        String?
+  transactionKind MappingTransactionKind
+  debitAccountId  String
+  debitAccount    Account                @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  creditAccountId String
+  creditAccount   Account                @relation("CreditAccount", fields: [creditAccountId], references: [id])
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@unique([tenantId, sourceType, sourceId, transactionKind])
+  @@index([tenantId])
 }

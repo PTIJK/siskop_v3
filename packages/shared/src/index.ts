@@ -49,6 +49,34 @@ export enum DomainStatus {
   FAILED = 'FAILED',
 }
 
+export enum AccountCategory {
+  ASET = 'ASET',
+  KEWAJIBAN = 'KEWAJIBAN',
+  EKUITAS = 'EKUITAS',
+  PENDAPATAN = 'PENDAPATAN',
+  BEBAN = 'BEBAN',
+}
+
+export enum NormalBalance {
+  DEBIT = 'DEBIT',
+  KREDIT = 'KREDIT',
+}
+
+export enum MappingSourceType {
+  SAVING_CONFIG = 'SAVING_CONFIG',
+  LOAN_CONFIG = 'LOAN_CONFIG',
+  SYSTEM = 'SYSTEM',
+}
+
+export enum MappingTransactionKind {
+  DEPOSIT = 'DEPOSIT',
+  WITHDRAWAL = 'WITHDRAWAL',
+  DISBURSEMENT = 'DISBURSEMENT',
+  PAYMENT_PRINCIPAL = 'PAYMENT_PRINCIPAL',
+  PAYMENT_INTEREST = 'PAYMENT_INTEREST',
+  PAYMENT_PENALTY = 'PAYMENT_PENALTY',
+}
+
 // ── Permission Types ─────────────────────────────────────────────────────────
 
 export interface Permissions {
@@ -60,6 +88,7 @@ export interface Permissions {
   config: { read: boolean; update: boolean };
   users: { create: boolean; read: boolean; update: boolean; delete: boolean };
   roles: { create: boolean; read: boolean; update: boolean; delete: boolean };
+  accounting?: { create: boolean; read: boolean; update: boolean; delete: boolean };
 }
 
 // ── Auth / User Types ────────────────────────────────────────────────────────
@@ -138,6 +167,35 @@ export interface WhitelabelConfig {
   hideBranding: boolean;
   emailSenderName?: string | null;
   emailSenderAddress?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Account {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  category: AccountCategory;
+  normalBalance: NormalBalance;
+  parentId?: string | null;
+  isHeader: boolean;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AccountMapping {
+  id: string;
+  tenantId: string;
+  sourceType: MappingSourceType;
+  sourceId?: string | null;
+  transactionKind: MappingTransactionKind;
+  debitAccountId: string;
+  debitAccount?: Account;
+  creditAccountId: string;
+  creditAccount?: Account;
   createdAt: string;
   updatedAt: string;
 }

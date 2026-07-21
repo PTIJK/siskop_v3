@@ -35,6 +35,7 @@ import { RolesPage } from './pages/config/RolesPage';
 import { SavingConfigPage } from './pages/config/SavingConfigPage';
 import { LoanConfigPage } from './pages/config/LoanConfigPage';
 import { WhitelabelConfigPage } from './pages/config/WhitelabelConfigPage';
+import { AccountsConfigPage } from './pages/config/AccountsConfigPage';
 
 export default function App() {
   return (
@@ -85,6 +86,7 @@ export default function App() {
           <Route path="/config/savings" element={<SavingConfigPage />} />
           <Route path="/config/loans" element={<LoanConfigPage />} />
           <Route path="/config/whitelabel" element={<WhitelabelConfigPage />} />
+          <Route path="/config/accounts" element={<AccountsConfigPage />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
