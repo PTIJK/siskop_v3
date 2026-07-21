@@ -176,20 +176,7 @@ export class AuthService {
     return { tenant, loginUrl: `https://${slug}.${domain}/login` };
   }
 
-  async login(
-    tenantId: string,
-    email: string,
-    password: string
-  ): Promise<{ user: UserWithRole; tenant: Tenant; accessToken: string; refreshToken: string }> {
-    const user = await prisma.user.findUnique({
-      where: { tenantId_email: { tenantId, email } },
-      include: { role: true },
-    });
-
-    if (!user || !user.isActive) {
-      throw new AppError('UNAUTHORIZED', 'Email atau password salah', 401);
-    }
-
+  private async verifyPassword(user: UserWithRole, password: string): Promise<void> {
     if (!user.passwordHash) {
       throw new AppError(
         'SSO_ONLY_ACCOUNT',
@@ -202,13 +189,11 @@ export class AuthService {
     if (!isValid) {
       throw new AppError('UNAUTHORIZED', 'Email atau password salah', 401);
     }
+  }
 
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      include: { package: true },
-    });
-    if (!tenant) throw new AppError('TENANT_NOT_FOUND', 'Koperasi tidak ditemukan', 404);
-
+  private async issueSession(
+    user: UserWithRole
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     const payload = {
       userId: user.id,
       tenantId: user.tenantId,
@@ -228,7 +213,56 @@ export class AuthService {
       },
     });
 
+    return { accessToken, refreshToken };
+  }
+
+  async login(
+    tenantId: string,
+    email: string,
+    password: string
+  ): Promise<{ user: UserWithRole; tenant: Tenant; accessToken: string; refreshToken: string }> {
+    const user = await prisma.user.findUnique({
+      where: { tenantId_email: { tenantId, email } },
+      include: { role: true },
+    });
+
+    if (!user || !user.isActive) {
+      throw new AppError('UNAUTHORIZED', 'Email atau password salah', 401);
+    }
+
+    await this.verifyPassword(user, password);
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: { package: true },
+    });
+    if (!tenant) throw new AppError('TENANT_NOT_FOUND', 'Koperasi tidak ditemukan', 404);
+
+    const { accessToken, refreshToken } = await this.issueSession(user);
+
     return { user, tenant, accessToken, refreshToken };
+  }
+
+  // Platform admins aren't tenant-scoped for login purposes — they authenticate from
+  // the admin subdomain, where tenantMiddleware intentionally leaves req.tenant unset.
+  async loginPlatformAdmin(
+    email: string,
+    password: string
+  ): Promise<{ user: UserWithRole; accessToken: string; refreshToken: string }> {
+    const user = await prisma.user.findFirst({
+      where: { email, isPlatformAdmin: true },
+      include: { role: true },
+    });
+
+    if (!user || !user.isActive) {
+      throw new AppError('UNAUTHORIZED', 'Email atau password salah', 401);
+    }
+
+    await this.verifyPassword(user, password);
+
+    const { accessToken, refreshToken } = await this.issueSession(user);
+
+    return { user, accessToken, refreshToken };
   }
 
   async refreshToken(

@@ -41,8 +41,26 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
   try {
     const { email, password } = LoginSchema.parse(req.body);
 
+    // req.tenant is unset on the admin subdomain (tenantMiddleware skips it there) —
+    // only a platform admin can authenticate in that case. Any other unresolved
+    // subdomain already 404'd with TENANT_NOT_FOUND inside tenantMiddleware.
     if (!req.tenant) {
-      throw new AppError('TENANT_NOT_FOUND', 'Koperasi tidak ditemukan', 404);
+      const result = await authService.loginPlatformAdmin(email, password);
+      setCookies(res, result.accessToken, result.refreshToken);
+      res.json({
+        success: true,
+        data: {
+          user: {
+            id: result.user.id,
+            name: result.user.name,
+            email: result.user.email,
+            role: result.user.role,
+            isPlatformAdmin: result.user.isPlatformAdmin,
+          },
+          tenant: null,
+        },
+      });
+      return;
     }
 
     const result = await authService.login(req.tenant.id, email, password);
@@ -56,6 +74,7 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
           name: result.user.name,
           email: result.user.email,
           role: result.user.role,
+          isPlatformAdmin: result.user.isPlatformAdmin,
         },
         tenant: result.tenant,
       },
@@ -94,7 +113,7 @@ export async function logout(req: Request, res: Response, next: NextFunction): P
 export async function me(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { passwordHash: _, ...userSafe } = req.user as typeof req.user & { passwordHash?: string };
-    res.json({ success: true, data: { user: userSafe, tenant: req.tenant } });
+    res.json({ success: true, data: { user: userSafe, tenant: req.tenant ?? null } });
   } catch (err) {
     next(err);
   }
