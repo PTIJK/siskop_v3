@@ -68,6 +68,7 @@ Default: `page=1`, `limit=20`, `sortBy=createdAt`, `sortOrder=desc`.
 | JOURNAL_ENTRY_UNBALANCED      | 500  | Internal guard rail — `SUM(debit) != SUM(credit)` detected before commit; should never actually reach a client |
 | REPORT_PERIOD_INVALID         | 422  | `from`/`to` date range for a report is invalid (e.g. `from > to`) |
 | SHU_DISTRIBUTION_PERCENT_INVALID | 422 | The 4 `ShuDistributionConfig` percentages (jasaSimpanan/jasaPinjaman/cadangan/lainnya) don't sum to exactly 100 |
+| MODAL_DISETOR_INVALID         | 422  | `Tenant.modalDisetor` value is negative |
 
 ## Route Namespacing — Host (Platform Admin) additions
 
@@ -104,6 +105,12 @@ POST   /api/config/accounts/:id/mark-cash-equivalent            Toggle Account.i
 
 GET    /api/config/shu-distribution                             Get the tenant's ShuDistributionConfig (null if not configured yet)
 PUT    /api/config/shu-distribution                              Upsert ShuDistributionConfig — 4 percentages (jasaSimpanan/jasaPinjaman/cadangan/lainnya) must sum to 100
+
+GET    /api/config/modal-disetor                                Get Tenant.modalDisetor + auditThresholdNotifiedAt (null if not set yet). NOT gated
+                                                                  by "accounting" entitlement — general compliance field, only requirePermission('config', ...).
+PUT    /api/config/modal-disetor                                Update Tenant.modalDisetor (body: { modalDisetor: number | null }); rejects negative
+                                                                  values with 422 MODAL_DISETOR_INVALID. Drives the daily audit-threshold notification
+                                                                  cron (Permenkop UKM No. 2/2024 Pasal 12, Rp5M) — see `apps/backend/src/lib/audit-threshold.ts`.
 ```
 
 ## Route Namespacing — Laporan Keuangan Regulasi (Neraca, Arus Kas) additions

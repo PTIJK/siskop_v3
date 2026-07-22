@@ -36,6 +36,7 @@ import {
   getMappingCompleteness,
 } from './coa.controller';
 import { getShuDistributionConfig, upsertShuDistributionConfig } from './shu-distribution.controller';
+import { getModalDisetor, updateModalDisetor } from './modal-disetor.controller';
 
 const logoStorage = multer.diskStorage({
   destination: (req, _file, cb) => {
@@ -160,3 +161,9 @@ configRouter.put(
   requirePermission('accounting', 'update'),
   upsertShuDistributionConfig
 );
+
+// Modal disetor — compliance field for the Permenkop UKM No. 2/2024 Pasal 12
+// mandatory-audit threshold (Rp5M). Not gated by "accounting" entitlement: this
+// is a general tenant compliance field, independent of the Konfigurasi Akun module.
+configRouter.get('/modal-disetor', requirePermission('config', 'read'), getModalDisetor);
+configRouter.put('/modal-disetor', requirePermission('config', 'update'), updateModalDisetor);

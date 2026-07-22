@@ -4,7 +4,7 @@ import prisma from './prisma';
 type NotificationClient = PrismaClient | Prisma.TransactionClient;
 
 export interface CreateNotificationInput {
-  type: 'TENANT_REGISTERED' | 'BILLING_BLOCKED' | 'PACKAGE_CHANGED';
+  type: 'TENANT_REGISTERED' | 'BILLING_BLOCKED' | 'PACKAGE_CHANGED' | 'AUDIT_THRESHOLD_EXCEEDED';
   title: string;
   message: string;
   relatedTenantId?: string;

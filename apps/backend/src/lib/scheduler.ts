@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { recalculateAllKOL } from './kol';
 import { processBillingReminders } from './billing';
+import { checkAuditThreshold } from './audit-threshold';
 import prisma from './prisma';
 
 export function startScheduler(): void {
@@ -23,6 +24,17 @@ export function startScheduler(): void {
       console.log('[Scheduler] Billing reminders processed');
     } catch (error) {
       console.error('[Scheduler] Billing reminders failed:', error);
+    }
+  });
+
+  // Audit threshold check (Permenkop 2/2024 Pasal 12): every day at 00:15 WIB (17:15 UTC)
+  cron.schedule('15 17 * * *', async () => {
+    console.log('[Scheduler] Checking audit threshold...');
+    try {
+      await checkAuditThreshold();
+      console.log('[Scheduler] Audit threshold check completed');
+    } catch (error) {
+      console.error('[Scheduler] Audit threshold check failed:', error);
     }
   });
 

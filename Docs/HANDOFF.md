@@ -4,6 +4,46 @@ Standing doc for picking up work across sessions — update it whenever a work s
 
 ---
 
+## 2026-07-22 (cont'd 3) — Tenant.modalDisetor + audit-threshold notification
+
+### Context
+
+Picked up roadmap item 4 from the Phase 3 step 2 entry below (§5.3/§6.6 of `Docs/specs/2026-07-22-pelaporan-regulasi-design.md`) — independent of the CALK/PDF-export/frontend items still open, so it was pulled forward. Note: everything from the three earlier entries below was **already committed** in `7e754d3` before this session started — `git status` was clean at the start, despite those entries saying "uncommitted." Trust `git log`/`git status` over the prose in older entries here.
+
+### What's done (uncommitted)
+
+**Schema** — new migration `prisma/migrations/20260722040804_add_tenant_modal_disetor_audit_threshold/`:
+- `Tenant.modalDisetor` (`Decimal(15,2)?`) — manual input, per spec §11's open question (not derived from Neraca equity, since "modal" for Pasal 12 may not equal total equity — unresolved, flagged again here).
+- `Tenant.auditThresholdNotifiedAt` (`DateTime?`) — last time the threshold notification fired, to dedupe.
+- `NotificationType` enum: added `AUDIT_THRESHOLD_EXCEEDED`.
+
+**Config endpoint** — new files `apps/backend/src/modules/config/modal-disetor.{schema,service,controller}.ts`, routes in `config.router.ts`:
+- `GET /api/config/modal-disetor`, `PUT /api/config/modal-disetor` (body `{ modalDisetor: number | null }`, null clears it).
+- **Deviation from spec §8's literal path** (`PUT /api/config/tenant/modal-disetor`): used `/api/config/modal-disetor` instead — there is no `tenant/` prefix segment anywhere else in `config.router.ts` (whitelabel, accounts, shu-distribution all hang directly off `/api/config`), so matched the established convention rather than the spec's exact string.
+- **Not gated by `requireAccountingEntitlement`** — deliberate: this is a general tenant compliance field per spec §5.3 ("properti tenant individual"), not part of the Konfigurasi Akun module, so it only needs `requirePermission('config', 'read'/'update')` (same gate as `/whitelabel`, `/profile`).
+- Negative values rejected via a service-layer check → `422 MODAL_DISETOR_INVALID` (new error code), not a Zod schema constraint — same pattern as `SHU_DISTRIBUTION_PERCENT_INVALID`/`ACCOUNT_CODE_INVALID_FORMAT` (schema handles type coercion, service handles the business rule so the dedicated error code actually fires instead of getting swallowed into generic `VALIDATION_ERROR`).
+
+**Audit-threshold cron** — new `apps/backend/src/lib/audit-threshold.ts` (`checkAuditThreshold(tenantId?)`, mirrors `billing.ts`'s structure), wired into `apps/backend/src/lib/scheduler.ts` as a fourth daily job (00:15 WIB / 17:15 UTC — staggered after the existing three). For every tenant with `modalDisetor >= 5_000_000_000` where `auditThresholdNotifiedAt` is null or from a prior calendar year, creates an `AUDIT_THRESHOLD_EXCEEDED` platform-admin `Notification` (via the existing `createNotification` helper, `relatedTenantId` scoped) and stamps `auditThresholdNotifiedAt`. Pure compliance reminder — doesn't block or restrict anything, per spec §6.6/§10.
+
+Note re: apps/backend/CLAUDE.md's `src/jobs/kol-cron.ts` reference — that file doesn't exist; the actual cron registration point is `src/lib/scheduler.ts` (`startScheduler()`, called from `server.ts`). Followed the code, not the stale doc reference.
+
+**Error code**: `MODAL_DISETOR_INVALID` (422) added to `errors.ts` and `docs/api-conventions.md`.
+
+**Docs updated**: `docs/api-conventions.md` — new error code row + `GET/PUT /api/config/modal-disetor` rows under Konfigurasi Akun's route section (with a note that it's not accounting-gated).
+
+**Tests**: `apps/backend/tests/audit-threshold.test.ts` (new, 10 tests) — config endpoint (get default null, update + string serialization, negative-value 422, clear-to-null, teller 403, unauthenticated 401) and `checkAuditThreshold` directly (below-threshold no-op, notifies + stamps at/above threshold, no duplicate within the same calendar year, re-notifies once the stamp is from a prior year). **Status: 15/15 suites, 168/168 tests passing** (158 previous + 10 new). `npx tsc --noEmit` clean in `apps/backend`. No `EPERM`/locked-engine issue this session — migration + generate ran clean on the first try.
+
+### Not done in this step (still open)
+
+Unchanged from the Phase 3 step 2 entry below: PDF export for the 4 report endpoints, the LHU closing-entry design question, frontend UI (still zero frontend work across all of Phase 2/3), CALK, LPEA, and the periodic-deadline reminder (§7, explicitly gated on manual legal verification — not touched).
+
+### Operational notes for the next session
+
+- Still nothing from *this* session committed — everything above is new/uncommitted on top of `7e754d3`. The three earlier Phase 2/3 entries below are already in history; don't re-commit or re-describe them as pending.
+- Frontend has had zero attention across the entire regulatory-reporting effort (Phase 2 + all of Phase 3) — worth prioritizing soon so the backend work becomes usable, not just correct.
+
+---
+
 ## 2026-07-22 (cont'd 2) — Regulatory financial reporting: Phase 3 step 2 (Laporan Hasil Usaha + SHU distribution)
 
 ### Context

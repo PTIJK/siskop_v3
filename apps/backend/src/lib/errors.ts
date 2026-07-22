@@ -45,4 +45,6 @@ export const Errors = {
     new AppError('REPORT_PERIOD_INVALID', message, 422),
   SHU_DISTRIBUTION_PERCENT_INVALID: (message = 'Jumlah persentase distribusi SHU harus 100%') =>
     new AppError('SHU_DISTRIBUTION_PERCENT_INVALID', message, 422),
+  MODAL_DISETOR_INVALID: (message = 'Modal disetor harus berupa angka non-negatif') =>
+    new AppError('MODAL_DISETOR_INVALID', message, 422),
 };

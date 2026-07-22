@@ -64,6 +64,7 @@ enum NotificationType {
   TENANT_REGISTERED
   BILLING_BLOCKED
   PACKAGE_CHANGED
+  AUDIT_THRESHOLD_EXCEEDED
 }
 
 enum AccountCategory {
@@ -138,6 +139,8 @@ model Tenant {
   nextBillingDate         DateTime?
   billingReminder30SentAt DateTime?
   billingReminder7SentAt  DateTime?
+  modalDisetor            Decimal?             @db.Decimal(15, 2)
+  auditThresholdNotifiedAt DateTime?
   createdAt               DateTime             @default(now())
 
   users            User[]
