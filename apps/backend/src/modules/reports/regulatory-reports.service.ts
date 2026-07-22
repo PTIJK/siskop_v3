@@ -1,3 +1,4 @@
+import puppeteer from 'puppeteer';
 import prisma from '../../lib/prisma';
 import { Errors } from '../../lib/errors';
 import { splitPrincipalAndInterest } from '../../lib/journal';
@@ -5,6 +6,61 @@ import { CalkSection } from '@prisma/client';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function rp(value: string | number): string {
+  return `Rp ${Number(value).toLocaleString('id-ID')}`;
+}
+
+type RegulatoryPdfType = 'neraca' | 'arus-kas' | 'laporan-hasil-usaha' | 'shu-distribution';
+
+interface PdfTenant {
+  name: string;
+  address: string;
+  registrationNo: string;
+  logoUrl?: string | null;
+}
+
+const PDF_TITLES: Record<RegulatoryPdfType, string> = {
+  neraca: 'Neraca (Laporan Posisi Keuangan)',
+  'arus-kas': 'Laporan Arus Kas',
+  'laporan-hasil-usaha': 'Laporan Perhitungan Hasil Usaha',
+  'shu-distribution': 'Daftar Pembagian SHU per Anggota',
+};
+
+/** Shared page shell — header (logo+nama+alamat) and table styling follow the
+ * same pattern as RPT-01/02 in `reports.service.ts` (Design Spec §7 note: "harus
+ * ikut pola PDF export yang sudah ada... supaya konsisten dan langsung siap-cetak
+ * untuk RAT"). */
+function wrapRegulatoryPdf(tenant: PdfTenant, title: string, subtitle: string, bodyHtml: string): string {
+  const headerHtml = `
+    <div style="display:flex; align-items:center; margin-bottom:16px; border-bottom:2px solid #1e3a5f; padding-bottom:12px">
+      ${tenant.logoUrl ? `<img src="${tenant.logoUrl}" style="height:60px; margin-right:16px"/>` : ''}
+      <div>
+        <h2 style="margin:0; color:#1e3a5f; font-size:18px">${tenant.name}</h2>
+        <p style="margin:2px 0; font-size:12px; color:#555">${tenant.address}</p>
+        <p style="margin:0; font-size:11px; color:#888">No. Registrasi: ${tenant.registrationNo}</p>
+      </div>
+    </div>
+  `;
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #222; padding: 20px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  th { background: #1e3a5f; color: white; padding: 8px; text-align: left; }
+  td { padding: 6px 8px; border-bottom: 1px solid #e0e0e0; }
+  tr:nth-child(even) td { background: #f5f5f5; }
+  tr.total td { font-weight: bold; border-top: 2px solid #1e3a5f; }
+  h3 { color: #1e3a5f; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+  .catatan { padding: 12px; background: #fff8e1; border: 1px solid #ffe082; border-radius: 4px; }
+</style></head>
+<body>
+${headerHtml}
+<h2 style="text-align:center; color:#1e3a5f">${title}</h2>
+<p style="text-align:center; color:#555">${subtitle}</p>
+${bodyHtml}
+</body></html>`;
 }
 
 export const CALK_SECTIONS: CalkSection[] = [
@@ -73,6 +129,115 @@ async function memberSavingsBalanceAsOf(tenantId: string, memberId: string, date
     0
   );
   return round2(currentTotal + adjustment);
+}
+
+function renderNeracaPdf(tenant: PdfTenant, data: Awaited<ReturnType<RegulatoryReportsService['getNeraca']>>): string {
+  const section = (label: string, s: { items: Array<{ code: string | null; name: string; balance: string; isComputed: boolean }>; total: string }) => `
+    <h3>${label}</h3>
+    <table><tr><th>Kode</th><th>Nama Akun</th><th>Saldo</th></tr>
+    ${s.items.map((i) => `<tr><td>${i.code ?? '-'}</td><td>${i.name}${i.isComputed ? ' <i>(dihitung otomatis)</i>' : ''}</td><td>${rp(i.balance)}</td></tr>`).join('')}
+    <tr class="total"><td colspan="2">Total ${label}</td><td>${rp(s.total)}</td></tr>
+    </table>
+  `;
+  const body = `
+    ${section('Aset', data.aset)}
+    ${section('Kewajiban', data.kewajiban)}
+    ${section('Ekuitas', data.ekuitas)}
+    <table>
+      <tr class="total"><td>Total Kewajiban dan Ekuitas</td><td>${rp(data.totalKewajibanDanEkuitas)}</td></tr>
+    </table>
+    <p style="text-align:center; color:${data.balanced ? '#2e7d32' : '#c62828'}">
+      ${data.balanced ? 'Aset = Kewajiban + Ekuitas (seimbang)' : 'PERINGATAN: neraca tidak seimbang'}
+    </p>
+  `;
+  return wrapRegulatoryPdf(tenant, PDF_TITLES.neraca, `Per Tanggal ${data.asOfDate}`, body);
+}
+
+function renderArusKasPdf(tenant: PdfTenant, data: Awaited<ReturnType<RegulatoryReportsService['getArusKas']>>): string {
+  if (data.catatan) {
+    return wrapRegulatoryPdf(
+      tenant,
+      PDF_TITLES['arus-kas'],
+      `Periode ${data.periode.from} s/d ${data.periode.to}`,
+      `<div class="catatan">${data.catatan}</div>`
+    );
+  }
+  const activity = (label: string, a: { rincian: Array<{ label: string; amount: string }>; total: string }) => `
+    <h3>${label}</h3>
+    <table><tr><th>Keterangan</th><th>Nominal</th></tr>
+    ${a.rincian.map((r) => `<tr><td>${r.label}</td><td>${rp(r.amount)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada aktivitas</td></tr>'}
+    <tr class="total"><td>Total ${label}</td><td>${rp(a.total)}</td></tr>
+    </table>
+  `;
+  const body = `
+    <table><tr><td>Saldo Kas Awal Periode</td><td>${rp(data.saldoKasAwal)}</td></tr></table>
+    ${activity('Aktivitas Operasi', data.aktivitasOperasi)}
+    ${activity('Aktivitas Investasi', data.aktivitasInvestasi)}
+    ${activity('Aktivitas Pendanaan', data.aktivitasPendanaan)}
+    <table>
+      <tr class="total"><td>Kenaikan (Penurunan) Kas Bersih</td><td>${rp(data.kenaikanPenurunanKasBersih)}</td></tr>
+      <tr class="total"><td>Saldo Kas Akhir Periode</td><td>${rp(data.saldoKasAkhir)}</td></tr>
+    </table>
+    <p style="text-align:center; color:${data.balanced ? '#2e7d32' : '#c62828'}">
+      ${data.balanced ? 'Rekonsiliasi kas sesuai buku besar' : 'PERINGATAN: saldo kas tidak sesuai buku besar'}
+    </p>
+  `;
+  return wrapRegulatoryPdf(tenant, PDF_TITLES['arus-kas'], `Periode ${data.periode.from} s/d ${data.periode.to}`, body);
+}
+
+function renderLaporanHasilUsahaPdf(
+  tenant: PdfTenant,
+  data: Awaited<ReturnType<RegulatoryReportsService['getLaporanHasilUsaha']>>
+): string {
+  const section = (label: string, s: { items: Array<{ code: string | null; name: string; total: string }>; total: string }) => `
+    <h3>${label}</h3>
+    <table><tr><th>Kode</th><th>Nama Akun</th><th>Nominal</th></tr>
+    ${s.items.map((i) => `<tr><td>${i.code ?? '-'}</td><td>${i.name}</td><td>${rp(i.total)}</td></tr>`).join('') || '<tr><td colspan="3">Tidak ada data</td></tr>'}
+    <tr class="total"><td colspan="2">Total ${label}</td><td>${rp(s.total)}</td></tr>
+    </table>
+  `;
+  const body = `
+    ${section('Pendapatan', data.pendapatan)}
+    ${section('Beban', data.beban)}
+    <table><tr class="total"><td>Sisa Hasil Usaha (SHU) Periode Berjalan</td><td>${rp(data.shuBerjalan)}</td></tr></table>
+  `;
+  return wrapRegulatoryPdf(
+    tenant,
+    PDF_TITLES['laporan-hasil-usaha'],
+    `Periode ${data.periode.from} s/d ${data.periode.to}`,
+    body
+  );
+}
+
+function renderShuDistributionPdf(
+  tenant: PdfTenant,
+  data: Awaited<ReturnType<RegulatoryReportsService['getShuDistribution']>>
+): string {
+  const subtitle = `Periode ${data.periode.from} s/d ${data.periode.to}`;
+  if (data.catatan) {
+    return wrapRegulatoryPdf(tenant, PDF_TITLES['shu-distribution'], subtitle, `<div class="catatan">${data.catatan}</div>`);
+  }
+  const alokasi = data.alokasi!;
+  const body = `
+    <table><tr class="total"><td>SHU Periode Berjalan</td><td>${rp(data.shuBerjalan)}</td></tr></table>
+    <h3>Alokasi SHU</h3>
+    <table>
+      <tr><th>Pos</th><th>Persentase</th><th>Nominal</th></tr>
+      <tr><td>Jasa Simpanan</td><td>${alokasi.jasaSimpanan.percent}%</td><td>${rp(alokasi.jasaSimpanan.total)}</td></tr>
+      <tr><td>Jasa Pinjaman</td><td>${alokasi.jasaPinjaman.percent}%</td><td>${rp(alokasi.jasaPinjaman.total)}</td></tr>
+      <tr><td>Cadangan</td><td>${alokasi.cadangan.percent}%</td><td>${rp(alokasi.cadangan.total)}</td></tr>
+      <tr><td>Lainnya</td><td>${alokasi.lainnya.percent}%</td><td>${rp(alokasi.lainnya.total)}</td></tr>
+    </table>
+    <h3>Pembagian per Anggota</h3>
+    <table>
+      <tr><th>ID Anggota</th><th>Nama</th><th>Rata-rata Simpanan</th><th>Bunga Dibayar</th><th>Jasa Simpanan</th><th>Jasa Pinjaman</th><th>Total SHU</th></tr>
+      ${data.anggota.map((a) => `
+        <tr><td>${a.memberCode}</td><td>${a.fullName}</td><td>${rp(a.avgSavingsBalance)}</td><td>${rp(a.interestPaid)}</td><td>${rp(a.jasaSimpanan)}</td><td>${rp(a.jasaPinjaman)}</td><td>${rp(a.totalShu)}</td></tr>
+      `).join('') || '<tr><td colspan="7">Tidak ada anggota aktif</td></tr>'}
+      <tr class="total"><td colspan="6">Total Dibagikan ke Anggota</td><td>${rp(data.totalDibagikanKeAnggota ?? '0')}</td></tr>
+    </table>
+  `;
+  return wrapRegulatoryPdf(tenant, PDF_TITLES['shu-distribution'], subtitle, body);
 }
 
 export class RegulatoryReportsService {
@@ -489,6 +654,63 @@ export class RegulatoryReportsService {
   assertValidPeriod(from: Date, to: Date): void {
     if (from.getTime() > to.getTime()) {
       throw Errors.REPORT_PERIOD_INVALID('Tanggal awal periode tidak boleh setelah tanggal akhir');
+    }
+  }
+
+  /**
+   * PDF export for Neraca / Arus Kas / Laporan Hasil Usaha / Daftar Pembagian SHU
+   * — Design Spec §8. Follows the exact puppeteer + inline-HTML-template pattern
+   * already used by RPT-01/02 in `reports.service.ts` (same header/footer shape),
+   * per the spec's §7 instruction to stay consistent with the existing PDF export.
+   * CALK deliberately has no `/pdf` variant here — §8 doesn't list one; its
+   * narrative sections are edited/reviewed in the UI, not exported as a static PDF.
+   */
+  async generatePDF(
+    tenantId: string,
+    type: RegulatoryPdfType,
+    params: { asOfDate?: Date; from?: Date; to?: Date }
+  ): Promise<Buffer> {
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new Error('Tenant tidak ditemukan');
+
+    let html: string;
+    switch (type) {
+      case 'neraca':
+        html = renderNeracaPdf(tenant, await this.getNeraca(tenantId, params.asOfDate ?? new Date()));
+        break;
+      case 'arus-kas':
+        html = renderArusKasPdf(tenant, await this.getArusKas(tenantId, params.from!, params.to!));
+        break;
+      case 'laporan-hasil-usaha':
+        html = renderLaporanHasilUsahaPdf(
+          tenant,
+          await this.getLaporanHasilUsaha(tenantId, params.from!, params.to!)
+        );
+        break;
+      case 'shu-distribution':
+        html = renderShuDistributionPdf(tenant, await this.getShuDistribution(tenantId, params.from!, params.to!));
+        break;
+    }
+
+    const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'load' });
+      const pdf = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '20mm', bottom: '25mm', left: '15mm', right: '15mm' },
+        displayHeaderFooter: true,
+        headerTemplate: '<div></div>',
+        footerTemplate: `
+          <div style="font-size:10px; width:100%; text-align:center; color:#666; padding:5px">
+            ${tenant.name} &nbsp;|&nbsp; Halaman <span class="pageNumber"></span> dari <span class="totalPages"></span>
+          </div>
+        `,
+      });
+      return Buffer.from(pdf);
+    } finally {
+      await browser.close();
     }
   }
 }

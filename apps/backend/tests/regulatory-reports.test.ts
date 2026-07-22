@@ -386,4 +386,75 @@ describe('Regulatory Reports — Neraca & Laporan Arus Kas (Phase 3)', () => {
         .send({ isCashEquivalent: true });
     });
   });
+
+  describe('PDF export (§8 — Neraca/Arus Kas/LHU/SHU distribution)', () => {
+    const pdfRoutes = [
+      '/api/reports/regulatory/neraca/pdf',
+      '/api/reports/regulatory/arus-kas/pdf',
+      '/api/reports/regulatory/laporan-hasil-usaha/pdf',
+      '/api/reports/regulatory/shu-distribution/pdf',
+    ];
+
+    it.each(pdfRoutes)('returns a PDF buffer for %s', async (path) => {
+      const res = await api
+        .get(path)
+        .set('Host', `${tenant.slug}.localhost`)
+        .set('Cookie', adminCookies);
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toBe('application/pdf');
+      expect(res.headers['content-disposition']).toMatch(/^attachment; filename=".+\.pdf"$/);
+      expect(Buffer.isBuffer(res.body)).toBe(true);
+      expect(res.body.toString('latin1')).toMatch(/^%PDF/);
+    });
+
+    it('rejects an invalid period on the arus-kas PDF route', async () => {
+      const res = await api
+        .get('/api/reports/regulatory/arus-kas/pdf?from=2026-02-01&to=2026-01-01')
+        .set('Host', `${tenant.slug}.localhost`)
+        .set('Cookie', adminCookies);
+
+      expect(res.status).toBe(422);
+      expect(res.body.error.code).toBe('REPORT_PERIOD_INVALID');
+    });
+
+    it('renders the "belum diatur" catatan fallback for shu-distribution PDF without config', async () => {
+      // No ShuDistributionConfig has been created for this tenant, so getShuDistribution
+      // hits its `catatan` branch — this exercises the PDF template's catatan-only path.
+      const res = await api
+        .get('/api/reports/regulatory/shu-distribution/pdf')
+        .set('Host', `${tenant.slug}.localhost`)
+        .set('Cookie', adminCookies);
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toBe('application/pdf');
+    });
+
+    it('returns 403 FORBIDDEN when the role lacks the reports.export permission', async () => {
+      const res = await api
+        .get('/api/reports/regulatory/neraca/pdf')
+        .set('Host', `${tenant.slug}.localhost`)
+        .set('Cookie', noReportsCookies);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 403 FEATURE_NOT_ENTITLED when the package lacks the accounting module', async () => {
+      const pkg = await createPackage(['members', 'savings', 'loans', 'reports', 'config']);
+      await testPrisma.tenant.update({ where: { id: tenant.id }, data: { packageId: pkg.id } });
+
+      const res = await api
+        .get('/api/reports/regulatory/neraca/pdf')
+        .set('Host', `${tenant.slug}.localhost`)
+        .set('Cookie', adminCookies);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('FEATURE_NOT_ENTITLED');
+
+      const restored = await createPackage(['members', 'savings', 'loans', 'reports', 'config', 'accounting']);
+      await testPrisma.tenant.update({ where: { id: tenant.id }, data: { packageId: restored.id } });
+      await testPrisma.subscriptionPackage.delete({ where: { id: pkg.id } });
+    });
+  });
 });

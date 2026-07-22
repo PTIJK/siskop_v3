@@ -122,20 +122,27 @@ GET    /api/reports/regulatory/neraca?asOfDate=       Neraca (balance sheet) as 
                                                        ASET = KEWAJIBAN + EKUITAS — current-period PENDAPATAN/BEBAN net income is
                                                        folded into EKUITAS as a computed "SHU Tahun Berjalan (Belum Ditutup)" line
                                                        since no P&L closing entry exists yet (that's Laporan Hasil Usaha, not built).
+GET    /api/reports/regulatory/neraca/pdf?asOfDate=   PDF export of the above, `requirePermission('reports', 'export')` (same
+                                                       gate as RPT-01/02's existing `/financial/pdf`, `/rat/pdf`).
 GET    /api/reports/regulatory/arus-kas?from=&to=     Laporan Arus Kas (direct method), default period = current month. Groups
                                                        JournalLines touching Account.isCashEquivalent=true accounts into
                                                        Operasi/Investasi/Pendanaan. Returns `catatan` instead of aggregating if
                                                        the tenant hasn't marked any account as cash-equivalent yet.
+GET    /api/reports/regulatory/arus-kas/pdf?from=&to= PDF export of the above (renders the `catatan` fallback as a plain notice
+                                                       if no cash-equivalent account is marked yet).
 GET    /api/reports/regulatory/laporan-hasil-usaha?from=&to=  PENDAPATAN − BEBAN for the period, default = current month. Does
                                                        NOT auto-post a closing JournalEntry to 3-3000 SHU Tahun Berjalan despite
                                                        the design spec's §6.2 prose — deliberately deferred (needs its own
                                                        idempotency/timing design); Neraca already accounts for unclosed income
                                                        via a computed line.
+GET    /api/reports/regulatory/laporan-hasil-usaha/pdf?from=&to=  PDF export of the above.
 GET    /api/reports/regulatory/shu-distribution?from=&to=     Daftar Pembagian SHU per Anggota. Allocates the period's SHU
                                                        across ShuDistributionConfig's 4 buckets, then divides jasaSimpanan/
                                                        jasaPinjaman proportionally per active member. Returns `catatan` instead
                                                        of an allocation if ShuDistributionConfig isn't set yet, or if the
                                                        period's SHU isn't positive.
+GET    /api/reports/regulatory/shu-distribution/pdf?from=&to=  PDF export of the above (renders the `catatan` fallback as a
+                                                       plain notice if config isn't set yet or the period's SHU isn't positive).
 GET    /api/reports/regulatory/calk?from=&to=                CALK (Catatan Atas Laporan Keuangan). Numeric sections
                                                        (`rincianAset`/`rincianKewajiban`/`rincianEkuitas` with saldoAwal/
                                                        saldoAkhir/mutasi per account, `rincianPendapatan`/`rincianBeban`,
@@ -154,7 +161,7 @@ PUT    /api/reports/regulatory/calk/narrative                Upsert one CALK nar
                                                        Teller/Viewer: false).
 ```
 
-Not yet implemented (remaining Phase 3 roadmap items, see `docs/handoff.md`): PDF export for the five report endpoints above, LPEA (needs its own calculation spec).
+Not yet implemented (remaining Phase 3 roadmap items, see `docs/handoff.md`): LPEA (needs its own calculation spec). PDF export is done for Neraca/Arus Kas/Laporan Hasil Usaha/SHU-distribution above; CALK has no `/pdf` variant by design (§8 of the design spec) — its narrative sections are edited/reviewed in the UI, not exported as a static document.
 
 ## Route Namespacing
 

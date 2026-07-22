@@ -14,6 +14,10 @@ import {
   getShuDistributionReport,
   getCalk,
   upsertCalkNarrative,
+  downloadNeracaPDF,
+  downloadArusKasPDF,
+  downloadLaporanHasilUsahaPDF,
+  downloadShuDistributionPDF,
 } from './regulatory-reports.controller';
 
 export const reportsRouter = Router();
@@ -32,10 +36,22 @@ reportsRouter.get(
   getNeraca
 );
 reportsRouter.get(
+  '/regulatory/neraca/pdf',
+  requireAccountingEntitlement,
+  requirePermission('reports', 'export'),
+  downloadNeracaPDF
+);
+reportsRouter.get(
   '/regulatory/arus-kas',
   requireAccountingEntitlement,
   requirePermission('reports', 'read'),
   getArusKas
+);
+reportsRouter.get(
+  '/regulatory/arus-kas/pdf',
+  requireAccountingEntitlement,
+  requirePermission('reports', 'export'),
+  downloadArusKasPDF
 );
 reportsRouter.get(
   '/regulatory/laporan-hasil-usaha',
@@ -44,10 +60,22 @@ reportsRouter.get(
   getLaporanHasilUsaha
 );
 reportsRouter.get(
+  '/regulatory/laporan-hasil-usaha/pdf',
+  requireAccountingEntitlement,
+  requirePermission('reports', 'export'),
+  downloadLaporanHasilUsahaPDF
+);
+reportsRouter.get(
   '/regulatory/shu-distribution',
   requireAccountingEntitlement,
   requirePermission('reports', 'read'),
   getShuDistributionReport
+);
+reportsRouter.get(
+  '/regulatory/shu-distribution/pdf',
+  requireAccountingEntitlement,
+  requirePermission('reports', 'export'),
+  downloadShuDistributionPDF
 );
 reportsRouter.get(
   '/regulatory/calk',

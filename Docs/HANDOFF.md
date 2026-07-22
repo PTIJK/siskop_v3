@@ -4,6 +4,89 @@ Standing doc for picking up work across sessions — update it whenever a work s
 
 ---
 
+## 2026-07-22 (cont'd 6) — PDF export for the 4 regulatory reports
+
+### Context
+
+Picked up the next roadmap item per this doc's own operational notes, which had flagged
+PDF export as outstanding across every session since Phase 3 step 1. First checked
+`git status`/`git log` before starting: the frontend work described in the entry below
+(cont'd 5) was already committed as `eaad602` — the tree was clean at session start,
+despite that entry's prose still saying "nothing committed yet." Trust `git log`/`git
+status` over older prose in this doc, per the note this doc itself keeps repeating.
+
+Re-read the design spec (`Docs/specs/2026-07-22-pelaporan-regulasi-design.md` §8) before
+implementing: it only lists a `/pdf` variant for 4 of the 5 regulatory report endpoints
+(Neraca, Arus Kas, Laporan Hasil Usaha, SHU distribution) — **not** CALK. Several earlier
+handoff entries loosely said "PDF export for all 5 endpoints"; that was imprecise. CALK's
+narrative sections are meant to be edited/reviewed in the UI (already shipped in cont'd 5),
+not exported as a static PDF, so no 5th `/pdf` route was added.
+
+### What's done (uncommitted)
+
+**Service** — `apps/backend/src/modules/reports/regulatory-reports.service.ts`: added
+`generatePDF(tenantId, type, params)` plus 4 module-level HTML-template renderers
+(`renderNeracaPdf`, `renderArusKasPdf`, `renderLaporanHasilUsahaPdf`,
+`renderShuDistributionPdf`) and a shared `wrapRegulatoryPdf()` page shell. Followed the
+exact puppeteer-launch + inline-HTML pattern already used by RPT-01/02 in
+`reports.service.ts` (same header: logo+nama+alamat+no. registrasi; same footer: nama +
+"Halaman X dari Y") — per the design spec's §7 instruction to stay consistent so these are
+"langsung siap-cetak untuk RAT". Each template renders the `catatan`-only fallback (Arus
+Kas with no cash-equivalent account marked, SHU distribution with no config or non-positive
+SHU) as a plain notice box instead of an empty table, mirroring the JSON endpoints'
+existing behavior.
+
+**Controller/routes**: 4 new controller functions (`downloadNeracaPDF`,
+`downloadArusKasPDF`, `downloadLaporanHasilUsahaPDF`, `downloadShuDistributionPDF`) in
+`regulatory-reports.controller.ts`, 4 new routes in `reports.router.ts`
+(`GET .../neraca/pdf`, `.../arus-kas/pdf`, `.../laporan-hasil-usaha/pdf`,
+`.../shu-distribution/pdf`), each gated by `requireAccountingEntitlement` +
+`requirePermission('reports', 'export')` — the same permission action RPT-01/02's
+`/financial/pdf` and `/rat/pdf` already use, no new permission key needed.
+
+**Tests**: extended `apps/backend/tests/regulatory-reports.test.ts` with a new "PDF export"
+describe block — 200 + `application/pdf` content-type + `%PDF` magic-byte check for all 4
+routes (`it.each`), the arus-kas PDF route's period-validation rejection, the
+shu-distribution PDF's catatan-fallback path (no `ShuDistributionConfig` exists for this
+test's tenant), and both the `FORBIDDEN`/`FEATURE_NOT_ENTITLED` gates. Puppeteer is
+mocked (`apps/backend/__mocks__/puppeteer.js`, pre-existing) so these tests don't spawn a
+real browser — they still meaningfully exercise every template-rendering function against
+real report data shapes (verifying the templates don't throw on the actual JSON your
+`getNeraca`/`getArusKas`/etc. return), just not actual PDF byte-for-byte rendering.
+**Status: 16/16 suites, 182/182 tests passing** (174 previous + 8 new). `npx tsc --noEmit`
+clean in `apps/backend`.
+
+**Docs updated**: `docs/api-conventions.md` — 4 new `/pdf` route lines under "Laporan
+Keuangan Regulasi", plus corrected the stale "Not yet implemented" line (previously said
+PDF export was missing for "the five report endpoints" — now says LPEA is the only
+remaining item, and explicitly notes CALK has no `/pdf` variant by design).
+
+### Not done in this step (still open)
+
+- **LPEA** — still explicitly deferred, needs its own calculation spec (`Docs/specs/2026-07-22-pelaporan-regulasi-design.md` §2/§14).
+- **Frontend "Unduh PDF" buttons** — the 5-tab `RegulatoryReportsPage.tsx` (cont'd 5) has
+  no download button wired to these 4 new endpoints yet; RPT-01/02's existing
+  `ReportsPage.tsx` presumably has one for `/financial/pdf`/`/rat/pdf` as a reference
+  pattern, not verified this session.
+- **The pre-existing `/reports` (financial/RAT) response-shape bug** — still not fixed,
+  still unrelated to this work (see the Phase 2 entry below for the original finding).
+- **Manual walkthrough of the cont'd-5 frontend work** — still not done (mark
+  Kas/Bank cash-equivalent → confirm Arus Kas populates; set SHU distribution config →
+  confirm allocation; set Modal Disetor; edit CALK narrative) — carried over unchanged
+  from the previous entry, still worth doing before considering Phase 3 fully closed.
+- No frontend vitest coverage added for the Phase 3 pages — also carried over.
+
+### Operational notes for the next session
+
+- Nothing from this session is committed yet — review and commit before continuing.
+- Once this is committed, the only remaining item on the original 5-item Phase 3 roadmap
+  (see the 2026-07-22 Phase 2 entry below, "Next steps") is LPEA — everything else
+  (Neraca, Arus Kas, Laporan Hasil Usaha, SHU distribution, CALK, modalDisetor,
+  frontend, now PDF export) is built. LPEA needs a calculation spec written first, not
+  just an implementation session — don't jump straight to code for it.
+
+---
+
 ## 2026-07-22 (cont'd 5) — Frontend for regulatory financial reporting
 
 ### Context

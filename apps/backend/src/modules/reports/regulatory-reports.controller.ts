@@ -97,3 +97,83 @@ export async function upsertCalkNarrative(
     next(err);
   }
 }
+
+export async function downloadNeracaPDF(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { asOfDate } = NeracaParamsSchema.parse(req.query);
+    const cutoff = asOfDate ? new Date(asOfDate) : new Date();
+    const pdf = await regulatoryReportsService.generatePDF(req.tenant.id, 'neraca', { asOfDate: cutoff });
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="neraca-${cutoff.toISOString().split('T')[0]}.pdf"`,
+    });
+    res.send(pdf);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function downloadArusKasPDF(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { from, to } = PeriodParamsSchema.parse(req.query);
+    const start = from ? new Date(from) : startOfMonth(new Date());
+    const end = to ? new Date(to) : endOfMonth(new Date());
+    regulatoryReportsService.assertValidPeriod(start, end);
+    const pdf = await regulatoryReportsService.generatePDF(req.tenant.id, 'arus-kas', { from: start, to: end });
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="arus-kas-${start.toISOString().split('T')[0]}_${end.toISOString().split('T')[0]}.pdf"`,
+    });
+    res.send(pdf);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function downloadLaporanHasilUsahaPDF(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { from, to } = PeriodParamsSchema.parse(req.query);
+    const start = from ? new Date(from) : startOfMonth(new Date());
+    const end = to ? new Date(to) : endOfMonth(new Date());
+    regulatoryReportsService.assertValidPeriod(start, end);
+    const pdf = await regulatoryReportsService.generatePDF(req.tenant.id, 'laporan-hasil-usaha', {
+      from: start,
+      to: end,
+    });
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="laporan-hasil-usaha-${start.toISOString().split('T')[0]}_${end.toISOString().split('T')[0]}.pdf"`,
+    });
+    res.send(pdf);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function downloadShuDistributionPDF(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { from, to } = PeriodParamsSchema.parse(req.query);
+    const start = from ? new Date(from) : startOfMonth(new Date());
+    const end = to ? new Date(to) : endOfMonth(new Date());
+    regulatoryReportsService.assertValidPeriod(start, end);
+    const pdf = await regulatoryReportsService.generatePDF(req.tenant.id, 'shu-distribution', {
+      from: start,
+      to: end,
+    });
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="shu-distribution-${start.toISOString().split('T')[0]}_${end.toISOString().split('T')[0]}.pdf"`,
+    });
+    res.send(pdf);
+  } catch (err) {
+    next(err);
+  }
+}
