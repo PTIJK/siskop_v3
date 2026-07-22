@@ -4,6 +4,89 @@ Standing doc for picking up work across sessions — update it whenever a work s
 
 ---
 
+## 2026-07-22 (cont'd 5) — Frontend for regulatory financial reporting
+
+### Context
+
+Picked up the top risk flagged in the last four handoff entries: the entire regulatory-
+reporting effort (journal engine, Neraca, Arus Kas, Laporan Hasil Usaha, SHU distribution,
+`Tenant.modalDisetor`, CALK) had zero frontend. This session builds that UI. `git status`
+was clean at the start — the CALK entry below (cont'd 4) was already committed as `07b429c`.
+
+Two IA decisions confirmed with the user before implementation (via AskUserQuestion):
+one tabbed report page rather than 5 separate routes, and a plain `Textarea` for CALK's
+narrative sections rather than introducing a rich-text editor dependency.
+
+### What's done (uncommitted)
+
+**New page** `apps/frontend/src/pages/reports/RegulatoryReportsPage.tsx` at
+`/reports/regulatory` — 5 tabs (Neraca / Arus Kas / Hasil Usaha / Pembagian SHU / CALK),
+each implemented as its own file under `apps/frontend/src/pages/reports/regulatory/`
+(`NeracaTab.tsx`, `ArusKasTab.tsx`, `LabaRugiTab.tsx`, `ShuDistribusiTab.tsx`, `CalkTab.tsx`,
+plus shared `types.ts` and `PeriodRangeControls.tsx`). Types in `types.ts` were written by
+reading the actual backend response shapes directly out of
+`regulatory-reports.service.ts` rather than trusting the design spec prose — the existing
+`/reports` (financial/RAT) page has exactly this kind of shape-mismatch bug today (confirmed
+while researching, see "Known incidental finding" in the 2026-07-22 Phase 2 entry below);
+this new work does not repeat it. Each tab fetches once on mount with a sensible default
+period (current month, or today for Neraca's `asOfDate`) and re-fetches on a "Tampilkan"
+click. `catatan` fallback states (Arus Kas with no cash-equivalent account marked yet, SHU
+distribution with no config or non-positive SHU) render an info card with a link to the
+relevant config page instead of an empty table. CALK's narrative "Simpan" buttons are gated
+by `can('reports','update')` (falls back to read-only rendered text otherwise).
+
+**New config pages**, both modeled directly on the existing `WhitelabelConfigPage.tsx`
+GET-on-mount/PUT-on-submit pattern:
+- `apps/frontend/src/pages/config/ShuDistributionConfigPage.tsx` (`/config/shu-distribution`)
+  — 4 percentage inputs matching `shu-distribution.schema.ts` exactly, plus a live
+  "Total: X%" client-side hint (not authoritative — the backend's
+  `SHU_DISTRIBUTION_PERCENT_INVALID` still is). Save gated by `can('accounting','update')`.
+- `apps/frontend/src/pages/config/ModalDisetorConfigPage.tsx` (`/config/modal-disetor`) —
+  one nullable numeric field + read-only `auditThresholdNotifiedAt` display. Save gated by
+  `can('config','update')`, deliberately **not** `accounting` — matches the backend's
+  deliberate non-gating of this endpoint on the `accounting` entitlement (it's a general
+  compliance field, see the modalDisetor entry below).
+
+**Konfigurasi Akun addition** — `AccountsConfigPage.tsx`'s Daftar Akun tab now has a
+"Kas & Setara Kas" checkbox column (ASET category card only), posting to
+`POST /api/config/accounts/:id/mark-cash-equivalent`. This was a load-bearing gap: without
+it, Arus Kas has no way to produce anything but its `catatan` placeholder.
+
+**Shared type fix** — `packages/shared/src/index.ts`'s `Account` interface was missing
+`isCashEquivalent: boolean` even though the backend has returned it on the wire since the
+Phase 3 step 1 session (`coa.service.ts`'s `listAccounts` does an unfiltered `findMany`).
+Added the field; no backend change needed.
+
+**Nav/routing wiring**:
+- `apps/frontend/src/App.tsx` — 3 new routes (`/reports/regulatory`,
+  `/config/shu-distribution`, `/config/modal-disetor`).
+- `apps/frontend/src/components/layout/Sidebar.tsx` — the flat "Laporan" nav item became
+  `buildNavItems(accountingEnabled)` (mirroring the existing `buildConfigItem` pattern) so
+  it can conditionally show a "Laporan Regulasi" child; `buildConfigItem` gained
+  "Konfigurasi SHU" (accounting-gated) and "Modal Disetor" (**not** accounting-gated, same
+  reasoning as the page-level permission gate above).
+
+### Not done in this step (still open)
+
+- **The pre-existing `/reports` (financial/RAT) response-shape bug** — confirmed still
+  present, deliberately not fixed here (unrelated to this session's scope, already flagged
+  separately in the Phase 2 entry below).
+- **PDF export** for the 5 new regulatory report endpoints — backend doesn't have it yet
+  either.
+- **LPEA** — still no backend/spec.
+- No new frontend tests were added (no existing per-page vitest coverage convention to
+  extend) — verification for this session was `tsc`/lint plus a manual walkthrough (see
+  below); still worth a real vitest pass for the new pages before considering this closed.
+
+### Operational notes for the next session
+
+- Nothing from this session is committed yet — review and commit before continuing.
+- Manual walkthrough still needed end-to-end: mark Kas/Bank as cash-equivalent → confirm
+  Arus Kas populates; set SHU distribution config summing to 100 → confirm the SHU tab
+  allocates; set + reload Modal Disetor; edit + reload a CALK narrative section.
+
+---
+
 ## 2026-07-22 (cont'd 4) — CALK (Catatan Atas Laporan Keuangan)
 
 ### Context

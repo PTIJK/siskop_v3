@@ -9,47 +9,53 @@ import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { TenantType } from '@siskop/shared';
 
-const navItems = [
-  {
-    label: 'Dashboard',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-    module: 'dashboard' as const,
-    action: 'read' as const,
-  },
-  {
-    label: 'Anggota',
-    href: '/members',
-    icon: Users,
-    module: 'members' as const,
-    action: 'read' as const,
-  },
-  {
-    label: 'Simpanan',
-    href: '/savings',
-    icon: PiggyBank,
-    module: 'savings' as const,
-    action: 'read' as const,
-  },
-  {
-    label: 'Pinjaman',
-    href: '/loans',
-    icon: CreditCard,
-    module: 'loans' as const,
-    action: 'read' as const,
-    children: [
-      { label: 'Semua Pinjaman', href: '/loans' },
-      { label: 'Anggota Menunggak', href: '/loans/overdue', icon: AlertTriangle },
-    ],
-  },
-  {
-    label: 'Laporan',
-    href: '/reports',
-    icon: FileText,
-    module: 'reports' as const,
-    action: 'read' as const,
-  },
-];
+function buildNavItems(accountingEnabled: boolean) {
+  return [
+    {
+      label: 'Dashboard',
+      href: '/dashboard',
+      icon: LayoutDashboard,
+      module: 'dashboard' as const,
+      action: 'read' as const,
+    },
+    {
+      label: 'Anggota',
+      href: '/members',
+      icon: Users,
+      module: 'members' as const,
+      action: 'read' as const,
+    },
+    {
+      label: 'Simpanan',
+      href: '/savings',
+      icon: PiggyBank,
+      module: 'savings' as const,
+      action: 'read' as const,
+    },
+    {
+      label: 'Pinjaman',
+      href: '/loans',
+      icon: CreditCard,
+      module: 'loans' as const,
+      action: 'read' as const,
+      children: [
+        { label: 'Semua Pinjaman', href: '/loans' },
+        { label: 'Anggota Menunggak', href: '/loans/overdue', icon: AlertTriangle },
+      ],
+    },
+    {
+      label: 'Laporan',
+      href: '/reports',
+      icon: FileText,
+      module: 'reports' as const,
+      action: 'read' as const,
+      children: [
+        { label: 'Laporan Keuangan', href: '/reports' },
+        ...(accountingEnabled ? [{ label: 'Laporan Regulasi', href: '/reports/regulatory' }] : []),
+      ],
+    },
+  ];
+}
 
 function buildConfigItem(whitelabelEnabled: boolean, accountingEnabled: boolean) {
   return {
@@ -63,6 +69,8 @@ function buildConfigItem(whitelabelEnabled: boolean, accountingEnabled: boolean)
       { label: 'Konfigurasi Simpanan', href: '/config/savings' },
       { label: 'Konfigurasi Pinjaman', href: '/config/loans' },
       ...(accountingEnabled ? [{ label: 'Konfigurasi Akun', href: '/config/accounts' }] : []),
+      ...(accountingEnabled ? [{ label: 'Konfigurasi SHU', href: '/config/shu-distribution' }] : []),
+      { label: 'Modal Disetor', href: '/config/modal-disetor' },
       { label: 'Pengguna', href: '/config/users' },
       { label: 'Hak Akses', href: '/config/roles' },
       ...(whitelabelEnabled ? [{ label: 'Whitelabel', href: '/config/whitelabel' }] : []),
@@ -148,10 +156,9 @@ function NavItemComponent({ item, onClose }: { item: NavItemWithChildren; onClos
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { can } = usePermissions();
   const tenant = useAuthStore((s) => s.tenant);
-  const configItem = buildConfigItem(
-    Boolean(tenant?.package?.whitelabelEnabled),
-    Boolean(tenant?.package?.modules?.includes('accounting'))
-  );
+  const accountingEnabled = Boolean(tenant?.package?.modules?.includes('accounting'));
+  const navItems = buildNavItems(accountingEnabled);
+  const configItem = buildConfigItem(Boolean(tenant?.package?.whitelabelEnabled), accountingEnabled);
 
   return (
     <div className="flex h-full flex-col bg-slate-900">

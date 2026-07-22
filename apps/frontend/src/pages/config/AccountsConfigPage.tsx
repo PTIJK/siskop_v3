@@ -187,6 +187,16 @@ export function AccountsConfigPage() {
     }
   };
 
+  const toggleCashEquivalent = async (acc: Account, value: boolean) => {
+    try {
+      await api.post(`/api/config/accounts/${acc.id}/mark-cash-equivalent`, { isCashEquivalent: value });
+      toast({ title: value ? 'Akun ditandai sebagai kas & setara kas' : 'Penandaan kas & setara kas dihapus' });
+      fetchAll();
+    } catch (err) {
+      toast({ title: 'Gagal memperbarui akun', description: apiErrorMessage(err, ''), variant: 'destructive' });
+    }
+  };
+
   const updateMapping = async (
     sourceType: 'SAVING_CONFIG' | 'LOAN_CONFIG',
     sourceId: string,
@@ -268,6 +278,7 @@ export function AccountsConfigPage() {
                             <TableHead>Nama Akun</TableHead>
                             <TableHead>Saldo Normal</TableHead>
                             <TableHead>Tipe</TableHead>
+                            {category === AccountCategory.ASET && <TableHead>Kas &amp; Setara Kas</TableHead>}
                             <TableHead className="text-right">Aksi</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -286,6 +297,15 @@ export function AccountsConfigPage() {
                                     {!acc.isActive && <Badge variant="destructive">Nonaktif</Badge>}
                                   </div>
                                 </TableCell>
+                                {category === AccountCategory.ASET && (
+                                  <TableCell>
+                                    <Checkbox
+                                      checked={acc.isCashEquivalent}
+                                      disabled={acc.isHeader || !acc.isActive}
+                                      onCheckedChange={(checked) => toggleCashEquivalent(acc, checked === true)}
+                                    />
+                                  </TableCell>
+                                )}
                                 <TableCell className="text-right">
                                   {acc.isActive && (
                                     <Button

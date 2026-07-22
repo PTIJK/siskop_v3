@@ -28,6 +28,7 @@ import { LoanDetailPage } from './pages/loans/LoanDetailPage';
 import { OverduePage } from './pages/loans/OverduePage';
 
 import { ReportsPage } from './pages/reports/ReportsPage';
+import { RegulatoryReportsPage } from './pages/reports/RegulatoryReportsPage';
 
 import { ProfilePage } from './pages/config/ProfilePage';
 import { UsersPage } from './pages/config/UsersPage';
@@ -36,6 +37,8 @@ import { SavingConfigPage } from './pages/config/SavingConfigPage';
 import { LoanConfigPage } from './pages/config/LoanConfigPage';
 import { WhitelabelConfigPage } from './pages/config/WhitelabelConfigPage';
 import { AccountsConfigPage } from './pages/config/AccountsConfigPage';
+import { ShuDistributionConfigPage } from './pages/config/ShuDistributionConfigPage';
+import { ModalDisetorConfigPage } from './pages/config/ModalDisetorConfigPage';
 
 export default function App() {
   return (
@@ -78,6 +81,7 @@ export default function App() {
 
           {/* Reports */}
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/reports/regulatory" element={<RegulatoryReportsPage />} />
 
           {/* Config */}
           <Route path="/config/profile" element={<ProfilePage />} />
@@ -87,6 +91,8 @@ export default function App() {
           <Route path="/config/loans" element={<LoanConfigPage />} />
           <Route path="/config/whitelabel" element={<WhitelabelConfigPage />} />
           <Route path="/config/accounts" element={<AccountsConfigPage />} />
+          <Route path="/config/shu-distribution" element={<ShuDistributionConfigPage />} />
+          <Route path="/config/modal-disetor" element={<ModalDisetorConfigPage />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

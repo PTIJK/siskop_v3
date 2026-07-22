@@ -182,6 +182,7 @@ export interface Account {
   isHeader: boolean;
   isDefault: boolean;
   isActive: boolean;
+  isCashEquivalent: boolean;
   createdAt: string;
   updatedAt: string;
 }
