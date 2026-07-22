@@ -45,7 +45,7 @@ export async function createTestRoles(tenantId: string) {
     members: { create: true, read: true, update: true, delete: true },
     savings: { create: true, read: true, update: true, delete: true },
     loans: { create: true, read: true, update: true, delete: true },
-    reports: { read: true, export: true },
+    reports: { read: true, export: true, update: true },
     config: { read: true, update: true },
     users: { create: true, read: true, update: true, delete: true },
     roles: { create: true, read: true, update: true, delete: true },
@@ -55,7 +55,7 @@ export async function createTestRoles(tenantId: string) {
     members: { create: false, read: true, update: false, delete: false },
     savings: { create: true, read: true, update: true, delete: false },
     loans: { create: false, read: true, update: true, delete: false },
-    reports: { read: false, export: false },
+    reports: { read: false, export: false, update: false },
     config: { read: false, update: false },
     users: { create: false, read: false, update: false, delete: false },
     roles: { create: false, read: false, update: false, delete: false },
@@ -106,6 +106,7 @@ export async function cleanupTenant(tenantId: string) {
   await testPrisma.notification.deleteMany({ where: { relatedTenantId: tenantId } });
   await testPrisma.whitelabelConfig.deleteMany({ where: { tenantId } });
   await testPrisma.shuDistributionConfig.deleteMany({ where: { tenantId } });
+  await testPrisma.calkNarrative.deleteMany({ where: { tenantId } });
   await testPrisma.journalLine.deleteMany({ where: { tenantId } });
   await testPrisma.journalEntry.deleteMany({ where: { tenantId } });
   await testPrisma.accountMapping.deleteMany({ where: { tenantId } });

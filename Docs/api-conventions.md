@@ -136,9 +136,25 @@ GET    /api/reports/regulatory/shu-distribution?from=&to=     Daftar Pembagian S
                                                        jasaPinjaman proportionally per active member. Returns `catatan` instead
                                                        of an allocation if ShuDistributionConfig isn't set yet, or if the
                                                        period's SHU isn't positive.
+GET    /api/reports/regulatory/calk?from=&to=                CALK (Catatan Atas Laporan Keuangan). Numeric sections
+                                                       (`rincianAset`/`rincianKewajiban`/`rincianEkuitas` with saldoAwal/
+                                                       saldoAkhir/mutasi per account, `rincianPendapatan`/`rincianBeban`,
+                                                       `shuBerjalan`) are re-derived on-demand from the existing Neraca (at
+                                                       period start and end) and Laporan Hasil Usaha — no separate storage,
+                                                       no new calculation logic. `narasi` returns the 4 fixed narrative
+                                                       sections (`UMUM`/`DASAR_PENYUSUNAN`/`KEBIJAKAN_AKUNTANSI`/
+                                                       `INFORMASI_TAMBAHAN`), each `{ content: string, updatedAt: string|null }`
+                                                       — empty string / null if the tenant hasn't written that section yet.
+PUT    /api/reports/regulatory/calk/narrative                Upsert one CALK narrative section (body: `{ section, content }`,
+                                                       `section` one of the 4 above). Rich text is edited once by the tenant
+                                                       and reused for every period's CALK — not stored per-period. Requires
+                                                       `requirePermission('reports', 'update')` — the `reports` permission key
+                                                       gained an `update` action for this (previously only `read`/`export`);
+                                                       all default roles were re-seeded accordingly (Super Admin/Manager: true,
+                                                       Teller/Viewer: false).
 ```
 
-Not yet implemented (remaining Phase 3 roadmap items, see `Docs/HANDOFF.md`): CALK, PDF export for the four report endpoints above, `Tenant.modalDisetor` audit-threshold notification.
+Not yet implemented (remaining Phase 3 roadmap items, see `docs/handoff.md`): PDF export for the five report endpoints above, LPEA (needs its own calculation spec).
 
 ## Route Namespacing
 

@@ -84,7 +84,7 @@ export interface Permissions {
   members: { create: boolean; read: boolean; update: boolean; delete: boolean };
   savings: { create: boolean; read: boolean; update: boolean; delete: boolean };
   loans: { create: boolean; read: boolean; update: boolean; delete: boolean };
-  reports: { read: boolean; export: boolean };
+  reports: { read: boolean; export: boolean; update: boolean };
   config: { read: boolean; update: boolean };
   users: { create: boolean; read: boolean; update: boolean; delete: boolean };
   roles: { create: boolean; read: boolean; update: boolean; delete: boolean };

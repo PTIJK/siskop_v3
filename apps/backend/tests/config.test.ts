@@ -233,7 +233,7 @@ describe('Config Module', () => {
             members: { create: false, read: true, update: false, delete: false },
             savings: { create: false, read: true, update: false, delete: false },
             loans: { create: false, read: true, update: false, delete: false },
-            reports: { read: true, export: false },
+            reports: { read: true, export: false, update: false },
             config: { read: false, update: false },
             users: { create: false, read: false, update: false, delete: false },
             roles: { create: false, read: false, update: false, delete: false },

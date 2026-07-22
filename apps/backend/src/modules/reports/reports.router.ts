@@ -12,6 +12,8 @@ import {
   getArusKas,
   getLaporanHasilUsaha,
   getShuDistributionReport,
+  getCalk,
+  upsertCalkNarrative,
 } from './regulatory-reports.controller';
 
 export const reportsRouter = Router();
@@ -46,4 +48,16 @@ reportsRouter.get(
   requireAccountingEntitlement,
   requirePermission('reports', 'read'),
   getShuDistributionReport
+);
+reportsRouter.get(
+  '/regulatory/calk',
+  requireAccountingEntitlement,
+  requirePermission('reports', 'read'),
+  getCalk
+);
+reportsRouter.put(
+  '/regulatory/calk/narrative',
+  requireAccountingEntitlement,
+  requirePermission('reports', 'update'),
+  upsertCalkNarrative
 );

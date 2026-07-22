@@ -4,6 +4,48 @@ Standing doc for picking up work across sessions — update it whenever a work s
 
 ---
 
+## 2026-07-22 (cont'd 4) — CALK (Catatan Atas Laporan Keuangan)
+
+### Context
+
+Picked up the next Phase 3 roadmap item per the original sequencing in `Docs/specs/2026-07-22-pelaporan-regulasi-design.md` §3 (Product panel note) and §6.5 — user explicitly chose "CALK (next per original sequencing)" over frontend UI / PDF export / LPEA when asked. `git status` was clean and `7e754d3`/`180ca28` were both already committed at the start of this session, so this entry starts from a clean tree.
+
+### What's done (uncommitted)
+
+**Schema** — new migration `prisma/migrations/20260722043102_add_calk_narrative/`:
+- `CalkNarrative` model: `tenantId` + `section` (enum `CalkSection`: `UMUM` / `DASAR_PENYUSUNAN` / `KEBIJAKAN_AKUNTANSI` / `INFORMASI_TAMBAHAN`) + `content` (`String @db.Text`, rich text/HTML) + `updatedAt`. `@@unique([tenantId, section])` — one row per tenant per fixed section, edited once and reused every period (per spec §6.5, not stored per-period).
+- No new model needed for the numeric side — deliberately reuses `getNeraca`/`getLaporanHasilUsaha` rather than introducing new aggregation logic, matching the spec's explicit "no additional calculation logic beyond §6.1/§6.2" instruction.
+
+**Service** — `RegulatoryReportsService.getCalk(tenantId, from, to)` in the existing `regulatory-reports.service.ts`:
+- Calls `getNeraca` twice (at `from - 1ms` for opening balances, at `to` for closing) and `getLaporanHasilUsaha(from, to)` once, then merges each Neraca section's opening/closing items by `accountId` into `{ saldoAwal, saldoAkhir, mutasi }` rows — this "mutasi" (movement) column is arithmetic over two already-correct Neraca snapshots, not a new balance-tracking mechanism.
+- `narasi` returns all 4 fixed sections (even unset ones, as `{ content: '', updatedAt: null }`) so the frontend always has a stable shape to render an editor against.
+- `upsertCalkNarrative(tenantId, section, content)` — plain upsert on `(tenantId, section)`.
+- New `CALK_SECTIONS` export (the 4-value array) — used by `calk.schema.ts`'s `z.nativeEnum(CalkSection)` (imported directly from `@prisma/client`, not the array, since nativeEnum needs the actual enum object).
+
+**API** — new `apps/backend/src/modules/reports/calk.schema.ts`, two new controller functions in the existing `regulatory-reports.controller.ts`, two new routes in `reports.router.ts`:
+- `GET /api/reports/regulatory/calk?from=&to=` — `requireAccountingEntitlement` + `requirePermission('reports', 'read')`, same gate as the other 4 regulatory reports.
+- `PUT /api/reports/regulatory/calk/narrative` (body `{ section, content }`) — `requireAccountingEntitlement` + `requirePermission('reports', 'update')`.
+
+**Permission model change (the one non-trivial deviation this session)**: `Permissions.reports` in `packages/shared/src/index.ts` only had `{ read, export }` — no `update` action existed anywhere in the app for the `reports` module. Since Design Spec §10 says regulatory-report endpoints should live under the *existing* `"reports"` permission key rather than introduce a new one, and the CALK narrative PUT is the first *write* endpoint in that namespace, extended the type to `{ read, export, update }` and propagated `update: <bool>` to every existing role-permission literal across the codebase (`auth.service.ts` default Super Admin/Manager/Teller/Viewer roles, `prisma/seed.ts`, and all test files' inline permission objects — `coa.test.ts`, `journal.test.ts`, `regulatory-reports.test.ts`, `shu-distribution.test.ts`, `config.test.ts`, `tests/helpers/setup.ts`). Super Admin/Manager/full-perms test roles get `update: true`; Teller/Viewer/read-only roles get `update: false`. This is additive (Prisma stores permissions as `Json`, so old rows without the field just evaluate `update` as falsy — no migration needed for existing tenant data), but it's a real RBAC surface change worth flagging: any *existing* production tenant's custom roles (not the 4 seeded defaults) that were granted broad `reports` access before this field existed will need their permissions JSON re-saved (via the Role edit UI, once it exists) to explicitly grant `reports.update` if they should be able to edit CALK narrative — they won't get it automatically just because they had `read`/`export`.
+
+**Tests**: `apps/backend/tests/calk.test.ts` (new, 6 tests) — narrative defaults (4 sections, empty/null), numeric section cross-checked against a real posted deposit (saldoAwal/saldoAkhir/mutasi), `REPORT_PERIOD_INVALID` rejection, invalid-section 422 `VALIDATION_ERROR`, upsert-then-reused-across-different-periods (proves it's not period-scoped storage) + confirms exactly one row per section (no duplicate rows on repeat PUT), 403 `FORBIDDEN` for a role without `reports.update`, and the `FEATURE_NOT_ENTITLED` entitlement gate. **Status: 16/16 suites, 174/174 tests passing** (168 previous + 6 new). `npx tsc --noEmit` clean in `apps/backend`. No `EPERM` issue this session — migration + generate ran clean.
+
+**Docs updated**: `docs/api-conventions.md` — new `GET/PUT` routes under "Laporan Keuangan Regulasi", plus a note on the `reports.update` permission addition; refreshed the stale "Not yet implemented" line at the end of that section (previously still listed CALK and `modalDisetor`, which were both already done — now correctly says PDF export + LPEA are what's left) and fixed a stale `Docs/HANDOFF.md` path reference to the correct `docs/handoff.md`.
+
+### Not done in this step (still open)
+
+- **PDF export** for all 5 regulatory report endpoints (Neraca/Arus Kas/LHU/SHU-distribution/CALK) — still not built.
+- **Frontend UI** — still zero attention across the entire regulatory-reporting effort (Phase 2 + all of Phase 3, now including CALK). This is the same gap flagged in the last 3 handoff entries; it's the biggest risk to the work actually being usable.
+- **LPEA** — still explicitly deferred, needs its own calculation spec (§2, §14 of the design spec).
+- The CALK numeric section's "rincianPendapatan"/"rincianBeban" don't carry the anggota/bukanAnggota split visually distinct from the LHU report — they're just passed through as-is from `getLaporanHasilUsaha`'s existing items; not a gap, just noting the numeric section is a thin composition layer, not new domain logic, by design.
+
+### Operational notes for the next session
+
+- **RBAC**: if a next session touches the Role management UI/API (`config.router.ts`'s `/roles` endpoints, `apps/backend/src/modules/config/config.service.ts`), make sure any role-editing form picks up the new `reports.update` checkbox — it was added to the *type* and *default seed data* this session but there's no frontend role editor yet to verify against.
+- Frontend has now gone three consecutive Phase 2/3 sessions with zero attention — strongly worth prioritizing next, per the note in the previous handoff entry too.
+
+---
+
 ## 2026-07-22 (cont'd 3) — Tenant.modalDisetor + audit-threshold notification
 
 ### Context

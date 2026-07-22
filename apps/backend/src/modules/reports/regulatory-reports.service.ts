@@ -1,10 +1,18 @@
 import prisma from '../../lib/prisma';
 import { Errors } from '../../lib/errors';
 import { splitPrincipalAndInterest } from '../../lib/journal';
+import { CalkSection } from '@prisma/client';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+export const CALK_SECTIONS: CalkSection[] = [
+  'UMUM',
+  'DASAR_PENYUSUNAN',
+  'KEBIJAKAN_AKUNTANSI',
+  'INFORMASI_TAMBAHAN',
+];
 
 interface AccountSums {
   debit: number;
@@ -411,6 +419,71 @@ export class RegulatoryReportsService {
       anggota,
       totalDibagikanKeAnggota: totalDibagikanKeAnggota.toString(),
     };
+  }
+
+  /**
+   * CALK (Catatan Atas Laporan Keuangan) — Design Spec §6.5. V1 is not a fully
+   * auto-generated report: fixed narrative sections (accounting policy, basis of
+   * preparation, etc.) are rich-text the tenant edits once and reuses every period
+   * (persisted in `CalkNarrative`), combined with numeric sections re-derived from
+   * the already-built Neraca/Laporan Hasil Usaha — no new "calculation" logic per
+   * the spec's explicit note. The per-account "mutasi" (movement) column is just
+   * the Neraca balance at the period's start minus at its end, both computed via
+   * the existing getNeraca(), not a new balance-tracking mechanism.
+   */
+  async getCalk(tenantId: string, from: Date, to: Date) {
+    const dayBeforeFrom = new Date(from.getTime() - 1);
+
+    const [neracaAwal, neracaAkhir, laporanHasilUsaha, narrativeRows] = await Promise.all([
+      this.getNeraca(tenantId, dayBeforeFrom),
+      this.getNeraca(tenantId, to),
+      this.getLaporanHasilUsaha(tenantId, from, to),
+      prisma.calkNarrative.findMany({ where: { tenantId } }),
+    ]);
+
+    const narasi = Object.fromEntries(
+      CALK_SECTIONS.map((section) => {
+        const row = narrativeRows.find((r) => r.section === section);
+        return [section, { content: row?.content ?? '', updatedAt: row?.updatedAt.toISOString() ?? null }];
+      })
+    );
+
+    type NeracaItem = { accountId: string | null; code: string | null; name: string; balance: string };
+    const buildMutasi = (awalItems: NeracaItem[], akhirItems: NeracaItem[]) => {
+      const awalByAccount = new Map(awalItems.map((i) => [i.accountId, i]));
+      return akhirItems.map((item) => {
+        const awal = awalByAccount.get(item.accountId);
+        const saldoAwal = awal ? Number(awal.balance) : 0;
+        const saldoAkhir = Number(item.balance);
+        return {
+          accountId: item.accountId,
+          code: item.code,
+          name: item.name,
+          saldoAwal: saldoAwal.toString(),
+          saldoAkhir: saldoAkhir.toString(),
+          mutasi: round2(saldoAkhir - saldoAwal).toString(),
+        };
+      });
+    };
+
+    return {
+      periode: { from: from.toISOString().split('T')[0], to: to.toISOString().split('T')[0] },
+      narasi,
+      rincianAset: buildMutasi(neracaAwal.aset.items, neracaAkhir.aset.items),
+      rincianKewajiban: buildMutasi(neracaAwal.kewajiban.items, neracaAkhir.kewajiban.items),
+      rincianEkuitas: buildMutasi(neracaAwal.ekuitas.items, neracaAkhir.ekuitas.items),
+      rincianPendapatan: laporanHasilUsaha.pendapatan.items,
+      rincianBeban: laporanHasilUsaha.beban.items,
+      shuBerjalan: laporanHasilUsaha.shuBerjalan,
+    };
+  }
+
+  async upsertCalkNarrative(tenantId: string, section: CalkSection, content: string) {
+    return prisma.calkNarrative.upsert({
+      where: { tenantId_section: { tenantId, section } },
+      create: { tenantId, section, content },
+      update: { content },
+    });
   }
 
   assertValidPeriod(from: Date, to: Date): void {

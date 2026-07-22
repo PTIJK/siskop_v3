@@ -159,6 +159,7 @@ model Tenant {
   journalEntries   JournalEntry[]
   journalLines     JournalLine[]
   shuDistributionConfig ShuDistributionConfig?
+  calkNarratives   CalkNarrative[]
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
@@ -488,4 +489,27 @@ model ShuDistributionConfig {
   cadanganPercent     Decimal  @db.Decimal(5, 2)
   lainnyaPercent      Decimal  @db.Decimal(5, 2)
   updatedAt           DateTime @updatedAt
+}
+
+// CALK — Catatan Atas Laporan Keuangan (Design Spec 2026-07-22-pelaporan-regulasi §6.5).
+// Fixed narrative sections edited by the tenant once and reused every period; the
+// numeric parts of CALK are computed on-demand from Neraca/Laporan Hasil Usaha
+// (no separate storage — see RegulatoryReportsService.getCalk).
+enum CalkSection {
+  UMUM
+  DASAR_PENYUSUNAN
+  KEBIJAKAN_AKUNTANSI
+  INFORMASI_TAMBAHAN
+}
+
+model CalkNarrative {
+  id        String      @id @default(cuid())
+  tenantId  String
+  tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  section   CalkSection
+  content   String      @db.Text
+  updatedAt DateTime    @updatedAt
+
+  @@unique([tenantId, section])
+  @@index([tenantId])
 }

@@ -28,7 +28,7 @@ const accountingPerms = {
   members: { create: true, read: true, update: true, delete: true },
   savings: { create: true, read: true, update: true, delete: true },
   loans: { create: true, read: true, update: true, delete: true },
-  reports: { read: true, export: true },
+  reports: { read: true, export: true, update: true },
   config: { read: true, update: true },
   users: { create: true, read: true, update: true, delete: true },
   roles: { create: true, read: true, update: true, delete: true },
