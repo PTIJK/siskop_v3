@@ -34,6 +34,7 @@ prisma/migrations/*.sql.bak
 # Uploads
 uploads/
 !uploads/.gitkeep
+uploads-test/
 
 # OS
 .DS_Store

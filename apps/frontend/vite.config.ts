@@ -14,7 +14,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3001',
         // Keep the browser's Host header (e.g. demo.localhost) so the
         // backend tenant middleware can resolve the slug from the subdomain.
         changeOrigin: false,
