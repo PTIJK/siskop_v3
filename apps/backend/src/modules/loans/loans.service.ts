@@ -4,6 +4,7 @@ import prisma from '../../lib/prisma';
 import { AppError, Errors } from '../../lib/errors';
 import { calculateLoan } from '../../lib/loan-calc';
 import { recalculateKOL } from '../../lib/kol';
+import { postLoanDisbursement, postLoanPayment, splitPrincipalAndInterest } from '../../lib/journal';
 import { savingsService } from '../savings/savings.service';
 import {
   CreateLoanConfigInput,
@@ -151,24 +152,37 @@ export class LoansService {
 
     void createdBy;
 
-    return prisma.loan.create({
-      data: {
+    return prisma.$transaction(async (tx) => {
+      const loan = await tx.loan.create({
+        data: {
+          tenantId,
+          memberId: data.memberId,
+          loanConfigId: data.loanConfigId,
+          principalAmount: data.principalAmount,
+          totalAmount: calc.totalAmount,
+          termMonths: data.termMonths,
+          monthlyPayment: calc.monthlyPayment,
+          remainingAmount: calc.totalAmount,
+          status: LoanStatus.ACTIVE as unknown as import('@prisma/client').LoanStatus,
+          kolCategory: KOLCategory.LANCAR as unknown as import('@prisma/client').KOLCategory,
+          disbursedAt,
+        },
+        include: {
+          loanConfig: true,
+          member: { select: { memberId: true, fullName: true, accountNumber: true } },
+        },
+      });
+
+      await postLoanDisbursement(tx, {
         tenantId,
-        memberId: data.memberId,
+        loanId: loan.id,
         loanConfigId: data.loanConfigId,
-        principalAmount: data.principalAmount,
-        totalAmount: calc.totalAmount,
-        termMonths: data.termMonths,
-        monthlyPayment: calc.monthlyPayment,
-        remainingAmount: calc.totalAmount,
-        status: LoanStatus.ACTIVE as unknown as import('@prisma/client').LoanStatus,
-        kolCategory: KOLCategory.LANCAR as unknown as import('@prisma/client').KOLCategory,
-        disbursedAt,
-      },
-      include: {
-        loanConfig: true,
-        member: { select: { memberId: true, fullName: true, accountNumber: true } },
-      },
+        amount: data.principalAmount,
+        entryDate: disbursedAt,
+        description: 'Pencairan pinjaman',
+      });
+
+      return loan;
     });
   }
 
@@ -185,17 +199,36 @@ export class LoansService {
         throw new AppError('LOAN_NOT_ACTIVE', 'Pinjaman tidak dalam status aktif', 400);
       }
 
-      await tx.loanPayment.create({
+      const paidAt = new Date(data.paidAt);
+
+      const payment = await tx.loanPayment.create({
         data: {
           loanId,
           tenantId,
           amount: data.amount,
           penalty: data.penalty ?? 0,
-          paidAt: new Date(data.paidAt),
+          paidAt,
           dueDate: new Date(data.dueDate),
           note: data.note,
           createdBy,
         },
+      });
+
+      const { principal, interest } = splitPrincipalAndInterest(
+        data.amount,
+        Number(loan.principalAmount),
+        Number(loan.totalAmount)
+      );
+
+      await postLoanPayment(tx, {
+        tenantId,
+        loanPaymentId: payment.id,
+        loanConfigId: loan.loanConfigId,
+        principalAmount: principal,
+        interestAmount: interest,
+        penaltyAmount: data.penalty ?? 0,
+        entryDate: paidAt,
+        description: 'Pembayaran cicilan pinjaman',
       });
 
       const newRemaining = Math.max(0, Number(loan.remainingAmount) - data.amount);

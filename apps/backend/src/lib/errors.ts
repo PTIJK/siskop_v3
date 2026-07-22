@@ -39,4 +39,10 @@ export const Errors = {
   ACCOUNT_NOT_FOUND: () => new AppError('ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan', 404),
   MAPPING_ACCOUNT_CATEGORY_MISMATCH: (message: string) =>
     new AppError('MAPPING_ACCOUNT_CATEGORY_MISMATCH', message, 422),
+  JOURNAL_ENTRY_UNBALANCED: (message = 'Entri jurnal tidak seimbang antara debit dan kredit') =>
+    new AppError('JOURNAL_ENTRY_UNBALANCED', message, 500),
+  REPORT_PERIOD_INVALID: (message = 'Rentang tanggal laporan tidak valid') =>
+    new AppError('REPORT_PERIOD_INVALID', message, 422),
+  SHU_DISTRIBUTION_PERCENT_INVALID: (message = 'Jumlah persentase distribusi SHU harus 100%') =>
+    new AppError('SHU_DISTRIBUTION_PERCENT_INVALID', message, 422),
 };

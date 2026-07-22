@@ -14,6 +14,10 @@ export const UpdateAccountSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+export const MarkCashEquivalentSchema = z.object({
+  isCashEquivalent: z.boolean(),
+});
+
 export const AccountQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(20),
@@ -36,5 +40,6 @@ export const UpsertAccountMappingSchema = z
 
 export type CreateAccountInput = z.infer<typeof CreateAccountSchema>;
 export type UpdateAccountInput = z.infer<typeof UpdateAccountSchema>;
+export type MarkCashEquivalentInput = z.infer<typeof MarkCashEquivalentSchema>;
 export type AccountQuery = z.infer<typeof AccountQuerySchema>;
 export type UpsertAccountMappingInput = z.infer<typeof UpsertAccountMappingSchema>;

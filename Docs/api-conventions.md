@@ -65,6 +65,9 @@ Default: `page=1`, `limit=20`, `sortBy=createdAt`, `sortOrder=desc`.
 | ACCOUNT_IN_USE                | 409  | Account cannot be deleted/deactivated — it is `isDefault=true` or referenced by an `AccountMapping` |
 | ACCOUNT_NOT_FOUND             | 404  | Account ID does not exist in tenant |
 | MAPPING_ACCOUNT_CATEGORY_MISMATCH | 422 | Debit/credit account choice violates the expected normal-balance direction for the transaction kind |
+| JOURNAL_ENTRY_UNBALANCED      | 500  | Internal guard rail — `SUM(debit) != SUM(credit)` detected before commit; should never actually reach a client |
+| REPORT_PERIOD_INVALID         | 422  | `from`/`to` date range for a report is invalid (e.g. `from > to`) |
+| SHU_DISTRIBUTION_PERCENT_INVALID | 422 | The 4 `ShuDistributionConfig` percentages (jasaSimpanan/jasaPinjaman/cadangan/lainnya) don't sum to exactly 100 |
 
 ## Route Namespacing — Host (Platform Admin) additions
 
@@ -96,7 +99,39 @@ POST   /api/config/accounts/seed-default                        Seed the standar
 GET    /api/config/account-mappings                             List mappings, joined with source config name + account names
 PUT    /api/config/account-mappings                              Upsert one mapping (sourceType + sourceId + transactionKind + debit/credit account)
 GET    /api/config/account-mappings/completeness                Count of expected vs. mapped transaction kinds (drives the UX completeness indicator)
+
+POST   /api/config/accounts/:id/mark-cash-equivalent            Toggle Account.isCashEquivalent — drives the Kas/Bank grouping used by Laporan Arus Kas (§below)
+
+GET    /api/config/shu-distribution                             Get the tenant's ShuDistributionConfig (null if not configured yet)
+PUT    /api/config/shu-distribution                              Upsert ShuDistributionConfig — 4 percentages (jasaSimpanan/jasaPinjaman/cadangan/lainnya) must sum to 100
 ```
+
+## Route Namespacing — Laporan Keuangan Regulasi (Neraca, Arus Kas) additions
+
+Journal posting engine (`JournalEntry`/`JournalLine`, forward-only from transactions, no manual CRUD in v1) plus report generators derived from it. Gated the same as Konfigurasi Akun (`"accounting"` module entitlement) but under the existing `"reports"` permission key, not `"accounting"`. See `Docs/specs/2026-07-22-pelaporan-regulasi-design.md`.
+
+```
+GET    /api/reports/regulatory/neraca?asOfDate=       Neraca (balance sheet) as of a cutoff date (default: today). Self-checks
+                                                       ASET = KEWAJIBAN + EKUITAS — current-period PENDAPATAN/BEBAN net income is
+                                                       folded into EKUITAS as a computed "SHU Tahun Berjalan (Belum Ditutup)" line
+                                                       since no P&L closing entry exists yet (that's Laporan Hasil Usaha, not built).
+GET    /api/reports/regulatory/arus-kas?from=&to=     Laporan Arus Kas (direct method), default period = current month. Groups
+                                                       JournalLines touching Account.isCashEquivalent=true accounts into
+                                                       Operasi/Investasi/Pendanaan. Returns `catatan` instead of aggregating if
+                                                       the tenant hasn't marked any account as cash-equivalent yet.
+GET    /api/reports/regulatory/laporan-hasil-usaha?from=&to=  PENDAPATAN − BEBAN for the period, default = current month. Does
+                                                       NOT auto-post a closing JournalEntry to 3-3000 SHU Tahun Berjalan despite
+                                                       the design spec's §6.2 prose — deliberately deferred (needs its own
+                                                       idempotency/timing design); Neraca already accounts for unclosed income
+                                                       via a computed line.
+GET    /api/reports/regulatory/shu-distribution?from=&to=     Daftar Pembagian SHU per Anggota. Allocates the period's SHU
+                                                       across ShuDistributionConfig's 4 buckets, then divides jasaSimpanan/
+                                                       jasaPinjaman proportionally per active member. Returns `catatan` instead
+                                                       of an allocation if ShuDistributionConfig isn't set yet, or if the
+                                                       period's SHU isn't positive.
+```
+
+Not yet implemented (remaining Phase 3 roadmap items, see `Docs/HANDOFF.md`): CALK, PDF export for the four report endpoints above, `Tenant.modalDisetor` audit-threshold notification.
 
 ## Route Namespacing
 

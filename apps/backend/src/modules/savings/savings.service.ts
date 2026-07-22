@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../../lib/prisma';
 import { AppError, Errors } from '../../lib/errors';
 import { assertSavingConfigNotFrozen } from '../../lib/entitlement';
+import { postSavingTransaction } from '../../lib/journal';
 import { TenantWithPackage } from '../../middleware/tenant.middleware';
 import {
   CreateSavingConfigInput,
@@ -120,7 +121,7 @@ export class SavingsService {
       });
 
       if (data.initialDeposit > 0) {
-        await tx.savingTransaction.create({
+        const transaction = await tx.savingTransaction.create({
           data: {
             savingId: saving.id,
             tenantId,
@@ -129,6 +130,16 @@ export class SavingsService {
             note: 'Setoran awal',
             createdBy,
           },
+        });
+
+        await postSavingTransaction(tx, {
+          tenantId,
+          savingTransactionId: transaction.id,
+          savingConfigId: data.savingConfigId,
+          kind: 'DEPOSIT',
+          amount: data.initialDeposit,
+          entryDate: transaction.createdAt,
+          description: 'Setoran awal simpanan',
         });
       }
 
@@ -174,7 +185,7 @@ export class SavingsService {
         data: { balance: { increment: data.amount } },
       });
 
-      return tx.savingTransaction.create({
+      const transaction = await tx.savingTransaction.create({
         data: {
           savingId,
           tenantId,
@@ -184,6 +195,18 @@ export class SavingsService {
           createdBy,
         },
       });
+
+      await postSavingTransaction(tx, {
+        tenantId,
+        savingTransactionId: transaction.id,
+        savingConfigId: saving.savingConfigId,
+        kind: 'DEPOSIT',
+        amount: data.amount,
+        entryDate: transaction.createdAt,
+        description: 'Setoran simpanan',
+      });
+
+      return transaction;
     });
   }
 
@@ -225,7 +248,7 @@ export class SavingsService {
         data: { balance: { decrement: data.amount } },
       });
 
-      return tx.savingTransaction.create({
+      const transaction = await tx.savingTransaction.create({
         data: {
           savingId,
           tenantId,
@@ -235,6 +258,18 @@ export class SavingsService {
           createdBy,
         },
       });
+
+      await postSavingTransaction(tx, {
+        tenantId,
+        savingTransactionId: transaction.id,
+        savingConfigId: saving.savingConfigId,
+        kind: 'WITHDRAWAL',
+        amount: data.amount,
+        entryDate: transaction.createdAt,
+        description: 'Penarikan simpanan',
+      });
+
+      return transaction;
     });
   }
 

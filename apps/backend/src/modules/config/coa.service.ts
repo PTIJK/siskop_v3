@@ -106,6 +106,13 @@ export class CoaService {
     await prisma.account.update({ where: { id }, data: { isActive: false } });
   }
 
+  async markCashEquivalent(tenantId: string, id: string, isCashEquivalent: boolean) {
+    const account = await prisma.account.findFirst({ where: { id, tenantId } });
+    if (!account) throw Errors.ACCOUNT_NOT_FOUND();
+
+    return prisma.account.update({ where: { id }, data: { isCashEquivalent } });
+  }
+
   private async assertAccountNotInUse(
     tenantId: string,
     accountId: string,
@@ -148,6 +155,7 @@ export class CoaService {
             category: item.category as unknown as import('@prisma/client').AccountCategory,
             normalBalance: CATEGORY_NORMAL_BALANCE[item.category] as unknown as import('@prisma/client').NormalBalance,
             isHeader: item.isHeader ?? false,
+            isCashEquivalent: item.isCashEquivalent ?? false,
             isDefault: true,
             isActive: true,
           },

@@ -3,6 +3,7 @@ import { coaService } from './coa.service';
 import {
   AccountQuerySchema,
   CreateAccountSchema,
+  MarkCashEquivalentSchema,
   UpdateAccountSchema,
   UpsertAccountMappingSchema,
 } from './coa.schema';
@@ -45,6 +46,20 @@ export async function deactivateAccount(
   try {
     await coaService.deactivateAccount(req.tenant.id, req.params.id);
     res.json({ success: true, data: { message: 'Akun berhasil dinonaktifkan' } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function markCashEquivalent(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { isCashEquivalent } = MarkCashEquivalentSchema.parse(req.body);
+    const account = await coaService.markCashEquivalent(req.tenant.id, req.params.id, isCashEquivalent);
+    res.json({ success: true, data: account });
   } catch (err) {
     next(err);
   }

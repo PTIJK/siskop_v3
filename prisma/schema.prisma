@@ -94,6 +94,18 @@ enum MappingTransactionKind {
   PAYMENT_PENALTY
 }
 
+enum JournalSourceType {
+  SAVING_TRANSACTION
+  LOAN_PAYMENT
+  LOAN_DISBURSEMENT
+  MANUAL
+}
+
+enum JournalEntryStatus {
+  POSTED
+  UNPOSTED_MISSING_MAPPING
+}
+
 // ── PLATFORM ──────────────────────────────────────────────────────────────────
 
 model SubscriptionPackage {
@@ -141,6 +153,9 @@ model Tenant {
   notifications    Notification[]
   accounts         Account[]
   accountMappings  AccountMapping[]
+  journalEntries   JournalEntry[]
+  journalLines     JournalLine[]
+  shuDistributionConfig ShuDistributionConfig?
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
@@ -393,11 +408,13 @@ model Account {
   isHeader      Boolean         @default(false)
   isDefault     Boolean         @default(false)
   isActive      Boolean         @default(true)
+  isCashEquivalent Boolean      @default(false)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
   debitMappings  AccountMapping[] @relation("DebitAccount")
   creditMappings AccountMapping[] @relation("CreditAccount")
+  journalLines   JournalLine[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -421,4 +438,51 @@ model AccountMapping {
 
   @@unique([tenantId, sourceType, sourceId, transactionKind])
   @@index([tenantId])
+}
+
+// ── JOURNAL / POSTING ENGINE (Design Spec 2026-07-22-pelaporan-regulasi §5) ───
+
+model JournalEntry {
+  id          String             @id @default(cuid())
+  tenantId    String
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  entryDate   DateTime
+  sourceType  JournalSourceType
+  sourceId    String?
+  description String
+  status      JournalEntryStatus @default(POSTED)
+  createdAt   DateTime           @default(now())
+
+  lines JournalLine[]
+
+  @@index([tenantId])
+  @@index([entryDate])
+  @@index([sourceType, sourceId])
+}
+
+model JournalLine {
+  id             String       @id @default(cuid())
+  journalEntryId String
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id])
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id])
+  debit          Decimal      @default(0) @db.Decimal(15, 2)
+  credit         Decimal      @default(0) @db.Decimal(15, 2)
+
+  @@index([tenantId])
+  @@index([accountId])
+  @@index([journalEntryId])
+}
+
+model ShuDistributionConfig {
+  id                  String   @id @default(cuid())
+  tenantId            String   @unique
+  tenant              Tenant   @relation(fields: [tenantId], references: [id])
+  jasaSimpananPercent Decimal  @db.Decimal(5, 2)
+  jasaPinjamanPercent Decimal  @db.Decimal(5, 2)
+  cadanganPercent     Decimal  @db.Decimal(5, 2)
+  lainnyaPercent      Decimal  @db.Decimal(5, 2)
+  updatedAt           DateTime @updatedAt
 }

@@ -6,9 +6,10 @@ export const DEFAULT_COA_TEMPLATE: Array<{
   name: string;
   category: AccountCategory;
   isHeader?: boolean;
+  isCashEquivalent?: boolean;
 }> = [
-  { code: '1-1000', name: 'Kas', category: AccountCategory.ASET },
-  { code: '1-1010', name: 'Bank', category: AccountCategory.ASET },
+  { code: '1-1000', name: 'Kas', category: AccountCategory.ASET, isCashEquivalent: true },
+  { code: '1-1010', name: 'Bank', category: AccountCategory.ASET, isCashEquivalent: true },
   { code: '1-1100', name: 'Piutang Pinjaman Anggota', category: AccountCategory.ASET },
   { code: '1-1190', name: 'Penyisihan Kerugian Piutang', category: AccountCategory.ASET },
   { code: '1-2000', name: 'Aset Tetap', category: AccountCategory.ASET, isHeader: true },

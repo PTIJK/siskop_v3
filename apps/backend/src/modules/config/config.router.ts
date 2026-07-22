@@ -29,11 +29,13 @@ import {
   createAccount,
   updateAccount,
   deactivateAccount,
+  markCashEquivalent,
   seedDefaultTemplate,
   listMappings,
   upsertMapping,
   getMappingCompleteness,
 } from './coa.controller';
+import { getShuDistributionConfig, upsertShuDistributionConfig } from './shu-distribution.controller';
 
 const logoStorage = multer.diskStorage({
   destination: (req, _file, cb) => {
@@ -119,6 +121,12 @@ configRouter.post(
   requirePermission('accounting', 'create'),
   seedDefaultTemplate
 );
+configRouter.post(
+  '/accounts/:id/mark-cash-equivalent',
+  requireAccountingEntitlement,
+  requirePermission('accounting', 'update'),
+  markCashEquivalent
+);
 
 configRouter.get(
   '/account-mappings',
@@ -137,4 +145,18 @@ configRouter.get(
   requireAccountingEntitlement,
   requirePermission('accounting', 'read'),
   getMappingCompleteness
+);
+
+// Daftar Pembagian SHU per Anggota — distribution formula config (Design Spec §5.4)
+configRouter.get(
+  '/shu-distribution',
+  requireAccountingEntitlement,
+  requirePermission('accounting', 'read'),
+  getShuDistributionConfig
+);
+configRouter.put(
+  '/shu-distribution',
+  requireAccountingEntitlement,
+  requirePermission('accounting', 'update'),
+  upsertShuDistributionConfig
 );
