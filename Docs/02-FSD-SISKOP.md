@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 1.1.0 |
-| **Tanggal** | 21 Juli 2026 |
+| **Versi** | 1.2.0 |
+| **Tanggal** | 22 Juli 2026 |
 | **Status** | Draft — disinkronkan dengan implementasi berjalan |
 
 ---
@@ -412,6 +412,40 @@ MACET               : > 180 hari
 
 Implementasi: Puppeteer render HTML template → export PDF stream.
 
+### 7.4 Laporan Keuangan Regulasi (Permenkop UKM No. 2/2024)
+
+Digated oleh entitlement paket (`"accounting"` di `SubscriptionPackage.modules[]`, sama seperti Konfigurasi Akun §8.3), di bawah permission key `reports` yang sudah ada. Lihat `Docs/specs/2026-07-22-pelaporan-regulasi-design.md`.
+
+**Mesin jurnal (posting engine):** setiap `SavingTransaction`, `LoanPayment`, dan pencairan `Loan` otomatis menghasilkan satu `JournalEntry` + baris `JournalLine` double-entry, memakai `AccountMapping` yang dikonfigurasi tenant (§8.4) untuk menentukan akun debit/kredit. Forward-only — tidak ada CRUD manual jurnal di v1. Jika mapping untuk suatu `transactionKind` belum dikonfigurasi, `JournalEntry` tetap dibuat dengan `status = UNPOSTED_MISSING_MAPPING` (bukan gagal total) dan tidak ikut dihitung laporan sampai mapping dilengkapi.
+
+**Neraca** — `GET /api/reports/regulatory/neraca?asOfDate=`
+- Posisi keuangan per tanggal cutoff (default: hari ini), diagregasi dari `JournalLine` per `Account`
+- Self-check: `ASET = KEWAJIBAN + EKUITAS`; SHU tahun berjalan yang belum ditutup dilipat ke EKUITAS sebagai baris terhitung "SHU Tahun Berjalan (Belum Ditutup)" karena belum ada jurnal penutup otomatis
+- PDF: `GET /api/reports/regulatory/neraca/pdf?asOfDate=`, permission `reports.export`
+
+**Arus Kas** — `GET /api/reports/regulatory/arus-kas?from=&to=`
+- Metode langsung, default periode = bulan berjalan
+- Mengelompokkan `JournalLine` yang menyentuh akun `Account.isCashEquivalent = true` ke Operasi/Investasi/Pendanaan
+- Mengembalikan `catatan` (bukan agregasi) jika tenant belum menandai akun manapun sebagai setara kas (lihat §8.3, `mark-cash-equivalent`)
+- PDF: `GET /api/reports/regulatory/arus-kas/pdf?from=&to=`
+
+**Laporan Hasil Usaha (Laba Rugi/SHU)** — `GET /api/reports/regulatory/laporan-hasil-usaha?from=&to=`
+- PENDAPATAN − BEBAN untuk periode, default = bulan berjalan
+- Tidak otomatis posting jurnal penutup ke akun SHU Tahun Berjalan — Neraca sudah menghitung SHU belum ditutup lewat baris terhitung di atas
+- PDF: `GET /api/reports/regulatory/laporan-hasil-usaha/pdf?from=&to=`
+
+**Daftar Pembagian SHU per Anggota** — `GET /api/reports/regulatory/shu-distribution?from=&to=`
+- Mengalokasikan SHU periode ke 4 kelompok `ShuDistributionConfig` (§8.5), lalu membagi jasaSimpanan/jasaPinjaman secara proporsional per anggota aktif
+- Mengembalikan `catatan` jika `ShuDistributionConfig` belum diset, atau SHU periode tidak positif
+- PDF: `GET /api/reports/regulatory/shu-distribution/pdf?from=&to=`
+
+**CALK (Catatan Atas Laporan Keuangan)** — `GET /api/reports/regulatory/calk?from=&to=`
+- Bagian numerik (`rincianAset`/`rincianKewajiban`/`rincianEkuitas` dengan saldoAwal/saldoAkhir/mutasi per akun, `rincianPendapatan`/`rincianBeban`, `shuBerjalan`) diturunkan on-demand dari Neraca (awal & akhir periode) dan Laporan Hasil Usaha — tanpa penyimpanan terpisah
+- Bagian `narasi` mengembalikan 4 section tetap (`UMUM`/`DASAR_PENYUSUNAN`/`KEBIJAKAN_AKUNTANSI`/`INFORMASI_TAMBAHAN`), diedit sekali oleh tenant lewat `PUT /api/reports/regulatory/calk/narrative` (permission `reports.update`) dan dipakai ulang setiap periode
+- Tidak ada varian `/pdf` — narasi CALK di-review/diedit di UI, bukan diekspor sebagai dokumen statis (keputusan desain, §8 spec)
+
+**Belum diimplementasikan:** LPEA (Laporan Promosi Ekonomi Anggota) — butuh spesifikasi kalkulasi sendiri, lihat `docs/handoff.md`.
+
 ---
 
 ## 8. Modul Sistem Konfigurasi
@@ -437,16 +471,18 @@ Implementasi: Puppeteer render HTML template → export PDF stream.
 **Permission Matrix per Modul:**
 ```json
 {
-  "dashboard": { "read": true },
-  "members":   { "create": true, "read": true, "update": true, "delete": false },
-  "savings":   { "create": true, "read": true, "update": true, "delete": false },
-  "loans":     { "create": true, "read": true, "update": true, "delete": false },
-  "reports":   { "read": true, "export": true },
-  "config":    { "read": false, "update": false },
-  "users":     { "create": false, "read": false, "update": false, "delete": false },
-  "roles":     { "create": false, "read": false, "update": false, "delete": false }
+  "dashboard":  { "read": true },
+  "members":    { "create": true, "read": true, "update": true, "delete": false },
+  "savings":    { "create": true, "read": true, "update": true, "delete": false },
+  "loans":      { "create": true, "read": true, "update": true, "delete": false },
+  "reports":    { "read": true, "export": true, "update": false },
+  "config":     { "read": false, "update": false },
+  "users":      { "create": false, "read": false, "update": false, "delete": false },
+  "roles":      { "create": false, "read": false, "update": false, "delete": false },
+  "accounting": { "create": false, "read": false, "update": false, "delete": false }
 }
 ```
+`reports.update` mengontrol `PUT /api/reports/regulatory/calk/narrative` (§7.4) — ditambahkan khusus untuk CALK, sebelumnya `reports` hanya punya `read`/`export`. `accounting` mengontrol modul Konfigurasi Akun (§8.3–8.5). Default seed: Super Admin/Manager `reports.update: true`, Teller/Viewer `false`; hanya Super Admin yang punya `accounting: true` secara default.
 
 **Default Roles:**
 | Role | Deskripsi |
@@ -455,6 +491,45 @@ Implementasi: Puppeteer render HTML template → export PDF stream.
 | MANAGER | Baca semua + kelola transaksi, tanpa user/role management |
 | TELLER | Simpanan + pembayaran cicilan saja |
 | VIEWER | Read-only semua modul |
+
+### 8.3 Konfigurasi Akun (Chart of Accounts)
+
+Digated oleh entitlement paket (`"accounting"` di `SubscriptionPackage.modules[]`, `403 FEATURE_NOT_ENTITLED` jika tidak tersedia). Lihat `Docs/specs/2026-07-21-konfigurasi-akun-coa-design.md`.
+
+**Endpoints:**
+- `GET /api/config/accounts?category=&page=&limit=&search=` — list akun, filter per kategori
+- `POST /api/config/accounts` — buat akun; `code` harus sesuai prefiks kategori (1- Aset, 2- Kewajiban, 3- Ekuitas, 4- Pendapatan, 5- Beban), `422 ACCOUNT_CODE_INVALID_FORMAT` jika tidak; `409 ACCOUNT_CODE_DUPLICATE` jika `code` sudah dipakai di tenant
+- `PUT /api/config/accounts/:id` — update nama/`isActive`; `code` immutable setelah dibuat
+- `DELETE /api/config/accounts/:id` — nonaktifkan (soft delete); `409 ACCOUNT_IN_USE` jika `isDefault=true` atau masih direferensikan `AccountMapping`
+- `POST /api/config/accounts/seed-default` — seed template COA standar; no-op/blocked jika tenant sudah punya akun
+- `POST /api/config/accounts/:id/mark-cash-equivalent` — toggle `Account.isCashEquivalent`, menentukan pengelompokan Kas/Bank di Laporan Arus Kas (§7.4)
+
+### 8.4 Pemetaan Akun (Account Mapping)
+
+Memetakan sumber transaksi (`SavingConfig`, `LoanConfig`, atau `SYSTEM` tenant-wide) ke akun debit/kredit yang dipakai mesin posting (§7.4) saat menjurnal transaksi.
+
+**Endpoints:**
+- `GET /api/config/account-mappings` — list mapping, join dengan nama config sumber + nama akun
+- `PUT /api/config/account-mappings` — upsert satu mapping (`sourceType` + `sourceId` + `transactionKind` + akun debit/kredit); `422 MAPPING_ACCOUNT_CATEGORY_MISMATCH` jika kombinasi kategori debit/kredit melanggar arah saldo normal yang diharapkan untuk `transactionKind` tersebut
+- `GET /api/config/account-mappings/completeness` — jumlah `transactionKind` yang diharapkan vs. sudah dipetakan, mendorong indikator kelengkapan di UX
+
+### 8.5 Konfigurasi Distribusi SHU
+
+**Endpoints:**
+- `GET /api/config/shu-distribution` — ambil `ShuDistributionConfig` tenant (`null` jika belum diset)
+- `PUT /api/config/shu-distribution` — upsert; 4 persentase (`jasaSimpanan`/`jasaPinjaman`/`cadangan`/`lainnya`) wajib berjumlah tepat 100 (`422 SHU_DISTRIBUTION_PERCENT_INVALID` jika tidak)
+
+Dipakai laporan Daftar Pembagian SHU per Anggota (§7.4).
+
+### 8.6 Modal Disetor & Notifikasi Ambang Audit
+
+Field kepatuhan umum — **tidak** digated oleh entitlement `"accounting"` (independen dari modul Konfigurasi Akun), hanya `requirePermission('config', ...)`.
+
+**Endpoints:**
+- `GET /api/config/modal-disetor` — ambil `Tenant.modalDisetor` + `auditThresholdNotifiedAt`
+- `PUT /api/config/modal-disetor` — update `modalDisetor`; `422 MODAL_DISETOR_INVALID` jika nilai negatif
+
+Mendorong cron notifikasi ambang-audit harian (Permenkop UKM No. 2/2024 Pasal 12, Rp5M) — lihat `apps/backend/src/lib/audit-threshold.ts`. Saat `modalDisetor` melewati ambang, sistem membuat `Notification` bertipe `AUDIT_THRESHOLD_EXCEEDED` (§9.5) dan mencatat `auditThresholdNotifiedAt` agar tidak mengirim ulang untuk kondisi yang sama.
 
 ---
 
@@ -476,6 +551,12 @@ Implementasi: Puppeteer render HTML template → export PDF stream.
 - `GET /api/admin/tenants/:id/stats` — statistik per koperasi
 
 ### 9.3 Manajemen Paket Langganan
+
+**Endpoints:**
+- `GET /api/admin/packages` — list paket langganan
+- `POST /api/admin/packages` — buat paket baru
+- `PUT /api/admin/packages/:id` — update paket
+- `DELETE /api/admin/packages/:id` — nonaktifkan paket (soft delete)
 
 Setiap paket memiliki:
 - Nama paket
@@ -506,6 +587,7 @@ Multipart form upload (`multer`, field `logo`, jpg/png, max 2MB), mengikuti pola
 | `TENANT_REGISTERED` | Koperasi baru mendaftar | `auth.service.ts` → `registerTenant` (dalam transaksi yang sama) |
 | `BILLING_BLOCKED` | Koperasi diblokir otomatis karena tagihan lewat jatuh tempo | `billing.ts` → `processBillingReminders` |
 | `PACKAGE_CHANGED` | Paket langganan koperasi diubah oleh platform admin | `admin.service.ts` → `updateTenant` (saat `packageId` berubah) |
+| `AUDIT_THRESHOLD_EXCEEDED` | `Tenant.modalDisetor` melewati ambang wajib-audit Permenkop UKM No. 2/2024 Pasal 12 (Rp5M) | `apps/backend/src/lib/audit-threshold.ts`, cron harian (lihat §8.6) |
 
 **Model penyimpanan status baca:** `Notification` (event log, shared antar semua platform admin) + `NotificationRead` (baris per user per notifikasi; ketiadaan baris = belum dibaca). Ini memastikan satu platform admin menandai baca tidak memengaruhi status baca admin lain.
 
@@ -561,5 +643,14 @@ Semua list endpoint mendukung:
 | `NOTIFICATION_NOT_FOUND` | ID notifikasi tidak ditemukan |
 | `CANNOT_DEACTIVATE_SELF` | Platform admin tidak bisa menonaktifkan akunnya sendiri |
 | `DOMAIN_ALREADY_USED` | Domain kustom sudah dipakai tenant lain |
+| `ACCOUNT_CODE_INVALID_FORMAT` | Kode akun tidak sesuai prefiks kategori (§8.3) |
+| `ACCOUNT_CODE_DUPLICATE` | Kode akun sudah dipakai di tenant |
+| `ACCOUNT_IN_USE` | Akun tidak bisa dihapus/dinonaktifkan — `isDefault=true` atau masih dipakai `AccountMapping` |
+| `ACCOUNT_NOT_FOUND` | ID akun tidak ditemukan di tenant |
+| `MAPPING_ACCOUNT_CATEGORY_MISMATCH` | Pilihan akun debit/kredit melanggar arah saldo normal untuk `transactionKind` tersebut |
+| `JOURNAL_ENTRY_UNBALANCED` | Guard rail internal — `SUM(debit) != SUM(credit)` sebelum commit; seharusnya tidak pernah sampai ke client |
+| `REPORT_PERIOD_INVALID` | Range tanggal `from`/`to` laporan tidak valid (mis. `from > to`) |
+| `SHU_DISTRIBUTION_PERCENT_INVALID` | 4 persentase `ShuDistributionConfig` tidak berjumlah tepat 100 |
+| `MODAL_DISETOR_INVALID` | Nilai `Tenant.modalDisetor` negatif |
 
 > Lihat juga `Docs/api-conventions.md` untuk daftar lengkap dan HTTP status masing-masing kode error di atas — dokumen ini fokus pada kapan tiap error dipicu.

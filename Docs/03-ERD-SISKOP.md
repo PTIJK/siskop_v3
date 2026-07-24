@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 1.2.0 |
-| **Tanggal** | 21 Juli 2026 |
+| **Versi** | 1.3.0 |
+| **Tanggal** | 22 Juli 2026 |
 | **Database** | PostgreSQL |
 | **ORM** | Prisma |
 | **Status** | Draft — disinkronkan dengan `prisma/schema.prisma` implementasi berjalan |
@@ -44,6 +44,8 @@ erDiagram
     DateTime    nextBillingDate
     DateTime    billingReminder30SentAt
     DateTime    billingReminder7SentAt
+    Decimal     modalDisetor
+    DateTime    auditThresholdNotifiedAt
     DateTime    createdAt
   }
 
@@ -231,6 +233,45 @@ erDiagram
     DateTime               updatedAt
   }
 
+  %% ── JOURNAL / POSTING ENGINE (Pelaporan Regulasi) ────────
+  JournalEntry {
+    String             id          PK
+    String             tenantId    FK
+    DateTime           entryDate
+    JournalSourceType  sourceType
+    String             sourceId
+    String             description
+    JournalEntryStatus status
+    DateTime           createdAt
+  }
+
+  JournalLine {
+    String  id             PK
+    String  journalEntryId FK
+    String  tenantId       FK
+    String  accountId      FK
+    Decimal debit
+    Decimal credit
+  }
+
+  ShuDistributionConfig {
+    String  id                  PK
+    String  tenantId            FK, UK
+    Decimal jasaSimpananPercent
+    Decimal jasaPinjamanPercent
+    Decimal cadanganPercent
+    Decimal lainnyaPercent
+    DateTime updatedAt
+  }
+
+  CalkNarrative {
+    String      id       PK
+    String      tenantId FK
+    CalkSection section
+    String      content
+    DateTime    updatedAt
+  }
+
   %% ── RELATIONSHIPS ─────────────────────────────────────────
   SubscriptionPackage ||--o{ Tenant          : "subscribed_to"
   Tenant              ||--o{ Role            : "has"
@@ -265,6 +306,12 @@ erDiagram
   Account             |o--o{ Account         : "parent_of"
   Account             ||--o{ AccountMapping  : "debit_side"
   Account             ||--o{ AccountMapping  : "credit_side"
+
+  Tenant              ||--o{ JournalEntry    : "posts"
+  JournalEntry        ||--o{ JournalLine     : "has"
+  Account              ||--o{ JournalLine     : "posted_to"
+  Tenant              ||--o| ShuDistributionConfig : "configures"
+  Tenant              ||--o{ CalkNarrative   : "writes"
 ```
 
 ---
@@ -303,6 +350,8 @@ erDiagram
 | nextBillingDate | TIMESTAMP | NULLABLE | Tanggal tagihan berikutnya; lewat tanggal ini + `isActive=true` → login seluruh user tenant diblokir otomatis |
 | billingReminder30SentAt | TIMESTAMP | NULLABLE | Timestamp pengingat email 30 hari terkirim; direset saat `nextBillingDate` diperbarui ke masa depan |
 | billingReminder7SentAt | TIMESTAMP | NULLABLE | Timestamp pengingat email 7 hari terkirim; direset saat `nextBillingDate` diperbarui ke masa depan |
+| modalDisetor | DECIMAL(15,2) | NULLABLE | Modal disetor koperasi; field kepatuhan umum, tidak digated oleh entitlement `"accounting"`. Menentukan ambang wajib-audit Permenkop UKM No. 2/2024 Pasal 12 (Rp5M) |
+| auditThresholdNotifiedAt | TIMESTAMP | NULLABLE | Timestamp notifikasi terakhir saat `modalDisetor` melewati ambang wajib-audit; dicek oleh cron harian, lihat `apps/backend/src/lib/audit-threshold.ts` |
 | createdAt | TIMESTAMP | DEFAULT NOW() | Tanggal daftar |
 
 **Index:** `slug` (UNIQUE), `registrationNo` (UNIQUE)
@@ -543,7 +592,7 @@ Akun dengan `isDefault=true` atau yang masih direferensikan oleh `AccountMapping
 
 ### 2.14 AccountMapping
 
-Memetakan sumber transaksi (satu `SavingConfig`, satu `LoanConfig`, atau default tenant-wide `SYSTEM`) ke akun debit/kredit yang akan digunakan saat mesin posting (Phase 2, belum diimplementasikan) menjurnal transaksi tersebut.
+Memetakan sumber transaksi (satu `SavingConfig`, satu `LoanConfig`, atau default tenant-wide `SYSTEM`) ke akun debit/kredit yang digunakan mesin posting (`JournalEntry`/`JournalLine`, §2.15–2.16) saat menjurnal transaksi tersebut.
 
 | Kolom | Tipe | Constraint | Keterangan |
 |-------|------|------------|------------|
@@ -570,6 +619,70 @@ Setiap `transactionKind` punya kombinasi kategori debit/kredit yang diharapkan (
 | PAYMENT_PRINCIPAL (Pembayaran Pokok) | ASET | ASET |
 | PAYMENT_INTEREST (Pembayaran Bunga/Margin) | ASET | PENDAPATAN |
 | PAYMENT_PENALTY (Denda) | ASET | PENDAPATAN |
+
+### 2.15 JournalEntry
+
+Header jurnal, satu per event akuntansi (satu setoran, satu pencairan, dst.). Dibuat forward-only dari transaksi — tidak ada CRUD manual di v1. Bagian dari mesin posting, lihat `Docs/specs/2026-07-22-pelaporan-regulasi-design.md` §5.
+
+| Kolom | Tipe | Constraint | Keterangan |
+|-------|------|------------|------------|
+| id | VARCHAR | PK, CUID | Primary key |
+| tenantId | VARCHAR | FK, NOT NULL | Koperasi pemilik |
+| entryDate | TIMESTAMP | NOT NULL | Tanggal efektif jurnal (bukan `createdAt`) |
+| sourceType | ENUM | NOT NULL | `SAVING_TRANSACTION \| LOAN_PAYMENT \| LOAN_DISBURSEMENT \| MANUAL` |
+| sourceId | VARCHAR | NULLABLE | FK ke record sumber (`SavingTransaction.id`, `LoanPayment.id`, `Loan.id`); `null` untuk `MANUAL` |
+| description | VARCHAR | NOT NULL | Deskripsi baris jurnal, mis. "Setoran Simpanan Sukarela — KOP-XXX-202607-0001" |
+| status | ENUM | DEFAULT `POSTED` | `POSTED \| UNPOSTED_MISSING_MAPPING` — nilai kedua dipakai saat `AccountMapping` untuk transaksi ini belum dikonfigurasi (jurnal tetap dibuat sebagai catatan, tapi tidak ikut dihitung laporan sampai mapping dilengkapi dan re-post) |
+| createdAt | TIMESTAMP | DEFAULT NOW() | Waktu dibuat |
+
+**Index:** `tenantId`, `entryDate`, `(sourceType, sourceId)`
+
+### 2.16 JournalLine
+
+Baris debit/kredit di bawah satu `JournalEntry`. Setiap `JournalEntry` punya minimal 2 baris (double-entry); `SUM(debit) = SUM(credit)` per entry adalah invariant yang ditegakkan sebelum commit (`500 JOURNAL_ENTRY_UNBALANCED` bila gagal — guard rail internal, seharusnya tidak pernah sampai ke client).
+
+| Kolom | Tipe | Constraint | Keterangan |
+|-------|------|------------|------------|
+| id | VARCHAR | PK, CUID | Primary key |
+| journalEntryId | VARCHAR | FK → JournalEntry, NOT NULL, `onDelete: Cascade` | Header jurnal induk |
+| tenantId | VARCHAR | FK, NOT NULL | Koperasi pemilik (denormalized dari `JournalEntry` untuk query langsung per tenant) |
+| accountId | VARCHAR | FK → Account, NOT NULL | Akun yang terpengaruh |
+| debit | DECIMAL(15,2) | DEFAULT 0 | Nilai sisi debit (0 bila baris ini kredit) |
+| credit | DECIMAL(15,2) | DEFAULT 0 | Nilai sisi kredit (0 bila baris ini debit) |
+
+**Index:** `tenantId`, `accountId`, `journalEntryId`
+
+Laporan Neraca, Arus Kas, Laporan Hasil Usaha, dan SHU Distribution (RPT-08–12, lihat `docs/02-FSD-SISKOP.md` §2.x) semuanya diturunkan on-demand dari agregasi `JournalLine` per `Account` — tidak ada tabel saldo tersimpan terpisah.
+
+### 2.17 ShuDistributionConfig
+
+Formula pembagian SHU per tenant, dipakai laporan Daftar Pembagian SHU per Anggota. Lihat Design Spec §5.4.
+
+| Kolom | Tipe | Constraint | Keterangan |
+|-------|------|------------|------------|
+| id | VARCHAR | PK, CUID | Primary key |
+| tenantId | VARCHAR | FK, UNIQUE, NOT NULL | Koperasi pemilik — satu config per tenant |
+| jasaSimpananPercent | DECIMAL(5,2) | NOT NULL | Persentase alokasi jasa simpanan |
+| jasaPinjamanPercent | DECIMAL(5,2) | NOT NULL | Persentase alokasi jasa pinjaman |
+| cadanganPercent | DECIMAL(5,2) | NOT NULL | Persentase alokasi cadangan |
+| lainnyaPercent | DECIMAL(5,2) | NOT NULL | Persentase alokasi lain-lain |
+| updatedAt | TIMESTAMP | | Kolom audit standar |
+
+Keempat persentase harus berjumlah tepat 100 (`422 SHU_DISTRIBUTION_PERCENT_INVALID` jika tidak); ditegakkan di backend saat upsert, bukan constraint database.
+
+### 2.18 CalkNarrative
+
+Bagian naratif tetap dari CALK (Catatan Atas Laporan Keuangan) — diedit tenant sekali dan dipakai ulang di setiap periode CALK; bagian numerik CALK diturunkan on-demand dari Neraca/Laporan Hasil Usaha, tidak disimpan di sini. Lihat Design Spec §6.5.
+
+| Kolom | Tipe | Constraint | Keterangan |
+|-------|------|------------|------------|
+| id | VARCHAR | PK, CUID | Primary key |
+| tenantId | VARCHAR | FK, NOT NULL | Koperasi pemilik |
+| section | ENUM | NOT NULL | `UMUM \| DASAR_PENYUSUNAN \| KEBIJAKAN_AKUNTANSI \| INFORMASI_TAMBAHAN` — 4 bagian tetap |
+| content | TEXT | NOT NULL | Isi naratif (rich text) |
+| updatedAt | TIMESTAMP | | Kolom audit standar |
+
+**Unique constraint:** `(tenantId, section)` — satu baris per section per tenant · **Index:** `tenantId`
 
 ---
 
@@ -610,7 +723,8 @@ CREATE TYPE "DomainStatus"  AS ENUM ('PENDING', 'VERIFIED', 'FAILED');
 CREATE TYPE "NotificationType" AS ENUM (
   'TENANT_REGISTERED',
   'BILLING_BLOCKED',
-  'PACKAGE_CHANGED'
+  'PACKAGE_CHANGED',
+  'AUDIT_THRESHOLD_EXCEEDED'
 );
 
 -- Kategori akun (Chart of Accounts)
@@ -637,13 +751,33 @@ CREATE TYPE "MappingTransactionKind" AS ENUM (
   'PAYMENT_INTEREST',
   'PAYMENT_PENALTY'
 );
+
+-- Sumber event jurnal (mesin posting)
+CREATE TYPE "JournalSourceType" AS ENUM (
+  'SAVING_TRANSACTION',
+  'LOAN_PAYMENT',
+  'LOAN_DISBURSEMENT',
+  'MANUAL'
+);
+
+-- Status jurnal — POSTED normal; UNPOSTED_MISSING_MAPPING saat AccountMapping
+-- untuk transaksi ini belum dikonfigurasi
+CREATE TYPE "JournalEntryStatus" AS ENUM ('POSTED', 'UNPOSTED_MISSING_MAPPING');
+
+-- Bagian naratif tetap CALK (Catatan Atas Laporan Keuangan)
+CREATE TYPE "CalkSection" AS ENUM (
+  'UMUM',
+  'DASAR_PENYUSUNAN',
+  'KEBIJAKAN_AKUNTANSI',
+  'INFORMASI_TAMBAHAN'
+);
 ```
 
 ---
 
 ## 4. Prisma Schema Lengkap
 
-> Disalin langsung dari `prisma/schema.prisma` implementasi berjalan (21 Juli 2026). Jika keduanya berbeda di masa depan, `prisma/schema.prisma` adalah sumber kebenaran — dokumen ini butuh sinkronisasi ulang.
+> Disalin langsung dari `prisma/schema.prisma` implementasi berjalan (22 Juli 2026). Jika keduanya berbeda di masa depan, `prisma/schema.prisma` adalah sumber kebenaran — dokumen ini butuh sinkronisasi ulang.
 
 ```prisma
 // prisma/schema.prisma
@@ -712,6 +846,7 @@ enum NotificationType {
   TENANT_REGISTERED
   BILLING_BLOCKED
   PACKAGE_CHANGED
+  AUDIT_THRESHOLD_EXCEEDED
 }
 
 enum AccountCategory {
@@ -740,6 +875,18 @@ enum MappingTransactionKind {
   PAYMENT_PRINCIPAL
   PAYMENT_INTEREST
   PAYMENT_PENALTY
+}
+
+enum JournalSourceType {
+  SAVING_TRANSACTION
+  LOAN_PAYMENT
+  LOAN_DISBURSEMENT
+  MANUAL
+}
+
+enum JournalEntryStatus {
+  POSTED
+  UNPOSTED_MISSING_MAPPING
 }
 
 // ── PLATFORM ──────────────────────────────────────────────────────────────────
@@ -774,6 +921,8 @@ model Tenant {
   nextBillingDate         DateTime?
   billingReminder30SentAt DateTime?
   billingReminder7SentAt  DateTime?
+  modalDisetor            Decimal?             @db.Decimal(15, 2)
+  auditThresholdNotifiedAt DateTime?
   createdAt               DateTime             @default(now())
 
   users            User[]
@@ -789,6 +938,10 @@ model Tenant {
   notifications    Notification[]
   accounts         Account[]
   accountMappings  AccountMapping[]
+  journalEntries   JournalEntry[]
+  journalLines     JournalLine[]
+  shuDistributionConfig ShuDistributionConfig?
+  calkNarratives   CalkNarrative[]
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
@@ -1041,11 +1194,13 @@ model Account {
   isHeader      Boolean         @default(false)
   isDefault     Boolean         @default(false)
   isActive      Boolean         @default(true)
+  isCashEquivalent Boolean      @default(false)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
   debitMappings  AccountMapping[] @relation("DebitAccount")
   creditMappings AccountMapping[] @relation("CreditAccount")
+  journalLines   JournalLine[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1068,6 +1223,76 @@ model AccountMapping {
   updatedAt       DateTime               @updatedAt
 
   @@unique([tenantId, sourceType, sourceId, transactionKind])
+  @@index([tenantId])
+}
+
+// ── JOURNAL / POSTING ENGINE (Design Spec 2026-07-22-pelaporan-regulasi §5) ───
+
+model JournalEntry {
+  id          String             @id @default(cuid())
+  tenantId    String
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  entryDate   DateTime
+  sourceType  JournalSourceType
+  sourceId    String?
+  description String
+  status      JournalEntryStatus @default(POSTED)
+  createdAt   DateTime           @default(now())
+
+  lines JournalLine[]
+
+  @@index([tenantId])
+  @@index([entryDate])
+  @@index([sourceType, sourceId])
+}
+
+model JournalLine {
+  id             String       @id @default(cuid())
+  journalEntryId String
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id])
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id])
+  debit          Decimal      @default(0) @db.Decimal(15, 2)
+  credit         Decimal      @default(0) @db.Decimal(15, 2)
+
+  @@index([tenantId])
+  @@index([accountId])
+  @@index([journalEntryId])
+}
+
+model ShuDistributionConfig {
+  id                  String   @id @default(cuid())
+  tenantId            String   @unique
+  tenant              Tenant   @relation(fields: [tenantId], references: [id])
+  jasaSimpananPercent Decimal  @db.Decimal(5, 2)
+  jasaPinjamanPercent Decimal  @db.Decimal(5, 2)
+  cadanganPercent     Decimal  @db.Decimal(5, 2)
+  lainnyaPercent      Decimal  @db.Decimal(5, 2)
+  updatedAt           DateTime @updatedAt
+}
+
+// CALK — Catatan Atas Laporan Keuangan (Design Spec 2026-07-22-pelaporan-regulasi §6.5).
+// Fixed narrative sections edited by the tenant once and reused every period; the
+// numeric parts of CALK are computed on-demand from Neraca/Laporan Hasil Usaha
+// (no separate storage — see RegulatoryReportsService.getCalk).
+enum CalkSection {
+  UMUM
+  DASAR_PENYUSUNAN
+  KEBIJAKAN_AKUNTANSI
+  INFORMASI_TAMBAHAN
+}
+
+model CalkNarrative {
+  id        String      @id @default(cuid())
+  tenantId  String
+  tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  section   CalkSection
+  content   String      @db.Text
+  updatedAt DateTime    @updatedAt
+
+  @@unique([tenantId, section])
   @@index([tenantId])
 }
 ```

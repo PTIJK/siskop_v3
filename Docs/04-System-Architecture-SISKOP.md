@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| **Versi** | 1.0.0 |
-| **Tanggal** | Juni 2026 |
+| **Versi** | 1.1.0 |
+| **Tanggal** | 22 Juli 2026 |
 | **Status** | Draft |
 
 ---
@@ -134,8 +134,8 @@ siskop/
 │       │   │   ├── members/
 │       │   │   ├── savings/
 │       │   │   ├── loans/
-│       │   │   ├── reports/
-│       │   │   ├── config/
+│       │   │   ├── reports/         # RPT-01/02 + regulatory-reports.* (Neraca, Arus Kas, dst.)
+│       │   │   ├── config/          # profile/users/roles + coa.* (Konfigurasi Akun), shu-distribution.*, modal-disetor.*
 │       │   │   └── admin/
 │       │   ├── lib/
 │       │   │   ├── prisma.ts        # Prisma singleton
@@ -144,6 +144,7 @@ siskop/
 │       │   │   ├── kol.ts           # KOL recalculation logic
 │       │   │   ├── loan-calc.ts     # Angsuran calculator
 │       │   │   ├── pdf.ts           # Puppeteer PDF generator
+│       │   │   ├── audit-threshold.ts # Cek Tenant.modalDisetor vs. ambang wajib-audit (§8.3)
 │       │   │   └── scheduler.ts     # node-cron jobs
 │       │   └── templates/           # HTML templates untuk PDF
 │       ├── tests/
@@ -457,9 +458,88 @@ Proses:
 1. Delete semua RefreshToken dengan expiresAt < NOW()
 ```
 
+### 8.3 Audit Threshold Check (Daily)
+
+```
+Jadwal: Setiap hari pukul 00:15 WIB (Asia/Jakarta)
+Cron:   "15 17 * * *" (UTC)
+
+Proses (apps/backend/src/lib/audit-threshold.ts):
+1. Ambil semua Tenant dengan modalDisetor terisi
+2. Bandingkan terhadap ambang wajib-audit Permenkop UKM No. 2/2024 Pasal 12 (Rp5M)
+3. Jika terlampaui dan belum pernah dinotifikasi untuk kondisi ini:
+   - Buat Notification bertipe AUDIT_THRESHOLD_EXCEEDED
+   - Catat Tenant.auditThresholdNotifiedAt agar tidak berulang
+```
+
+Semua 3 cron job (KOL, billing, audit threshold) didaftarkan di `scheduler.ts` dan dijalankan berurutan tiap hari dengan jeda 5 menit (00:05, 00:10, 00:15 WIB) untuk menghindari beban query bersamaan.
+
 ---
 
-## 9. PDF Generation Architecture
+## 9. Journal Posting Engine & Regulatory Reporting
+
+Ditambahkan 22 Juli 2026 untuk memenuhi kewajiban pelaporan keuangan SAK EP (Permenkop UKM No. 2/2024) — Neraca, Laporan Arus Kas, Laporan Hasil Usaha, Daftar Pembagian SHU, dan CALK. Lihat `Docs/specs/2026-07-22-pelaporan-regulasi-design.md` untuk desain lengkap; `docs/02-FSD-SISKOP.md` §7.4/§8.3–8.6 untuk detail endpoint dan `docs/03-ERD-SISKOP.md` §2.13–2.18 untuk skema data.
+
+### 9.1 Posting Flow
+
+```
+SavingTransaction / LoanPayment / Loan (disbursement)
+    │
+    ▼
+regulatory-reports.service.ts → postJournalEntry(tenantId, sourceType, sourceId, ...)
+    │
+    ▼
+Cari AccountMapping yang cocok:
+  (tenantId, sourceType: SAVING_CONFIG|LOAN_CONFIG|SYSTEM, sourceId, transactionKind)
+    │
+  ┌─┴─────────────────────┐
+ ditemukan          tidak ditemukan
+  │                       │
+  ▼                       ▼
+Buat JournalEntry     Buat JournalEntry
+status: POSTED        status: UNPOSTED_MISSING_MAPPING
+  │                       │
+  ▼                       ▼
+Buat 2+ JournalLine    Tidak ikut dihitung laporan
+(debit/kredit sesuai   sampai mapping dilengkapi
+ AccountMapping)        dan entry di-reprocess
+  │
+  ▼
+Guard rail: SUM(debit) === SUM(credit)
+  → jika gagal: 500 JOURNAL_ENTRY_UNBALANCED (seharusnya tidak pernah terjadi)
+```
+
+Forward-only: tidak ada endpoint CRUD manual untuk `JournalEntry`/`JournalLine` di v1 — setiap baris jurnal berasal dari satu event transaksi yang sudah tervalidasi di modul sumbernya (savings/loans).
+
+### 9.2 Report Generation (Aggregation, bukan Storage)
+
+Tidak ada tabel saldo/ledger tersimpan terpisah. Setiap laporan regulasi mengagregasi `JournalLine` on-demand per request:
+
+```
+GET /api/reports/regulatory/neraca?asOfDate=2026-07-31
+    │
+    ▼
+regulatory-reports.service.ts → getNeraca(tenantId, asOfDate)
+    │
+    ▼
+SUM(JournalLine.debit - JournalLine.credit)
+  GROUP BY Account.id
+  WHERE JournalEntry.entryDate <= asOfDate
+    │
+    ▼
+Kelompokkan per Account.category (ASET/KEWAJIBAN/EKUITAS/...)
+Hitung SHU tahun berjalan (belum ditutup) dari PENDAPATAN − BEBAN periode berjalan
+Self-check: ASET = KEWAJIBAN + EKUITAS (termasuk SHU belum ditutup)
+    │
+    ▼
+Response JSON — atau PDF via generatePDF() (§10, sama seperti RPT-01/02)
+```
+
+Laporan Arus Kas mengikuti pola sama tapi memfilter `JournalLine` yang menyentuh `Account.isCashEquivalent = true`; CALK menurunkan bagian numeriknya dari dua panggilan `getNeraca()` (awal & akhir periode) plus `getLaporanHasilUsaha()` — tanpa kalkulasi baru.
+
+---
+
+## 10. PDF Generation Architecture
 
 ```
 Frontend: GET /api/reports/financial/pdf?startDate=&endDate=
@@ -490,27 +570,29 @@ Content-Type: application/pdf
 Content-Disposition: attachment; filename="laporan-keuangan-juni-2026.pdf"
 ```
 
+**Regulatory report templates (§9):** `generatePDF(tenantId, type, params)` di `regulatory-reports.service.ts` mengikuti pola identik — 4 renderer HTML module-level (`renderNeracaPdf`, `renderArusKasPdf`, `renderLaporanHasilUsahaPdf`, `renderShuDistributionPdf`) dibungkus `wrapRegulatoryPdf()`, memakai header/footer yang sama dengan RPT-01/02 (logo+nama+alamat+no. registrasi; footer nama+halaman). CALK tidak punya varian PDF (keputusan desain — lihat FSD §7.4).
+
 ---
 
-## 10. Security Architecture
+## 11. Security Architecture
 
-### 10.1 Authentication Security
+### 11.1 Authentication Security
 - Password: bcrypt dengan cost factor 12
 - JWT: signed dengan secret berbeda untuk access dan refresh token
 - Cookies: httpOnly, Secure, SameSite=Strict
 - Rate limiting login: max 10 request/menit per IP
 
-### 10.2 Tenant Isolation
+### 11.2 Tenant Isolation
 - Semua query data wajib include `tenantId` dari `req.tenant`
 - Tidak ada endpoint yang bisa query lintas tenant (kecuali platform admin)
 - User JWT payload berisi `tenantId` — divalidasi ulang saat setiap request
 
-### 10.3 Input Validation
+### 11.3 Input Validation
 - Semua input divalidasi dengan Zod schema sebelum masuk service layer
 - File upload dibatasi: type (jpg/png/pdf), size (max 2MB)
 - SQL injection tidak mungkin karena menggunakan Prisma ORM (parameterized queries)
 
-### 10.4 HTTP Security Headers (Helmet)
+### 11.4 HTTP Security Headers (Helmet)
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`
 - `Content-Security-Policy` (configured for tenant subdomains)
@@ -518,9 +600,9 @@ Content-Disposition: attachment; filename="laporan-keuangan-juni-2026.pdf"
 
 ---
 
-## 11. Development Workflow
+## 12. Development Workflow
 
-### 11.1 Makefile Commands
+### 12.1 Makefile Commands
 
 ```makefile
 # Setup
@@ -547,7 +629,7 @@ make test-be        # jest backend
 make build          # build semua
 ```
 
-### 11.2 Environment Setup
+### 12.2 Environment Setup
 
 ```bash
 # 1. Clone repo
@@ -574,7 +656,7 @@ make dev
 # Atau gunakan: http://localhost:5173 (frontend akan simulasi subdomain via env)
 ```
 
-### 11.3 Seed Data (Development)
+### 12.3 Seed Data (Development)
 
 Setelah `make seed`, tersedia:
 
@@ -589,7 +671,7 @@ Setelah `make seed`, tersedia:
 
 ---
 
-## 12. Deployment Architecture (Production)
+## 13. Deployment Architecture (Production)
 
 ```
                     ┌─────────────────────────────┐
