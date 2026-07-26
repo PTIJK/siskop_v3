@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import api from '../../lib/api';
+import api, { isFeatureNotEntitled } from '../../lib/api';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { FormError } from '../../components/shared/FormError';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
+import { NotEntitledNotice } from '../../components/shared/NotEntitledNotice';
 import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -89,6 +90,7 @@ export function AccountsConfigPage() {
   const [apiError, setApiError] = useState('');
   const [deactivateTarget, setDeactivateTarget] = useState<Account | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const [notEntitled, setNotEntitled] = useState(false);
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } =
     useForm<AccountFormData>({
@@ -98,6 +100,7 @@ export function AccountsConfigPage() {
 
   const fetchAll = () => {
     setIsLoading(true);
+    setNotEntitled(false);
     Promise.all([
       api.get('/api/config/accounts', { params: { limit: 200 } }),
       api.get('/api/config/account-mappings'),
@@ -111,6 +114,11 @@ export function AccountsConfigPage() {
         setCompleteness(completenessRes.data.data);
         setSavingConfigs(savingRes.data.data);
         setLoanConfigs(loanRes.data.data);
+      })
+      .catch((err) => {
+        if (isFeatureNotEntitled(err)) {
+          setNotEntitled(true);
+        }
       })
       .finally(() => setIsLoading(false));
   };
@@ -226,6 +234,18 @@ export function AccountsConfigPage() {
 
   if (isLoading) {
     return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
+  }
+
+  if (notEntitled) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Konfigurasi Akun"
+          description="Bagan akun (Chart of Accounts) dan pemetaan transaksi simpanan/pinjaman ke akun"
+        />
+        <NotEntitledNotice />
+      </div>
+    );
   }
 
   return (

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { startOfMonth, endOfMonth } from 'date-fns';
+import { startOfMonth, endOfMonth, endOfDay } from 'date-fns';
 import { regulatoryReportsService } from './regulatory-reports.service';
 import { UpsertCalkNarrativeSchema } from './calk.schema';
 
@@ -16,7 +16,7 @@ const PeriodParamsSchema = z.object({
 export async function getNeraca(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { asOfDate } = NeracaParamsSchema.parse(req.query);
-    const cutoff = asOfDate ? new Date(asOfDate) : new Date();
+    const cutoff = asOfDate ? endOfDay(new Date(asOfDate)) : new Date();
     const data = await regulatoryReportsService.getNeraca(req.tenant.id, cutoff);
     res.json({ success: true, data });
   } catch (err) {
@@ -28,7 +28,7 @@ export async function getArusKas(req: Request, res: Response, next: NextFunction
   try {
     const { from, to } = PeriodParamsSchema.parse(req.query);
     const start = from ? new Date(from) : startOfMonth(new Date());
-    const end = to ? new Date(to) : endOfMonth(new Date());
+    const end = to ? endOfDay(new Date(to)) : endOfMonth(new Date());
     regulatoryReportsService.assertValidPeriod(start, end);
     const data = await regulatoryReportsService.getArusKas(req.tenant.id, start, end);
     res.json({ success: true, data });
@@ -45,7 +45,7 @@ export async function getLaporanHasilUsaha(
   try {
     const { from, to } = PeriodParamsSchema.parse(req.query);
     const start = from ? new Date(from) : startOfMonth(new Date());
-    const end = to ? new Date(to) : endOfMonth(new Date());
+    const end = to ? endOfDay(new Date(to)) : endOfMonth(new Date());
     regulatoryReportsService.assertValidPeriod(start, end);
     const data = await regulatoryReportsService.getLaporanHasilUsaha(req.tenant.id, start, end);
     res.json({ success: true, data });
@@ -62,7 +62,7 @@ export async function getShuDistributionReport(
   try {
     const { from, to } = PeriodParamsSchema.parse(req.query);
     const start = from ? new Date(from) : startOfMonth(new Date());
-    const end = to ? new Date(to) : endOfMonth(new Date());
+    const end = to ? endOfDay(new Date(to)) : endOfMonth(new Date());
     regulatoryReportsService.assertValidPeriod(start, end);
     const data = await regulatoryReportsService.getShuDistribution(req.tenant.id, start, end);
     res.json({ success: true, data });
@@ -75,7 +75,7 @@ export async function getCalk(req: Request, res: Response, next: NextFunction): 
   try {
     const { from, to } = PeriodParamsSchema.parse(req.query);
     const start = from ? new Date(from) : startOfMonth(new Date());
-    const end = to ? new Date(to) : endOfMonth(new Date());
+    const end = to ? endOfDay(new Date(to)) : endOfMonth(new Date());
     regulatoryReportsService.assertValidPeriod(start, end);
     const data = await regulatoryReportsService.getCalk(req.tenant.id, start, end);
     res.json({ success: true, data });
@@ -101,7 +101,7 @@ export async function upsertCalkNarrative(
 export async function downloadNeracaPDF(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { asOfDate } = NeracaParamsSchema.parse(req.query);
-    const cutoff = asOfDate ? new Date(asOfDate) : new Date();
+    const cutoff = asOfDate ? endOfDay(new Date(asOfDate)) : new Date();
     const pdf = await regulatoryReportsService.generatePDF(req.tenant.id, 'neraca', { asOfDate: cutoff });
     res.set({
       'Content-Type': 'application/pdf',
@@ -117,7 +117,7 @@ export async function downloadArusKasPDF(req: Request, res: Response, next: Next
   try {
     const { from, to } = PeriodParamsSchema.parse(req.query);
     const start = from ? new Date(from) : startOfMonth(new Date());
-    const end = to ? new Date(to) : endOfMonth(new Date());
+    const end = to ? endOfDay(new Date(to)) : endOfMonth(new Date());
     regulatoryReportsService.assertValidPeriod(start, end);
     const pdf = await regulatoryReportsService.generatePDF(req.tenant.id, 'arus-kas', { from: start, to: end });
     res.set({
@@ -138,7 +138,7 @@ export async function downloadLaporanHasilUsahaPDF(
   try {
     const { from, to } = PeriodParamsSchema.parse(req.query);
     const start = from ? new Date(from) : startOfMonth(new Date());
-    const end = to ? new Date(to) : endOfMonth(new Date());
+    const end = to ? endOfDay(new Date(to)) : endOfMonth(new Date());
     regulatoryReportsService.assertValidPeriod(start, end);
     const pdf = await regulatoryReportsService.generatePDF(req.tenant.id, 'laporan-hasil-usaha', {
       from: start,
@@ -162,7 +162,7 @@ export async function downloadShuDistributionPDF(
   try {
     const { from, to } = PeriodParamsSchema.parse(req.query);
     const start = from ? new Date(from) : startOfMonth(new Date());
-    const end = to ? new Date(to) : endOfMonth(new Date());
+    const end = to ? endOfDay(new Date(to)) : endOfMonth(new Date());
     regulatoryReportsService.assertValidPeriod(start, end);
     const pdf = await regulatoryReportsService.generatePDF(req.tenant.id, 'shu-distribution', {
       from: start,

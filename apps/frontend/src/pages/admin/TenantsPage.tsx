@@ -127,6 +127,7 @@ export function TenantsPage() {
 
   useEffect(() => {
     fetchTenants();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, search]);
 
   const totalPages = Math.ceil(meta.total / meta.limit);

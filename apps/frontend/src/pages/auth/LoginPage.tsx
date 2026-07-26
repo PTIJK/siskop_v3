@@ -4,14 +4,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../../hooks/useAuth';
-import { useAuthStore } from '../../stores/authStore';
 import { Card, CardContent, CardHeader } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { FormError } from '../../components/shared/FormError';
 import { Building2, Eye, EyeOff } from 'lucide-react';
-import { TenantType } from '@siskop/shared';
 
 const loginSchema = z.object({
   email: z.string().email('Email tidak valid'),
@@ -23,7 +21,6 @@ type LoginForm = z.infer<typeof loginSchema>;
 export function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const tenant = useAuthStore((s) => s.tenant);
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState('');
 

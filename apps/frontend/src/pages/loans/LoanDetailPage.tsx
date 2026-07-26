@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import api from '../../lib/api';
-import { formatRupiah, formatTanggalIndonesia, formatTanggalPendek } from '../../lib/utils';
+import { formatRupiah, formatTanggalPendek } from '../../lib/utils';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { KOLBadge } from '../../components/shared/KOLBadge';
@@ -56,7 +56,6 @@ interface LoanDetail {
 
 export function LoanDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { can } = usePermissions();
   const { toast } = useToast();
   const [loan, setLoan] = useState<LoanDetail | null>(null);
@@ -75,6 +74,7 @@ export function LoanDetailPage() {
       .finally(() => setIsLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchLoan(); }, [id]);
 
   useEffect(() => {

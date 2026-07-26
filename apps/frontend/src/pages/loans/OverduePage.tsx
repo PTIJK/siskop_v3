@@ -104,6 +104,7 @@ export function OverduePage() {
         data={data}
         isLoading={isLoading}
         onRowClick={(row) => navigate(`/loans/${row.id}`)}
+        rowClassName={(row) => ROW_TINT[row.kolCategory]}
         emptyMessage="Tidak ada pinjaman bermasalah"
       />
     </div>

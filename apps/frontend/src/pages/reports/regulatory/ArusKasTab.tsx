@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../../../lib/api';
+import api, { isFeatureNotEntitled } from '../../../lib/api';
 import { formatRupiah } from '../../../lib/utils';
 import { PageLoading } from '../../../components/shared/LoadingSpinner';
+import { NotEntitledNotice } from '../../../components/shared/NotEntitledNotice';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '../../../components/ui/table';
+import { Table, TableBody, TableCell, TableRow } from '../../../components/ui/table';
 import { FileText, Info } from 'lucide-react';
 import { PeriodRangeControls } from './PeriodRangeControls';
 import { ArusKas, ArusKasSection, defaultPeriodFrom, defaultPeriodTo } from './types';
@@ -43,12 +44,16 @@ export function ArusKasTab() {
   const [to, setTo] = useState(defaultPeriodTo());
   const [data, setData] = useState<ArusKas | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [notEntitled, setNotEntitled] = useState(false);
 
   const fetchReport = async () => {
     setIsLoading(true);
+    setNotEntitled(false);
     try {
       const res = await api.get('/api/reports/regulatory/arus-kas', { params: { from, to } });
       setData(res.data.data);
+    } catch (err) {
+      if (isFeatureNotEntitled(err)) setNotEntitled(true);
     } finally {
       setIsLoading(false);
     }
@@ -67,6 +72,8 @@ export function ArusKasTab() {
 
       {isLoading ? (
         <PageLoading />
+      ) : notEntitled ? (
+        <NotEntitledNotice />
       ) : data?.catatan ? (
         <Card>
           <CardContent className="flex items-start gap-3 py-6 text-sm">

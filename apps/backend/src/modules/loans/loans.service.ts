@@ -250,7 +250,7 @@ export class LoansService {
   }
 
   async getOverdue(tenantId: string) {
-    return prisma.loan.findMany({
+    const loans = await prisma.loan.findMany({
       where: {
         tenantId,
         status: 'ACTIVE',
@@ -263,6 +263,11 @@ export class LoansService {
       },
       orderBy: [{ kolCategory: 'desc' }, { updatedAt: 'asc' }],
     });
+
+    return loans.map(({ payments, ...loan }) => ({
+      ...loan,
+      lastPaymentAt: payments[0]?.paidAt ?? null,
+    }));
   }
 }
 

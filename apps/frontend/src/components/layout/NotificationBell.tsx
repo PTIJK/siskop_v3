@@ -8,7 +8,6 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
 import { Bell, Building2 } from 'lucide-react';
 
 interface NotificationItem {
@@ -40,6 +39,7 @@ export function NotificationBell() {
     setIsLoading(true);
     api.get('/api/admin/notifications', { params: { page: 1, limit: 20 } })
       .then((res) => setItems(res.data.data))
+      .catch((err) => console.error(err))
       .finally(() => setIsLoading(false));
   };
 
@@ -54,10 +54,14 @@ export function NotificationBell() {
   }, [open]);
 
   const handleItemClick = async (item: NotificationItem) => {
-    if (!item.isRead) {
-      await api.post(`/api/admin/notifications/${item.id}/read`);
-      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, isRead: true } : i)));
-      setUnreadCount((c) => Math.max(0, c - 1));
+    try {
+      if (!item.isRead) {
+        await api.post(`/api/admin/notifications/${item.id}/read`);
+        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, isRead: true } : i)));
+        setUnreadCount((c) => Math.max(0, c - 1));
+      }
+    } catch (err) {
+      console.error(err);
     }
     if (item.relatedTenant) {
       setOpen(false);
@@ -66,9 +70,13 @@ export function NotificationBell() {
   };
 
   const markAllRead = async () => {
-    await api.post('/api/admin/notifications/read-all');
-    setItems((prev) => prev.map((i) => ({ ...i, isRead: true })));
-    setUnreadCount(0);
+    try {
+      await api.post('/api/admin/notifications/read-all');
+      setItems((prev) => prev.map((i) => ({ ...i, isRead: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (

@@ -72,7 +72,7 @@ export function ProfilePage() {
     try {
       await api.post('/api/config/logo', form, { headers: { 'Content-Type': 'multipart/form-data' } });
       toast({ title: 'Logo berhasil diupload' });
-    } catch (err: unknown) {
+    } catch {
       toast({ title: 'Gagal upload logo', variant: 'destructive' });
     }
   };

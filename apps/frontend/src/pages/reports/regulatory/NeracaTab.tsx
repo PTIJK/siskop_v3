@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import api from '../../../lib/api';
+import api, { isFeatureNotEntitled } from '../../../lib/api';
 import { formatRupiah } from '../../../lib/utils';
 import { PageLoading } from '../../../components/shared/LoadingSpinner';
+import { NotEntitledNotice } from '../../../components/shared/NotEntitledNotice';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
@@ -50,12 +51,16 @@ export function NeracaTab() {
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [data, setData] = useState<Neraca | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [notEntitled, setNotEntitled] = useState(false);
 
   const fetchReport = async () => {
     setIsLoading(true);
+    setNotEntitled(false);
     try {
       const res = await api.get('/api/reports/regulatory/neraca', { params: { asOfDate } });
       setData(res.data.data);
+    } catch (err) {
+      if (isFeatureNotEntitled(err)) setNotEntitled(true);
     } finally {
       setIsLoading(false);
     }
@@ -81,6 +86,8 @@ export function NeracaTab() {
 
       {isLoading ? (
         <PageLoading />
+      ) : notEntitled ? (
+        <NotEntitledNotice />
       ) : data ? (
         <>
           <div className="flex items-center justify-between">

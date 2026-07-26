@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import api from '../../../lib/api';
+import api, { isFeatureNotEntitled } from '../../../lib/api';
 import { formatRupiah, formatTanggalIndonesia } from '../../../lib/utils';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { useToast } from '../../../components/hooks/use-toast';
 import { PageLoading } from '../../../components/shared/LoadingSpinner';
+import { NotEntitledNotice } from '../../../components/shared/NotEntitledNotice';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Textarea } from '../../../components/ui/textarea';
@@ -152,12 +153,16 @@ export function CalkTab() {
   const [to, setTo] = useState(defaultPeriodTo());
   const [data, setData] = useState<Calk | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [notEntitled, setNotEntitled] = useState(false);
 
   const fetchReport = async () => {
     setIsLoading(true);
+    setNotEntitled(false);
     try {
       const res = await api.get('/api/reports/regulatory/calk', { params: { from, to } });
       setData(res.data.data);
+    } catch (err) {
+      if (isFeatureNotEntitled(err)) setNotEntitled(true);
     } finally {
       setIsLoading(false);
     }
@@ -182,6 +187,8 @@ export function CalkTab() {
 
       {isLoading ? (
         <PageLoading />
+      ) : notEntitled ? (
+        <NotEntitledNotice />
       ) : data ? (
         <>
           <p className="text-sm text-muted-foreground">Periode {data.periode.from} — {data.periode.to}</p>

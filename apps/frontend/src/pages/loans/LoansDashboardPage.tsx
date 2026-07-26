@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
-import { formatRupiah, formatTanggalPendek } from '../../lib/utils';
+import { formatRupiah } from '../../lib/utils';
 import { usePermissions } from '../../hooks/usePermissions';
 import { DataTable, ColumnDef } from '../../components/shared/DataTable';
 import { PageHeader } from '../../components/shared/PageHeader';
@@ -34,7 +34,17 @@ interface Loan {
   disbursedAt?: string;
 }
 
-function LoansTable({ status, search, loanConfigId }: { status?: string; search: string; loanConfigId?: string }) {
+function LoansTable({
+  status,
+  search,
+  onSearchChange,
+  loanConfigId,
+}: {
+  status?: string;
+  search: string;
+  onSearchChange: (value: string) => void;
+  loanConfigId?: string;
+}) {
   const navigate = useNavigate();
   const [data, setData] = useState<Loan[]>([]);
   const [total, setTotal] = useState(0);
@@ -98,6 +108,7 @@ function LoansTable({ status, search, loanConfigId }: { status?: string; search:
       pagination={{ page, limit, total, onPageChange: setPage }}
       onRowClick={(row) => navigate(`/loans/${row.id}`)}
       emptyMessage="Belum ada data pinjaman"
+      search={{ value: search, onChange: onSearchChange, placeholder: 'Cari nama, ID anggota...' }}
     />
   );
 }
@@ -168,13 +179,13 @@ export function LoansDashboardPage() {
           <TabsTrigger value="completed">Lunas</TabsTrigger>
         </TabsList>
         <TabsContent value="all" className="mt-4">
-          <LoansTable search={search} loanConfigId={typeFilter} />
+          <LoansTable search={search} onSearchChange={setSearch} loanConfigId={typeFilter} />
         </TabsContent>
         <TabsContent value="active" className="mt-4">
-          <LoansTable status="ACTIVE" search={search} loanConfigId={typeFilter} />
+          <LoansTable status="ACTIVE" search={search} onSearchChange={setSearch} loanConfigId={typeFilter} />
         </TabsContent>
         <TabsContent value="completed" className="mt-4">
-          <LoansTable status="COMPLETED" search={search} loanConfigId={typeFilter} />
+          <LoansTable status="COMPLETED" search={search} onSearchChange={setSearch} loanConfigId={typeFilter} />
         </TabsContent>
       </Tabs>
     </div>

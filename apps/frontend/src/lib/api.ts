@@ -53,4 +53,16 @@ api.interceptors.response.use(
   }
 );
 
+/** True when an API error response is a 403 FEATURE_NOT_ENTITLED (package doesn't include this feature). */
+export function isFeatureNotEntitled(err: unknown): boolean {
+  const axiosErr = err as { response?: { data?: { error?: { code?: string } } } };
+  return axiosErr?.response?.data?.error?.code === 'FEATURE_NOT_ENTITLED';
+}
+
+/** Extracts the backend's Indonesian error message from an API error, falling back if absent. */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
+  return axiosErr?.response?.data?.error?.message ?? fallback;
+}
+
 export default api;

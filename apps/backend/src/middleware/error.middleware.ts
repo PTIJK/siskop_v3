@@ -6,7 +6,7 @@ export function errorMiddleware(
   err: Error,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void {
   console.error(`[ERROR] ${err.message}`, err);
 

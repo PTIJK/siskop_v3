@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import api from '../../lib/api';
+import api, { apiErrorMessage } from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { FormError } from '../../components/shared/FormError';
@@ -56,9 +56,12 @@ export function LoanConfigPage() {
   });
 
   const fetchConfigs = () => {
-    api.get('/api/loans/configs').then((res) => setConfigs(res.data.data));
+    api.get('/api/loans/configs')
+      .then((res) => setConfigs(res.data.data))
+      .catch((err) => toast({ title: 'Gagal memuat konfigurasi pinjaman', description: apiErrorMessage(err, ''), variant: 'destructive' }));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchConfigs(); }, []);
 
   const openEdit = (c: LoanConfig) => {

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import api from '../../lib/api';
+import api, { apiErrorMessage } from '../../lib/api';
 import { formatRupiah } from '../../lib/utils';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useToast } from '../../components/hooks/use-toast';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { PageLoading } from '../../components/shared/LoadingSpinner';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -45,6 +46,7 @@ const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
 export function ReportsPage() {
   const { can } = usePermissions();
+  const { toast } = useToast();
   const [periodType, setPeriodType] = useState<PeriodType>('range');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -87,16 +89,20 @@ export function ReportsPage() {
   const downloadPDF = async () => {
     const { startDate: sd, endDate: ed } = getDateRange();
     const endpoint = activeTab === 'financial' ? 'financial' : 'rat';
-    const response = await api.get(`/api/reports/${endpoint}/pdf`, {
-      params: { startDate: sd, endDate: ed },
-      responseType: 'blob',
-    });
-    const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `laporan-${endpoint}-${Date.now()}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const response = await api.get(`/api/reports/${endpoint}/pdf`, {
+        params: { startDate: sd, endDate: ed },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `laporan-${endpoint}-${Date.now()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({ title: 'Gagal mengunduh PDF', description: apiErrorMessage(err, ''), variant: 'destructive' });
+    }
   };
 
   const hasReport = financialReport || ratReport;

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import api from '../../lib/api';
+import api, { apiErrorMessage } from '../../lib/api';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { FormError } from '../../components/shared/FormError';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -78,9 +78,13 @@ export function WhitelabelConfigPage() {
           });
         }
       })
+      .catch((err) => {
+        toast({ title: 'Gagal memuat pengaturan whitelabel', description: apiErrorMessage(err, ''), variant: 'destructive' });
+      })
       .finally(() => setIsLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchConfig(); }, []);
 
   const onSubmit = async (data: FormData) => {

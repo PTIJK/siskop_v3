@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import api from '../../lib/api';
+import api, { apiErrorMessage } from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
 import { formatTanggalPendek } from '../../lib/utils';
 import { DataTable, ColumnDef } from '../../components/shared/DataTable';
@@ -48,9 +48,11 @@ export function AdminUsersPage() {
     setIsLoading(true);
     api.get('/api/admin/users')
       .then((res) => setData(res.data.data))
+      .catch((err) => toast({ title: 'Gagal memuat platform admin', description: apiErrorMessage(err, ''), variant: 'destructive' }))
       .finally(() => setIsLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchUsers(); }, []);
 
   const onAddSubmit = async (data: AddForm) => {

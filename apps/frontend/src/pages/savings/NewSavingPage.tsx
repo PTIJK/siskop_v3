@@ -3,8 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import api from '../../lib/api';
-import { formatRupiah } from '../../lib/utils';
+import api, { apiErrorMessage } from '../../lib/api';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { FormError } from '../../components/shared/FormError';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -57,22 +56,31 @@ export function NewSavingPage() {
   });
 
   useEffect(() => {
-    api.get('/api/savings/configs').then((res) => setConfigs(res.data.data.filter((c: SavingConfig) => c.isActive)));
+    api.get('/api/savings/configs')
+      .then((res) => setConfigs(res.data.data.filter((c: SavingConfig) => c.isActive)))
+      .catch((err) => toast({ title: 'Gagal memuat jenis simpanan', description: apiErrorMessage(err, ''), variant: 'destructive' }));
 
     const prefillId = searchParams.get('memberId');
     if (prefillId) {
-      api.get(`/api/members/${prefillId}`).then((res) => {
-        const m = res.data.data;
-        setSelectedMember({ id: m.id, memberId: m.memberId, fullName: m.fullName, accountNumber: m.accountNumber });
-        setValue('memberId', m.id);
-      });
+      api.get(`/api/members/${prefillId}`)
+        .then((res) => {
+          const m = res.data.data;
+          setSelectedMember({ id: m.id, memberId: m.memberId, fullName: m.fullName, accountNumber: m.accountNumber });
+          setValue('memberId', m.id);
+        })
+        .catch((err) => toast({ title: 'Gagal memuat data anggota', description: apiErrorMessage(err, ''), variant: 'destructive' }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const searchMembers = async (q: string) => {
     if (q.length < 2) { setMemberResults([]); return; }
-    const res = await api.get('/api/members', { params: { search: q, limit: 5 } });
-    setMemberResults(res.data.data);
+    try {
+      const res = await api.get('/api/members', { params: { search: q, limit: 5 } });
+      setMemberResults(res.data.data);
+    } catch (err) {
+      toast({ title: 'Gagal mencari anggota', description: apiErrorMessage(err, ''), variant: 'destructive' });
+    }
   };
 
   const onSubmit = async (data: FormData) => {

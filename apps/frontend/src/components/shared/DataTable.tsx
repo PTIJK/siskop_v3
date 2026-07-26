@@ -31,6 +31,7 @@ interface DataTableProps<T> {
     placeholder?: string;
   };
   onRowClick?: (row: T) => void;
+  rowClassName?: (row: T) => string | undefined;
   emptyMessage?: string;
   headerActions?: React.ReactNode;
 }
@@ -42,6 +43,7 @@ export function DataTable<T>({
   pagination,
   search,
   onRowClick,
+  rowClassName,
   emptyMessage = 'Tidak ada data',
   headerActions,
 }: DataTableProps<T>) {
@@ -55,10 +57,15 @@ export function DataTable<T>({
       search.onChange(searchInput);
     }, 300);
     return () => clearTimeout(debounceRef.current);
+    // `search` is a fresh object every render (parent passes an inline literal) —
+    // depending on it would re-fire the debounce timer every render and defeat it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
   useEffect(() => {
     if (search) setSearchInput(search.value);
+    // Same reasoning as above — `search` itself is a new object every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search?.value]);
 
   const totalPages = pagination ? Math.ceil(pagination.total / pagination.limit) : 1;
@@ -118,7 +125,7 @@ export function DataTable<T>({
                 <TableRow
                   key={i}
                   onClick={() => onRowClick?.(row)}
-                  className={cn(onRowClick && 'cursor-pointer hover:bg-muted/50')}
+                  className={cn(onRowClick && 'cursor-pointer hover:bg-muted/50', rowClassName?.(row))}
                 >
                   {columns.map((col, j) => (
                     <TableCell key={j} className={col.className}>

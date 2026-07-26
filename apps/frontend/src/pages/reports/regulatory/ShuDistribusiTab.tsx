@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../../../lib/api';
+import api, { isFeatureNotEntitled } from '../../../lib/api';
 import { formatRupiah } from '../../../lib/utils';
 import { PageLoading } from '../../../components/shared/LoadingSpinner';
+import { NotEntitledNotice } from '../../../components/shared/NotEntitledNotice';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table';
 import { FileText, Info } from 'lucide-react';
@@ -14,12 +15,16 @@ export function ShuDistribusiTab() {
   const [to, setTo] = useState(defaultPeriodTo());
   const [data, setData] = useState<ShuDistribution | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [notEntitled, setNotEntitled] = useState(false);
 
   const fetchReport = async () => {
     setIsLoading(true);
+    setNotEntitled(false);
     try {
       const res = await api.get('/api/reports/regulatory/shu-distribution', { params: { from, to } });
       setData(res.data.data);
+    } catch (err) {
+      if (isFeatureNotEntitled(err)) setNotEntitled(true);
     } finally {
       setIsLoading(false);
     }
@@ -38,6 +43,8 @@ export function ShuDistribusiTab() {
 
       {isLoading ? (
         <PageLoading />
+      ) : notEntitled ? (
+        <NotEntitledNotice />
       ) : data?.catatan ? (
         <Card>
           <CardContent className="flex items-start gap-3 py-6 text-sm">

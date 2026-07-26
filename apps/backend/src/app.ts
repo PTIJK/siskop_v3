@@ -38,7 +38,7 @@ app.use(
 if (process.env.NODE_ENV !== 'test') {
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: 2000,
     standardHeaders: true,
     legacyHeaders: false,
   });

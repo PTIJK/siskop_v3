@@ -49,7 +49,7 @@ export async function recalculateKOL(loanId: string): Promise<KOLCategory> {
 
   await prisma.loan.update({
     where: { id: loanId },
-    data: { kolCategory: newCategory },
+    data: { kolCategory: newCategory, daysOverdue: maxDaysOverdue },
   });
 
   return newCategory;

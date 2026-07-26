@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import api from '../../lib/api';
+import api, { apiErrorMessage } from '../../lib/api';
 import { formatTanggalPendek } from '../../lib/utils';
 import { usePermissions } from '../../hooks/usePermissions';
 import { DataTable, ColumnDef } from '../../components/shared/DataTable';
@@ -54,12 +54,16 @@ export function UsersPage() {
     setIsLoading(true);
     api.get('/api/config/users')
       .then((res) => setData(res.data.data))
+      .catch((err) => toast({ title: 'Gagal memuat pengguna', description: apiErrorMessage(err, ''), variant: 'destructive' }))
       .finally(() => setIsLoading(false));
   };
 
   useEffect(() => {
     fetchUsers();
-    api.get('/api/config/roles').then((res) => setRoles(res.data.data));
+    api.get('/api/config/roles')
+      .then((res) => setRoles(res.data.data))
+      .catch((err) => toast({ title: 'Gagal memuat daftar role', description: apiErrorMessage(err, ''), variant: 'destructive' }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onAddSubmit = async (data: z.infer<typeof addSchema>) => {
@@ -83,7 +87,7 @@ export function UsersPage() {
       toast({ title: 'Role berhasil diubah' });
       setEditUser(null);
       fetchUsers();
-    } catch (err: unknown) {
+    } catch {
       toast({ title: 'Gagal', variant: 'destructive' });
     }
   };

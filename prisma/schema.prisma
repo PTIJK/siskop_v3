@@ -364,6 +364,7 @@ model Loan {
   remainingAmount Decimal     @db.Decimal(15, 2)
   status          LoanStatus  @default(ACTIVE)
   kolCategory     KOLCategory @default(LANCAR)
+  daysOverdue     Int         @default(0)
   disbursedAt     DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt

@@ -3,8 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import api from '../../lib/api';
-import { formatRupiah, formatTanggalPendek } from '../../lib/utils';
+import api, { apiErrorMessage } from '../../lib/api';
+import { formatRupiah } from '../../lib/utils';
 import { hitungAngsuranKonvensional, hitungAngsuranSyariah, LoanType } from '@siskop/shared';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { FormError } from '../../components/shared/FormError';
@@ -13,7 +13,6 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Badge } from '../../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../components/ui/dialog';
 import { useToast } from '../../components/hooks/use-toast';
 import { CheckCircle, XCircle, Search, ChevronRight, ChevronLeft } from 'lucide-react';
@@ -77,19 +76,24 @@ export function NewLoanPage() {
   const termMonths = watch('termMonths');
 
   useEffect(() => {
-    api.get('/api/loans/configs').then((res) => {
-      setConfigs(res.data.data.filter((c: LoanConfig) => c.isActive));
-    });
+    api.get('/api/loans/configs')
+      .then((res) => {
+        setConfigs(res.data.data.filter((c: LoanConfig) => c.isActive));
+      })
+      .catch((err) => toast({ title: 'Gagal memuat jenis pembiayaan', description: apiErrorMessage(err, ''), variant: 'destructive' }));
 
     const prefillId = searchParams.get('memberId');
     if (prefillId) {
-      api.get(`/api/members/${prefillId}`).then((res) => {
-        const m = res.data.data;
-        setSelectedMember({ id: m.id, memberId: m.memberId, fullName: m.fullName, accountNumber: m.accountNumber });
-        const hasPokok = m.savings?.some((s: { savingConfig: { type: string }; isActive: boolean }) => s.savingConfig.type === 'POKOK' && s.isActive);
-        setHasPokokSaving(hasPokok ?? false);
-      });
+      api.get(`/api/members/${prefillId}`)
+        .then((res) => {
+          const m = res.data.data;
+          setSelectedMember({ id: m.id, memberId: m.memberId, fullName: m.fullName, accountNumber: m.accountNumber });
+          const hasPokok = m.savings?.some((s: { savingConfig: { type: string }; isActive: boolean }) => s.savingConfig.type === 'POKOK' && s.isActive);
+          setHasPokokSaving(hasPokok ?? false);
+        })
+        .catch((err) => toast({ title: 'Gagal memuat data anggota', description: apiErrorMessage(err, ''), variant: 'destructive' }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -106,18 +110,26 @@ export function NewLoanPage() {
 
   const searchMembers = async (q: string) => {
     if (q.length < 2) { setMemberResults([]); return; }
-    const res = await api.get('/api/members', { params: { search: q, limit: 5 } });
-    setMemberResults(res.data.data);
+    try {
+      const res = await api.get('/api/members', { params: { search: q, limit: 5 } });
+      setMemberResults(res.data.data);
+    } catch (err) {
+      toast({ title: 'Gagal mencari anggota', description: apiErrorMessage(err, ''), variant: 'destructive' });
+    }
   };
 
   const selectMember = async (m: MemberResult) => {
     setSelectedMember(m);
     setMemberResults([]);
     setMemberSearch('');
-    const res = await api.get(`/api/members/${m.id}`);
-    const member = res.data.data;
-    const hasPokok = member.savings?.some((s: { savingConfig: { type: string }; isActive: boolean }) => s.savingConfig.type === 'POKOK' && s.isActive);
-    setHasPokokSaving(hasPokok ?? false);
+    try {
+      const res = await api.get(`/api/members/${m.id}`);
+      const member = res.data.data;
+      const hasPokok = member.savings?.some((s: { savingConfig: { type: string }; isActive: boolean }) => s.savingConfig.type === 'POKOK' && s.isActive);
+      setHasPokokSaving(hasPokok ?? false);
+    } catch (err) {
+      toast({ title: 'Gagal memuat data anggota', description: apiErrorMessage(err, ''), variant: 'destructive' });
+    }
   };
 
   const submitLoan = async (data: Step2Form, force = false) => {

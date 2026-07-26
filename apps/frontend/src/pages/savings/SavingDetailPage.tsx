@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import api from '../../lib/api';
-import { formatRupiah, formatTanggalIndonesia, formatTanggalPendek } from '../../lib/utils';
+import { formatRupiah, formatTanggalPendek } from '../../lib/utils';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { PageLoading } from '../../components/shared/LoadingSpinner';
@@ -39,7 +39,6 @@ type ActionType = 'deposit' | 'withdraw' | null;
 
 export function SavingDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { can } = usePermissions();
   const { toast } = useToast();
   const [saving, setSaving] = useState<SavingDetail | null>(null);
@@ -63,6 +62,7 @@ export function SavingDetailPage() {
       .finally(() => setIsLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchData(); }, [id]);
 
   const handleTransaction = async () => {

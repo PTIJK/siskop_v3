@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '../../lib/api';
-import { formatRupiah, formatTanggalIndonesia, formatTanggalPendek } from '../../lib/utils';
+import { formatRupiah, formatTanggalIndonesia } from '../../lib/utils';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { KOLBadge } from '../../components/shared/KOLBadge';
@@ -10,8 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
-import { Edit, PiggyBank, CreditCard, ArrowDownCircle, ArrowUpCircle, AlertCircle } from 'lucide-react';
+import { Edit, PiggyBank, CreditCard, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 
 interface MemberDetail {
   id: string;

@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import api from '../../lib/api';
+import api, { apiErrorMessage } from '../../lib/api';
 import { usePermissions } from '../../hooks/usePermissions';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { FormError } from '../../components/shared/FormError';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
+import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -66,9 +65,13 @@ export function RolesPage() {
 
   const fetchRoles = () => {
     setIsLoading(true);
-    api.get('/api/config/roles').then((res) => setRoles(res.data.data)).finally(() => setIsLoading(false));
+    api.get('/api/config/roles')
+      .then((res) => setRoles(res.data.data))
+      .catch((err) => toast({ title: 'Gagal memuat daftar role', description: apiErrorMessage(err, ''), variant: 'destructive' }))
+      .finally(() => setIsLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchRoles(); }, []);
 
   const openEdit = (role: Role) => {

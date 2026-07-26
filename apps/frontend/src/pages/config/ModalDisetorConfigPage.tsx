@@ -52,9 +52,13 @@ export function ModalDisetorConfigPage() {
         reset({ modalDisetor: data.modalDisetor !== null ? Number(data.modalDisetor) : null });
         setAuditThresholdNotifiedAt(data.auditThresholdNotifiedAt);
       })
+      .catch((err) => {
+        toast({ title: 'Gagal memuat modal disetor', description: apiErrorMessage(err, ''), variant: 'destructive' });
+      })
       .finally(() => setIsLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchConfig(); }, []);
 
   const onSubmit = async (data: FormData) => {

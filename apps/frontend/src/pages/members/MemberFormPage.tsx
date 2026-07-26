@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import api from '../../lib/api';
+import api, { apiErrorMessage } from '../../lib/api';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { FormError } from '../../components/shared/FormError';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -45,19 +45,25 @@ export function MemberFormPage() {
 
   useEffect(() => {
     if (!isEdit) return;
-    api.get(`/api/members/${id}`).then((res) => {
-      const m = res.data.data;
-      reset({
-        fullName: m.fullName,
-        nik: m.nik,
-        address: m.address,
-        birthPlace: m.birthPlace,
-        birthDate: m.birthDate ? m.birthDate.split('T')[0] : '',
-        occupation: m.occupation,
+    api.get(`/api/members/${id}`)
+      .then((res) => {
+        const m = res.data.data;
+        reset({
+          fullName: m.fullName,
+          nik: m.nik,
+          address: m.address,
+          birthPlace: m.birthPlace,
+          birthDate: m.birthDate ? m.birthDate.split('T')[0] : '',
+          occupation: m.occupation,
+        });
+        setMemberInfo({ memberId: m.memberId, accountNumber: m.accountNumber });
+        if (m.ktpUrl) setKtpPreview(m.ktpUrl);
+      })
+      .catch((err) => {
+        toast({ title: 'Gagal memuat data anggota', description: apiErrorMessage(err, ''), variant: 'destructive' });
+        navigate('/members');
       });
-      setMemberInfo({ memberId: m.memberId, accountNumber: m.accountNumber });
-      if (m.ktpUrl) setKtpPreview(m.ktpUrl);
-    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isEdit]);
 
   const handleKtpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
