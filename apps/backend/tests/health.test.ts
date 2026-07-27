@@ -12,6 +12,16 @@ describe("GET /health", () => {
     expect(typeof res.body.data.timestamp).toBe("string");
   });
 
+  // The frontend's apiFetch prefixes /api and the Vite proxy forwards that
+  // prefix as-is, so the shell's status card hits /api/health, not /health.
+  it("is also reachable under the /api prefix the frontend client uses", async () => {
+    const res = await request(createApp()).get("/api/health");
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.status).toBe("ok");
+  });
+
   it("returns a structured 404 for unknown routes", async () => {
     const res = await request(createApp()).get("/does-not-exist");
 

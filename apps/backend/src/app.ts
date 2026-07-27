@@ -20,7 +20,11 @@ export function createApp(): Express {
   );
   app.use(express.json({ limit: "1mb" }));
 
-  app.get("/health", (_req: Request, res: Response) => {
+  // Served on both paths deliberately: "/health" is the root-level liveness
+  // probe (docker/compose healthchecks), while "/api/health" is what the
+  // frontend's typed client reaches, since apiFetch prefixes every call with
+  // /api and the Vite proxy forwards that prefix unrewritten.
+  app.get(["/health", "/api/health"], (_req: Request, res: Response) => {
     res.json({
       success: true,
       data: { status: "ok", timestamp: new Date().toISOString() },
