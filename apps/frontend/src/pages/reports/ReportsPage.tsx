@@ -13,32 +13,32 @@ import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
+import { KOLBadge } from '../../components/shared/KOLBadge';
 import { Download, FileText } from 'lucide-react';
 
 type PeriodType = 'range' | 'monthly' | 'yearly';
 
 interface FinancialReport {
-  summary: {
-    totalSavings: string;
-    totalLoansOutstanding: string;
-    totalPaymentsReceived: string;
+  periode: { start: string; end: string };
+  simpananPerJenis: { name: string; type: string; totalBalance: string; count: number }[];
+  transaksiSimpanan: {
+    deposit: { total: string; count: number };
+    withdrawal: { total: string; count: number };
   };
-  savingsByType: { type: string; configName: string; accountCount: number; totalBalance: string }[];
-  savingTransactions: { period: string; totalDeposit: string; totalWithdrawal: string; net: string }[];
-  loansByType: { configName: string; disbursed: string; paymentsReceived: string; outstanding: string }[];
+  pinjaman: {
+    dicairkan: { total: string; count: number };
+    angsuranDiterima: { total: string; totalDenda: string; count: number };
+  };
+  saldoAkhirSimpanan: string;
+  sisaPinjamanOutstanding: string;
 }
 
 interface RATReport {
-  period: string;
-  totalAssets: string;
-  totalLiabilities: string;
-  equity: string;
-  income: string;
-  expenses: string;
-  netIncome: string;
-  memberCount: number;
-  savingsGrowth: string;
-  loansGrowth: string;
+  tahun: number;
+  keanggotaan: { awalTahun: number; akhirTahun: number; pertumbuhan: number };
+  simpanan: { jenis: string; type: string; totalSaldo: string; jumlahRekening: number }[];
+  pinjaman: { diberikan: { total: string; count: number }; lunas: number };
+  kolDistribution: { category: string; count: number; percentage: string }[];
 }
 
 const MONTHS = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
@@ -68,15 +68,15 @@ export function ReportsPage() {
   };
 
   const fetchReport = async () => {
-    const { startDate: sd, endDate: ed } = getDateRange();
-    if (!sd || !ed) return;
     setIsLoading(true);
     try {
       if (activeTab === 'financial') {
+        const { startDate: sd, endDate: ed } = getDateRange();
+        if (!sd || !ed) return;
         const res = await api.get('/api/reports/financial', { params: { startDate: sd, endDate: ed } });
         setFinancialReport(res.data.data);
       } else {
-        const res = await api.get('/api/reports/rat', { params: { startDate: sd, endDate: ed } });
+        const res = await api.get('/api/reports/rat', { params: { year } });
         setRatReport(res.data.data);
       }
     } catch (err) {
@@ -87,11 +87,11 @@ export function ReportsPage() {
   };
 
   const downloadPDF = async () => {
-    const { startDate: sd, endDate: ed } = getDateRange();
     const endpoint = activeTab === 'financial' ? 'financial' : 'rat';
+    const params = activeTab === 'financial' ? getDateRange() : { year };
     try {
       const response = await api.get(`/api/reports/${endpoint}/pdf`, {
-        params: { startDate: sd, endDate: ed },
+        params,
         responseType: 'blob',
       });
       const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
@@ -207,12 +207,16 @@ export function ReportsPage() {
             <PageLoading />
           ) : financialReport ? (
             <>
+              <p className="text-xs text-muted-foreground">
+                Periode: {financialReport.periode.start} s/d {financialReport.periode.end}
+              </p>
+
               {/* Summary */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 {[
-                  { label: 'Total Simpanan', value: financialReport.summary.totalSavings },
-                  { label: 'Pinjaman Outstanding', value: financialReport.summary.totalLoansOutstanding },
-                  { label: 'Angsuran Diterima', value: financialReport.summary.totalPaymentsReceived },
+                  { label: 'Saldo Akhir Simpanan', value: financialReport.saldoAkhirSimpanan },
+                  { label: 'Sisa Pinjaman Outstanding', value: financialReport.sisaPinjamanOutstanding },
+                  { label: 'Angsuran Diterima', value: financialReport.pinjaman.angsuranDiterima.total },
                 ].map((item) => (
                   <Card key={item.label}>
                     <CardContent className="pt-4">
@@ -237,11 +241,11 @@ export function ReportsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {financialReport.savingsByType.map((s, i) => (
+                      {financialReport.simpananPerJenis.map((s, i) => (
                         <TableRow key={i}>
                           <TableCell>{s.type}</TableCell>
-                          <TableCell>{s.configName}</TableCell>
-                          <TableCell className="text-right">{s.accountCount}</TableCell>
+                          <TableCell>{s.name}</TableCell>
+                          <TableCell className="text-right">{s.count}</TableCell>
                           <TableCell className="text-right font-semibold">{formatRupiah(s.totalBalance)}</TableCell>
                         </TableRow>
                       ))}
@@ -257,48 +261,58 @@ export function ReportsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Periode</TableHead>
-                        <TableHead className="text-right">Total Setoran</TableHead>
-                        <TableHead className="text-right">Total Penarikan</TableHead>
-                        <TableHead className="text-right">Net</TableHead>
+                        <TableHead>Jenis Transaksi</TableHead>
+                        <TableHead className="text-right">Jumlah Transaksi</TableHead>
+                        <TableHead className="text-right">Total Nominal</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {financialReport.savingTransactions.map((t, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{t.period}</TableCell>
-                          <TableCell className="text-right text-green-700">{formatRupiah(t.totalDeposit)}</TableCell>
-                          <TableCell className="text-right text-orange-700">{formatRupiah(t.totalWithdrawal)}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatRupiah(t.net)}</TableCell>
-                        </TableRow>
-                      ))}
+                      <TableRow>
+                        <TableCell>Setoran</TableCell>
+                        <TableCell className="text-right">{financialReport.transaksiSimpanan.deposit.count}</TableCell>
+                        <TableCell className="text-right font-semibold text-green-700">
+                          {formatRupiah(financialReport.transaksiSimpanan.deposit.total)}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Penarikan</TableCell>
+                        <TableCell className="text-right">{financialReport.transaksiSimpanan.withdrawal.count}</TableCell>
+                        <TableCell className="text-right font-semibold text-orange-700">
+                          {formatRupiah(financialReport.transaksiSimpanan.withdrawal.total)}
+                        </TableCell>
+                      </TableRow>
                     </TableBody>
                   </Table>
                 </CardContent>
               </Card>
 
-              {/* Loans by type */}
+              {/* Loans */}
               <Card>
                 <CardHeader><CardTitle className="text-sm">Rincian Pinjaman</CardTitle></CardHeader>
                 <CardContent>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Jenis</TableHead>
-                        <TableHead className="text-right">Dicairkan</TableHead>
-                        <TableHead className="text-right">Angsuran Diterima</TableHead>
-                        <TableHead className="text-right">Outstanding</TableHead>
+                        <TableHead>Keterangan</TableHead>
+                        <TableHead className="text-right">Jumlah</TableHead>
+                        <TableHead className="text-right">Total Nominal</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {financialReport.loansByType.map((l, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{l.configName}</TableCell>
-                          <TableCell className="text-right">{formatRupiah(l.disbursed)}</TableCell>
-                          <TableCell className="text-right text-green-700">{formatRupiah(l.paymentsReceived)}</TableCell>
-                          <TableCell className="text-right font-semibold text-orange-700">{formatRupiah(l.outstanding)}</TableCell>
-                        </TableRow>
-                      ))}
+                      <TableRow>
+                        <TableCell>Pinjaman Dicairkan</TableCell>
+                        <TableCell className="text-right">{financialReport.pinjaman.dicairkan.count}</TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {formatRupiah(financialReport.pinjaman.dicairkan.total)}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Angsuran Diterima</TableCell>
+                        <TableCell className="text-right">{financialReport.pinjaman.angsuranDiterima.count}</TableCell>
+                        <TableCell className="text-right font-semibold text-green-700">
+                          {formatRupiah(financialReport.pinjaman.angsuranDiterima.total)}
+                        </TableCell>
+                      </TableRow>
                     </TableBody>
                   </Table>
                 </CardContent>
@@ -316,26 +330,74 @@ export function ReportsPage() {
           {isLoading ? (
             <PageLoading />
           ) : ratReport ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {[
-                { label: 'Total Aset', value: ratReport.totalAssets },
-                { label: 'Total Kewajiban', value: ratReport.totalLiabilities },
-                { label: 'Ekuitas', value: ratReport.equity },
-                { label: 'Pendapatan', value: ratReport.income },
-                { label: 'Beban', value: ratReport.expenses },
-                { label: 'SHU (Laba Bersih)', value: ratReport.netIncome },
-              ].map((item) => (
-                <Card key={item.label}>
-                  <CardContent className="pt-4">
-                    <p className="text-xs text-muted-foreground">{item.label}</p>
-                    <p className="mt-1 text-xl font-bold">{formatRupiah(item.value)}</p>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="space-y-5">
+              <p className="text-xs text-muted-foreground">Tahun {ratReport.tahun}</p>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {[
+                  { label: 'Anggota Awal Tahun', value: `${ratReport.keanggotaan.awalTahun} orang` },
+                  { label: 'Anggota Akhir Tahun', value: `${ratReport.keanggotaan.akhirTahun} orang` },
+                  { label: 'Pertumbuhan Anggota', value: `${ratReport.keanggotaan.pertumbuhan} orang` },
+                  { label: 'Pinjaman Diberikan', value: formatRupiah(ratReport.pinjaman.diberikan.total) },
+                  { label: 'Jumlah Pinjaman Diberikan', value: `${ratReport.pinjaman.diberikan.count} pinjaman` },
+                  { label: 'Pinjaman Lunas', value: `${ratReport.pinjaman.lunas} pinjaman` },
+                ].map((item) => (
+                  <Card key={item.label}>
+                    <CardContent className="pt-4">
+                      <p className="text-xs text-muted-foreground">{item.label}</p>
+                      <p className="mt-1 text-xl font-bold">{item.value}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
               <Card>
-                <CardContent className="pt-4">
-                  <p className="text-xs text-muted-foreground">Jumlah Anggota</p>
-                  <p className="mt-1 text-xl font-bold">{ratReport.memberCount} orang</p>
+                <CardHeader><CardTitle className="text-sm">Simpanan per Jenis</CardTitle></CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Jenis</TableHead>
+                        <TableHead>Nama Simpanan</TableHead>
+                        <TableHead className="text-right">Jumlah Rekening</TableHead>
+                        <TableHead className="text-right">Total Saldo</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ratReport.simpanan.map((s, i) => (
+                        <TableRow key={i}>
+                          <TableCell>{s.type}</TableCell>
+                          <TableCell>{s.jenis}</TableCell>
+                          <TableCell className="text-right">{s.jumlahRekening}</TableCell>
+                          <TableCell className="text-right font-semibold">{formatRupiah(s.totalSaldo)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader><CardTitle className="text-sm">Distribusi Kualitas Pinjaman (KOL)</CardTitle></CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Kategori</TableHead>
+                        <TableHead className="text-right">Jumlah</TableHead>
+                        <TableHead className="text-right">Persentase</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ratReport.kolDistribution.map((k, i) => (
+                        <TableRow key={i}>
+                          <TableCell><KOLBadge category={k.category} /></TableCell>
+                          <TableCell className="text-right">{k.count}</TableCell>
+                          <TableCell className="text-right font-semibold">{k.percentage}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </CardContent>
               </Card>
             </div>
