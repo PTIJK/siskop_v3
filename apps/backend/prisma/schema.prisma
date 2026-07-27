@@ -10,6 +10,9 @@ datasource db {
 model Tenant {
   id               String   @id @default(cuid())
   name             String
+  // Login subdomain: `demo` serves demo.localhost:3000. Kept separate from
+  // cooperativeId, which is a registry number and not hostname-safe.
+  slug             String   @unique
   cooperativeId    String   @unique
   email            String   @unique
   phone            String

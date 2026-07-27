@@ -2,6 +2,7 @@
 
 Run 2026-07-27. Checked boxes were executed and observed, not assumed.
 Re-run 2026-07-27 after the `CooperativeUnit` gap was closed (plan Tasks 3, 5, 6, 6b, 9).
+Re-run again 2026-07-27 after subdomain login/registration (Sprint 1 auth) was added.
 
 ## Verified
 
@@ -17,22 +18,38 @@ Re-run 2026-07-27 after the `CooperativeUnit` gap was closed (plan Tasks 3, 5, 6
 - [x] `pnpm run lint` exits 0 (3 packages)
 - [x] `pnpm run typecheck` exits 0 (4 tasks) — `AuthClaims.unitIds` and the Zod
       `claimsSchema` verified in sync here, per plan Task 6 Step 3b
-- [x] `pnpm run test` passes — 20 tests, coverage 96.47% lines / 87.5% branches / 100% funcs
+- [x] `pnpm run test` passes — 57 tests, coverage 96.85% lines / 83.48% branches / 100% funcs
+- [x] `POST /api/auth/register` creates tenant + first unit + tenant_admin user in one
+      transaction; `POST /api/auth/login` resolves the tenant from the `Host` subdomain
+      (never the body) and rejects a wrong password / unknown email with the same message
+- [x] `GET /api/auth/me` and `POST /api/auth/refresh` round-trip a session
 - [x] `pnpm run build` exits 0 (3 packages)
 - [x] `curl localhost:3001/health` returns the success envelope
 - [x] `curl localhost:3000/api/health` returns the success envelope — the Vite proxy
       reaches the backend on the exact path the frontend client requests
 - [x] `CLAUDE.md` present at repo root, including rule 2b (units)
 - [x] Four agent instruction files in `docs/claude-integration/`
+- [x] Browser at http://localhost:3000 renders status "ok" — rendered in headless
+      Chrome (`--dump-dom` + `--screenshot`), not just curled. The React Query fetch
+      resolves, `apiFetch` unwraps the envelope, Tailwind styles apply, and the date
+      formats under the `id-ID` locale. Note this machine has no `chromium-cli`;
+      drive it with `"/c/Program Files/Google/Chrome/Application/chrome.exe"
+      --headless=new --virtual-time-budget=8000`.
+- [x] `http://demo.localhost:3000/login` renders, driven end-to-end via chrome-remote-
+      interface (real form fill + submit, not a fetch): a registered admin logs in,
+      lands on `/`, and sees their name/role — proving the Vite proxy passes the `Host`
+      header through unrewritten (`changeOrigin: false`). Wrong password and the
+      no-subdomain case (`localhost:3000/login`) both render their intended message.
+      Demo tenant deleted from `siskop_dev` afterward; `siskop_dev` is empty again.
 
-## Not verified (requires a GUI or a push)
+## Not verified (requires a GUI or CI credentials)
 
 - [ ] `code siskop.code-workspace` loads 4 folders — needs an interactive VSCode session
 - [ ] F5 → "Backend: dev server" starts under the debugger — needs an interactive session
-- [ ] Browser at http://localhost:3000 visually renders status "ok" — the underlying
-      request the page makes was verified via curl, but the rendered DOM was not
-- [ ] CI green on GitHub Actions — **not pushed**. All five CI steps were reproduced
-      locally in order and passed; the workflow itself has never run on a runner.
+- [ ] CI green on GitHub Actions — `main` was pushed (`25d4c70..4e8ead9`), so the
+      workflow should have run, but the result is unread: `gh` is not installed on this
+      machine and the repo is private, so the API returns 404 unauthenticated. All CI
+      steps were reproduced locally in order and passed. Check the Actions tab.
 
 ## Known gaps carried over from the plan
 
@@ -44,9 +61,10 @@ Re-run 2026-07-27 after the `CooperativeUnit` gap was closed (plan Tasks 3, 5, 6
 - `packages/shared` appears in the plan's file-structure diagram but is never created and
   nothing imports it. Deferred by the plan itself.
 - Frontend has no test setup (no Vitest/RTL, no `test` script), so `turbo run test` covers
-  the backend only. Playwright e2e is deferred to QA in Week 5.
-- No auth login/register endpoints — Sprint 1 work. `src/modules/` now holds `tenants/`
-  (provisioning) only.
+  the backend only; the login flow above was verified by driving a real browser, not by
+  an automated frontend test. Playwright e2e is deferred to QA in Week 5.
+- `src/modules/` now holds `tenants/` (provisioning) and `auth/` (register, login,
+  refresh, `me`, the `Host`→slug resolver). No password-reset or email-verification flow.
 
 ## Open decision for the Lead Engineer
 
@@ -62,6 +80,12 @@ proposed:
 - `unitIds` rides in the JWT, so unit-access changes take up to `JWT_EXPIRES_IN` (15m) to
   take effect. Swap `assertUnitAccess` for a cached per-request lookup if staff move
   between units often; call sites do not change.
+- Login identifies the tenant by subdomain (`Tenant.slug`, new column), not by a field in
+  the request body — chosen over an explicit "kode koperasi" input to match the login
+  experience the user expected (`demo.localhost`) and to keep the tenant boundary out of
+  reach of anything the client sends. `Tenant.email` (cooperative contact address, globally
+  unique) is now distinct from a user's login email (unique only within the tenant), so one
+  person can administer more than one koperasi.
 
 ## Sprint 1 readiness
 

@@ -17,6 +17,11 @@ SaaS cooperative management system (Sistem Informasi Koperasi) for Indonesian ko
 
 1. **Multi-tenant isolation.** Every Prisma query touching tenant data MUST filter by
    `tenantId` taken from `req.auth.tenantId`. Never from the request body or a URL param.
+   The same rule holds at login, before `req.auth` exists: the tenant is resolved from
+   the request's `Host` subdomain (`slugFromHost`), never from the request body — a
+   caller must not be able to name which tenant it authenticates against. This is why
+   the Vite dev proxy's `changeOrigin` must stay `false`: `true` rewrites `Host` to the
+   proxy target and erases the subdomain before the backend ever sees it.
 2. **Money is `Decimal`.** Never `Float`/`number` for balances, principal, or amounts.
 2b. **Every tenant has ≥1 `CooperativeUnit`.** Financial rows carry a non-null `unitId`.
    `KSU` is not a type — it's `units.length > 1`. Never write `if (type === 'KSU')`.

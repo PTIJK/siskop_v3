@@ -10,6 +10,7 @@ describe("provisionTenant", () => {
   it("creates a tenant with exactly one unit", async () => {
     const tenant = await provisionTenant({
       name: "KSP Sejahtera",
+      slug: "sejahtera",
       cooperativeId: "KOP-001",
       email: "admin@sejahtera.test",
       phone: "0812",
@@ -25,6 +26,7 @@ describe("provisionTenant", () => {
   it("creates a multi-unit tenant when more units are supplied", async () => {
     const tenant = await provisionTenant({
       name: "KSU Bersama",
+      slug: "bersama",
       cooperativeId: "KOP-002",
       email: "admin@bersama.test",
       phone: "0813",
@@ -43,6 +45,7 @@ describe("provisionTenant", () => {
     await expect(
       provisionTenant({
         name: "Bad Coop",
+        slug: "bad-coop",
         cooperativeId: "KOP-003",
         email: "admin@bad.test",
         phone: "0814",

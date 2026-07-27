@@ -10,8 +10,17 @@ const unitInput = z.object({
 // `firstUnit` is a required scalar rather than an array with `.min(1)`, so the
 // type system — not a runtime check — makes a unitless tenant unconstructible
 // at every call site.
+// Slug is the login subdomain, so it is constrained to what a hostname label
+// may contain: lowercase alphanumerics and interior hyphens, nothing else.
+export const slugSchema = z
+  .string()
+  .min(1)
+  .max(63)
+  .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, "slug must be a valid hostname label");
+
 const provisionInput = z.object({
   name: z.string().min(1),
+  slug: slugSchema,
   cooperativeId: z.string().min(1),
   email: z.string().email(),
   phone: z.string().min(1),
@@ -30,6 +39,7 @@ export async function provisionTenant(input: ProvisionTenantInput) {
     const tenant = await tx.tenant.create({
       data: {
         name: data.name,
+        slug: data.slug,
         cooperativeId: data.cooperativeId,
         email: data.email,
         phone: data.phone,

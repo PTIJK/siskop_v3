@@ -25,6 +25,23 @@ cd apps/backend && DATABASE_URL="postgresql://postgres:postgres@localhost:5433/s
 Verify: `curl localhost:3001/health` returns `{"success":true,...}`, and
 http://localhost:3000 shows the backend status as ok.
 
+### Auth: registering and logging in
+
+Tenants are addressed by subdomain — `demo.localhost:3000` logs into the tenant whose
+`slug` is `demo`. `*.localhost` resolves to loopback in every modern browser without a
+hosts-file entry.
+
+```bash
+curl -X POST http://demo.localhost:3000/api/auth/register -H "Content-Type: application/json" -d '{
+  "tenantName": "KSP Demo", "slug": "demo", "cooperativeId": "KOP-DEMO-01",
+  "address": "Jl. Merdeka 1", "adminName": "Admin Demo", "adminEmail": "admin@demo.test",
+  "adminPhone": "0812000000", "password": "demopassword123",
+  "firstUnit": { "type": "KSP", "name": "Simpan Pinjam" }
+}'
+```
+
+Then open `http://demo.localhost:3000/login` and sign in with `admin@demo.test`.
+
 > **Postgres runs on host port 5433, not 5432.** Development machines in this project
 > already have an unrelated native Postgres service bound to 5432; the compose file maps
 > `5433 -> 5432` to avoid silently connecting to the wrong database. CI uses 5432, since
