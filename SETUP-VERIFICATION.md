@@ -1,6 +1,7 @@
 # Setup Verification
 
 Run 2026-07-27. Checked boxes were executed and observed, not assumed.
+Re-run 2026-07-27 after the `CooperativeUnit` gap was closed (plan Tasks 3, 5, 6, 6b, 9).
 
 ## Verified
 
@@ -8,16 +9,20 @@ Run 2026-07-27. Checked boxes were executed and observed, not assumed.
 - [x] `pnpm install --frozen-lockfile` completes — lockfile is in sync, as CI requires
 - [x] `docker compose ps` shows postgres healthy (`siskop-postgres`, host port **5433**)
 - [x] `pnpm --filter @siskop/backend db:migrate` created `prisma/migrations/20260727082242_init`
-- [x] All 6 tables exist in `siskop_dev` (Tenant, User, Member, SavingsAccount, Loan, Transaction)
+- [x] `20260727090000_add_cooperative_units` applied — adds `CooperativeUnit`,
+      `UnitMembership`, and a non-null `unitId` on `SavingsAccount`, `Loan`, `Transaction`
+- [x] All 8 tables exist in `siskop_dev`; `prisma migrate diff` reports no drift
+- [x] `siskop_test` created and migrated — integration tests never touch `siskop_dev`
 - [x] `pnpm --filter @siskop/backend exec prisma migrate deploy` runs clean
 - [x] `pnpm run lint` exits 0 (3 packages)
-- [x] `pnpm run typecheck` exits 0 (4 tasks)
-- [x] `pnpm run test` passes — 12 tests, coverage 94.64% lines / 88.23% branches / 100% funcs
+- [x] `pnpm run typecheck` exits 0 (4 tasks) — `AuthClaims.unitIds` and the Zod
+      `claimsSchema` verified in sync here, per plan Task 6 Step 3b
+- [x] `pnpm run test` passes — 20 tests, coverage 96.47% lines / 87.5% branches / 100% funcs
 - [x] `pnpm run build` exits 0 (3 packages)
 - [x] `curl localhost:3001/health` returns the success envelope
 - [x] `curl localhost:3000/api/health` returns the success envelope — the Vite proxy
       reaches the backend on the exact path the frontend client requests
-- [x] `CLAUDE.md` present at repo root
+- [x] `CLAUDE.md` present at repo root, including rule 2b (units)
 - [x] Four agent instruction files in `docs/claude-integration/`
 
 ## Not verified (requires a GUI or a push)
@@ -40,8 +45,23 @@ Run 2026-07-27. Checked boxes were executed and observed, not assumed.
   nothing imports it. Deferred by the plan itself.
 - Frontend has no test setup (no Vitest/RTL, no `test` script), so `turbo run test` covers
   the backend only. Playwright e2e is deferred to QA in Week 5.
-- No auth login/register endpoints, no modules under `apps/backend/src/modules/` yet —
-  Sprint 1 work.
+- No auth login/register endpoints — Sprint 1 work. `src/modules/` now holds `tenants/`
+  (provisioning) only.
+
+## Open decision for the Lead Engineer
+
+The plan flags this as theirs to ratify, and it is now implemented rather than merely
+proposed:
+
+- `CooperativeType` has **no `KSU` member**. A koperasi serba usaha is a tenant with more
+  than one `CooperativeUnit`, derived by `isMultiUnit()`. This diverges from
+  `COOPERATIVE-TYPES-RESEARCH.md`, which models `KSU` as a sixth enum value on `Tenant`.
+- The "≥1 unit per tenant" invariant is enforced in `provisionTenant()`, not by a database
+  constraint — Postgres cannot express "at least one child row". The regression guard is
+  the orphan-tenant test in `tests/provision-tenant.test.ts`.
+- `unitIds` rides in the JWT, so unit-access changes take up to `JWT_EXPIRES_IN` (15m) to
+  take effect. Swap `assertUnitAccess` for a cached per-request lookup if staff move
+  between units often; call sites do not change.
 
 ## Sprint 1 readiness
 

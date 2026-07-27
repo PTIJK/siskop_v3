@@ -13,6 +13,15 @@ pnpm --filter @siskop/backend db:migrate
 pnpm run dev                                # backend :3001, frontend :3000
 ```
 
+Integration tests truncate tables, so they run against their own database rather than
+`siskop_dev`. Create it once (`apps/backend/.env.test` already points at it):
+
+```bash
+docker exec siskop-postgres psql -U postgres -c "CREATE DATABASE siskop_test"
+cd apps/backend && DATABASE_URL="postgresql://postgres:postgres@localhost:5433/siskop_test" \
+  pnpm exec prisma migrate deploy
+```
+
 Verify: `curl localhost:3001/health` returns `{"success":true,...}`, and
 http://localhost:3000 shows the backend status as ok.
 
@@ -26,6 +35,7 @@ http://localhost:3000 shows the backend status as ok.
 | Path | What |
 |------|------|
 | `apps/backend` | Express API, Prisma, PostgreSQL |
+| `apps/backend/src/modules` | One directory per module (auth, tenants, members, …) |
 | `apps/frontend` | React + Vite + Tailwind |
 | `packages/types` | Shared API & domain types |
 | `packages/eslint-config` | Shared lint rules |

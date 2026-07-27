@@ -19,6 +19,7 @@ model Tenant {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  units            CooperativeUnit[]
   users            User[]
   members          Member[]
   savingsAccounts  SavingsAccount[]
@@ -26,6 +27,41 @@ model Tenant {
   transactions     Transaction[]
 
   @@index([isActive])
+}
+
+// Every tenant has at least one unit: a single-purpose KSP is a tenant with one,
+// a koperasi serba usaha is a tenant with several. Postgres cannot express
+// "at least one child row", so the invariant is enforced by provisionTenant().
+model CooperativeUnit {
+  id        String   @id @default(cuid())
+  tenantId  String
+  type      String // KSP | KONSUMEN | PRODUSEN | JASA | PEMASARAN
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships UnitMembership[]
+  savings     SavingsAccount[]
+  loans       Loan[]
+  entries     Transaction[]
+
+  @@index([tenantId, isActive])
+  @@index([tenantId, type])
+}
+
+model UnitMembership {
+  id       String   @id @default(cuid())
+  memberId String
+  unitId   String
+  joinedAt DateTime @default(now())
+
+  member Member          @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  unit   CooperativeUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, unitId])
+  @@index([unitId])
 }
 
 model User {
@@ -48,6 +84,9 @@ model User {
   @@index([tenantId])
 }
 
+// No `unitId` here: membership is of the koperasi. Which units a member takes
+// part in lives in UnitMembership, and that is what SHU distribution is
+// computed against (savings/loan volume for KSP, purchase volume for Konsumen).
 model Member {
   id           String   @id @default(cuid())
   tenantId     String
@@ -62,6 +101,7 @@ model Member {
 
   tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memberships  UnitMembership[]
   savings      SavingsAccount[]
   loans        Loan[]
 
@@ -72,23 +112,26 @@ model Member {
 model SavingsAccount {
   id        String   @id @default(cuid())
   tenantId  String
+  unitId    String
   memberId  String
   type      String // simpanan_pokok | simpanan_wajib | simpanan_sukarela
   balance   Decimal  @default(0) @db.Decimal(18, 2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unit      CooperativeUnit @relation(fields: [unitId], references: [id])
+  member    Member          @relation(fields: [memberId], references: [id], onDelete: Cascade)
   entries   Transaction[]
 
-  @@unique([tenantId, memberId, type])
-  @@index([tenantId])
+  @@unique([unitId, memberId, type])
+  @@index([tenantId, unitId])
 }
 
 model Loan {
   id         String    @id @default(cuid())
   tenantId   String
+  unitId     String
   memberId   String
   principal  Decimal   @db.Decimal(18, 2)
   rate       Decimal   @db.Decimal(6, 4)
@@ -101,17 +144,22 @@ model Loan {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  member     Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unit       CooperativeUnit @relation(fields: [unitId], references: [id])
+  member     Member          @relation(fields: [memberId], references: [id], onDelete: Cascade)
   entries    Transaction[]
 
-  @@index([tenantId, status])
+  @@index([tenantId, unitId, status])
   @@index([tenantId, kolClass])
 }
 
+// tenantId is denormalised alongside unitId on purpose: it keeps the isolation
+// predicate on a single column every query already filters, so tenant isolation
+// never depends on a join being written correctly.
 model Transaction {
   id               String   @id @default(cuid())
   tenantId         String
+  unitId           String
   savingsAccountId String?
   loanId           String?
   direction        String // debit | credit
@@ -121,10 +169,11 @@ model Transaction {
   createdAt        DateTime @default(now())
 
   tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unit             CooperativeUnit @relation(fields: [unitId], references: [id])
   savingsAccount   SavingsAccount? @relation(fields: [savingsAccountId], references: [id])
   loan             Loan?           @relation(fields: [loanId], references: [id])
 
-  @@index([tenantId, createdAt])
+  @@index([tenantId, unitId, createdAt])
   @@index([savingsAccountId])
   @@index([loanId])
 }

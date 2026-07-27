@@ -18,6 +18,9 @@ SaaS cooperative management system (Sistem Informasi Koperasi) for Indonesian ko
 1. **Multi-tenant isolation.** Every Prisma query touching tenant data MUST filter by
    `tenantId` taken from `req.auth.tenantId`. Never from the request body or a URL param.
 2. **Money is `Decimal`.** Never `Float`/`number` for balances, principal, or amounts.
+2b. **Every tenant has ≥1 `CooperativeUnit`.** Financial rows carry a non-null `unitId`.
+   `KSU` is not a type — it's `units.length > 1`. Never write `if (type === 'KSU')`.
+   Consolidated reporting = omit the unit filter; per-unit = add it.
 3. **API envelope.** Every response is `ApiResponse<T>` from `@siskop/types`.
    Errors use the `ErrorCode` enum — no ad-hoc strings.
 4. **TDD.** Write the failing test first. Coverage gate is 80% lines (backend).

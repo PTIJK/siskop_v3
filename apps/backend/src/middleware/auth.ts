@@ -7,8 +7,20 @@ import { ErrorCode, type AuthClaims } from "@siskop/types";
 const claimsSchema = z.object({
   userId: z.string().min(1),
   tenantId: z.string().min(1),
-  role: z.enum(["super_admin", "tenant_admin", "accountant", "member"])
+  role: z.enum(["super_admin", "tenant_admin", "accountant", "member"]),
+  unitIds: z.array(z.string().min(1)).min(1, "unitIds must not be empty")
 });
+
+// Carrying unitIds in the token trades staleness for a saved permission lookup
+// on every request: a unit-access change takes up to JWT_EXPIRES_IN (15m) to
+// take effect. If staff start moving between units often, swap this for a
+// cached per-request lookup and drop unitIds from the claims — call sites of
+// assertUnitAccess do not change.
+export function assertUnitAccess(claims: AuthClaims, unitId: string): void {
+  if (!claims.unitIds.includes(unitId)) {
+    throw new Error(`FORBIDDEN: no access to unit ${unitId}`);
+  }
+}
 
 export function signAccessToken(claims: AuthClaims, secret: string, expiresIn: string): string {
   return jwt.sign(claims, secret, { expiresIn } as jwt.SignOptions);

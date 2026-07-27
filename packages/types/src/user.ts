@@ -16,6 +16,7 @@ export interface AuthClaims {
   userId: string;
   tenantId: string;
   role: UserRole;
+  unitIds: string[];
 }
 
 export interface LoginRequest {

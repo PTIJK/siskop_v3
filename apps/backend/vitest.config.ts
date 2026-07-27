@@ -4,6 +4,10 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
+    setupFiles: ["./tests/setup.ts"],
+    // Integration tests share one database and truncate it between cases, so
+    // files must not run concurrently against it.
+    fileParallelism: false,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
