@@ -8,8 +8,13 @@ export default defineConfig({
   server: {
     port: 3000,
     // Tenants are addressed by subdomain (demo.localhost:3000), and *.localhost
-    // resolves to loopback in browsers without a hosts-file entry.
-    host: "localhost",
+    // resolves to loopback in browsers without a hosts-file entry — but it can
+    // resolve to EITHER 127.0.0.1 or ::1 depending on the client. host: "localhost"
+    // let Node resolve that ambiguous string itself, which on this machine bound
+    // only the IPv6 loopback and left 127.0.0.1:3000 refusing every connection.
+    // "0.0.0.0" binds every IPv4 interface, guaranteeing 127.0.0.1 is reachable,
+    // and matches the backend's own default (unqualified `.listen(port)`, dual-stack).
+    host: "0.0.0.0",
     allowedHosts: [".localhost"],
     proxy: {
       "/api": {
