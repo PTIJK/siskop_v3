@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: siskop_test
+        # 5432 is correct here even though local dev uses 5433: the runner is
+        # clean, and the 5433 mapping only exists to dodge a native Postgres
+        # on the development machine.
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/siskop_test
+      JWT_SECRET: ci-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+      JWT_EXPIRES_IN: 15m
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @siskop/backend db:generate
+
+      - run: pnpm run lint
+
+      - run: pnpm run typecheck
+
+      - run: pnpm --filter @siskop/backend exec prisma migrate deploy
+
+      - run: pnpm run test
+
+      - run: pnpm run build
