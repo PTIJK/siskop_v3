@@ -1,18 +1,19 @@
 {
-  "name": "siskop",
-  "version": "1.0.0",
+  "name": "siskop-monorepo",
+  "version": "0.1.0",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "type": "module",
+  "engines": { "node": ">=20.0.0", "pnpm": ">=9.0.0" },
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=apps/frontend\" \"npm run dev --workspace=apps/backend\"",
-    "build": "npm run build --workspaces",
-    "test": "npm run test --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\""
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
-  },
-  "prisma": {
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+    "prettier": "^3.2.0",
+    "turbo": "^1.13.0"
   }
 }
