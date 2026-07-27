@@ -1,0 +1,11 @@
+{
+  "folders": [
+    { "path": ".", "name": "siskop (root)" },
+    { "path": "apps/backend", "name": "backend" },
+    { "path": "apps/frontend", "name": "frontend" },
+    { "path": "packages/types", "name": "types" }
+  ],
+  "settings": {
+    "files.exclude": { "**/node_modules": true, "**/.turbo": true, "**/dist": true }
+  }
+}
