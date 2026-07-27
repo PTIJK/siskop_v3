@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id               String   @id @default(cuid())
+  name             String
+  cooperativeId    String   @unique
+  email            String   @unique
+  phone            String
+  address          String
+  subscriptionTier String   @default("starter")
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  users            User[]
+  members          Member[]
+  savingsAccounts  SavingsAccount[]
+  loans            Loan[]
+  transactions     Transaction[]
+
+  @@index([isActive])
+}
+
+model User {
+  id           String    @id @default(cuid())
+  tenantId     String
+  email        String
+  phone        String
+  name         String
+  passwordHash String
+  role         String    @default("member")
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  member       Member?
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model Member {
+  id           String   @id @default(cuid())
+  tenantId     String
+  userId       String   @unique
+  membershipId String
+  status       String   @default("active")
+  joinDate     DateTime @default(now())
+  phone        String
+  address      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savings      SavingsAccount[]
+  loans        Loan[]
+
+  @@unique([tenantId, membershipId])
+  @@index([tenantId, status])
+}
+
+model SavingsAccount {
+  id        String   @id @default(cuid())
+  tenantId  String
+  memberId  String
+  type      String // simpanan_pokok | simpanan_wajib | simpanan_sukarela
+  balance   Decimal  @default(0) @db.Decimal(18, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  entries   Transaction[]
+
+  @@unique([tenantId, memberId, type])
+  @@index([tenantId])
+}
+
+model Loan {
+  id         String    @id @default(cuid())
+  tenantId   String
+  memberId   String
+  principal  Decimal   @db.Decimal(18, 2)
+  rate       Decimal   @db.Decimal(6, 4)
+  termMonths Int
+  status     String    @default("active") // active | paid | defaulted
+  kolClass   Int       @default(1) // 1..5 kolektibilitas
+  issuedAt   DateTime  @default(now())
+  dueAt      DateTime
+  paidAt     DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  member     Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  entries    Transaction[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, kolClass])
+}
+
+model Transaction {
+  id               String   @id @default(cuid())
+  tenantId         String
+  savingsAccountId String?
+  loanId           String?
+  direction        String // debit | credit
+  amount           Decimal  @db.Decimal(18, 2)
+  description      String
+  referenceNo      String?
+  createdAt        DateTime @default(now())
+
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  savingsAccount   SavingsAccount? @relation(fields: [savingsAccountId], references: [id])
+  loan             Loan?           @relation(fields: [loanId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([savingsAccountId])
+  @@index([loanId])
+}
