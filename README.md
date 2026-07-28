@@ -67,7 +67,9 @@ Then open `http://demo.localhost:3000/login` and sign in with `admin@demo.test`.
 
 Four agents — PM, Engineer, QA, Ops — with no-consensus convergence. The
 highest-authority agent for a given issue decides within 24h. See
-`CLAUDE-PROJECT-SISKOP-SETUP.md`.
+`docs/claude-integration/` for each role's instructions (the plan's
+`CLAUDE-PROJECT-SISKOP-SETUP.md` escalation doc was never created —
+see `SETUP-VERIFICATION.md` "Known gaps").
 
 ## VSCode
 

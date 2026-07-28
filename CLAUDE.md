@@ -38,11 +38,18 @@ Postgres runs on host port **5433**, not 5432 — this machine has an unrelated 
 Postgres service on 5432. `docker compose up -d postgres` maps 5433 -> 5432; keep
 `apps/backend/.env` in sync.
 
+Vite's dev server binds `host: "0.0.0.0"` (`apps/frontend/vite.config.ts`), not
+`"localhost"`. `*.localhost` subdomains (`demo.localhost:3000`) can resolve to either
+127.0.0.1 or ::1 depending on the client, and letting Node resolve the ambiguous string
+`"localhost"` bound only the IPv6 side on this machine, refusing every IPv4 connection.
+
 ## Module ownership
 
 Auth · Dashboard · Members · Savings · Loans · Reports · Config · Platform Admin —
 Engineer leads all; QA owns acceptance, PM owns scope. See
-`CLAUDE-PROJECT-SISKOP-SETUP.md` for the escalation tree.
+`docs/claude-integration/` for per-role instructions and the escalation tree below
+(the plan's `CLAUDE-PROJECT-SISKOP-SETUP.md` was never created — see
+`SETUP-VERIFICATION.md` "Known gaps").
 
 ## Decision authority
 

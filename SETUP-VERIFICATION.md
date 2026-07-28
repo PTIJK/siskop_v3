@@ -3,6 +3,7 @@
 Run 2026-07-27. Checked boxes were executed and observed, not assumed.
 Re-run 2026-07-27 after the `CooperativeUnit` gap was closed (plan Tasks 3, 5, 6, 6b, 9).
 Re-run again 2026-07-27 after subdomain login/registration (Sprint 1 auth) was added.
+Re-run again 2026-07-27 after the Vite dev-server host-binding fix (93e0f1b).
 
 ## Verified
 
@@ -41,6 +42,12 @@ Re-run again 2026-07-27 after subdomain login/registration (Sprint 1 auth) was a
       header through unrewritten (`changeOrigin: false`). Wrong password and the
       no-subdomain case (`localhost:3000/login`) both render their intended message.
       Demo tenant deleted from `siskop_dev` afterward; `siskop_dev` is empty again.
+- [x] `apps/frontend/vite.config.ts` binds `host: "0.0.0.0"` instead of `"localhost"` —
+      on this machine `"localhost"` resolved ambiguously and Vite bound IPv6-only,
+      so `curl http://127.0.0.1:3000` returned connection-refused while `http://[::1]:3000`
+      returned 200. Reproduced pre-fix, then re-verified post-fix that both
+      `curl -4 http://127.0.0.1:3000` and the full `demo.localhost:3000/login` flow
+      succeed through a fresh, uncached headless-Chrome profile.
 
 ## Not verified (requires a GUI or CI credentials)
 
