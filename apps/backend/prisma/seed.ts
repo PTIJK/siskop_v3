@@ -322,7 +322,7 @@ async function main() {
     }
   });
 
-  const barokahPokok = await prisma.savingConfig.upsert({
+  await prisma.savingConfig.upsert({
     where: { id: `${barokah.id}_pokok` },
     update: {},
     create: {
@@ -350,41 +350,88 @@ async function main() {
       isActive: true
     }
   });
+  await prisma.savingConfig.upsert({
+    where: { id: `${barokah.id}_sukarela` },
+    update: {},
+    create: {
+      id: `${barokah.id}_sukarela`,
+      tenantId: barokah.id,
+      name: "Simpanan Sukarela",
+      type: SavingType.SUKARELA,
+      rateType: RateType.BAGI_HASIL,
+      rate: 2.5,
+      periodUnit: "YEARLY",
+      isActive: true
+    }
+  });
+  console.log("Saving configs created (Barokah)");
 
-  const rina = await prisma.member.upsert({
-    where: { memberId: "KOP-BRK-202606-0001" },
+  // Syariah financing configs (Barokah's equivalent of the demo tenant's loan
+  // configs) — flat margin, not annuitas (see lib/loan-calc.ts).
+  await prisma.loanConfig.upsert({
+    where: { id: `${barokah.id}_murabahah` },
     update: {},
     create: {
+      id: `${barokah.id}_murabahah`,
       tenantId: barokah.id,
-      memberId: "KOP-BRK-202606-0001",
-      accountNumber: "ACC-9284710001",
-      fullName: "Rina Amalia",
-      nik: "3273234567890001",
-      birthPlace: "Bandung",
-      birthDate: new Date("1992-06-12"),
-      occupation: "Wiraswasta",
-      address: "Jl. Braga No. 10, Bandung",
+      name: "Pembiayaan Murabahah",
+      type: LoanType.SYARIAH,
+      rateType: RateType.MARGIN,
+      rate: 10.0,
+      maxTermMonths: 24,
       isActive: true
     }
   });
-  await prisma.unitMembership.upsert({
-    where: { memberId_unitId: { memberId: rina.id, unitId: barokahUnit.id } },
-    update: {},
-    create: { memberId: rina.id, unitId: barokahUnit.id }
-  });
-  await prisma.saving.upsert({
-    where: { id: `saving_pokok_${rina.id}` },
+  await prisma.loanConfig.upsert({
+    where: { id: `${barokah.id}_modal_usaha` },
     update: {},
     create: {
-      id: `saving_pokok_${rina.id}`,
+      id: `${barokah.id}_modal_usaha`,
       tenantId: barokah.id,
-      unitId: barokahUnit.id,
-      memberId: rina.id,
-      savingConfigId: barokahPokok.id,
-      balance: 500000,
+      name: "Pembiayaan Modal Usaha",
+      type: LoanType.SYARIAH,
+      rateType: RateType.MARGIN,
+      rate: 8.0,
+      maxTermMonths: 18,
       isActive: true
     }
   });
+  console.log("Loan configs created (Barokah)");
+
+  // 10 sample members for Barokah, mirroring the demo tenant's structural-only
+  // approach — savings/loans populated via the real API by
+  // seed-demo-transactions.mjs so journal posting + KOL recalculation run.
+  const barokahMembers = [
+    { fullName: "Rina Amalia", nik: "3273234567890001", birthPlace: "Bandung", birthDate: new Date("1992-06-12"), occupation: "Wiraswasta", address: "Jl. Braga No. 10, Bandung" },
+    { fullName: "Yusuf Abdullah", nik: "3273234567890002", birthPlace: "Bandung", birthDate: new Date("1984-01-20"), occupation: "Pedagang", address: "Jl. Asia Afrika No. 21, Bandung" },
+    { fullName: "Siti Maimunah", nik: "3273234567890003", birthPlace: "Cimahi", birthDate: new Date("1990-10-05"), occupation: "Guru Ngaji", address: "Jl. Cihampelas No. 44, Bandung" },
+    { fullName: "Asep Sudrajat", nik: "3273234567890004", birthPlace: "Garut", birthDate: new Date("1979-04-18"), occupation: "Petani", address: "Jl. Dago No. 67, Bandung" },
+    { fullName: "Neneng Kartika", nik: "3273234567890005", birthPlace: "Bandung", birthDate: new Date("1995-08-27"), occupation: "Wiraswasta", address: "Jl. Kopo No. 12, Bandung" },
+    { fullName: "Dedi Supriadi", nik: "3273234567890006", birthPlace: "Sumedang", birthDate: new Date("1983-12-02"), occupation: "Karyawan Swasta", address: "Jl. Buah Batu No. 88, Bandung" },
+    { fullName: "Euis Sumiati", nik: "3273234567890007", birthPlace: "Bandung", birthDate: new Date("1988-03-09"), occupation: "Pedagang", address: "Jl. Sukajadi No. 5, Bandung" },
+    { fullName: "Iwan Setiawan", nik: "3273234567890008", birthPlace: "Cianjur", birthDate: new Date("1981-07-14"), occupation: "Wiraswasta", address: "Jl. Pasteur No. 30, Bandung" },
+    { fullName: "Lilis Suryani", nik: "3273234567890009", birthPlace: "Bandung", birthDate: new Date("1993-11-23"), occupation: "Penjahit", address: "Jl. Riau No. 19, Bandung" },
+    { fullName: "Wawan Gunawan", nik: "3273234567890010", birthPlace: "Tasikmalaya", birthDate: new Date("1977-05-30"), occupation: "Petani", address: "Jl. Setiabudi No. 56, Bandung" }
+  ];
+
+  for (const [index, m] of barokahMembers.entries()) {
+    const seq = String(index + 1).padStart(4, "0");
+    const memberId = `KOP-BRK-202606-${seq}`;
+    const accountNumber = `ACC-${9284710001 + index}`;
+
+    const member = await prisma.member.upsert({
+      where: { memberId },
+      update: {},
+      create: { tenantId: barokah.id, memberId, accountNumber, ...m, isActive: true }
+    });
+
+    await prisma.unitMembership.upsert({
+      where: { memberId_unitId: { memberId: member.id, unitId: barokahUnit.id } },
+      update: {},
+      create: { memberId: member.id, unitId: barokahUnit.id }
+    });
+  }
+  console.log("10 sample members created for Barokah (savings/loans populated by the demo-transactions script)");
   console.log("Second tenant (Koperasi Syariah Barokah, no accounting package) created");
 
   // 9. Platform-admin notifications — one of each NotificationType (Phase 2 —

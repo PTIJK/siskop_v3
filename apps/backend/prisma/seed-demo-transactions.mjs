@@ -192,6 +192,125 @@ async function main() {
 
   console.log("");
   console.log("Demo transactional data complete!");
+
+  // ── Barokah (Syariah) tenant ────────────────────────────────────────────────
+  console.log("");
+  console.log("Logging in as barokah tenant admin...");
+  const barokahToken = await login("barokah.localhost", "admin@barokah.com", "Admin123!");
+  const barokah = (method, path, body) => request(method, path, { hostHeader: "barokah.localhost", token: barokahToken, body });
+
+  const barokahSavingConfigs = assertOk(await barokah("GET", "/api/savings/configs"), "list barokah saving configs");
+  const barokahLoanConfigs = assertOk(await barokah("GET", "/api/loans/configs"), "list barokah loan configs");
+  const barokahMembersPage = assertOk(await barokah("GET", "/api/members?limit=50"), "list barokah members");
+
+  const barokahSavingConfigByType = Object.fromEntries(barokahSavingConfigs.map((c) => [c.type, c]));
+  const barokahLoanConfigByName = Object.fromEntries(barokahLoanConfigs.map((c) => [c.name, c]));
+  const barokahMemberByName = Object.fromEntries(barokahMembersPage.map((m) => [m.fullName, m]));
+
+  const barokahPokokId = barokahSavingConfigByType.POKOK.id;
+  const barokahWajibId = barokahSavingConfigByType.WAJIB.id;
+  const barokahSukarelaId = barokahSavingConfigByType.SUKARELA.id;
+  const murabahahId = barokahLoanConfigByName["Pembiayaan Murabahah"].id;
+  const modalUsahaId = barokahLoanConfigByName["Pembiayaan Modal Usaha"].id;
+
+  console.log("Creating savings accounts (Barokah)...");
+  const barokahSavingsPlan = {
+    "Rina Amalia": { pokok: 500000, wajib: 300000, sukarela: 1500000 },
+    "Yusuf Abdullah": { pokok: 500000, wajib: 250000 },
+    "Siti Maimunah": { pokok: 500000, wajib: 300000, sukarela: 800000 },
+    "Asep Sudrajat": { pokok: 500000, wajib: 250000 },
+    "Neneng Kartika": { pokok: 500000, wajib: 300000, sukarela: 1200000 },
+    "Dedi Supriadi": { pokok: 500000, wajib: 300000, sukarela: 900000 },
+    "Euis Sumiati": { pokok: 500000, wajib: 300000, sukarela: 600000 },
+    "Iwan Setiawan": { pokok: 500000, wajib: 350000, sukarela: 2000000 },
+    "Lilis Suryani": { pokok: 500000, wajib: 300000 },
+    "Wawan Gunawan": { pokok: 500000, wajib: 250000, sukarela: 500000 }
+  };
+
+  const barokahSavingsByMemberAndType = {};
+  for (const [name, plan] of Object.entries(barokahSavingsPlan)) {
+    const member = barokahMemberByName[name];
+    if (!member) throw new Error(`Barokah member not found: ${name}`);
+    barokahSavingsByMemberAndType[name] = {};
+
+    const pokok = assertOk(
+      await barokah("POST", "/api/savings", { memberId: member.id, savingConfigId: barokahPokokId, initialDeposit: plan.pokok }),
+      `create pokok saving for ${name}`
+    );
+    barokahSavingsByMemberAndType[name].POKOK = pokok;
+
+    const wajib = assertOk(
+      await barokah("POST", "/api/savings", { memberId: member.id, savingConfigId: barokahWajibId, initialDeposit: plan.wajib }),
+      `create wajib saving for ${name}`
+    );
+    barokahSavingsByMemberAndType[name].WAJIB = wajib;
+
+    if (plan.sukarela) {
+      const sukarela = assertOk(
+        await barokah("POST", "/api/savings", { memberId: member.id, savingConfigId: barokahSukarelaId, initialDeposit: plan.sukarela }),
+        `create sukarela saving for ${name}`
+      );
+      barokahSavingsByMemberAndType[name].SUKARELA = sukarela;
+    }
+    console.log(`  ${name}`);
+  }
+
+  console.log("Recording a couple of extra deposit/withdrawal transactions (Barokah)...");
+  const rinaSukarela = barokahSavingsByMemberAndType["Rina Amalia"].SUKARELA;
+  await barokah("POST", `/api/savings/${rinaSukarela.id}/deposit`, { amount: 400000, note: "Setoran tambahan bulan ini" });
+  const iwanSukarela = barokahSavingsByMemberAndType["Iwan Setiawan"].SUKARELA;
+  assertOk(
+    await barokah("POST", `/api/savings/${iwanSukarela.id}/withdraw`, { amount: 300000, note: "Penarikan untuk keperluan usaha" }),
+    "withdraw for Iwan"
+  );
+  console.log("  done");
+
+  console.log("Creating financing (loans) across KOL categories (Barokah)...");
+
+  async function createBarokahLoan(name, loanConfigId, principalAmount, termMonths, disbursedAt) {
+    const member = barokahMemberByName[name];
+    return assertOk(
+      await barokah("POST", "/api/loans", { memberId: member.id, loanConfigId, principalAmount, termMonths, disbursedAt }),
+      `create loan for ${name}`
+    );
+  }
+
+  async function payBarokah(loanId, amount, paidAt, dueDate, note) {
+    return assertOk(await barokah("POST", `/api/loans/${loanId}/pay`, { amount, paidAt, dueDate, note }), `record payment for loan ${loanId}`);
+  }
+
+  // LANCAR — Yusuf, disbursed 2 months ago, both installments paid on time
+  const yusuf = await createBarokahLoan("Yusuf Abdullah", murabahahId, 3000000, 12, monthsAgo(2));
+  await payBarokah(yusuf.id, yusuf.monthlyPayment, monthsAgo(1), monthsAgo(1), "Angsuran bulan 1");
+  const yusufResult = await payBarokah(yusuf.id, yusuf.monthlyPayment, iso(today), iso(today), "Angsuran bulan 2");
+  console.log(`  Yusuf Abdullah -> LANCAR (expected), got ${yusufResult.kolCategory}`);
+
+  // DALAM_PERHATIAN — Asep, disbursed 3 months ago, months 1-2 skipped, month 3 (today) paid
+  const asep = await createBarokahLoan("Asep Sudrajat", modalUsahaId, 4000000, 10, monthsAgo(3));
+  const asepResult = await payBarokah(asep.id, asep.monthlyPayment, iso(today), iso(today), "Angsuran bulan berjalan");
+  console.log(`  Asep Sudrajat -> DALAM_PERHATIAN (expected), got ${asepResult.kolCategory}`);
+
+  // KURANG_LANCAR — Dedi, disbursed 4 months ago, months 1-3 skipped, month 4 (today) paid
+  const dedi = await createBarokahLoan("Dedi Supriadi", murabahahId, 5000000, 12, monthsAgo(4));
+  const dediResult = await payBarokah(dedi.id, dedi.monthlyPayment, iso(today), iso(today), "Angsuran bulan berjalan");
+  console.log(`  Dedi Supriadi -> KURANG_LANCAR (expected), got ${dediResult.kolCategory}`);
+
+  // MACET — Wawan, disbursed 8 months ago, months 1-7 skipped, month 8 (today) paid
+  const wawan = await createBarokahLoan("Wawan Gunawan", modalUsahaId, 6000000, 14, monthsAgo(8));
+  const wawanResult = await payBarokah(wawan.id, wawan.monthlyPayment, iso(today), iso(today), "Angsuran bulan berjalan");
+  console.log(`  Wawan Gunawan -> MACET (expected), got ${wawanResult.kolCategory}`);
+
+  // COMPLETED — Neneng, short 2-month financing paid off in full immediately
+  const neneng = await createBarokahLoan("Neneng Kartika", modalUsahaId, 2000000, 2, monthsAgo(1));
+  const nenengResult = await payBarokah(neneng.id, neneng.totalAmount, iso(today), iso(today), "Pelunasan penuh");
+  console.log(`  Neneng Kartika -> status ${nenengResult.status} (expected COMPLETED)`);
+
+  // ── Soft-delete one member to demo deactivation ────────────────────────────
+  console.log("Deactivating Lilis Suryani to demo soft-delete...");
+  assertOk(await barokah("DELETE", `/api/members/${barokahMemberByName["Lilis Suryani"].id}`), "deactivate Lilis Suryani");
+
+  console.log("");
+  console.log("Barokah transactional data complete!");
 }
 
 main().catch((err) => {
