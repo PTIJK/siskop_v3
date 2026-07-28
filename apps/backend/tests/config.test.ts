@@ -412,3 +412,38 @@ describe("GET/POST/DELETE /api/config/account-mappings", () => {
     expect(afterEntry?.status).toBe("POSTED");
   });
 });
+
+// ── SHU Distribution ─────────────────────────────────────────────────────────
+
+describe("GET/PUT /api/config/shu-distribution", () => {
+  it("returns null when not yet configured", async () => {
+    const admin = await setupTenant();
+    const res = await request(app())
+      .get("/api/config/shu-distribution")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toBeNull();
+  });
+
+  it("saves the allocation and rejects a mix that doesn't add up to 100%", async () => {
+    const admin = await setupTenant();
+    const rejected = await request(app())
+      .put("/api/config/shu-distribution")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ jasaSimpananPercent: 25, jasaPinjamanPercent: 25, cadanganPercent: 40, lainnyaPercent: 5 });
+    expect(rejected.status).toBe(422);
+
+    const saved = await request(app())
+      .put("/api/config/shu-distribution")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ jasaSimpananPercent: 25, jasaPinjamanPercent: 25, cadanganPercent: 40, lainnyaPercent: 10 });
+    expect(saved.status).toBe(200);
+    expect(saved.body.data.cadanganPercent).toBe("40");
+
+    const fetched = await request(app())
+      .get("/api/config/shu-distribution")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(fetched.body.data.jasaSimpananPercent).toBe("25");
+  });
+});

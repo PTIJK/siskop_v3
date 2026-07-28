@@ -7,6 +7,7 @@ import { UnitsTab } from "./UnitsTab";
 import { RolesTab } from "./RolesTab";
 import { AccountsTab } from "./AccountsTab";
 import { AccountMappingsTab } from "./AccountMappingsTab";
+import { ShuConfigTab } from "./ShuConfigTab";
 
 export function ConfigPage() {
   const { can } = usePermissions();
@@ -17,7 +18,8 @@ export function ConfigPage() {
     { value: "units", label: "Unit Koperasi", show: can("config", "read"), content: <UnitsTab /> },
     { value: "roles", label: "Role & Izin", show: can("roles", "read"), content: <RolesTab /> },
     { value: "accounts", label: "Chart of Accounts", show: can("accounting", "read"), content: <AccountsTab /> },
-    { value: "mappings", label: "Pemetaan Akun", show: can("accounting", "read"), content: <AccountMappingsTab /> }
+    { value: "mappings", label: "Pemetaan Akun", show: can("accounting", "read"), content: <AccountMappingsTab /> },
+    { value: "shu", label: "Konfigurasi SHU", show: can("accounting", "read"), content: <ShuConfigTab /> }
   ].filter((t) => t.show);
 
   return (

@@ -8,7 +8,8 @@ import type {
   UpdateAccountInput,
   UpdateRoleInput,
   UpdateUnitInput,
-  UpsertAccountMappingInput
+  UpsertAccountMappingInput,
+  UpsertShuDistributionConfigInput
 } from "./schema.js";
 
 // ── Units ────────────────────────────────────────────────────────────────────
@@ -226,4 +227,20 @@ export async function deleteAccountMapping(tenantId: string, id: string): Promis
   const mapping = await db.accountMapping.findFirst({ where: { id, tenantId } });
   if (!mapping) throw notFound("Pemetaan akun tidak ditemukan");
   await db.accountMapping.delete({ where: { id } });
+}
+
+// ── SHU Distribution ─────────────────────────────────────────────────────────
+// Feeds the "Pembagian SHU" regulatory report (modules/reports) — a tenant
+// with no row here just gets an unconfigured notice on that report, not an error.
+
+export async function getShuDistributionConfig(tenantId: string) {
+  return db.shuDistributionConfig.findUnique({ where: { tenantId } });
+}
+
+export async function upsertShuDistributionConfig(tenantId: string, data: UpsertShuDistributionConfigInput) {
+  return db.shuDistributionConfig.upsert({
+    where: { tenantId },
+    create: { tenantId, ...data },
+    update: data
+  });
 }

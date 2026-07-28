@@ -86,6 +86,20 @@ export const upsertAccountMappingSchema = z.object({
   creditAccountId: z.string().cuid("Akun kredit tidak valid")
 });
 
+// ── SHU Distribution ─────────────────────────────────────────────────────────
+
+export const upsertShuDistributionConfigSchema = z
+  .object({
+    jasaSimpananPercent: z.coerce.number().min(0).max(100),
+    jasaPinjamanPercent: z.coerce.number().min(0).max(100),
+    cadanganPercent: z.coerce.number().min(0).max(100),
+    lainnyaPercent: z.coerce.number().min(0).max(100)
+  })
+  .refine(
+    (d) => Math.abs(d.jasaSimpananPercent + d.jasaPinjamanPercent + d.cadanganPercent + d.lainnyaPercent - 100) < 0.01,
+    { message: "Total persentase alokasi SHU harus 100%" }
+  );
+
 export type CreateUnitInput = z.infer<typeof createUnitSchema>;
 export type UpdateUnitInput = z.infer<typeof updateUnitSchema>;
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
@@ -93,3 +107,4 @@ export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
 export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
 export type UpsertAccountMappingInput = z.infer<typeof upsertAccountMappingSchema>;
+export type UpsertShuDistributionConfigInput = z.infer<typeof upsertShuDistributionConfigSchema>;

@@ -1,11 +1,10 @@
 import { NavLink } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
-import { LayoutDashboard, Users, PiggyBank, CreditCard, AlertTriangle, Building2, Settings, X, Menu } from "lucide-react";
+import { LayoutDashboard, Users, PiggyBank, CreditCard, FileText, AlertTriangle, Building2, Settings, X, Menu } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { PermissionAction, PermissionModule } from "@siskop/types";
 
-// Reports is still Phase 2 — no routes exist yet, so no nav entry for it.
 // Config (Konfigurasi) is gated on any of config/roles/accounting:read below,
 // since it's a single page covering all three.
 const NAV_ITEMS = [
@@ -21,6 +20,17 @@ const NAV_ITEMS = [
     children: [
       { label: "Semua Pinjaman", href: "/loans" },
       { label: "Anggota Menunggak", href: "/loans/overdue", icon: AlertTriangle }
+    ]
+  },
+  {
+    label: "Laporan",
+    href: "/reports",
+    icon: FileText,
+    module: "reports" as const,
+    action: "read" as const,
+    children: [
+      { label: "Laporan Keuangan", href: "/reports" },
+      { label: "Laporan Regulasi", href: "/reports/regulatory" }
     ]
   }
 ];

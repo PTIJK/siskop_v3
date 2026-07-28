@@ -1,7 +1,193 @@
-import { PrismaClient, TenantType, SavingType, RateType, LoanType, NotificationType } from "@prisma/client";
+import {
+  PrismaClient,
+  TenantType,
+  SavingType,
+  RateType,
+  LoanType,
+  NotificationType,
+  AccountCategory,
+  NormalBalance,
+  MappingSourceType,
+  MappingTransactionKind,
+  CalkSection
+} from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
+
+interface AccountSeed {
+  key: string;
+  code: string;
+  name: string;
+  category: AccountCategory;
+  normalBalance: NormalBalance;
+  isHeader?: boolean;
+  isCashEquivalent?: boolean;
+  parentKey?: string;
+}
+
+// Standard COA template — Docs/specs/2026-07-21-konfigurasi-akun-coa-design.md §4.
+// Seeded here (rather than left for the tenant to configure by hand) so the
+// demo/Barokah tenants have a real ledger before seed-demo-transactions.mjs
+// posts through the API; without accounts + mappings existing first, every
+// transaction's JournalEntry would post as UNPOSTED_MISSING_MAPPING and the
+// regulatory reports (Neraca/Arus Kas/Laporan Hasil Usaha/SHU) would be empty.
+const COA_TEMPLATE: AccountSeed[] = [
+  { key: "kas", code: "1-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT", isCashEquivalent: true },
+  { key: "bank", code: "1-1010", name: "Bank", category: "ASET", normalBalance: "DEBIT", isCashEquivalent: true },
+  { key: "piutang_pinjaman", code: "1-1100", name: "Piutang Pinjaman Anggota", category: "ASET", normalBalance: "DEBIT" },
+  {
+    key: "penyisihan_piutang",
+    code: "1-1190",
+    name: "Penyisihan Kerugian Piutang",
+    category: "ASET",
+    normalBalance: "KREDIT" // contra-asset — credit-normal, reduces Piutang Pinjaman Anggota
+  },
+  { key: "aset_tetap", code: "1-2000", name: "Aset Tetap", category: "ASET", normalBalance: "DEBIT", isHeader: true },
+  { key: "simpanan_sukarela", code: "2-1000", name: "Simpanan Sukarela — Anggota", category: "KEWAJIBAN", normalBalance: "KREDIT" },
+  { key: "utang_usaha", code: "2-1100", name: "Utang Usaha", category: "KEWAJIBAN", normalBalance: "KREDIT" },
+  { key: "simpanan_pokok", code: "3-1000", name: "Simpanan Pokok", category: "EKUITAS", normalBalance: "KREDIT" },
+  { key: "simpanan_wajib", code: "3-1100", name: "Simpanan Wajib", category: "EKUITAS", normalBalance: "KREDIT" },
+  { key: "cadangan", code: "3-2000", name: "Cadangan / Modal Penyertaan", category: "EKUITAS", normalBalance: "KREDIT" },
+  { key: "shu_berjalan", code: "3-3000", name: "SHU Tahun Berjalan", category: "EKUITAS", normalBalance: "KREDIT" },
+  { key: "shu_lalu", code: "3-3100", name: "SHU Tahun Lalu Belum Dibagi", category: "EKUITAS", normalBalance: "KREDIT" },
+  { key: "pendapatan_bunga", code: "4-1000", name: "Pendapatan Bunga/Margin Pinjaman", category: "PENDAPATAN", normalBalance: "KREDIT" },
+  { key: "pendapatan_admin", code: "4-2000", name: "Pendapatan Jasa Administrasi", category: "PENDAPATAN", normalBalance: "KREDIT" },
+  { key: "pendapatan_lain", code: "4-9000", name: "Pendapatan Lain-lain", category: "PENDAPATAN", normalBalance: "KREDIT" },
+  { key: "beban_bunga_simpanan", code: "5-1000", name: "Beban Bunga/Bagi Hasil Simpanan", category: "BEBAN", normalBalance: "DEBIT" },
+  { key: "beban_gaji", code: "5-2000", name: "Beban Operasional — Gaji", category: "BEBAN", normalBalance: "DEBIT" },
+  { key: "beban_sewa", code: "5-2100", name: "Beban Sewa", category: "BEBAN", normalBalance: "DEBIT" },
+  { key: "beban_penyisihan", code: "5-3000", name: "Beban Penyisihan Kerugian Piutang", category: "BEBAN", normalBalance: "DEBIT" },
+  { key: "beban_lain", code: "5-9000", name: "Beban Lain-lain", category: "BEBAN", normalBalance: "DEBIT" }
+];
+
+const CALK_NARRATIVE: Record<CalkSection, string> = {
+  UMUM:
+    "Koperasi didirikan berdasarkan prinsip kekeluargaan untuk meningkatkan kesejahteraan ekonomi anggota melalui layanan simpan pinjam. Laporan keuangan ini disusun untuk periode berjalan sesuai dengan Peraturan Menteri Koperasi dan UKM No. 2 Tahun 2024.",
+  DASAR_PENYUSUNAN:
+    "Laporan keuangan disusun berdasarkan Standar Akuntansi Keuangan Entitas Privat (SAK EP) yang berlaku efektif sejak 1 Januari 2025, menggantikan PSAK 27 yang telah dicabut. Laporan disajikan menggunakan dasar akrual dan konsep kelangsungan usaha.",
+  KEBIJAKAN_AKUNTANSI:
+    "Simpanan Pokok dan Simpanan Wajib dicatat sebagai bagian dari Ekuitas (modal anggota) karena bersifat tidak dapat ditarik selama anggota masih aktif. Simpanan Sukarela dicatat sebagai Kewajiban karena dapat ditarik sewaktu-waktu. Pendapatan bunga/margin pinjaman diakui secara proporsional berdasarkan porsi pokok dan bunga pada setiap angsuran yang diterima.",
+  INFORMASI_TAMBAHAN:
+    "Tidak terdapat peristiwa material setelah tanggal laporan yang memerlukan penyesuaian atau pengungkapan tambahan pada periode ini."
+};
+
+async function seedAccounting(
+  tenantId: string,
+  savingConfigIds: { POKOK: string; WAJIB: string; SUKARELA: string },
+  loanConfigIds: string[]
+) {
+  const accountIdByKey = new Map<string, string>();
+  for (const acc of COA_TEMPLATE) {
+    const id = `${tenantId}_acc_${acc.key}`;
+    accountIdByKey.set(acc.key, id);
+    const parentId = acc.parentKey ? accountIdByKey.get(acc.parentKey) : undefined;
+    await prisma.account.upsert({
+      where: { id },
+      update: {},
+      create: {
+        id,
+        tenantId,
+        code: acc.code,
+        name: acc.name,
+        category: acc.category,
+        normalBalance: acc.normalBalance,
+        isHeader: acc.isHeader ?? false,
+        isCashEquivalent: acc.isCashEquivalent ?? false,
+        isDefault: true,
+        isActive: true,
+        ...(parentId ? { parentId } : {})
+      }
+    });
+  }
+
+  const kas = accountIdByKey.get("kas")!;
+  const piutang = accountIdByKey.get("piutang_pinjaman")!;
+  const pendapatanBunga = accountIdByKey.get("pendapatan_bunga")!;
+  const pendapatanLain = accountIdByKey.get("pendapatan_lain")!;
+  const equityOrLiabilityBySavingType: Record<"POKOK" | "WAJIB" | "SUKARELA", string> = {
+    POKOK: accountIdByKey.get("simpanan_pokok")!,
+    WAJIB: accountIdByKey.get("simpanan_wajib")!,
+    SUKARELA: accountIdByKey.get("simpanan_sukarela")!
+  };
+
+  async function upsertMapping(
+    key: string,
+    sourceType: MappingSourceType,
+    sourceId: string,
+    transactionKind: MappingTransactionKind,
+    debitAccountId: string,
+    creditAccountId: string
+  ) {
+    const id = `${tenantId}_map_${key}`;
+    await prisma.accountMapping.upsert({
+      where: { id },
+      update: { debitAccountId, creditAccountId },
+      create: { id, tenantId, sourceType, sourceId, transactionKind, debitAccountId, creditAccountId }
+    });
+  }
+
+  // Setoran/penarikan per jenis simpanan — Pokok/Wajib -> Ekuitas, Sukarela -> Kewajiban
+  // (conventional koperasi treatment, Design Spec §4/§2).
+  for (const [type, savingConfigId] of Object.entries(savingConfigIds) as Array<
+    [keyof typeof savingConfigIds, string]
+  >) {
+    const equityOrLiability = equityOrLiabilityBySavingType[type];
+    await upsertMapping(`${type}_deposit`, "SAVING_CONFIG", savingConfigId, "DEPOSIT", kas, equityOrLiability);
+    await upsertMapping(`${type}_withdrawal`, "SAVING_CONFIG", savingConfigId, "WITHDRAWAL", equityOrLiability, kas);
+  }
+
+  // Pencairan/pembayaran per jenis pembiayaan — every loan config posts through
+  // the same Kas/Piutang/Pendapatan accounts.
+  for (const loanConfigId of loanConfigIds) {
+    await upsertMapping(`${loanConfigId}_disbursement`, "LOAN_CONFIG", loanConfigId, "DISBURSEMENT", piutang, kas);
+    await upsertMapping(`${loanConfigId}_principal`, "LOAN_CONFIG", loanConfigId, "PAYMENT_PRINCIPAL", kas, piutang);
+    await upsertMapping(`${loanConfigId}_interest`, "LOAN_CONFIG", loanConfigId, "PAYMENT_INTEREST", kas, pendapatanBunga);
+    await upsertMapping(`${loanConfigId}_penalty`, "LOAN_CONFIG", loanConfigId, "PAYMENT_PENALTY", kas, pendapatanLain);
+  }
+
+  // Initial paid-in capital — without this, loan disbursements (funded from
+  // Kas) outstrip what member savings deposits alone provide, and Kas goes
+  // negative on the Neraca. Dated well before any seeded saving/loan activity
+  // so it's already part of history for every report period.
+  const cadangan = accountIdByKey.get("cadangan")!;
+  await prisma.journalEntry.upsert({
+    where: { id: `${tenantId}_je_modal_awal` },
+    update: {},
+    create: {
+      id: `${tenantId}_je_modal_awal`,
+      tenantId,
+      entryDate: new Date("2025-01-01"),
+      sourceType: "MANUAL",
+      description: "Setoran modal awal pendirian koperasi",
+      status: "POSTED",
+      lines: {
+        create: [
+          { tenantId, accountId: kas, debit: 10_000_000, credit: 0 },
+          { tenantId, accountId: cadangan, debit: 0, credit: 10_000_000 }
+        ]
+      }
+    }
+  });
+
+  // SHU allocation used by the "Pembagian SHU" regulatory report — see
+  // Docs/specs/2026-07-22-pelaporan-regulasi-design.md §6.4.
+  await prisma.shuDistributionConfig.upsert({
+    where: { tenantId },
+    update: {},
+    create: { tenantId, jasaSimpananPercent: 25, jasaPinjamanPercent: 25, cadanganPercent: 40, lainnyaPercent: 10 }
+  });
+
+  // CALK narrative sections — edited once, reused every period (see
+  // modules/reports/regulatory-service.ts getCalk()).
+  for (const section of Object.keys(CALK_NARRATIVE) as CalkSection[]) {
+    await prisma.calkNarrative.upsert({
+      where: { tenantId_section: { tenantId, section } },
+      update: {},
+      create: { tenantId, section, content: CALK_NARRATIVE[section] }
+    });
+  }
+}
 
 async function main() {
   console.log("Starting seed...");
@@ -212,6 +398,16 @@ async function main() {
   });
   console.log("Loan configs created");
 
+  // 5b. Accounting: Chart of Accounts + mappings + SHU allocation + CALK narratives
+  // — must run before seed-demo-transactions.mjs so its API calls post real
+  // journal entries instead of UNPOSTED_MISSING_MAPPING.
+  await seedAccounting(
+    tenant.id,
+    { POKOK: `${tenant.id}_pokok`, WAJIB: `${tenant.id}_wajib`, SUKARELA: `${tenant.id}_sukarela` },
+    [`${tenant.id}_kur`, `${tenant.id}_umum`]
+  );
+  console.log("Chart of Accounts, mappings, SHU config, and CALK narratives created");
+
   // 6. 10 sample members (structural only — no Saving/Loan records here; those
   // are created through the real API by seed-demo-transactions.mjs so the
   // journal posting engine + KOL recalculation run exactly as in normal use).
@@ -397,6 +593,13 @@ async function main() {
     }
   });
   console.log("Loan configs created (Barokah)");
+
+  await seedAccounting(
+    barokah.id,
+    { POKOK: `${barokah.id}_pokok`, WAJIB: `${barokah.id}_wajib`, SUKARELA: `${barokah.id}_sukarela` },
+    [`${barokah.id}_murabahah`, `${barokah.id}_modal_usaha`]
+  );
+  console.log("Chart of Accounts, mappings, SHU config, and CALK narratives created (Barokah)");
 
   // 10 sample members for Barokah, mirroring the demo tenant's structural-only
   // approach — savings/loans populated via the real API by

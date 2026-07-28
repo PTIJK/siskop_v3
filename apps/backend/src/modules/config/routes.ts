@@ -9,7 +9,8 @@ import {
   updateAccountSchema,
   updateRoleSchema,
   updateUnitSchema,
-  upsertAccountMappingSchema
+  upsertAccountMappingSchema,
+  upsertShuDistributionConfigSchema
 } from "./schema.js";
 import {
   createAccount,
@@ -17,6 +18,7 @@ import {
   createUnit,
   deleteAccountMapping,
   deleteRole,
+  getShuDistributionConfig,
   listAccountMappings,
   listAccounts,
   listRoles,
@@ -24,7 +26,8 @@ import {
   updateAccount,
   updateRole,
   updateUnit,
-  upsertAccountMapping
+  upsertAccountMapping,
+  upsertShuDistributionConfig
 } from "./service.js";
 
 /** Forwards rejected promises to the error handler; Express 4 will not. */
@@ -167,6 +170,27 @@ export function configRoutes(): Router {
     handle(async (req, res) => {
       await deleteAccountMapping(authClaims(req).tenantId, requireParam(req, "id"));
       res.json({ success: true, data: { deleted: true }, meta: res.locals.meta });
+    })
+  );
+
+  // ── SHU Distribution ─────────────────────────────────────────────────────────
+
+  router.get(
+    "/shu-distribution",
+    requirePermission("accounting", "read"),
+    handle(async (req, res) => {
+      const data = await getShuDistributionConfig(authClaims(req).tenantId);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.put(
+    "/shu-distribution",
+    requirePermission("accounting", "update"),
+    handle(async (req, res) => {
+      const data = upsertShuDistributionConfigSchema.parse(req.body);
+      const config = await upsertShuDistributionConfig(authClaims(req).tenantId, data);
+      res.json({ success: true, data: config, meta: res.locals.meta });
     })
   );
 

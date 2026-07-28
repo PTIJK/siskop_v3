@@ -14,6 +14,8 @@ import { NewLoanPage } from "@/pages/loans/NewLoanPage";
 import { LoanDetailPage } from "@/pages/loans/LoanDetailPage";
 import { OverduePage } from "@/pages/loans/OverduePage";
 import { ConfigPage } from "@/pages/config/ConfigPage";
+import { ReportsPage } from "@/pages/reports/ReportsPage";
+import { RegulatoryReportsPage } from "@/pages/reports/RegulatoryReportsPage";
 
 export default function App() {
   return (
@@ -40,6 +42,9 @@ export default function App() {
             <Route path="/loans/overdue" element={<OverduePage />} />
             <Route path="/loans/new" element={<NewLoanPage />} />
             <Route path="/loans/:id" element={<LoanDetailPage />} />
+
+            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/reports/regulatory" element={<RegulatoryReportsPage />} />
 
             <Route path="/config" element={<ConfigPage />} />
           </Route>
