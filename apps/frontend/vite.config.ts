@@ -25,6 +25,12 @@ export default defineConfig({
         // login fail with "cooperative not identified". Production nginx must
         // likewise pass the original Host through (proxy_set_header Host $host).
         changeOrigin: false
+      },
+      // Serves member KTP uploads (apps/backend/src/app.ts) — no tenant
+      // resolution involved, so changeOrigin doesn't matter here.
+      "/uploads": {
+        target: "http://localhost:3001",
+        changeOrigin: false
       }
     }
   }

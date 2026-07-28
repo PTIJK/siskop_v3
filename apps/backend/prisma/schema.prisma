@@ -7,34 +7,176 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── ENUMS ──────────────────────────────────────────────────────────────────────
+// Ported verbatim from the pre-rescaffold system (see CLAUDE.md / merge plan).
+
+enum TenantType {
+  SYARIAH
+  KONVENSIONAL
+}
+
+enum SavingType {
+  POKOK
+  WAJIB
+  SUKARELA
+}
+
+enum RateType {
+  BUNGA
+  BAGI_HASIL
+  MARGIN
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+}
+
+enum LoanType {
+  SYARIAH
+  KONVENSIONAL
+}
+
+enum LoanStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  DEFAULTED
+}
+
+enum KOLCategory {
+  LANCAR
+  DALAM_PERHATIAN
+  KURANG_LANCAR
+  DIRAGUKAN
+  MACET
+}
+
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+enum NotificationType {
+  TENANT_REGISTERED
+  BILLING_BLOCKED
+  PACKAGE_CHANGED
+  AUDIT_THRESHOLD_EXCEEDED
+}
+
+enum AccountCategory {
+  ASET
+  KEWAJIBAN
+  EKUITAS
+  PENDAPATAN
+  BEBAN
+}
+
+enum NormalBalance {
+  DEBIT
+  KREDIT
+}
+
+enum MappingSourceType {
+  SAVING_CONFIG
+  LOAN_CONFIG
+  SYSTEM
+}
+
+enum MappingTransactionKind {
+  DEPOSIT
+  WITHDRAWAL
+  DISBURSEMENT
+  PAYMENT_PRINCIPAL
+  PAYMENT_INTEREST
+  PAYMENT_PENALTY
+}
+
+enum JournalSourceType {
+  SAVING_TRANSACTION
+  LOAN_PAYMENT
+  LOAN_DISBURSEMENT
+  MANUAL
+}
+
+enum JournalEntryStatus {
+  POSTED
+  UNPOSTED_MISSING_MAPPING
+}
+
+enum CalkSection {
+  UMUM
+  DASAR_PENYUSUNAN
+  KEBIJAKAN_AKUNTANSI
+  INFORMASI_TAMBAHAN
+}
+
+// ── PLATFORM ──────────────────────────────────────────────────────────────────
+// Not wired to any route yet (Phase 2) — carried over now so AccountMapping's
+// downstream models aren't blocked by a second migration later.
+
+model SubscriptionPackage {
+  id                String   @id @default(cuid())
+  name              String
+  price             Decimal  @db.Decimal(15, 2)
+  modules           String[]
+  maxUsers          Int
+  maxMembers        Int
+  maxSavingConfigs  Int?
+  whitelabelEnabled Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  tenants Tenant[]
+}
+
 model Tenant {
-  id               String   @id @default(cuid())
-  name             String
-  // Login subdomain: `demo` serves demo.localhost:3000. Kept separate from
-  // cooperativeId, which is a registry number and not hostname-safe.
-  slug             String   @unique
-  cooperativeId    String   @unique
-  email            String   @unique
-  phone            String
-  address          String
-  subscriptionTier String   @default("starter")
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                       String               @id @default(cuid())
+  name                     String
+  // Login subdomain: `demo` serves demo.localhost:3000. Resolved from the
+  // request's Host header (slugFromHost) — never from the request body.
+  slug                     String               @unique
+  address                  String
+  registrationNo           String               @unique
+  type                     TenantType
+  cooperativeType          String               @default("KSP")
+  logoUrl                  String?
+  packageId                String?
+  package                  SubscriptionPackage? @relation(fields: [packageId], references: [id])
+  isActive                 Boolean              @default(true)
+  nextBillingDate          DateTime?
+  billingReminder30SentAt  DateTime?
+  billingReminder7SentAt   DateTime?
+  modalDisetor             Decimal?             @db.Decimal(15, 2)
+  auditThresholdNotifiedAt DateTime?
+  createdAt                DateTime             @default(now())
 
-  units            CooperativeUnit[]
-  users            User[]
-  members          Member[]
-  savingsAccounts  SavingsAccount[]
-  loans            Loan[]
-  transactions     Transaction[]
-
-  @@index([isActive])
+  units                 CooperativeUnit[]
+  users                 User[]
+  roles                 Role[]
+  members               Member[]
+  savingConfigs         SavingConfig[]
+  loanConfigs           LoanConfig[]
+  savings               Saving[]
+  loans                 Loan[]
+  savingTxns            SavingTransaction[]
+  loanPayments          LoanPayment[]
+  whitelabelConfig      WhitelabelConfig?
+  notifications         Notification[]
+  accounts              Account[]
+  accountMappings       AccountMapping[]
+  journalEntries        JournalEntry[]
+  journalLines          JournalLine[]
+  shuDistributionConfig ShuDistributionConfig?
+  calkNarratives        CalkNarrative[]
 }
 
 // Every tenant has at least one unit: a single-purpose KSP is a tenant with one,
 // a koperasi serba usaha is a tenant with several. Postgres cannot express
-// "at least one child row", so the invariant is enforced by provisionTenant().
+// "at least one child row", so the invariant is enforced by provisionTenant()/
+// registerTenant(). Phase 1 always auto-provisions exactly one unit per tenant
+// and no UI exposes creating a second one yet — see merge plan "unit scoping".
 model CooperativeUnit {
   id        String   @id @default(cuid())
   tenantId  String
@@ -46,9 +188,8 @@ model CooperativeUnit {
 
   tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   memberships UnitMembership[]
-  savings     SavingsAccount[]
+  savings     Saving[]
   loans       Loan[]
-  entries     Transaction[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
@@ -67,116 +208,362 @@ model UnitMembership {
   @@index([unitId])
 }
 
-model User {
-  id           String    @id @default(cuid())
-  tenantId     String
-  email        String
-  phone        String
-  name         String
-  passwordHash String
-  role         String    @default("member")
-  isActive     Boolean   @default(true)
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+// ── AUTH ──────────────────────────────────────────────────────────────────────
 
-  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  member       Member?
+// Tenant-scoped custom role with a JSON permissions blob (module -> action ->
+// boolean). Every tenant gets 4 seed roles (Super Admin/Manager/Teller/Viewer)
+// at provisioning time. This is orthogonal to User's JWT-level `role` claim
+// (super_admin|tenant_admin|accountant|member, computed at login, not stored):
+// the JWT claim is coarse gating, this Role is the fine-grained RBAC the
+// ported KSP modules actually check via requirePermission(module, action).
+model Role {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  permissions Json
+  createdAt   DateTime @default(now())
+
+  users User[]
+}
+
+model User {
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roleId          String
+  role            Role     @relation(fields: [roleId], references: [id])
+  email           String
+  passwordHash    String
+  name            String
+  isActive        Boolean  @default(true)
+  isPlatformAdmin Boolean  @default(false)
+  lastLoginAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  savingTransactions SavingTransaction[]
+  loanPayments       LoanPayment[]
+  notificationReads  NotificationRead[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
 }
 
-// No `unitId` here: membership is of the koperasi. Which units a member takes
-// part in lives in UnitMembership, and that is what SHU distribution is
-// computed against (savings/loan volume for KSP, purchase volume for Konsumen).
+// ── MEMBER ────────────────────────────────────────────────────────────────────
+
+// A koperasi member's identity. Deliberately carries no User/login — members
+// are managed by staff (tenant_admin/accountant), they do not self-service log
+// in (matches the pre-rescaffold product; the new scaffold's 1:1 Member<->User
+// requirement was dropped in the merge — see merge plan "Auth + RBAC merge").
 model Member {
-  id           String   @id @default(cuid())
-  tenantId     String
-  userId       String   @unique
-  membershipId String
-  status       String   @default("active")
-  joinDate     DateTime @default(now())
-  phone        String
-  address      String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberId      String   @unique
+  accountNumber String   @unique
+  fullName      String
+  nik           String
+  address       String
+  birthPlace    String
+  birthDate     DateTime
+  occupation    String
+  ktpPhotoUrl   String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  memberships  UnitMembership[]
-  savings      SavingsAccount[]
-  loans        Loan[]
+  savings     Saving[]
+  loans       Loan[]
+  memberships UnitMembership[]
 
-  @@unique([tenantId, membershipId])
-  @@index([tenantId, status])
+  @@unique([tenantId, nik])
+  @@index([tenantId])
+  @@index([fullName])
 }
 
-model SavingsAccount {
-  id        String   @id @default(cuid())
-  tenantId  String
-  unitId    String
-  memberId  String
-  type      String // simpanan_pokok | simpanan_wajib | simpanan_sukarela
-  balance   Decimal  @default(0) @db.Decimal(18, 2)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ── SAVINGS ───────────────────────────────────────────────────────────────────
 
-  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  unit      CooperativeUnit @relation(fields: [unitId], references: [id])
-  member    Member          @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  entries   Transaction[]
-
-  @@unique([unitId, memberId, type])
-  @@index([tenantId, unitId])
-}
-
-model Loan {
-  id         String    @id @default(cuid())
+model SavingConfig {
+  id         String     @id @default(cuid())
   tenantId   String
-  unitId     String
-  memberId   String
-  principal  Decimal   @db.Decimal(18, 2)
-  rate       Decimal   @db.Decimal(6, 4)
-  termMonths Int
-  status     String    @default("active") // active | paid | defaulted
-  kolClass   Int       @default(1) // 1..5 kolektibilitas
-  issuedAt   DateTime  @default(now())
-  dueAt      DateTime
-  paidAt     DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name       String
+  type       SavingType
+  rateType   RateType
+  rate       Decimal    @db.Decimal(8, 4)
+  periodUnit String
+  isDefault  Boolean    @default(false)
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
 
-  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  unit       CooperativeUnit @relation(fields: [unitId], references: [id])
-  member     Member          @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  entries    Transaction[]
-
-  @@index([tenantId, unitId, status])
-  @@index([tenantId, kolClass])
+  savings Saving[]
 }
 
-// tenantId is denormalised alongside unitId on purpose: it keeps the isolation
-// predicate on a single column every query already filters, so tenant isolation
-// never depends on a join being written correctly.
-model Transaction {
-  id               String   @id @default(cuid())
-  tenantId         String
-  unitId           String
-  savingsAccountId String?
-  loanId           String?
-  direction        String // debit | credit
-  amount           Decimal  @db.Decimal(18, 2)
-  description      String
-  referenceNo      String?
-  createdAt        DateTime @default(now())
+model WhitelabelConfig {
+  id                 String       @id @default(cuid())
+  tenantId           String       @unique
+  tenant             Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customDomain       String?      @unique
+  domainStatus       DomainStatus @default(PENDING)
+  primaryColor       String?
+  hideBranding       Boolean      @default(false)
+  emailSenderName    String?
+  emailSenderAddress String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+}
 
-  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  unit             CooperativeUnit @relation(fields: [unitId], references: [id])
-  savingsAccount   SavingsAccount? @relation(fields: [savingsAccountId], references: [id])
-  loan             Loan?           @relation(fields: [loanId], references: [id])
+// ── NOTIFICATIONS (platform admin, in-app) ─────────────────────────────────────
 
-  @@index([tenantId, unitId, createdAt])
-  @@index([savingsAccountId])
+model Notification {
+  id              String           @id @default(cuid())
+  type            NotificationType
+  title           String
+  message         String
+  relatedTenantId String?
+  relatedTenant   Tenant?          @relation(fields: [relatedTenantId], references: [id])
+  createdAt       DateTime         @default(now())
+
+  reads NotificationRead[]
+
+  @@index([createdAt])
+  @@index([relatedTenantId])
+}
+
+// Per-platform-admin read state. A row's absence means unread for that user.
+model NotificationRead {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
+
+  @@unique([notificationId, userId])
+  @@index([userId])
+}
+
+// A member's savings balance. `unitId` is always resolved server-side from the
+// tenant's sole CooperativeUnit (CLAUDE.md rule 2b) — never accepted from the
+// client, so no unit-picker UI exists in Phase 1.
+model Saving {
+  id             String       @id @default(cuid())
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId         String
+  unit           CooperativeUnit @relation(fields: [unitId], references: [id])
+  memberId       String
+  member         Member       @relation(fields: [memberId], references: [id])
+  savingConfigId String
+  savingConfig   SavingConfig @relation(fields: [savingConfigId], references: [id])
+  balance        Decimal      @default(0) @db.Decimal(15, 2)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  transactions SavingTransaction[]
+
+  @@index([tenantId])
+  @@index([tenantId, unitId])
+  @@index([memberId])
+}
+
+model SavingTransaction {
+  id            String          @id @default(cuid())
+  savingId      String
+  saving        Saving          @relation(fields: [savingId], references: [id])
+  tenantId      String
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type          TransactionType
+  amount        Decimal         @db.Decimal(15, 2)
+  note          String?
+  createdBy     String
+  createdByUser User            @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime        @default(now())
+
+  @@index([savingId])
+  @@index([tenantId])
+  @@index([createdAt])
+}
+
+// ── LOANS ─────────────────────────────────────────────────────────────────────
+
+model LoanConfig {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String
+  type          LoanType
+  rateType      RateType
+  rate          Decimal  @db.Decimal(8, 4)
+  maxTermMonths Int
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  loans Loan[]
+}
+
+// A member's loan. `unitId` is always resolved server-side, same as Saving.
+model Loan {
+  id              String          @id @default(cuid())
+  tenantId        String
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId          String
+  unit            CooperativeUnit @relation(fields: [unitId], references: [id])
+  memberId        String
+  member          Member          @relation(fields: [memberId], references: [id])
+  loanConfigId    String
+  loanConfig      LoanConfig      @relation(fields: [loanConfigId], references: [id])
+  principalAmount Decimal         @db.Decimal(15, 2)
+  totalAmount     Decimal         @db.Decimal(15, 2)
+  termMonths      Int
+  monthlyPayment  Decimal         @db.Decimal(15, 2)
+  remainingAmount Decimal         @db.Decimal(15, 2)
+  status          LoanStatus      @default(ACTIVE)
+  kolCategory     KOLCategory     @default(LANCAR)
+  daysOverdue     Int             @default(0)
+  disbursedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  payments LoanPayment[]
+
+  @@index([tenantId])
+  @@index([tenantId, unitId])
+  @@index([memberId])
+  @@index([status])
+  @@index([kolCategory])
+}
+
+model LoanPayment {
+  id            String   @id @default(cuid())
+  loanId        String
+  loan          Loan     @relation(fields: [loanId], references: [id])
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  amount        Decimal  @db.Decimal(15, 2)
+  penalty       Decimal  @default(0) @db.Decimal(15, 2)
+  paidAt        DateTime
+  dueDate       DateTime
+  note          String?
+  createdBy     String
+  createdByUser User     @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime @default(now())
+
   @@index([loanId])
+  @@index([tenantId])
+  @@index([dueDate])
+}
+
+// ── ACCOUNTING CONFIGURATION (Konfigurasi Akun / COA) ─────────────────────────
+// Phase 2 (no management UI yet), but present now — journal.ts's postings
+// reference AccountMapping unconditionally from Savings/Loans in Phase 1.
+
+model Account {
+  id               String          @id @default(cuid())
+  tenantId         String
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  code             String
+  name             String
+  category         AccountCategory
+  normalBalance    NormalBalance
+  parentId         String?
+  parent           Account?        @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children         Account[]       @relation("AccountHierarchy")
+  isHeader         Boolean         @default(false)
+  isDefault        Boolean         @default(false)
+  isActive         Boolean         @default(true)
+  isCashEquivalent Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  debitMappings  AccountMapping[] @relation("DebitAccount")
+  creditMappings AccountMapping[] @relation("CreditAccount")
+  journalLines   JournalLine[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([category])
+  @@index([parentId])
+}
+
+model AccountMapping {
+  id              String                 @id @default(cuid())
+  tenantId        String
+  tenant          Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sourceType      MappingSourceType
+  sourceId        String?
+  transactionKind MappingTransactionKind
+  debitAccountId  String
+  debitAccount    Account                @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  creditAccountId String
+  creditAccount   Account                @relation("CreditAccount", fields: [creditAccountId], references: [id])
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@unique([tenantId, sourceType, sourceId, transactionKind])
+  @@index([tenantId])
+}
+
+// ── JOURNAL / POSTING ENGINE ───────────────────────────────────────────────────
+
+model JournalEntry {
+  id          String             @id @default(cuid())
+  tenantId    String
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entryDate   DateTime
+  sourceType  JournalSourceType
+  sourceId    String?
+  description String
+  status      JournalEntryStatus @default(POSTED)
+  createdAt   DateTime           @default(now())
+
+  lines JournalLine[]
+
+  @@index([tenantId])
+  @@index([entryDate])
+  @@index([sourceType, sourceId])
+}
+
+model JournalLine {
+  id             String       @id @default(cuid())
+  journalEntryId String
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id])
+  debit          Decimal      @default(0) @db.Decimal(15, 2)
+  credit         Decimal      @default(0) @db.Decimal(15, 2)
+
+  @@index([tenantId])
+  @@index([accountId])
+  @@index([journalEntryId])
+}
+
+model ShuDistributionConfig {
+  id                  String   @id @default(cuid())
+  tenantId            String   @unique
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  jasaSimpananPercent Decimal  @db.Decimal(5, 2)
+  jasaPinjamanPercent Decimal  @db.Decimal(5, 2)
+  cadanganPercent     Decimal  @db.Decimal(5, 2)
+  lainnyaPercent      Decimal  @db.Decimal(5, 2)
+  updatedAt           DateTime @updatedAt
+}
+
+// CALK — Catatan Atas Laporan Keuangan. Fixed narrative sections edited by the
+// tenant once and reused every period; the numeric parts of CALK are computed
+// on-demand from Neraca/Laporan Hasil Usaha (Phase 2 — no reports service yet).
+model CalkNarrative {
+  id        String      @id @default(cuid())
+  tenantId  String
+  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  section   CalkSection
+  content   String      @db.Text
+  updatedAt DateTime    @updatedAt
+
+  @@unique([tenantId, section])
+  @@index([tenantId])
 }

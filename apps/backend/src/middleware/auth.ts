@@ -3,22 +3,50 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { ErrorCode, type AuthClaims } from "@siskop/types";
+import { forbidden, unauthorized as unauthorizedError } from "../lib/errors.js";
+
+// Every action is optional: a role's permissions blob only sets the actions it
+// actually grants (see the SEED_ROLES default permission sets in
+// tenants/provision.ts), so an absent key must read as "not granted", not fail
+// validation.
+const permissionActions = z.object({
+  create: z.boolean().optional(),
+  read: z.boolean().optional(),
+  update: z.boolean().optional(),
+  delete: z.boolean().optional(),
+  export: z.boolean().optional()
+});
+
+const permissionsSchema = z.object({
+  dashboard: permissionActions,
+  members: permissionActions,
+  savings: permissionActions,
+  loans: permissionActions,
+  reports: permissionActions,
+  config: permissionActions,
+  users: permissionActions,
+  roles: permissionActions,
+  accounting: permissionActions.optional()
+});
 
 const claimsSchema = z.object({
   userId: z.string().min(1),
   tenantId: z.string().min(1),
   role: z.enum(["super_admin", "tenant_admin", "accountant", "member"]),
-  unitIds: z.array(z.string().min(1)).min(1, "unitIds must not be empty")
+  unitIds: z.array(z.string().min(1)).min(1, "unitIds must not be empty"),
+  roleId: z.string().min(1),
+  permissions: permissionsSchema
 });
 
 // Carrying unitIds in the token trades staleness for a saved permission lookup
 // on every request: a unit-access change takes up to JWT_EXPIRES_IN (15m) to
 // take effect. If staff start moving between units often, swap this for a
 // cached per-request lookup and drop unitIds from the claims — call sites of
-// assertUnitAccess do not change.
+// assertUnitAccess do not change. `permissions` (see requirePermission in
+// middleware/rbac.ts) rides in the same token for the same reason.
 export function assertUnitAccess(claims: AuthClaims, unitId: string): void {
   if (!claims.unitIds.includes(unitId)) {
-    throw new Error(`FORBIDDEN: no access to unit ${unitId}`);
+    throw forbidden(`No access to unit ${unitId}`);
   }
 }
 
@@ -43,6 +71,16 @@ declare module "express-serve-static-core" {
   interface Request {
     auth?: AuthClaims;
   }
+}
+
+/**
+ * Reads `req.auth`, populated by `requireAuth`. Every route using this must be
+ * mounted behind that middleware — throws (rather than returning undefined)
+ * so call sites get a non-nullable `AuthClaims` without repeating the guard.
+ */
+export function authClaims(req: Request): AuthClaims {
+  if (!req.auth) throw unauthorizedError();
+  return req.auth;
 }
 
 function unauthorized(res: Response, message: string): void {

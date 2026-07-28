@@ -1,22 +1,24 @@
+import type { Permissions } from "./role";
+import type { TenantType } from "./tenant";
+
 export type UserRole = "super_admin" | "tenant_admin" | "accountant" | "member";
 
 export interface User {
   id: string;
   tenantId: string;
   email: string;
-  phone: string;
   name: string;
+  /** Coarse role, derived at login from `isPlatformAdmin`/`role.name` — not a stored column. */
   role: UserRole;
+  /** The tenant-scoped `Role` row this user has — see `role.ts`. */
+  roleId: string;
+  /** Display name of that Role row, e.g. "Super Admin"/"Teller" — for UI chrome only. */
+  roleName: string;
+  permissions: Permissions;
   isActive: boolean;
+  isPlatformAdmin: boolean;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface AuthClaims {
-  userId: string;
-  tenantId: string;
-  role: UserRole;
-  unitIds: string[];
 }
 
 /**
@@ -36,21 +38,18 @@ export interface LoginResponse {
   user: User;
 }
 
-/** Creates the tenant, its first unit, and the admin user in one transaction. */
+/**
+ * Creates the tenant, its first unit, its 4 seed roles (Super Admin/Manager/
+ * Teller/Viewer), and the admin user (assigned Super Admin) in one transaction.
+ */
 export interface RegisterTenantRequest {
   tenantName: string;
   slug: string;
-  cooperativeId: string;
+  registrationNo: string;
   address: string;
-  /**
-   * The cooperative's official contact address, globally unique. Distinct from
-   * `adminEmail`, which is a person's login and is unique only within the
-   * tenant — one person may administer two koperasi. Defaults to `adminEmail`.
-   */
-  tenantEmail?: string;
+  type: TenantType;
   adminName: string;
   adminEmail: string;
-  adminPhone: string;
   password: string;
   firstUnit: { type: string; name: string };
 }
@@ -62,4 +61,19 @@ export interface RefreshRequest {
 export interface RefreshResponse {
   accessToken: string;
   refreshToken: string;
+}
+
+/**
+ * JWT access-token payload. `unitIds`/`permissions` are baked in for
+ * performance (avoids a DB round trip per request) — the tradeoff is that a
+ * unit-access or permission change takes up to `JWT_EXPIRES_IN` to propagate.
+ * Refresh tokens carry identity only and re-derive all of this on refresh.
+ */
+export interface AuthClaims {
+  userId: string;
+  tenantId: string;
+  role: UserRole;
+  unitIds: string[];
+  roleId: string;
+  permissions: Permissions;
 }

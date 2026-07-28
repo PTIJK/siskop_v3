@@ -8,11 +8,11 @@ const SECRET = "test-secret";
 const REGISTRATION = {
   tenantName: "KSP Demo",
   slug: "demo",
-  cooperativeId: "KOP-DEMO",
+  registrationNo: "KOP-DEMO",
   address: "Jl. Demo 1",
+  type: "KONVENSIONAL" as const,
   adminName: "Admin Demo",
   adminEmail: "admin@demo.test",
-  adminPhone: "0812000000",
   password: "rahasia123",
   firstUnit: { type: "KSP", name: "Simpan Pinjam" }
 };
@@ -27,15 +27,26 @@ beforeEach(async () => {
 });
 
 describe("registerTenant", () => {
-  it("creates tenant, first unit, and admin user, and returns a usable session", async () => {
+  it("creates tenant, first unit, 4 seed roles, and an admin user with Super Admin permissions", async () => {
     const session = await registerTenant(REGISTRATION);
 
     expect(session.user.email).toBe("admin@demo.test");
     expect(session.user.role).toBe("tenant_admin");
+    expect(session.user.permissions.members).toEqual({
+      create: true,
+      read: true,
+      update: true,
+      delete: true
+    });
 
     const claims = verifyAccessToken(session.accessToken, SECRET);
     expect(claims.tenantId).toBe(session.user.tenantId);
     expect(claims.unitIds).toHaveLength(1);
+    expect(claims.roleId).toBe(session.user.roleId);
+    expect(claims.permissions.members.create).toBe(true);
+
+    const roles = await db.role.findMany({ where: { tenantId: claims.tenantId } });
+    expect(roles.map((r) => r.name).sort()).toEqual(["Manager", "Super Admin", "Teller", "Viewer"]);
   });
 
   it("stores the password hashed, never in plaintext", async () => {
@@ -50,7 +61,7 @@ describe("registerTenant", () => {
   it("rejects a duplicate slug — the slug is the login subdomain", async () => {
     await registerTenant(REGISTRATION);
     await expect(
-      registerTenant({ ...REGISTRATION, cooperativeId: "KOP-OTHER", adminEmail: "b@x.test" })
+      registerTenant({ ...REGISTRATION, registrationNo: "KOP-OTHER", adminEmail: "b@x.test" })
     ).rejects.toThrow();
   });
 
@@ -113,10 +124,7 @@ describe("login", () => {
       ...REGISTRATION,
       tenantName: "KSP Lain",
       slug: "lain",
-      cooperativeId: "KOP-LAIN",
-      // Same admin login address, different cooperative contact address: one
-      // person administering two koperasi is legitimate.
-      tenantEmail: "kontak@lain.test",
+      registrationNo: "KOP-LAIN",
       password: "berbeda123"
     });
 

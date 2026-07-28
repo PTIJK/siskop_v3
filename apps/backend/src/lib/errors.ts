@@ -7,7 +7,16 @@ const STATUS: Record<ErrorCode, number> = {
   [ErrorCode.VALIDATION_ERROR]: 422,
   [ErrorCode.CONFLICT]: 409,
   [ErrorCode.RATE_LIMIT]: 429,
-  [ErrorCode.INTERNAL_ERROR]: 500
+  [ErrorCode.INTERNAL_ERROR]: 500,
+  // Ported KSP business-rule codes — see packages/types/src/api.ts.
+  [ErrorCode.NIK_EXISTS]: 409,
+  [ErrorCode.INSUFFICIENT_BALANCE]: 422,
+  [ErrorCode.CANNOT_WITHDRAW_POKOK]: 422,
+  [ErrorCode.MEMBER_HAS_NO_POKOK_SAVING]: 422,
+  [ErrorCode.TERM_EXCEEDS_MAX]: 422,
+  [ErrorCode.LOAN_NOT_ACTIVE]: 422,
+  [ErrorCode.INVALID_FILE_TYPE]: 422,
+  [ErrorCode.JOURNAL_ENTRY_UNBALANCED]: 500
 };
 
 /**
@@ -40,6 +49,14 @@ export class AppError extends Error {
 
 export function unauthorized(message = "Invalid credentials"): AppError {
   return new AppError(ErrorCode.UNAUTHORIZED, message);
+}
+
+export function forbidden(message = "Forbidden"): AppError {
+  return new AppError(ErrorCode.FORBIDDEN, message);
+}
+
+export function notFound(message = "Not found"): AppError {
+  return new AppError(ErrorCode.NOT_FOUND, message);
 }
 
 export function conflict(message: string): AppError {

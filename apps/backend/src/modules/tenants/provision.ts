@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
+import type { Permissions } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { CooperativeType } from "@siskop/types";
 
@@ -21,36 +23,120 @@ export const slugSchema = z
 const provisionInput = z.object({
   name: z.string().min(1),
   slug: slugSchema,
-  cooperativeId: z.string().min(1),
-  email: z.string().email(),
-  phone: z.string().min(1),
+  registrationNo: z.string().min(1),
   address: z.string().min(1),
+  type: z.enum(["SYARIAH", "KONVENSIONAL"]),
+  cooperativeType: z.string().min(1).default("KSP"),
   firstUnit: unitInput,
   additionalUnits: z.array(unitInput).default([])
 });
 
 export type ProvisionTenantInput = z.input<typeof provisionInput>;
 
-export async function provisionTenant(input: ProvisionTenantInput) {
+type Tx = Prisma.TransactionClient;
+
+const FULL: Permissions["members"] = { create: true, read: true, update: true, delete: true };
+const READ_ONLY = { read: true };
+
+/**
+ * Every tenant is seeded with these 4 roles at provisioning time (ported
+ * verbatim from the pre-rescaffold demo seed, now created for every tenant —
+ * not just the demo — so RBAC works out of the box). `Role`/`Permissions` are
+ * the fine-grained axis; `AuthClaims.role` (super_admin|tenant_admin|
+ * accountant|member) is the separate, coarse axis — see packages/types/src/role.ts.
+ */
+const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
+  {
+    name: "Super Admin",
+    permissions: {
+      dashboard: READ_ONLY,
+      members: FULL,
+      savings: FULL,
+      loans: FULL,
+      reports: { read: true, export: true, update: true },
+      config: { read: true, update: true },
+      users: FULL,
+      roles: FULL,
+      accounting: FULL
+    }
+  },
+  {
+    name: "Manager",
+    permissions: {
+      dashboard: READ_ONLY,
+      members: FULL,
+      savings: FULL,
+      loans: FULL,
+      reports: { read: true, export: true, update: true },
+      config: { read: true, update: false },
+      users: { create: false, read: true, update: false, delete: false },
+      roles: { read: true },
+      accounting: { create: false, read: false, update: false, delete: false }
+    }
+  },
+  {
+    name: "Teller",
+    permissions: {
+      dashboard: READ_ONLY,
+      members: READ_ONLY,
+      savings: { create: true, read: true, update: true, delete: false },
+      loans: { read: true, update: true },
+      reports: {},
+      config: {},
+      users: {},
+      roles: {}
+    }
+  },
+  {
+    name: "Viewer",
+    permissions: {
+      dashboard: READ_ONLY,
+      members: READ_ONLY,
+      savings: READ_ONLY,
+      loans: READ_ONLY,
+      reports: READ_ONLY,
+      config: {},
+      users: {},
+      roles: {}
+    }
+  }
+];
+
+/** Creates tenant + units + the 4 seed roles inside a caller-supplied transaction. */
+export async function provisionTenantInTx(tx: Tx, input: ProvisionTenantInput) {
   const data = provisionInput.parse(input);
   const units = [data.firstUnit, ...data.additionalUnits];
 
-  return db.$transaction(async (tx) => {
-    const tenant = await tx.tenant.create({
-      data: {
-        name: data.name,
-        slug: data.slug,
-        cooperativeId: data.cooperativeId,
-        email: data.email,
-        phone: data.phone,
-        address: data.address
-      }
-    });
-
-    await tx.cooperativeUnit.createMany({
-      data: units.map((u) => ({ tenantId: tenant.id, type: u.type, name: u.name }))
-    });
-
-    return tenant;
+  const tenant = await tx.tenant.create({
+    data: {
+      name: data.name,
+      slug: data.slug,
+      registrationNo: data.registrationNo,
+      address: data.address,
+      type: data.type,
+      cooperativeType: data.cooperativeType
+    }
   });
+
+  await tx.cooperativeUnit.createMany({
+    data: units.map((u) => ({ tenantId: tenant.id, type: u.type, name: u.name }))
+  });
+
+  const roles = await Promise.all(
+    SEED_ROLES.map((r) =>
+      tx.role.create({
+        data: {
+          tenantId: tenant.id,
+          name: r.name,
+          permissions: r.permissions as unknown as Prisma.InputJsonValue
+        }
+      })
+    )
+  );
+
+  return { tenant, roles };
+}
+
+export async function provisionTenant(input: ProvisionTenantInput) {
+  return db.$transaction((tx) => provisionTenantInTx(tx, input));
 }

@@ -1,11 +1,16 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import helmet from "helmet";
 import cors from "cors";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
 import { ErrorCode } from "@siskop/types";
 import { AppError } from "./lib/errors.js";
 import { authRoutes } from "./modules/auth/routes.js";
+import { membersRoutes } from "./modules/members/routes.js";
+import { savingsRoutes } from "./modules/savings/routes.js";
+import { loansRoutes } from "./modules/loans/routes.js";
+import { dashboardRoutes } from "./modules/dashboard/routes.js";
 
 function meta() {
   return { timestamp: new Date().toISOString(), requestId: randomUUID() };
@@ -22,6 +27,16 @@ export function createApp(): Express {
     })
   );
   app.use(express.json({ limit: "1mb" }));
+
+  // Serves KTP uploads (members/routes.ts) at the same URL path they're stored
+  // under (/uploads/ktp/{tenantId}/{file}). Helmet's default CORP header would
+  // otherwise block cross-origin <img> loads from the Vite dev server.
+  app.use(
+    "/uploads",
+    express.static(path.resolve(process.env.STORAGE_PATH ?? "./uploads"), {
+      setHeaders: (res) => res.setHeader("Cross-Origin-Resource-Policy", "cross-origin")
+    })
+  );
 
   // One requestId per request, shared by the success and error paths so a
   // client-reported id matches exactly one line in the logs.
@@ -43,6 +58,10 @@ export function createApp(): Express {
   });
 
   app.use("/api/auth", authRoutes());
+  app.use("/api/members", membersRoutes());
+  app.use("/api/savings", savingsRoutes());
+  app.use("/api/loans", loansRoutes());
+  app.use("/api/dashboard", dashboardRoutes());
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({

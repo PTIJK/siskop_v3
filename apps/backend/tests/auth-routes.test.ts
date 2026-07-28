@@ -8,11 +8,11 @@ const app = () => createApp();
 const REGISTRATION = {
   tenantName: "KSP Demo",
   slug: "demo",
-  cooperativeId: "KOP-DEMO",
+  registrationNo: "KOP-DEMO",
   address: "Jl. Demo 1",
+  type: "KONVENSIONAL",
   adminName: "Admin Demo",
   adminEmail: "admin@demo.test",
-  adminPhone: "0812000000",
   password: "rahasia123",
   firstUnit: { type: "KSP", name: "Simpan Pinjam" }
 };
@@ -50,7 +50,7 @@ describe("POST /api/auth/register", () => {
     await request(app()).post("/api/auth/register").send(REGISTRATION);
     const res = await request(app())
       .post("/api/auth/register")
-      .send({ ...REGISTRATION, cooperativeId: "KOP-2", adminEmail: "b@x.test" });
+      .send({ ...REGISTRATION, registrationNo: "KOP-2", adminEmail: "b@x.test" });
 
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe("CONFLICT");

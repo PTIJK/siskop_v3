@@ -1,10 +1,9 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
-import { db } from "../../lib/db.js";
-import { requireAuth } from "../../middleware/auth.js";
+import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { unauthorized } from "../../lib/errors.js";
 import { slugFromHost } from "./tenant-host.js";
-import { login, refreshSession, registerTenant } from "./service.js";
+import { getMe, login, refreshSession, registerTenant } from "./service.js";
 
 const loginBody = z.object({
   email: z.string().email(),
@@ -54,25 +53,11 @@ export function authRoutes(): Router {
     "/me",
     requireAuth,
     handle(async (req, res) => {
-      const auth = req.auth;
-      if (!auth) throw unauthorized();
+      const auth = authClaims(req);
 
       // Scoped by tenantId as well as id: rule 1 holds even when the id alone
       // would be sufficient, so the pattern stays uniform across every module.
-      const user = await db.user.findFirst({
-        where: { id: auth.userId, tenantId: auth.tenantId },
-        select: {
-          id: true,
-          tenantId: true,
-          email: true,
-          phone: true,
-          name: true,
-          role: true,
-          isActive: true,
-          createdAt: true,
-          updatedAt: true
-        }
-      });
+      const user = await getMe(auth.userId, auth.tenantId);
       if (!user) throw unauthorized();
 
       res.json({ success: true, data: user, meta: res.locals.meta });

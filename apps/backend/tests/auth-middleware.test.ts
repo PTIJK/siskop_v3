@@ -15,7 +15,18 @@ const CLAIMS = {
   userId: "u1",
   tenantId: "t1",
   role: "member",
-  unitIds: ["un1", "un2"]
+  unitIds: ["un1", "un2"],
+  roleId: "r1",
+  permissions: {
+    dashboard: { read: true },
+    members: { create: false, read: true, update: false, delete: false },
+    savings: {},
+    loans: {},
+    reports: {},
+    config: {},
+    users: {},
+    roles: {}
+  }
 } as const;
 
 describe("access token", () => {
