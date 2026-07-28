@@ -11,6 +11,7 @@ import { membersRoutes } from "./modules/members/routes.js";
 import { savingsRoutes } from "./modules/savings/routes.js";
 import { loansRoutes } from "./modules/loans/routes.js";
 import { dashboardRoutes } from "./modules/dashboard/routes.js";
+import { configRoutes } from "./modules/config/routes.js";
 
 function meta() {
   return { timestamp: new Date().toISOString(), requestId: randomUUID() };
@@ -62,6 +63,7 @@ export function createApp(): Express {
   app.use("/api/savings", savingsRoutes());
   app.use("/api/loans", loansRoutes());
   app.use("/api/dashboard", dashboardRoutes());
+  app.use("/api/config", configRoutes());
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({

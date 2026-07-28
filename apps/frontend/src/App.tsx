@@ -13,6 +13,7 @@ import { LoansDashboardPage } from "@/pages/loans/LoansDashboardPage";
 import { NewLoanPage } from "@/pages/loans/NewLoanPage";
 import { LoanDetailPage } from "@/pages/loans/LoanDetailPage";
 import { OverduePage } from "@/pages/loans/OverduePage";
+import { ConfigPage } from "@/pages/config/ConfigPage";
 
 export default function App() {
   return (
@@ -39,6 +40,8 @@ export default function App() {
             <Route path="/loans/overdue" element={<OverduePage />} />
             <Route path="/loans/new" element={<NewLoanPage />} />
             <Route path="/loans/:id" element={<LoanDetailPage />} />
+
+            <Route path="/config" element={<ConfigPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

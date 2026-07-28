@@ -18,6 +18,17 @@ export interface CooperativeUnit {
   updatedAt: string;
 }
 
+export interface CreateUnitRequest {
+  type: CooperativeType;
+  name: string;
+}
+
+export interface UpdateUnitRequest {
+  type?: CooperativeType;
+  name?: string;
+  isActive?: boolean;
+}
+
 export interface UnitMembership {
   id: string;
   memberId: string;

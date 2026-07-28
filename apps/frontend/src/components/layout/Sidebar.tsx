@@ -1,12 +1,13 @@
 import { NavLink } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
-import { LayoutDashboard, Users, PiggyBank, CreditCard, AlertTriangle, Building2, X, Menu } from "lucide-react";
+import { LayoutDashboard, Users, PiggyBank, CreditCard, AlertTriangle, Building2, Settings, X, Menu } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { PermissionAction, PermissionModule } from "@siskop/types";
 
-// Reports/Config are Phase 2 — no routes exist yet, so no nav entries for
-// them (see merge plan "Deferred to Phase 2").
+// Reports is still Phase 2 — no routes exist yet, so no nav entry for it.
+// Config (Konfigurasi) is gated on any of config/roles/accounting:read below,
+// since it's a single page covering all three.
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, module: "dashboard" as const, action: "read" as const },
   { label: "Anggota", href: "/members", icon: Users, module: "members" as const, action: "read" as const },
@@ -125,6 +126,12 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
           if (!can(item.module, item.action)) return null;
           return <NavItemComponent key={item.href} item={item} onClose={onClose} />;
         })}
+        {(can("config", "read") || can("roles", "read") || can("accounting", "read")) && (
+          <NavItemComponent
+            item={{ label: "Konfigurasi", href: "/config", icon: Settings, module: "config", action: "read" }}
+            onClose={onClose}
+          />
+        )}
       </nav>
     </div>
   );

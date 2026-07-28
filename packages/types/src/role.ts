@@ -37,3 +37,10 @@ export interface Role {
   permissions: Permissions;
   createdAt: string;
 }
+
+export interface CreateRoleRequest {
+  name: string;
+  permissions: Permissions;
+}
+
+export type UpdateRoleRequest = Partial<CreateRoleRequest>;
