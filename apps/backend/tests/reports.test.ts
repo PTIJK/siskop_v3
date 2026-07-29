@@ -252,6 +252,80 @@ describe("GET /api/reports/regulatory/shu-distribution", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.alokasi.cadangan.total).toBe("400000");
   });
+
+  it("splits jasaSimpanan into shuPokokWajib/shuSukarela proportional to the member's own balance mix", async () => {
+    const admin = await setupTenant();
+    await request(app())
+      .put("/api/config/shu-distribution")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ jasaSimpananPercent: 50, jasaPinjamanPercent: 0, cadanganPercent: 40, lainnyaPercent: 10 });
+
+    const member = await createMemberAs(admin.accessToken);
+    const kas = await createAccountAs(admin.accessToken);
+
+    const pokokAcc = await createAccountAs(admin.accessToken, {
+      code: "3-1000",
+      name: "Simpanan Pokok",
+      category: "EKUITAS",
+      normalBalance: "KREDIT",
+      isCashEquivalent: false
+    });
+    const pokokConfig = await request(app())
+      .post("/api/savings/configs")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ name: "Simpanan Pokok", type: "POKOK", rateType: "BUNGA", rate: 0, periodUnit: "MONTHLY" });
+    await mapDeposit(admin.accessToken, pokokConfig.body.data.id, kas.id, pokokAcc.id);
+    await request(app())
+      .post("/api/savings")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, savingConfigId: pokokConfig.body.data.id, initialDeposit: 300_000 });
+
+    const sukarelaAcc = await createAccountAs(admin.accessToken, SIMPANAN_SUKARELA_ACC);
+    const sukarelaConfig = await request(app())
+      .post("/api/savings/configs")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ name: "Simpanan Sukarela", type: "SUKARELA", rateType: "BUNGA", rate: 0, periodUnit: "YEARLY" });
+    await mapDeposit(admin.accessToken, sukarelaConfig.body.data.id, kas.id, sukarelaAcc.id);
+    await request(app())
+      .post("/api/savings")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, savingConfigId: sukarelaConfig.body.data.id, initialDeposit: 100_000 });
+
+    const pendapatan = await createAccountAs(admin.accessToken, PENDAPATAN_BUNGA);
+    await db.journalEntry.create({
+      data: {
+        tenantId: admin.user.tenantId,
+        entryDate: new Date(),
+        sourceType: "MANUAL",
+        description: "test income",
+        status: "POSTED",
+        lines: {
+          create: [
+            { tenantId: admin.user.tenantId, accountId: kas.id, debit: 1_000_000 },
+            { tenantId: admin.user.tenantId, accountId: pendapatan.id, credit: 1_000_000 }
+          ]
+        }
+      }
+    });
+
+    const res = await request(app())
+      .get("/api/reports/regulatory/shu-distribution")
+      .query({ from: "2020-01-01", to: "2100-01-01" })
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    const row = res.body.data.anggota.find((a: { memberId: string }) => a.memberId === member.id);
+    expect(row).toBeTruthy();
+    expect(row.no).toBe(1);
+
+    const jasaSimpanan = Number(row.jasaSimpanan);
+    const shuPokokWajib = Number(row.shuPokokWajib);
+    const shuSukarela = Number(row.shuSukarela);
+
+    expect(shuPokokWajib + shuSukarela).toBeCloseTo(jasaSimpanan, 2);
+    // Balance mix is 300_000 Pokok : 100_000 Sukarela, i.e. 3:1.
+    expect(shuPokokWajib / shuSukarela).toBeCloseTo(3, 1);
+  });
 });
 
 // ── Regulatory: CALK ─────────────────────────────────────────────────────────

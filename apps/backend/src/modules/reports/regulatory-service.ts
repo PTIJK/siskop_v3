@@ -40,30 +40,51 @@ async function getAccountSumsInPeriod(tenantId: string, accountIds: string[], fr
   );
 }
 
+interface SavingsBreakdown {
+  total: number;
+  /** POKOK + WAJIB — "Simpanan Pokok/SW" on the RAT distribution report. */
+  pokokWajib: number;
+  sukarela: number;
+}
+
 /**
- * Reconstructs a member's total savings balance as of a past date by taking the
- * current balance and undoing every transaction that happened after that date.
+ * Reconstructs a member's savings balance as of a past date by taking each of
+ * their saving accounts' current balance and undoing every transaction that
+ * happened after that date, split by SavingConfig.type so the SHU distribution
+ * report can attribute jasaSimpanan to a "Pokok/SW" vs "Sukarela" column.
  * SISKOP doesn't keep daily balance snapshots, so this is exact for the two
  * endpoints of a period (from/to) but "average balance during the period" is
  * then approximated as the mean of those two points rather than a true daily
  * time-weighted average — documented simplification, ported as-is from the
  * pre-rescaffold system (Design Spec 2026-07-22-pelaporan-regulasi §6.4).
  */
-async function memberSavingsBalanceAsOf(tenantId: string, memberId: string, date: Date): Promise<number> {
-  const savings = await db.saving.findMany({ where: { tenantId, memberId }, select: { id: true, balance: true } });
-  if (savings.length === 0) return 0;
+async function memberSavingsBreakdownAsOf(tenantId: string, memberId: string, date: Date): Promise<SavingsBreakdown> {
+  const savings = await db.saving.findMany({
+    where: { tenantId, memberId },
+    select: { id: true, balance: true, savingConfig: { select: { type: true } } }
+  });
+  if (savings.length === 0) return { total: 0, pokokWajib: 0, sukarela: 0 };
 
-  const currentTotal = savings.reduce((sum, s) => sum + Number(s.balance), 0);
   const futureTxns = await db.savingTransaction.findMany({
     where: { tenantId, savingId: { in: savings.map((s) => s.id) }, createdAt: { gt: date } },
-    select: { type: true, amount: true }
+    select: { savingId: true, type: true, amount: true }
   });
+  const adjustmentBySaving = new Map<string, number>();
+  for (const t of futureTxns) {
+    const delta = t.type === "DEPOSIT" ? -Number(t.amount) : Number(t.amount);
+    adjustmentBySaving.set(t.savingId, (adjustmentBySaving.get(t.savingId) ?? 0) + delta);
+  }
 
-  const adjustment = futureTxns.reduce(
-    (sum, t) => sum + (t.type === "DEPOSIT" ? -Number(t.amount) : Number(t.amount)),
-    0
-  );
-  return round2(currentTotal + adjustment);
+  let total = 0;
+  let pokokWajib = 0;
+  let sukarela = 0;
+  for (const s of savings) {
+    const balance = Number(s.balance) + (adjustmentBySaving.get(s.id) ?? 0);
+    total += balance;
+    if (s.savingConfig.type === "SUKARELA") sukarela += balance;
+    else pokokWajib += balance; // POKOK or WAJIB
+  }
+  return { total: round2(total), pokokWajib: round2(pokokWajib), sukarela: round2(sukarela) };
 }
 
 /**
@@ -343,13 +364,15 @@ export async function getShuDistribution(tenantId: string, from: Date, to: Date)
 
   const memberStats = await Promise.all(
     members.map(async (m) => {
-      const balAtFrom = await memberSavingsBalanceAsOf(tenantId, m.id, from);
-      const balAtTo = await memberSavingsBalanceAsOf(tenantId, m.id, to);
+      const breakdownAtFrom = await memberSavingsBreakdownAsOf(tenantId, m.id, from);
+      const breakdownAtTo = await memberSavingsBreakdownAsOf(tenantId, m.id, to);
       return {
         memberId: m.id,
         memberCode: m.memberId,
         fullName: m.fullName,
-        avgSavingsBalance: round2((balAtFrom + balAtTo) / 2),
+        avgSavingsBalance: round2((breakdownAtFrom.total + breakdownAtTo.total) / 2),
+        avgPokokWajibBalance: round2((breakdownAtFrom.pokokWajib + breakdownAtTo.pokokWajib) / 2),
+        avgSukarelaBalance: round2((breakdownAtFrom.sukarela + breakdownAtTo.sukarela) / 2),
         interestPaid: interestByMember.get(m.id) ?? 0
       };
     })
@@ -358,16 +381,28 @@ export async function getShuDistribution(tenantId: string, from: Date, to: Date)
   const totalAvgSavings = round2(memberStats.reduce((sum, m) => sum + m.avgSavingsBalance, 0));
   const totalInterestPaid = round2(memberStats.reduce((sum, m) => sum + m.interestPaid, 0));
 
-  const anggota = memberStats.map((m) => {
+  const anggota = memberStats.map((m, index) => {
     const jasaSimpanan = totalAvgSavings > 0 ? round2((m.avgSavingsBalance / totalAvgSavings) * jasaSimpananTotal) : 0;
     const jasaPinjaman = totalInterestPaid > 0 ? round2((m.interestPaid / totalInterestPaid) * jasaPinjamanTotal) : 0;
+
+    // Presentational breakdown of jasaSimpanan by the member's own Pokok/SW vs
+    // Sukarela balance mix — same pool/calculation as jasaSimpanan above, not a
+    // separate allocation policy. Any rounding remainder goes to Pokok/SW so
+    // shuPokokWajib + shuSukarela always equals jasaSimpanan exactly.
+    const shuSukarela =
+      m.avgSavingsBalance > 0 ? round2((m.avgSukarelaBalance / m.avgSavingsBalance) * jasaSimpanan) : 0;
+    const shuPokokWajib = round2(jasaSimpanan - shuSukarela);
+
     return {
+      no: index + 1,
       memberId: m.memberId,
       memberCode: m.memberCode,
       fullName: m.fullName,
       avgSavingsBalance: m.avgSavingsBalance.toString(),
       interestPaid: m.interestPaid.toString(),
       jasaSimpanan: jasaSimpanan.toString(),
+      shuPokokWajib: shuPokokWajib.toString(),
+      shuSukarela: shuSukarela.toString(),
       jasaPinjaman: jasaPinjaman.toString(),
       totalShu: round2(jasaSimpanan + jasaPinjaman).toString()
     };

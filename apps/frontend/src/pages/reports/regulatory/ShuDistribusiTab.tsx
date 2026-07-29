@@ -89,30 +89,30 @@ export function ShuDistribusiTab() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Anggota</TableHead>
-                    <TableHead className="text-right">Rata-rata Saldo Simpanan</TableHead>
-                    <TableHead className="text-right">Bunga/Margin Dibayar</TableHead>
-                    <TableHead className="text-right">Jasa Simpanan</TableHead>
-                    <TableHead className="text-right">Jasa Pinjaman</TableHead>
+                    <TableHead className="w-10">No</TableHead>
+                    <TableHead>No Anggota</TableHead>
+                    <TableHead>Nama</TableHead>
+                    <TableHead className="text-right">SHU Pokok/SW</TableHead>
+                    <TableHead className="text-right">SHU Sukarela</TableHead>
+                    <TableHead className="text-right">SHU Pinjaman</TableHead>
                     <TableHead className="text-right">Total SHU</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.anggota.map((a) => (
                     <TableRow key={a.memberId}>
-                      <TableCell>
-                        {a.fullName} <span className="text-xs text-muted-foreground">({a.memberCode})</span>
-                      </TableCell>
-                      <TableCell className="text-right">{formatRupiah(a.avgSavingsBalance)}</TableCell>
-                      <TableCell className="text-right">{formatRupiah(a.interestPaid)}</TableCell>
-                      <TableCell className="text-right">{formatRupiah(a.jasaSimpanan)}</TableCell>
+                      <TableCell>{a.no}</TableCell>
+                      <TableCell>{a.memberCode}</TableCell>
+                      <TableCell>{a.fullName}</TableCell>
+                      <TableCell className="text-right">{formatRupiah(a.shuPokokWajib)}</TableCell>
+                      <TableCell className="text-right">{formatRupiah(a.shuSukarela)}</TableCell>
                       <TableCell className="text-right">{formatRupiah(a.jasaPinjaman)}</TableCell>
                       <TableCell className="text-right font-semibold">{formatRupiah(a.totalShu)}</TableCell>
                     </TableRow>
                   ))}
                   {data.totalDibagikanKeAnggota && (
                     <TableRow className="font-semibold">
-                      <TableCell colSpan={5}>Total Dibagikan ke Anggota</TableCell>
+                      <TableCell colSpan={6}>Total Dibagikan ke Anggota</TableCell>
                       <TableCell className="text-right">{formatRupiah(data.totalDibagikanKeAnggota)}</TableCell>
                     </TableRow>
                   )}

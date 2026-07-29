@@ -106,12 +106,17 @@ export interface ShuAlokasi {
 }
 
 export interface ShuAnggotaRow {
+  no: number;
   memberId: string;
   memberCode: string;
   fullName: string;
   avgSavingsBalance: string;
   interestPaid: string;
   jasaSimpanan: string;
+  /** Presentational split of jasaSimpanan by the member's own Pokok/SW savings balance. */
+  shuPokokWajib: string;
+  /** Presentational split of jasaSimpanan by the member's own Sukarela savings balance. */
+  shuSukarela: string;
   jasaPinjaman: string;
   totalShu: string;
 }

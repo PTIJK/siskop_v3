@@ -19,9 +19,70 @@ function rp(value: string | number): string {
   return `Rp ${Number(value).toLocaleString("id-ID")}`;
 }
 
+/**
+ * Blank Ketua/Wakil Ketua/Bendahara signature lines with a place/date line —
+ * every RAT-style document in a koperasi's own paper reports ends with this
+ * block, signed by hand after printing. Officer names aren't modeled on
+ * `Tenant` today, so the lines are intentionally left blank rather than
+ * inventing an officer-roster feature here.
+ */
+function signatureBlockHtml(cityFromAddress: string, asOfDate: string | undefined): string {
+  const tanggal = new Date(asOfDate ?? Date.now()).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  });
+  return `
+    <table style="border:none; margin-top:36px">
+      <tr>
+        <td style="border:none; width:60%"></td>
+        <td style="border:none; text-align:center">${cityFromAddress}, ${tanggal}</td>
+      </tr>
+    </table>
+    <table style="border:none; margin-top:8px">
+      <tr>
+        <td style="border:none; width:34%; text-align:center">Ketua,</td>
+        <td style="border:none; width:32%; text-align:center">Wakil Ketua,</td>
+        <td style="border:none; width:34%; text-align:center">Bendahara,</td>
+      </tr>
+      <tr>
+        <td style="border:none; height:60px"></td>
+        <td style="border:none"></td>
+        <td style="border:none"></td>
+      </tr>
+      <tr>
+        <td style="border:none; text-align:center; border-top:1px solid #222">( .............................. )</td>
+        <td style="border:none; text-align:center; border-top:1px solid #222">( .............................. )</td>
+        <td style="border:none; text-align:center; border-top:1px solid #222">( .............................. )</td>
+      </tr>
+    </table>`;
+}
+
+/**
+ * City for the "Kota, tanggal" line on RAT documents. Tenant addresses follow
+ * "Jalan ..., Kota, Provinsi" (see prisma/seed.ts), so the city is the second
+ * comma-separated segment, not the last (which is the province).
+ */
+function cityFromAddress(address: string): string {
+  const parts = address
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return parts[1] ?? parts[0] ?? address;
+}
+
 /** Shared page shell — header (logo+nama+alamat) and table styling, reused by
- * every report so PDFs look consistent and are print-ready for RAT handouts. */
-function wrapPdf(tenant: PdfTenant, title: string, subtitle: string, bodyHtml: string): string {
+ * every report so PDFs look consistent and are print-ready for RAT handouts.
+ * `signature` renders the Ketua/Wakil Ketua/Bendahara block used by RAT-family
+ * documents (Laporan RAT, Pembagian SHU); omitted for regulatory statements
+ * that aren't RAT handouts (Neraca, Arus Kas, Laporan Hasil Usaha). */
+function wrapPdf(
+  tenant: PdfTenant,
+  title: string,
+  subtitle: string,
+  bodyHtml: string,
+  signature?: { asOfDate: string | undefined }
+): string {
   const headerHtml = `
     <div style="display:flex; align-items:center; margin-bottom:16px; border-bottom:2px solid #1e3a5f; padding-bottom:12px">
       ${tenant.logoUrl ? `<img src="${tenant.logoUrl}" style="height:60px; margin-right:16px"/>` : ""}
@@ -49,6 +110,7 @@ ${headerHtml}
 <h2 style="text-align:center; color:#1e3a5f">${title}</h2>
 <p style="text-align:center; color:#555">${subtitle}</p>
 ${bodyHtml}
+${signature ? signatureBlockHtml(cityFromAddress(tenant.address), signature.asOfDate) : ""}
 </body></html>`;
 }
 
@@ -138,7 +200,9 @@ ${data.simpanan.map((s) => `<tr><td>${s.jenis}</td><td>${s.jumlahRekening}</td><
 ${data.kolDistribution.map((k) => `<tr><td>${k.category}</td><td>${k.count}</td><td>${k.percentage}</td></tr>`).join("")}
 </table>`;
 
-  return renderToPdf(wrapPdf(tenant, "Laporan RAT (Rapat Anggota Tahunan)", `Tahun ${year}`, body));
+  return renderToPdf(
+    wrapPdf(tenant, "Laporan RAT (Rapat Anggota Tahunan)", `Tahun ${year}`, body, { asOfDate: `${year}-12-31` })
+  );
 }
 
 // ── Regulatory (Permenkop UKM No. 2/2024) ────────────────────────────────────
@@ -238,15 +302,15 @@ export async function generateShuDistributionPdf(tenantId: string, from: Date, t
     </table>
     <h3>Pembagian per Anggota</h3>
     <table>
-      <tr><th>ID Anggota</th><th>Nama</th><th>Rata-rata Simpanan</th><th>Bunga Dibayar</th><th>Jasa Simpanan</th><th>Jasa Pinjaman</th><th>Total SHU</th></tr>
+      <tr><th>No</th><th>No Anggota</th><th>Nama</th><th>SHU Pokok/SW</th><th>SHU Sukarela</th><th>SHU Pinjaman</th><th>Total SHU</th></tr>
       ${data.anggota
         .map(
           (a) =>
-            `<tr><td>${a.memberCode}</td><td>${a.fullName}</td><td>${rp(a.avgSavingsBalance)}</td><td>${rp(a.interestPaid)}</td><td>${rp(a.jasaSimpanan)}</td><td>${rp(a.jasaPinjaman)}</td><td>${rp(a.totalShu)}</td></tr>`
+            `<tr><td>${a.no}</td><td>${a.memberCode}</td><td>${a.fullName}</td><td>${rp(a.shuPokokWajib)}</td><td>${rp(a.shuSukarela)}</td><td>${rp(a.jasaPinjaman)}</td><td>${rp(a.totalShu)}</td></tr>`
         )
         .join("") || '<tr><td colspan="7">Tidak ada anggota aktif</td></tr>'}
       <tr class="total"><td colspan="6">Total Dibagikan ke Anggota</td><td>${rp(data.totalDibagikanKeAnggota ?? "0")}</td></tr>
     </table>`;
 
-  return renderToPdf(wrapPdf(tenant, "Daftar Pembagian SHU per Anggota", subtitle, body));
+  return renderToPdf(wrapPdf(tenant, "Daftar Pembagian SHU per Anggota", subtitle, body, { asOfDate: data.periode.to }));
 }
