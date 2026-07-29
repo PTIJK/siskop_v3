@@ -5,6 +5,7 @@ import { SavingConfigsTab } from "./SavingConfigsTab";
 import { LoanConfigsTab } from "./LoanConfigsTab";
 import { UnitsTab } from "./UnitsTab";
 import { RolesTab } from "./RolesTab";
+import { UsersTab } from "./UsersTab";
 import { AccountsTab } from "./AccountsTab";
 import { AccountMappingsTab } from "./AccountMappingsTab";
 import { ShuConfigTab } from "./ShuConfigTab";
@@ -17,6 +18,7 @@ export function ConfigPage() {
     { value: "loans", label: "Pinjaman", show: can("config", "read") || can("loans", "read"), content: <LoanConfigsTab /> },
     { value: "units", label: "Unit Koperasi", show: can("config", "read"), content: <UnitsTab /> },
     { value: "roles", label: "Role & Izin", show: can("roles", "read"), content: <RolesTab /> },
+    { value: "users", label: "Pengguna", show: can("users", "read"), content: <UsersTab /> },
     { value: "accounts", label: "Chart of Accounts", show: can("accounting", "read"), content: <AccountsTab /> },
     { value: "mappings", label: "Pemetaan Akun", show: can("accounting", "read"), content: <AccountMappingsTab /> },
     { value: "shu", label: "Konfigurasi SHU", show: can("accounting", "read"), content: <ShuConfigTab /> }

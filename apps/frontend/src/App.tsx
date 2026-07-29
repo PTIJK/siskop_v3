@@ -14,6 +14,7 @@ import { NewLoanPage } from "@/pages/loans/NewLoanPage";
 import { LoanDetailPage } from "@/pages/loans/LoanDetailPage";
 import { OverduePage } from "@/pages/loans/OverduePage";
 import { ConfigPage } from "@/pages/config/ConfigPage";
+import { ProfilePage } from "@/pages/profile/ProfilePage";
 import { ReportsPage } from "@/pages/reports/ReportsPage";
 import { RegulatoryReportsPage } from "@/pages/reports/RegulatoryReportsPage";
 
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="/reports/regulatory" element={<RegulatoryReportsPage />} />
 
             <Route path="/config" element={<ConfigPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

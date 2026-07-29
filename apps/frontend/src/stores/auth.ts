@@ -20,6 +20,7 @@ interface AuthState {
   user: User | null;
   accessToken: string | null;
   setSession: (session: LoginResponse) => void;
+  updateUser: (user: User) => void;
   clear: () => void;
 }
 
@@ -33,6 +34,13 @@ export const useAuth = create<AuthState>((set) => ({
     localStorage.setItem(REFRESH_KEY, session.refreshToken);
     localStorage.setItem(USER_KEY, JSON.stringify(session.user));
     set({ user: session.user, accessToken: session.accessToken });
+  },
+
+  // Profile self-edit (name/email) doesn't mint new tokens, so only the
+  // cached user record needs updating — see pages/profile/ProfilePage.
+  updateUser: (user) => {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    set({ user });
   },
 
   clear: () => {

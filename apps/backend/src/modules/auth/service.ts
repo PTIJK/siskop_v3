@@ -1,20 +1,20 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
-import type { Prisma, User as DbUser, Role as DbRole } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import {
   CooperativeType,
   type AuthClaims,
   type LoginResponse,
   type Permissions,
   type RefreshResponse,
-  type User,
-  type UserRole
+  type User
 } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { provisionTenantInTx, slugSchema } from "../tenants/provision.js";
 import { signAccessToken } from "../../middleware/auth.js";
 import { unauthorized, conflict, validationError } from "../../lib/errors.js";
+import { deriveUserRole, toPublicUser, type UserWithRole } from "../../lib/user-mapper.js";
 
 const BCRYPT_ROUNDS = 10;
 
@@ -32,44 +32,11 @@ const registerSchema = z.object({
 
 export type RegisterTenantInput = z.input<typeof registerSchema>;
 
-type UserWithRole = DbUser & { role: DbRole };
-
 /** Secrets are never defaulted: signing with "" would produce forgeable tokens. */
 function secret(name: "JWT_SECRET" | "JWT_REFRESH_SECRET"): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is not configured`);
   return value;
-}
-
-/**
- * `AuthClaims.role` (coarse, fixed) is derived here, not stored — the tenant's
- * actual RBAC role (`roleId`/`permissions`, seeded per-tenant with names like
- * "Super Admin"/"Teller") is a separate, per-tenant-customizable axis. Members
- * never log in (no `Member.userId`), so "member" is never produced here.
- */
-function deriveUserRole(user: UserWithRole): UserRole {
-  if (user.isPlatformAdmin) return "super_admin";
-  if (user.role.name === "Teller" || user.role.name === "Viewer") return "accountant";
-  return "tenant_admin";
-}
-
-function toPublicUser(user: UserWithRole): User {
-  // Built field-by-field rather than by deleting passwordHash, so a column
-  // added to the model later cannot leak by default.
-  return {
-    id: user.id,
-    tenantId: user.tenantId,
-    email: user.email,
-    name: user.name,
-    role: deriveUserRole(user),
-    roleId: user.roleId,
-    roleName: user.role.name,
-    permissions: user.role.permissions as unknown as Permissions,
-    isActive: user.isActive,
-    isPlatformAdmin: user.isPlatformAdmin,
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString()
-  };
 }
 
 /**
@@ -231,4 +198,42 @@ export async function getMe(userId: string, tenantId: string): Promise<User | nu
     include: { role: true }
   });
   return user ? toPublicUser(user) : null;
+}
+
+/** Self-service profile edit — name/email only; role/isActive are admin-only (see modules/users). */
+export async function updateProfile(
+  userId: string,
+  tenantId: string,
+  data: { name: string; email: string }
+): Promise<User> {
+  const user = await db.user.findFirst({ where: { id: userId, tenantId } });
+  if (!user) throw unauthorized();
+
+  if (data.email !== user.email) {
+    const duplicate = await db.user.findUnique({ where: { tenantId_email: { tenantId, email: data.email } } });
+    if (duplicate) throw conflict(`Email ${data.email} sudah digunakan`);
+  }
+
+  const updated = await db.user.update({
+    where: { id: userId },
+    data: { name: data.name, email: data.email },
+    include: { role: true }
+  });
+  return toPublicUser(updated);
+}
+
+export async function changePassword(
+  userId: string,
+  tenantId: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const user = await db.user.findFirst({ where: { id: userId, tenantId } });
+  if (!user) throw unauthorized();
+
+  const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!ok) throw unauthorized("Password saat ini salah");
+
+  const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+  await db.user.update({ where: { id: userId }, data: { passwordHash } });
 }

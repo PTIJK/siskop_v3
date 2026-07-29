@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { unauthorized } from "../../lib/errors.js";
 import { slugFromHost } from "./tenant-host.js";
-import { getMe, login, refreshSession, registerTenant } from "./service.js";
+import { changePassword, getMe, login, refreshSession, registerTenant, updateProfile } from "./service.js";
 
 const loginBody = z.object({
   email: z.string().email(),
@@ -11,6 +11,16 @@ const loginBody = z.object({
 });
 
 const refreshBody = z.object({ refreshToken: z.string().min(1) });
+
+const updateProfileBody = z.object({
+  name: z.string().min(1, "Nama wajib diisi"),
+  email: z.string().email("Email tidak valid")
+});
+
+const changePasswordBody = z.object({
+  currentPassword: z.string().min(1, "Password saat ini wajib diisi"),
+  newPassword: z.string().min(8, "Password baru minimal 8 karakter")
+});
 
 /** Forwards rejected promises to the error handler; Express 4 will not. */
 function handle(fn: (req: Request, res: Response) => Promise<void>) {
@@ -61,6 +71,28 @@ export function authRoutes(): Router {
       if (!user) throw unauthorized();
 
       res.json({ success: true, data: user, meta: res.locals.meta });
+    })
+  );
+
+  router.put(
+    "/me",
+    requireAuth,
+    handle(async (req, res) => {
+      const auth = authClaims(req);
+      const data = updateProfileBody.parse(req.body);
+      const user = await updateProfile(auth.userId, auth.tenantId, data);
+      res.json({ success: true, data: user, meta: res.locals.meta });
+    })
+  );
+
+  router.put(
+    "/me/password",
+    requireAuth,
+    handle(async (req, res) => {
+      const auth = authClaims(req);
+      const { currentPassword, newPassword } = changePasswordBody.parse(req.body);
+      await changePassword(auth.userId, auth.tenantId, currentPassword, newPassword);
+      res.json({ success: true, data: { changed: true }, meta: res.locals.meta });
     })
   );
 

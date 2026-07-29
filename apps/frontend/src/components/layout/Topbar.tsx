@@ -18,7 +18,8 @@ const ROUTE_LABELS: Record<string, string> = {
   "/savings/new": "Buka Rekening Simpanan",
   "/loans": "Pinjaman",
   "/loans/new": "Ajukan Pinjaman",
-  "/loans/overdue": "Anggota Menunggak"
+  "/loans/overdue": "Anggota Menunggak",
+  "/profile": "Profil Saya"
 };
 
 function getInitials(name: string): string {
@@ -65,7 +66,7 @@ export function Topbar() {
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem className="flex items-center gap-2 text-sm">
+            <DropdownMenuItem className="flex items-center gap-2 text-sm" onClick={() => navigate("/profile")}>
               <User className="h-4 w-4" />
               <div>
                 <p className="font-medium">{user?.name}</p>

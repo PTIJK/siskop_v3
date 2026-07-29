@@ -58,6 +58,32 @@ export interface RefreshRequest {
   refreshToken: string;
 }
 
+/** Config > Pengguna: creates a tenant staff login. Members never appear here — see Member. */
+export interface CreateUserRequest {
+  name: string;
+  email: string;
+  password: string;
+  roleId: string;
+}
+
+export type UpdateUserRequest = Partial<{
+  name: string;
+  email: string;
+  roleId: string;
+  isActive: boolean;
+}>;
+
+/** Self-service profile edit — no password/role/isActive here, see ChangePasswordRequest. */
+export interface UpdateProfileRequest {
+  name: string;
+  email: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export interface RefreshResponse {
   accessToken: string;
   refreshToken: string;
