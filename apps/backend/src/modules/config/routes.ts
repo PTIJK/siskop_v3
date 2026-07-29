@@ -1,16 +1,19 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
+import { requireAccountingEntitlement, requireWhitelabelEntitlement } from "../../middleware/entitlement.js";
 import { requireParam } from "../../lib/http.js";
 import {
   createAccountSchema,
   createRoleSchema,
   createUnitSchema,
   updateAccountSchema,
+  updateModalDisetorSchema,
   updateRoleSchema,
   updateUnitSchema,
   upsertAccountMappingSchema,
-  upsertShuDistributionConfigSchema
+  upsertShuDistributionConfigSchema,
+  upsertWhitelabelConfigSchema
 } from "./schema.js";
 import {
   createAccount,
@@ -18,16 +21,20 @@ import {
   createUnit,
   deleteAccountMapping,
   deleteRole,
+  getModalDisetor,
   getShuDistributionConfig,
+  getWhitelabelConfig,
   listAccountMappings,
   listAccounts,
   listRoles,
   listUnits,
   updateAccount,
+  updateModalDisetor,
   updateRole,
   updateUnit,
   upsertAccountMapping,
-  upsertShuDistributionConfig
+  upsertShuDistributionConfig,
+  upsertWhitelabelConfig
 } from "./service.js";
 
 /** Forwards rejected promises to the error handler; Express 4 will not. */
@@ -116,6 +123,7 @@ export function configRoutes(): Router {
 
   router.get(
     "/accounts",
+    requireAccountingEntitlement,
     requirePermission("accounting", "read"),
     handle(async (req, res) => {
       const data = await listAccounts(authClaims(req).tenantId);
@@ -125,6 +133,7 @@ export function configRoutes(): Router {
 
   router.post(
     "/accounts",
+    requireAccountingEntitlement,
     requirePermission("accounting", "create"),
     handle(async (req, res) => {
       const data = createAccountSchema.parse(req.body);
@@ -135,6 +144,7 @@ export function configRoutes(): Router {
 
   router.put(
     "/accounts/:id",
+    requireAccountingEntitlement,
     requirePermission("accounting", "update"),
     handle(async (req, res) => {
       const data = updateAccountSchema.parse(req.body);
@@ -147,6 +157,7 @@ export function configRoutes(): Router {
 
   router.get(
     "/account-mappings",
+    requireAccountingEntitlement,
     requirePermission("accounting", "read"),
     handle(async (req, res) => {
       const data = await listAccountMappings(authClaims(req).tenantId);
@@ -156,6 +167,7 @@ export function configRoutes(): Router {
 
   router.post(
     "/account-mappings",
+    requireAccountingEntitlement,
     requirePermission("accounting", "create"),
     handle(async (req, res) => {
       const data = upsertAccountMappingSchema.parse(req.body);
@@ -166,6 +178,7 @@ export function configRoutes(): Router {
 
   router.delete(
     "/account-mappings/:id",
+    requireAccountingEntitlement,
     requirePermission("accounting", "delete"),
     handle(async (req, res) => {
       await deleteAccountMapping(authClaims(req).tenantId, requireParam(req, "id"));
@@ -177,6 +190,7 @@ export function configRoutes(): Router {
 
   router.get(
     "/shu-distribution",
+    requireAccountingEntitlement,
     requirePermission("accounting", "read"),
     handle(async (req, res) => {
       const data = await getShuDistributionConfig(authClaims(req).tenantId);
@@ -186,11 +200,56 @@ export function configRoutes(): Router {
 
   router.put(
     "/shu-distribution",
+    requireAccountingEntitlement,
     requirePermission("accounting", "update"),
     handle(async (req, res) => {
       const data = upsertShuDistributionConfigSchema.parse(req.body);
       const config = await upsertShuDistributionConfig(authClaims(req).tenantId, data);
       res.json({ success: true, data: config, meta: res.locals.meta });
+    })
+  );
+
+  // ── Whitelabel ───────────────────────────────────────────────────────────────
+  // Read is ungated (frozen values stay visible); writes require whitelabelEnabled.
+
+  router.get(
+    "/whitelabel",
+    requirePermission("config", "read"),
+    handle(async (req, res) => {
+      const data = await getWhitelabelConfig(authClaims(req).tenantId);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.put(
+    "/whitelabel",
+    requirePermission("config", "update"),
+    requireWhitelabelEntitlement,
+    handle(async (req, res) => {
+      const data = upsertWhitelabelConfigSchema.parse(req.body);
+      const config = await upsertWhitelabelConfig(authClaims(req).tenantId, data);
+      res.json({ success: true, data: config, meta: res.locals.meta });
+    })
+  );
+
+  // ── Modal Disetor ────────────────────────────────────────────────────────────
+
+  router.get(
+    "/modal-disetor",
+    requirePermission("config", "read"),
+    handle(async (req, res) => {
+      const data = await getModalDisetor(authClaims(req).tenantId);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.put(
+    "/modal-disetor",
+    requirePermission("config", "update"),
+    handle(async (req, res) => {
+      const data = updateModalDisetorSchema.parse(req.body);
+      const result = await updateModalDisetor(authClaims(req).tenantId, data);
+      res.json({ success: true, data: result, meta: res.locals.meta });
     })
   );
 

@@ -53,9 +53,49 @@ export const DEFAULT_REGISTRATION: RegisterTenantInput = {
   firstUnit: { type: "KSP", name: "Simpan Pinjam" }
 };
 
-/** Registers a fresh tenant (+ unit, 4 seed roles, Super Admin user) and logs the admin in. */
-export async function setupTenant(overrides: Partial<RegisterTenantInput> = {}) {
-  return registerTenant({ ...DEFAULT_REGISTRATION, ...overrides });
+const TEST_PACKAGE_ID = "pkg_test_full";
+
+/**
+ * Upserted once per call (stable id), never deleted by the per-test
+ * `tenant.deleteMany` reset — SubscriptionPackage has no tenantId of its own.
+ */
+async function ensureFullPackage(): Promise<string> {
+  const pkg = await db.subscriptionPackage.upsert({
+    where: { id: TEST_PACKAGE_ID },
+    update: {},
+    create: {
+      id: TEST_PACKAGE_ID,
+      name: "Paket Lengkap (Test)",
+      price: 0,
+      modules: ["accounting"],
+      maxUsers: 100,
+      maxMembers: 10_000,
+      maxSavingConfigs: null,
+      whitelabelEnabled: true,
+      isActive: true
+    }
+  });
+  return pkg.id;
+}
+
+/**
+ * Registers a fresh tenant (+ unit, 4 seed roles, Super Admin user) and logs
+ * the admin in. Defaults to a fully-entitled package (accounting + whitelabel)
+ * — mirroring prisma/seed.ts's demo tenant, the primary fixture most tests are
+ * written against — so tests exercising accounting/whitelabel business logic
+ * don't all need to grant entitlement themselves. Pass `{ entitled: false }`
+ * to get a package-less tenant instead, mirroring seed.ts's Barokah tenant,
+ * for tests that specifically assert the entitlement gate itself.
+ */
+export async function setupTenant(
+  overrides: Partial<RegisterTenantInput> = {},
+  opts: { entitled?: boolean } = {}
+) {
+  const session = await registerTenant({ ...DEFAULT_REGISTRATION, ...overrides });
+  if (opts.entitled ?? true) {
+    await db.tenant.update({ where: { id: session.user.tenantId }, data: { packageId: await ensureFullPackage() } });
+  }
+  return session;
 }
 
 /** Creates a staff user under one of the tenant's seeded roles and logs them in. */
@@ -76,4 +116,23 @@ export async function createStaffSession(
     }
   });
   return login(slug, email, "rahasia123");
+}
+
+/** Registers a fresh tenant, then attaches a platform-admin user to it and logs them in. */
+export async function createPlatformAdminSession(email = "platform-admin@demo.test") {
+  const tenant = await setupTenant();
+  const superAdminRole = await db.role.findFirstOrThrow({
+    where: { tenantId: tenant.user.tenantId, name: "Super Admin" }
+  });
+  await db.user.create({
+    data: {
+      tenantId: tenant.user.tenantId,
+      roleId: superAdminRole.id,
+      email,
+      name: "Platform Admin",
+      passwordHash: await bcrypt.hash("rahasia123", 10),
+      isPlatformAdmin: true
+    }
+  });
+  return login("demo", email, "rahasia123");
 }

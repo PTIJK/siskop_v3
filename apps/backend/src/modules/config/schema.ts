@@ -100,6 +100,26 @@ export const upsertShuDistributionConfigSchema = z
     { message: "Total persentase alokasi SHU harus 100%" }
   );
 
+// ── Whitelabel ───────────────────────────────────────────────────────────────
+
+export const upsertWhitelabelConfigSchema = z.object({
+  customDomain: z.string().min(1).nullable().optional(),
+  primaryColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Warna harus format hex, contoh #1D4ED8")
+    .nullable()
+    .optional(),
+  hideBranding: z.boolean().optional(),
+  emailSenderName: z.string().min(1).nullable().optional(),
+  emailSenderAddress: z.string().email("Email tidak valid").nullable().optional()
+});
+
+// ── Modal Disetor ────────────────────────────────────────────────────────────
+
+export const updateModalDisetorSchema = z.object({
+  modalDisetor: z.coerce.number().nonnegative("Modal disetor tidak boleh negatif").nullable()
+});
+
 export type CreateUnitInput = z.infer<typeof createUnitSchema>;
 export type UpdateUnitInput = z.infer<typeof updateUnitSchema>;
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
@@ -108,3 +128,5 @@ export type CreateAccountInput = z.infer<typeof createAccountSchema>;
 export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
 export type UpsertAccountMappingInput = z.infer<typeof upsertAccountMappingSchema>;
 export type UpsertShuDistributionConfigInput = z.infer<typeof upsertShuDistributionConfigSchema>;
+export type UpsertWhitelabelConfigInput = z.infer<typeof upsertWhitelabelConfigSchema>;
+export type UpdateModalDisetorInput = z.infer<typeof updateModalDisetorSchema>;

@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { DataTable, type ColumnDef } from "@/components/shared/DataTable";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FormError } from "@/components/shared/FormError";
+import { EntitlementNotice } from "@/components/shared/EntitlementNotice";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -43,9 +44,10 @@ export function AccountMappingsTab() {
   const [apiError, setApiError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<AccountMapping | null>(null);
 
-  const { data, isPending, refetch } = useQuery({
+  const { data, isPending, error, refetch } = useQuery({
     queryKey: ["config", "account-mappings"],
-    queryFn: () => apiFetch<AccountMapping[]>("/config/account-mappings")
+    queryFn: () => apiFetch<AccountMapping[]>("/config/account-mappings"),
+    retry: (failureCount, err) => err instanceof ApiRequestError && err.code === "FEATURE_NOT_ENTITLED" ? false : failureCount < 3
   });
   const { data: accounts } = useQuery({
     queryKey: ["config", "accounts"],
@@ -124,6 +126,10 @@ export function AccountMappingsTab() {
         )
     }
   ];
+
+  if (error instanceof ApiRequestError && error.code === "FEATURE_NOT_ENTITLED") {
+    return <EntitlementNotice message={error.message} />;
+  }
 
   return (
     <div className="space-y-4">

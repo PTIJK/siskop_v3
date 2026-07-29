@@ -5,6 +5,7 @@ import { apiFetch, apiPut, ApiRequestError } from "@/api/client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { FormError } from "@/components/shared/FormError";
+import { EntitlementNotice } from "@/components/shared/EntitlementNotice";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,9 +34,10 @@ export function ShuConfigTab() {
   const [apiError, setApiError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, error } = useQuery({
     queryKey: ["config", "shu-distribution"],
-    queryFn: () => apiFetch<ShuDistributionConfig | null>("/config/shu-distribution")
+    queryFn: () => apiFetch<ShuDistributionConfig | null>("/config/shu-distribution"),
+    retry: (failureCount, err) => err instanceof ApiRequestError && err.code === "FEATURE_NOT_ENTITLED" ? false : failureCount < 3
   });
 
   useEffect(() => {
@@ -70,6 +72,10 @@ export function ShuConfigTab() {
   };
 
   if (isPending) return <PageLoading />;
+
+  if (error instanceof ApiRequestError && error.code === "FEATURE_NOT_ENTITLED") {
+    return <EntitlementNotice message={error.message} />;
+  }
 
   return (
     <Card className="max-w-xl">

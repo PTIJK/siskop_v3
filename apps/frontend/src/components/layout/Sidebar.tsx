@@ -1,6 +1,21 @@
 import { NavLink } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
-import { LayoutDashboard, Users, PiggyBank, CreditCard, FileText, AlertTriangle, Building2, Settings, X, Menu } from "lucide-react";
+import { useAuth } from "@/stores/auth";
+import {
+  LayoutDashboard,
+  Users,
+  PiggyBank,
+  CreditCard,
+  FileText,
+  AlertTriangle,
+  Building2,
+  Landmark,
+  Settings,
+  X,
+  Menu,
+  Package as PackageIcon,
+  ShieldCheck
+} from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { PermissionAction, PermissionModule } from "@siskop/types";
@@ -112,6 +127,7 @@ function NavItemComponent({ item, onClose }: { item: NavItemWithChildren; onClos
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { can } = usePermissions();
+  const isPlatformAdmin = useAuth((s) => s.user?.role === "super_admin");
 
   return (
     <div className="flex h-full flex-col bg-slate-900">
@@ -132,15 +148,53 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {NAV_ITEMS.map((item) => {
-          if (!can(item.module, item.action)) return null;
-          return <NavItemComponent key={item.href} item={item} onClose={onClose} />;
-        })}
-        {(can("config", "read") || can("roles", "read") || can("accounting", "read")) && (
-          <NavItemComponent
-            item={{ label: "Konfigurasi", href: "/config", icon: Settings, module: "config", action: "read" }}
-            onClose={onClose}
-          />
+        {/* Platform admins run the SaaS platform, not any single tenant's
+            cooperative — the tenant business modules below (Dashboard through
+            Konfigurasi) come from the tenant role they're attached to purely to
+            satisfy User's roleId FK (see modules/platform/service.ts), not from
+            any intent for them to operate that tenant. Hide those modules
+            entirely rather than exposing them because of an incidental role. */}
+        {!isPlatformAdmin && (
+          <>
+            {NAV_ITEMS.map((item) => {
+              if (!can(item.module, item.action)) return null;
+              return <NavItemComponent key={item.href} item={item} onClose={onClose} />;
+            })}
+            {(can("config", "read") || can("roles", "read") || can("accounting", "read")) && (
+              <NavItemComponent
+                item={{ label: "Konfigurasi", href: "/config", icon: Settings, module: "config", action: "read" }}
+                onClose={onClose}
+              />
+            )}
+          </>
+        )}
+
+        {isPlatformAdmin && (
+          <>
+            <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Platform Admin
+            </p>
+            {[
+              { href: "/platform/tenants", icon: Landmark, label: "Koperasi" },
+              { href: "/platform/packages", icon: PackageIcon, label: "Paket Langganan" },
+              { href: "/platform/admins", icon: ShieldCheck, label: "Admin Platform" }
+            ].map((item) => (
+              <NavLink
+                key={item.href}
+                to={item.href}
+                onClick={onClose}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                    isActive ? "border-l-2 border-primary bg-slate-700 text-white" : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                  )
+                }
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+                {item.label}
+              </NavLink>
+            ))}
+          </>
         )}
       </nav>
     </div>

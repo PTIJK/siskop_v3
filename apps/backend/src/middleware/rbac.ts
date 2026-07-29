@@ -22,3 +22,16 @@ export function requirePermission(module: PermissionModule, action: PermissionAc
     next();
   };
 }
+
+/**
+ * Gates cross-tenant platform routes (modules/platform) on the coarse
+ * `AuthClaims.role` claim, not the fine-grained `Permissions` blob —
+ * `requirePermission` checks permissions scoped to the caller's own tenant,
+ * which is the wrong axis for an operation that reads/writes *other* tenants.
+ */
+export function requirePlatformAdmin(req: Request, _res: Response, next: NextFunction): void {
+  const auth = req.auth;
+  if (!auth) throw unauthorized();
+  if (auth.role !== "super_admin") throw forbidden("Platform admin access required");
+  next();
+}

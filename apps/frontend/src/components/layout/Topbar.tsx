@@ -61,7 +61,12 @@ export function Topbar() {
             </Avatar>
             <div className="hidden flex-col items-start sm:flex">
               <span className="text-xs font-medium">{user?.name ?? "Pengguna"}</span>
-              <span className="text-xs text-muted-foreground">{user?.roleName ?? ""}</span>
+              {/* isPlatformAdmin users borrow a real tenant's role (roleName) purely to
+                  satisfy User's roleId FK — showing it here would misleadingly imply
+                  they administer that one tenant. */}
+              <span className="text-xs text-muted-foreground">
+                {user?.isPlatformAdmin ? "Platform Admin" : (user?.roleName ?? "")}
+              </span>
             </div>
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </DropdownMenuTrigger>

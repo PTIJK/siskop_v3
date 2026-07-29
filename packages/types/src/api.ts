@@ -18,6 +18,9 @@ export const ErrorCode = {
   LOAN_NOT_ACTIVE: "LOAN_NOT_ACTIVE",
   INVALID_FILE_TYPE: "INVALID_FILE_TYPE",
   JOURNAL_ENTRY_UNBALANCED: "JOURNAL_ENTRY_UNBALANCED",
+  // Phase-2 SaaS packaging — a tenant's SubscriptionPackage gates these.
+  FEATURE_NOT_ENTITLED: "FEATURE_NOT_ENTITLED",
+  PACKAGE_LIMIT_EXCEEDED: "PACKAGE_LIMIT_EXCEEDED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

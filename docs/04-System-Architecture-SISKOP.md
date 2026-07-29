@@ -1,72 +1,83 @@
 # 04 — System Architecture: SISKOP
 
-Status: written against the codebase as of 2026-07-28 (commit `93e0f1b`). Fills the
-`04-System-Architecture-SISKOP.md` gap noted in `SETUP-VERIFICATION.md` "Known gaps". Sections are
-marked **Current** (what runs today) or **Target** (documented direction, not yet built).
+Status: updated **2026-07-29** against the current codebase. Sections are marked **Current** (what
+runs today) or **Target** (documented direction, not yet built). Supersedes the 2026-07-28 version
+of this document, which described a backend with only `auth`/`tenants` modules wired — nine more
+modules have shipped since (Members, Savings, Loans, Dashboard, Config, Users, Reports, Platform,
+plus a cross-cutting entitlement layer).
 
 ## 1. High-level overview (Current)
 
 ```mermaid
 graph TB
     subgraph Client
-        Browser["Browser<br/>demo.localhost:3000"]
+        Browser["Browser<br/>demo.localhost:3000 / *.localhost:3000"]
     end
 
     subgraph "apps/frontend — Vite dev server :3000"
         FE["React 18 SPA<br/>React Router + TanStack Query + Zustand"]
         Proxy["/api/* proxy<br/>changeOrigin: false"]
+        Guard["AppLayout route guard<br/>confines isPlatformAdmin to /platform/*"]
     end
 
     subgraph "apps/backend — Express :3001"
         MW["helmet, CORS, JSON body parser,<br/>requestId/timestamp meta"]
-        Auth["requireAuth middleware<br/>(JWT verify)"]
-        Routes["/api/auth/*<br/>(only module wired in so far)"]
+        Auth["requireAuth<br/>(JWT verify)"]
+        RBAC["requirePermission / requirePlatformAdmin<br/>(fine-grained + coarse RBAC)"]
+        Ent["requireAccountingEntitlement /<br/>requireWhitelabelEntitlement<br/>(SubscriptionPackage check)"]
+        Routes["auth · members · savings · loans ·<br/>dashboard · config · users · reports · platform"]
         Err["Error handler<br/>Zod/AppError → ApiResponse"]
     end
 
     subgraph "Data layer"
-        Prisma["Prisma Client"]
+        Prisma["Prisma Client — 22 models"]
         PG[("PostgreSQL 15<br/>host :5433 → container :5432")]
     end
 
     Browser --> FE
+    FE --> Guard
     FE --> Proxy
     Proxy -->|"Host header passed through unrewritten"| MW
     MW --> Auth
-    Auth --> Routes
+    Auth --> RBAC
+    RBAC --> Ent
+    Ent --> Routes
     Routes --> Err
     Routes --> Prisma
     Prisma --> PG
 ```
 
 Both apps run from one monorepo via Turborepo + pnpm workspaces (`pnpm run dev` runs both
-concurrently: backend on `3001`, frontend on `3000`).
+concurrently: backend on `3001`, frontend on `3000`). `Ent` (entitlement) only sits in the request
+path for the specific routes that need it (Chart of Accounts, Account Mappings, SHU config,
+Whitelabel writes, and every `/reports/regulatory/*` route) — most routes go straight from `RBAC`
+to `Routes`.
 
 ## 2. Monorepo layout (Current)
 
 | Path | Contents |
 |---|---|
-| `apps/backend` | Express API, Prisma schema + migrations, Vitest tests |
-| `apps/frontend` | React + Vite + Tailwind SPA |
-| `packages/types` | `@siskop/types` — shared `ApiResponse`/`ErrorCode`, domain types (`Tenant`, `User`, `Member`, `CooperativeUnit`), consumed by both apps so a wire-format change is a single-package edit |
+| `apps/backend` | Express API, Prisma schema + 2 migrations, Vitest tests (16 files, 209 tests) |
+| `apps/frontend` | React + Vite + Tailwind SPA — shadcn/ui component kit, 9 page directories |
+| `packages/types` | `@siskop/types` — shared `ApiResponse`/`ErrorCode`, and one file per domain area (`tenant`, `unit`, `user`, `role`, `member`, `savings`, `loan`, `accounting`, `reports`, `dashboard`, `platform`), consumed by both apps so a wire-format change is a single-package edit |
 | `packages/eslint-config` | Shared ESLint flat config |
 | `docs/claude-integration` | Per-role (PM/Engineer/QA/Ops) Claude instructions |
 | `docs/` | This document set |
 
 Build orchestration is Turborepo (`turbo.json`): `build`/`typecheck`/`test` depend on `^build`
-(a package's dependencies build first — `@siskop/types` before either app); `dev` is
-non-cached/persistent; `lint` has no outputs to cache against.
+(`@siskop/types` builds before either app); `dev` is non-cached/persistent; `lint` has no outputs to
+cache against. Running `pnpm --filter @siskop/backend test` directly (bypassing `turbo run test`)
+skips that dependency ordering — if `@siskop/types` source changed but its `dist/` wasn't rebuilt
+first, a concurrent `pnpm run typecheck` racing the same test run can produce spurious failures
+(observed 2026-07-29; not a bug in the tests, a build-ordering hazard of invoking the filtered
+script directly instead of through `turbo`).
 
 `packages/shared`, named in the original scaffolding plan's file-structure diagram, was never
-created and nothing imports it — deliberately deferred (`SETUP-VERIFICATION.md`).
+created and nothing imports it — still deliberately deferred.
 
 ## 3. Backend architecture (Current)
 
 ### 3.1 Module layout
-
-Target convention per `docs/claude-integration/ENGINEER-INSTRUCTIONS.md`: one directory per
-module under `apps/backend/src/modules/<module>/`, each with `route`, `service`, `repository`,
-`schema` files. What actually exists today is smaller than that convention describes:
 
 ```
 apps/backend/src/
@@ -75,144 +86,210 @@ apps/backend/src/
   lib/
     db.ts                   # Prisma client singleton
     errors.ts               # AppError + ErrorCode → HTTP status map
+    http.ts                 # requireParam() and other route helpers
+    user-mapper.ts           # deriveUserRole(), toPublicUser()
+    units.ts                # server-side unit resolution (never client-supplied)
+    journal.ts              # double-entry posting engine
+    kol.ts                  # KOL (kolektibilitas) reclassification
+    loan-calc.ts            # amortization / margin calculation
+    id-generator.ts
   middleware/
     auth.ts                 # requireAuth, signAccessToken/verifyAccessToken, assertUnitAccess
+    rbac.ts                 # requirePermission(module, action), requirePlatformAdmin
+    entitlement.ts           # requireAccountingEntitlement, requireWhitelabelEntitlement
   modules/
-    auth/
-      routes.ts             # POST /register, /login, /refresh, GET /me
-      service.ts             # business logic: registerTenant, login, refreshSession
-      tenant-host.ts         # slugFromHost() — Host header → tenant slug
+    auth/                   # register, login, refresh, /me, self-service profile/password
     tenants/
-      provision.ts           # provisionTenant() — lower-level tenant+units creation
+      provision.ts           # provisionTenantInTx() — shared by self-service and platform-admin creation
+    members/                 # CRUD + KTP upload
+    savings/                 # configs (products) + accounts + deposit/withdraw
+    loans/                   # configs (products) + issuance + repayment + KOL
+    dashboard/                # tenant summary
+    config/                  # units, roles, users(*), accounts, account-mappings, shu-distribution, whitelabel, modal-disetor
+    users/                   # tenant-scoped staff CRUD (distinct from config/service.ts's user listing — see note below)
+    reports/                  # financial/RAT + full regulatory suite + PDF export
+    platform/                 # cross-tenant: tenants, subscription packages, platform-admin users
 ```
 
-There is no standalone `repository` layer yet — `service.ts` calls the Prisma client
-(`lib/db.ts`) directly. No module beyond `auth`/`tenants` exists; Members, Savings, Loans,
-Reports, Config, and Platform Admin have no `modules/<name>/` directory at all yet (their data
-models exist in `prisma/schema.prisma` — see `docs/05-DB-Schema-SISKOP.md`).
+Every module follows the same three-file convention: `routes.ts` (Express `Router`, Zod-validates
+input, calls `service.ts`, wraps the result in `{ success, data, meta }`), `service.ts` (business
+logic, calls Prisma directly — there is still no standalone `repository` layer), `schema.ts` (Zod
+schemas + inferred input types). `reports/` additionally has `regulatory-service.ts` and `pdf.ts`.
+
+*Note on `users`: both `modules/config/service.ts` (via `ConfigPage`'s "Pengguna" tab) and
+`modules/users/` exist — the former is the older, still-live path for tenant-admin user management
+inside Konfigurasi; `modules/platform/` is the unrelated, cross-tenant platform-admin-user CRUD.
+Three different "manage a user" surfaces exist by design, gated on three different axes: your own
+profile (Auth), your tenant's staff (Config/Users), and platform operators (Platform) — don't
+conflate them when extending any one.*
 
 ### 3.2 Request lifecycle
 
 1. `helmet()` — security headers.
 2. `cors()` — origin allow-list from `CORS_ORIGIN` env var, credentials enabled.
 3. `express.json({ limit: "1mb" })`.
-4. A meta middleware stamps `res.locals.meta = { timestamp, requestId }` — one ID per request,
-   shared by both the success and error response paths, so a client-reported request ID matches
-   exactly one server log line.
-5. Route match. Protected routes run `requireAuth` first, which verifies the JWT and attaches
-   `req.auth: AuthClaims` (`userId`, `tenantId`, `role`, `unitIds`).
-6. Route handler validates the body with Zod, calls into `service.ts`, wraps the result in
+4. `/uploads` static mount (KTP photos, tenant logos) with an explicit
+   `Cross-Origin-Resource-Policy: cross-origin` header — Helmet's default CORP would otherwise
+   block cross-origin `<img>` loads from the Vite dev server.
+5. A meta middleware stamps `res.locals.meta = { timestamp, requestId }` — one ID per request,
+   shared by both the success and error response paths.
+6. Route match. Protected routes run, in order: `requireAuth` (JWT verify, attaches
+   `req.auth: AuthClaims`) → `requirePermission(module, action)` or `requirePlatformAdmin`
+   (fine-grained or coarse RBAC) → for accounting/whitelabel-gated routes only,
+   `requireAccountingEntitlement`/`requireWhitelabelEntitlement` (an async DB lookup of the
+   tenant's `SubscriptionPackage`, since entitlement can change without a new JWT).
+7. Route handler validates the body with Zod, calls into `service.ts`, wraps the result in
    `{ success: true, data, meta }`.
-7. Errors funnel to a single error-handling middleware: `ZodError` → 422 `VALIDATION_ERROR` with
+8. Errors funnel to a single error-handling middleware: `ZodError` → 422 `VALIDATION_ERROR` with
    field-level issues; `AppError` → its mapped status/code; anything else → logged server-side,
-   returned to the client as an opaque 500 `INTERNAL_ERROR` (internals are never leaked by
-   default).
+   returned to the client as an opaque 500 `INTERNAL_ERROR`.
 
 ### 3.3 Error model
 
 `lib/errors.ts::AppError` is the only error type a route may throw and have its message reach the
 client. `ErrorCode` (`packages/types/src/api.ts`) maps 1:1 to HTTP status:
 
-| Code | Status |
-|---|---|
-| `UNAUTHORIZED` | 401 |
-| `FORBIDDEN` | 403 |
-| `NOT_FOUND` | 404 |
-| `VALIDATION_ERROR` | 422 |
-| `CONFLICT` | 409 |
-| `RATE_LIMIT` | 429 (defined, unused — no rate limiting implemented yet) |
-| `INTERNAL_ERROR` | 500 |
+| Code | Status | Notes |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | |
+| `FORBIDDEN` | 403 | |
+| `NOT_FOUND` | 404 | |
+| `VALIDATION_ERROR` | 422 | |
+| `CONFLICT` | 409 | |
+| `RATE_LIMIT` | 429 | Defined, unused — no rate limiting implemented |
+| `INTERNAL_ERROR` | 500 | |
+| `NIK_EXISTS` | 409 | |
+| `INSUFFICIENT_BALANCE` | 422 | |
+| `CANNOT_WITHDRAW_POKOK` | 422 | |
+| `MEMBER_HAS_NO_POKOK_SAVING` | 422 | |
+| `TERM_EXCEEDS_MAX` | 422 | |
+| `LOAN_NOT_ACTIVE` | 422 | |
+| `INVALID_FILE_TYPE` | 422 | |
+| `JOURNAL_ENTRY_UNBALANCED` | 500 | No code path currently produces this |
+| `FEATURE_NOT_ENTITLED` | 403 | **Added 2026-07-29** — thrown by `middleware/entitlement.ts` |
+| `PACKAGE_LIMIT_EXCEEDED` | 422 | **Added 2026-07-29** — defined for future quota enforcement (`SubscriptionPackage.maxUsers`/`maxMembers`/`maxSavingConfigs`), not yet thrown by any code path |
 
 ### 3.4 Logging
 
-`pino`/`pino-http` are dependencies but not yet wired into `app.ts` (which currently uses
-`console.error` for uncaught errors). Structured request logging is a gap, not a design choice.
+`pino`/`pino-http` remain dependencies but are still not wired into `app.ts`, which uses
+`console.error` for uncaught errors. Structured request logging is still a gap, unchanged from the
+prior version of this document.
 
 ## 4. Frontend architecture (Current)
 
 | Concern | Choice | Notes |
 |---|---|---|
 | Framework | React 18 + Vite 5 + TypeScript | `apps/frontend` |
-| Routing | React Router 6 | `App.tsx` — `/login` (public), `/` (behind `RequireAuth`), catch-all → `/` |
-| Server state | TanStack Query 5 | Not yet used beyond the health-check fetch in `HomePage.tsx` |
-| Client/auth state | Zustand | `stores/auth.ts` — `accessToken`/`user` persisted to `localStorage`, seeded on load so a page refresh doesn't bounce the user to `/login` |
-| Styling | Tailwind CSS 3 | `tailwind.config.js`, `index.css` |
+| Routing | React Router 6 | `App.tsx` — `/login` (public), everything else behind `AppLayout` |
+| Server state | TanStack Query 5 | Used throughout — every list/detail page fetches via `useQuery`, mutations via `apiPost`/`apiPut`/`apiDelete` + manual `refetch()` (no optimistic updates) |
+| Client/auth state | Zustand | `stores/auth.ts` — `accessToken`/`user` persisted to `localStorage` |
+| Styling | Tailwind CSS 3 + shadcn/ui | Full component kit (`components/ui/*`): dialog, dropdown-menu, table, tabs, toast, alert-dialog, checkbox, select, etc. |
 | Icons | `lucide-react` | |
-| API client | Hand-written `apiFetch<T>()` | `api/client.ts` — prefixes every call with `/api`, attaches the bearer token, unwraps `ApiResponse<T>`, throws `ApiRequestError` on `!success` |
+| API client | Hand-written `apiFetch<T>()` (`api/client.ts`) | Prefixes every call with `/api`, attaches the bearer token, unwraps `ApiResponse<T>`, throws `ApiRequestError` (carries `.code`/`.status`) on `!success` |
 
-`RequireAuth` in `App.tsx` gates on presence of an access token only — it does not itself check
-tenant scope, because the token is already tenant-scoped server-side; a token that targets the
-wrong tenant's subdomain simply fails every subsequent request, not at the route guard.
+`AppLayout.tsx` (not a separately-named `RequireAuth` component, correcting the prior version of
+this document) gates on presence of an access token — a missing token redirects to `/login`. As of
+2026-07-29 it also gates on `isPlatformAdmin`: any such user hitting a route outside `/platform/*`
+or `/profile` is redirected to `/platform/tenants`, even via direct URL — see §6 and
+`docs/01-PRD-SISKOP.md` §4a for why this exists. `Sidebar.tsx` mirrors this by hiding the tenant
+business-module nav entirely for `isPlatformAdmin` users, rather than relying on the route guard
+alone to make the restriction visible.
 
-Pages implemented: `LoginPage` (form → `POST /api/auth/login` → `setSession`), `HomePage`
-(renders backend health status — a placeholder, not the Dashboard module).
+Pages implemented (`apps/frontend/src/pages/`): `LoginPage`; `dashboard/`; `members/` (list, form,
+detail); `savings/` (list, new, detail); `loans/` (dashboard, new, detail, overdue); `reports/`
+(financial+RAT, plus `regulatory/` with 5 sub-tabs); `config/` (8 tabs: Units, Roles, Users,
+Accounts, Account Mappings, SHU, Whitelabel, Modal Disetor); `profile/`; `platform/` (Tenants,
+Packages, Admins).
 
-There is no frontend test setup (no Vitest/RTL, no `test` script) — `turbo run test` covers the
-backend only. The one browser-driven verification on record
-(`SETUP-VERIFICATION.md`) was done manually via headless Chrome, not an automated suite.
+A gated tab whose backing query fails with `FEATURE_NOT_ENTITLED` must render
+`components/shared/EntitlementNotice.tsx` with the server's message and set `retry: false` for that
+specific error — TanStack Query's default `data ?? []` fallback otherwise renders a silently-empty
+table, which was found and fixed in `AccountsTab`/`AccountMappingsTab`/`ShuConfigTab` on
+2026-07-29. Any new page built against an entitlement-gated endpoint needs the same pattern; it is
+not automatic.
+
+There is still no frontend test setup (no Vitest/RTL, no `test` script) — `turbo run test` covers
+the backend only. UI verification for changes is done via a scratch Puppeteer driver script (see
+`docs/02-System-Requirements-SISKOP.md` §2.6, NFR-TEST-03), not an automated suite.
 
 ## 5. Multi-tenancy architecture (Current) — the load-bearing design decision
 
-This is the single rule the rest of the system is built to protect (`CLAUDE.md` rule 1):
+Unchanged in substance from the prior version of this document — this remains the single rule the
+rest of the system is built to protect (`CLAUDE.md` rule 1):
 
 > Every Prisma query touching tenant data MUST filter by `tenantId` taken from
 > `req.auth.tenantId`. Never from the request body or a URL param.
 
-Two distinct mechanisms enforce it at two different points in the request lifecycle:
-
-1. **Post-login, every request**: `tenantId` comes from the verified JWT (`req.auth.tenantId`,
-   set by `requireAuth`). A client cannot influence this value — it isn't read from the body, a
-   header, or a query param.
+1. **Post-login, every request**: `tenantId` comes from the verified JWT (`req.auth.tenantId`).
 2. **At login, before `req.auth` exists**: the tenant is resolved from the `Host` header via
-   `slugFromHost()`, not from a field in the login form. This closes an otherwise-open door: if
-   login accepted a tenant identifier in the request body, any caller could attempt credentials
-   against any tenant by simply naming it.
+   `slugFromHost()`.
 
-That second mechanism has a specific, easy-to-break dependency: the Vite dev proxy's
-`changeOrigin` **must** stay `false` (`apps/frontend/vite.config.ts`). Setting it `true` rewrites
-the `Host` header to the proxy target (`localhost:3001`) before the backend ever sees the original
-`demo.localhost:3000`, silently erasing the subdomain and making every login fail closed with
-"cooperative not identified." The equivalent production requirement is
-`proxy_set_header Host $host;` on the Nginx reverse proxy (Target, see §8) — there is no Nginx
-config in this repo yet, so this is a requirement to carry forward when one is written, not
-something already verified in production.
+The Vite dev proxy's `changeOrigin` **must** stay `false` (`apps/frontend/vite.config.ts`) for the
+same reason as before. `RESERVED` hostnames (`www`, `api`, `admin`, `app`, `static`, `cdn`) are
+rejected as slugs.
 
-`RESERVED` hostnames (`www`, `api`, `admin`, `app`, `static`, `cdn` — `tenant-host.ts`) are
-rejected as slugs so a platform-level route can never be shadowed by a tenant registering that
-name.
+**A second, orthogonal gate sits alongside tenant isolation as of 2026-07-29: entitlement.**
+Tenant isolation answers "which tenant's data may this request touch"; entitlement
+(`middleware/entitlement.ts`) answers a different question — "does *this* tenant's assigned
+`SubscriptionPackage` include the module this route belongs to." A request can pass tenant
+isolation cleanly (correct `tenantId`, correct permissions) and still be rejected on entitlement
+grounds (`FEATURE_NOT_ENTITLED`). The two checks compose in sequence (RBAC → entitlement, §3.2),
+never merge into one.
+
+**Platform-level access is a third, separate axis again** (§6): `requirePlatformAdmin` deliberately
+does *not* check `req.auth.tenantId` at all — a platform admin's queries are cross-tenant by
+design (`GET /platform/tenants` lists every tenant).
 
 ## 6. AuthN / AuthZ (Current)
 
-- **Password storage**: bcrypt, 10 rounds (`BCRYPT_ROUNDS`).
+- **Password storage**: bcrypt, 10 rounds.
 - **Session**: short-lived access JWT (15m default) + longer-lived refresh JWT (7d default), both
-  signed with separate secrets (`JWT_SECRET`, `JWT_REFRESH_SECRET`) that must be set — there is no
-  fallback default, so a misconfigured deployment fails loudly instead of signing with `""`.
-- **Access claims** (`AuthClaims`): `userId`, `tenantId`, `role`, `unitIds`. `unitIds` is
-  recomputed on every login/refresh from current `UnitMembership` (for `member`) or all active
-  units (for staff roles) — never trusted as a long-lived cache.
-- **Refresh claims**: identity only (`userId`, `tenantId`, `typ: "refresh"`) — role and units are
-  re-derived at refresh time so a permission change lands within one access-token lifetime (≤15m)
-  rather than persisting for the refresh token's full 7-day validity.
-- **Authorization**: role is checked per-route (not yet — no route beyond `auth` exists to check
-  it on); unit-scoped access is checked via `assertUnitAccess(claims, unitId)`, currently defined
-  but not yet called from any route, since no unit-scoped resource routes exist yet.
+  signed with separate secrets that must be set — no fallback default.
+- **Refresh tokens are stateless**: a signed JWT carrying identity only (`userId`, `tenantId`,
+  `typ: "refresh"`), *not* a DB-backed row. This is a deliberate divergence from the pre-rescaffold
+  backup this product was merged from, which had a persisted, individually-revocable `RefreshToken`
+  table. The trade-off: simpler (no DB write per login), but a compromised refresh token cannot be
+  revoked before its 7-day expiry short of rotating `JWT_REFRESH_SECRET` for every tenant. Revisit
+  if session revocation ("log out all devices") becomes a product requirement — see
+  `docs/01-PRD-SISKOP.md` §9.
+- **Access claims** (`AuthClaims`): `userId`, `tenantId`, `role`, `unitIds`, `roleId`,
+  `permissions`. `role` (coarse: `super_admin`/`tenant_admin`/`accountant`/`member`) is *computed*
+  at login/refresh by `deriveUserRole()` (`lib/user-mapper.ts`) — `isPlatformAdmin → super_admin`;
+  else the tenant `Role.name` maps `Teller`/`Viewer → accountant`, everything else → `tenant_admin`.
+  It is never stored as a column. `permissions` is the tenant's assigned `Role.permissions` JSON
+  blob, carried in the token so `requirePermission` is a pure claim check, no DB round trip.
+- **Authorization has three distinct, composable axes**, not one:
+  1. **Fine-grained, tenant-scoped**: `requirePermission(module, action)` — checks
+     `req.auth.permissions[module][action]` from the JWT. This is what every tenant-facing module
+     route uses.
+  2. **Coarse, cross-tenant**: `requirePlatformAdmin` — checks `req.auth.role === "super_admin"`
+     only, ignoring `permissions` entirely, because a tenant's own "Super Admin" role has no
+     bearing on platform-level access. Used exclusively by `modules/platform/routes.ts`.
+  3. **Entitlement, tenant-scoped but package-derived**: `requireAccountingEntitlement` /
+     `requireWhitelabelEntitlement` — an async Prisma lookup of `tenant.package`, not a JWT claim
+     at all (so a package change takes effect on the very next request, not after a token refresh).
+  4. **Unit-scoped**: `assertUnitAccess(claims, unitId)` — still defined, still not called from any
+     route (every tenant has exactly one unit in practice; see `docs/01-PRD-SISKOP.md` §4).
 
 ## 7. Data layer (Current)
 
 - **ORM**: Prisma 5, PostgreSQL 15.
-- **Money**: `Decimal(18,2)` for all balances/amounts (`CLAUDE.md` rule 2) — see
-  `docs/05-DB-Schema-SISKOP.md` for the column-by-column reference.
-- **Migrations**: `apps/backend/prisma/migrations/` — three applied
-  (`20260727082242_init`, `20260727090000_add_cooperative_units`, `20260727093000_add_tenant_slug`).
+- **Money**: `Decimal(15,2)` for amounts, `Decimal(8,4)` for rates, `Decimal(5,2)` for SHU
+  percentages — see `docs/05-DB-Schema-SISKOP.md` for the column-by-column reference. (Corrects
+  the prior version of this document, which cited `Decimal(18,2)`/`Decimal(6,4)` — those precisions
+  belonged to the original 8-model scaffold and changed when the pre-rescaffold KSP schema was
+  merged in.)
+- **Migrations**: `apps/backend/prisma/migrations/` — two applied
+  (`20260728045148_init_merged_schema`, `20260728050338_add_tenant_cascade_deletes`), bringing the
+  schema to 22 models. See `docs/05-DB-Schema-SISKOP.md` §1.
 - **Environments**: `siskop_dev` (local dev, port 5433 host-mapped), `siskop_test` (integration
-  tests — truncated between runs, never the dev database), CI's own ephemeral Postgres service
-  (port 5432, since CI runners have no conflicting native Postgres).
-- **Client lifecycle**: a single Prisma client instance (`lib/db.ts`), imported wherever a query
-  is needed — no per-request client, no repository abstraction yet.
+  tests — truncated between runs), CI's own ephemeral Postgres service (port 5432).
+- **Client lifecycle**: a single Prisma client instance (`lib/db.ts`), imported wherever a query is
+  needed — no per-request client, no repository abstraction.
 
 ## 8. Deployment architecture (Target — not built in this repo)
 
-Baseline per `docs/claude-integration/OPS-INSTRUCTIONS.md`:
+Unchanged from the prior version of this document:
 
 ```mermaid
 graph LR
@@ -222,54 +299,54 @@ graph LR
     BE --> PG[("Managed/self-hosted<br/>PostgreSQL 15")]
 ```
 
-- Single VPS, Docker Compose, Nginx reverse proxy, PostgreSQL 15 — this repo currently ships only
-  a dev-oriented `docker-compose.yml` (Postgres only, no app containers, no Nginx config).
-  Building the production Compose file and Nginx config is Ops-owned, undone work.
+- Single VPS, Docker Compose, Nginx reverse proxy, PostgreSQL 15 — this repo still ships only a
+  dev-oriented `docker-compose.yml` (Postgres only).
 - Deploy flow: `develop` → staging automatically; `main`/production ships on a tagged release after
-  QA sign-off. No CD workflow exists yet — `.github/workflows/ci.yml` runs verification
-  (lint/typecheck/test/build) on push/PR to `main`/`develop`, but does not deploy anywhere.
-  See `docs/02-System-Requirements-SISKOP.md` §2.2 for the associated availability requirements
-  (RTO/RPO/backups), none of which are implemented yet.
-- Scale path: managed Postgres + object storage for report artifacts (for PDF exports once the
-  Reports module exists).
+  QA sign-off. No CD workflow exists yet.
+- Scale path: managed Postgres + object storage for report artifacts — more relevant now that PDF
+  export (Puppeteer-generated, §3.1) actually exists and produces files worth storing off-instance.
 
 ## 9. Observability (Target — not built)
 
-There is currently no metrics, tracing, or alerting pipeline. `pino`/`pino-http` are installed but
-unused (§3.4). This is a direct gap against the PM/QA targets in
-`docs/01-PRD-SISKOP.md` §10 (99.5% uptime, <500ms p99, NPS) — none of those targets can be
-measured today.
+Still no metrics, tracing, or alerting pipeline. `pino`/`pino-http` remain installed and unused
+(§3.4). Unchanged gap against the PM/QA targets in `docs/01-PRD-SISKOP.md` §7.
 
 ## 10. CI (Current)
 
-`.github/workflows/ci.yml`, on push to `main`/`develop` and on every PR:
+`.github/workflows/ci.yml`, on push to `main`/`develop` and on every PR — unchanged in shape from
+the prior version of this document:
 
 1. Checkout, pnpm 9 + Node 20 setup.
 2. `pnpm install --frozen-lockfile`.
-3. `prisma generate` for `@siskop/backend`.
+3. `pnpm --filter @siskop/backend db:generate`.
 4. `pnpm run lint` (all packages).
 5. `pnpm run typecheck` (all packages).
 6. `prisma migrate deploy` against the CI Postgres service.
-7. `pnpm run test` (Vitest + coverage, backend only — frontend has no test script).
+7. `pnpm run test` (Vitest + coverage, backend only).
 8. `pnpm run build` (all packages).
 
-No deploy step exists in this workflow (see §8).
+No deploy step exists in this workflow.
 
 ## 11. Open architecture decisions
 
-Carried from `SETUP-VERIFICATION.md`, listed here because they shape how new modules should be
-built:
+Carried and extended — listed here because they shape how new modules should be built:
 
-1. `unitIds` in the JWT trades staleness (≤15m) for avoiding a per-request permission lookup. If
-   staff start moving between units frequently, swap to a cached per-request lookup — call sites
-   of `assertUnitAccess` are written so they would not need to change.
-2. The "≥1 unit per tenant" invariant lives in application code (`provisionTenant()`/
-   `registerTenant()`), not a database constraint, because Postgres cannot express "at least one
-   child row." Any new code path that creates a tenant must go through one of those two functions,
-   not construct a `Tenant` row directly.
-3. Tenant resolution by subdomain (not a login-form field) is a security boundary, not just UX —
-   see §5. Any future "switch cooperative" UI must not reintroduce a client-suppliable tenant
-   identifier into the auth flow.
+1. `unitIds` in the JWT trades staleness (≤15m) for avoiding a per-request permission lookup.
+2. The "≥1 unit per tenant" invariant lives in application code
+   (`provisionTenantInTx()`/`registerTenant()`), not a database constraint. Any new code path that
+   creates a tenant must go through one of those, not construct a `Tenant` row directly.
+3. Tenant resolution by subdomain (not a login-form field) is a security boundary, not just UX.
+4. **Entitlement is a live DB lookup, deliberately not baked into the JWT** (unlike `permissions`) —
+   so a platform admin revoking/downgrading a package takes effect on the tenant's very next
+   request, not after their access token expires. Any new package-gated feature should follow the
+   same pattern (`middleware/entitlement.ts`), not add another JWT claim.
+5. **Platform-admin provisioning reuses the tenant `User`/`Role` FK machinery rather than adding a
+   parallel schema** (§6, §3.5 in `docs/05-DB-Schema-SISKOP.md`) — cheaper to build, but it means
+   every new tenant-scoped route must be conscious that a platform admin's JWT technically has real
+   permissions against their attachment tenant, and rely on the frontend route guard (§4) rather
+   than assuming "no legitimate tenant business route is reachable from that session" holds
+   server-side too. If this bites again, consider a genuinely tenant-less platform-admin identity
+   instead of patching the frontend further.
 
 ## 12. Related documents
 

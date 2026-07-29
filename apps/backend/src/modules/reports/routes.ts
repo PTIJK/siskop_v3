@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { endOfDay, endOfMonth, startOfMonth } from "date-fns";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
+import { requireAccountingEntitlement } from "../../middleware/entitlement.js";
 import {
   financialParamsSchema,
   neracaParamsSchema,
@@ -109,6 +110,7 @@ export function reportsRoutes(): Router {
 
   router.get(
     "/regulatory/neraca",
+    requireAccountingEntitlement,
     requirePermission("reports", "read"),
     handle(async (req, res) => {
       const { asOfDate } = neracaParamsSchema.parse(req.query);
@@ -120,6 +122,7 @@ export function reportsRoutes(): Router {
 
   router.get(
     "/regulatory/neraca/pdf",
+    requireAccountingEntitlement,
     requirePermission("reports", "export"),
     handle(async (req, res) => {
       const { asOfDate } = neracaParamsSchema.parse(req.query);
@@ -135,6 +138,7 @@ export function reportsRoutes(): Router {
 
   router.get(
     "/regulatory/arus-kas",
+    requireAccountingEntitlement,
     requirePermission("reports", "read"),
     handle(async (req, res) => {
       const { from, to } = periodParamsSchema.parse(req.query);
@@ -147,6 +151,7 @@ export function reportsRoutes(): Router {
 
   router.get(
     "/regulatory/arus-kas/pdf",
+    requireAccountingEntitlement,
     requirePermission("reports", "export"),
     handle(async (req, res) => {
       const { from, to } = periodParamsSchema.parse(req.query);
@@ -163,6 +168,7 @@ export function reportsRoutes(): Router {
 
   router.get(
     "/regulatory/laporan-hasil-usaha",
+    requireAccountingEntitlement,
     requirePermission("reports", "read"),
     handle(async (req, res) => {
       const { from, to } = periodParamsSchema.parse(req.query);
@@ -175,6 +181,7 @@ export function reportsRoutes(): Router {
 
   router.get(
     "/regulatory/laporan-hasil-usaha/pdf",
+    requireAccountingEntitlement,
     requirePermission("reports", "export"),
     handle(async (req, res) => {
       const { from, to } = periodParamsSchema.parse(req.query);
@@ -191,6 +198,7 @@ export function reportsRoutes(): Router {
 
   router.get(
     "/regulatory/shu-distribution",
+    requireAccountingEntitlement,
     requirePermission("reports", "read"),
     handle(async (req, res) => {
       const { from, to } = periodParamsSchema.parse(req.query);
@@ -203,6 +211,7 @@ export function reportsRoutes(): Router {
 
   router.get(
     "/regulatory/shu-distribution/pdf",
+    requireAccountingEntitlement,
     requirePermission("reports", "export"),
     handle(async (req, res) => {
       const { from, to } = periodParamsSchema.parse(req.query);
@@ -219,6 +228,7 @@ export function reportsRoutes(): Router {
 
   router.get(
     "/regulatory/calk",
+    requireAccountingEntitlement,
     requirePermission("reports", "read"),
     handle(async (req, res) => {
       const { from, to } = periodParamsSchema.parse(req.query);
@@ -233,6 +243,7 @@ export function reportsRoutes(): Router {
   // edited/reviewed in the UI, not exported as a static PDF (Design Spec §8).
   router.put(
     "/regulatory/calk/narrative",
+    requireAccountingEntitlement,
     requirePermission("reports", "update"),
     handle(async (req, res) => {
       const { section, content } = upsertCalkNarrativeSchema.parse(req.body);

@@ -16,7 +16,9 @@ const STATUS: Record<ErrorCode, number> = {
   [ErrorCode.TERM_EXCEEDS_MAX]: 422,
   [ErrorCode.LOAN_NOT_ACTIVE]: 422,
   [ErrorCode.INVALID_FILE_TYPE]: 422,
-  [ErrorCode.JOURNAL_ENTRY_UNBALANCED]: 500
+  [ErrorCode.JOURNAL_ENTRY_UNBALANCED]: 500,
+  [ErrorCode.FEATURE_NOT_ENTITLED]: 403,
+  [ErrorCode.PACKAGE_LIMIT_EXCEEDED]: 422
 };
 
 /**
@@ -65,4 +67,12 @@ export function conflict(message: string): AppError {
 
 export function validationError(message: string, details?: Record<string, unknown>): AppError {
   return new AppError(ErrorCode.VALIDATION_ERROR, message, details);
+}
+
+export function featureNotEntitled(message: string): AppError {
+  return new AppError(ErrorCode.FEATURE_NOT_ENTITLED, message);
+}
+
+export function packageLimitExceeded(message: string): AppError {
+  return new AppError(ErrorCode.PACKAGE_LIMIT_EXCEEDED, message);
 }

@@ -9,6 +9,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, type ColumnDef } from "@/components/shared/DataTable";
 import { FormError } from "@/components/shared/FormError";
+import { EntitlementNotice } from "@/components/shared/EntitlementNotice";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -52,9 +53,10 @@ export function AccountsTab() {
   const [editing, setEditing] = useState<Account | null>(null);
   const [apiError, setApiError] = useState("");
 
-  const { data, isPending, refetch } = useQuery({
+  const { data, isPending, error, refetch } = useQuery({
     queryKey: ["config", "accounts"],
-    queryFn: () => apiFetch<Account[]>("/config/accounts")
+    queryFn: () => apiFetch<Account[]>("/config/accounts"),
+    retry: (failureCount, err) => err instanceof ApiRequestError && err.code === "FEATURE_NOT_ENTITLED" ? false : failureCount < 3
   });
 
   const byId = useMemo(() => new Map((data ?? []).map((a) => [a.id, a])), [data]);
@@ -156,6 +158,10 @@ export function AccountsTab() {
   ];
 
   const headerOptions = (data ?? []).filter((a) => !editing || a.id !== editing.id);
+
+  if (error instanceof ApiRequestError && error.code === "FEATURE_NOT_ENTITLED") {
+    return <EntitlementNotice message={error.message} />;
+  }
 
   return (
     <div className="space-y-4">

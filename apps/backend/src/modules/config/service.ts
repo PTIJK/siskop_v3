@@ -1,15 +1,17 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "../../lib/db.js";
-import { conflict, notFound } from "../../lib/errors.js";
+import { conflict, notFound, validationError } from "../../lib/errors.js";
 import type {
   CreateAccountInput,
   CreateRoleInput,
   CreateUnitInput,
   UpdateAccountInput,
+  UpdateModalDisetorInput,
   UpdateRoleInput,
   UpdateUnitInput,
   UpsertAccountMappingInput,
-  UpsertShuDistributionConfigInput
+  UpsertShuDistributionConfigInput,
+  UpsertWhitelabelConfigInput
 } from "./schema.js";
 
 // ── Units ────────────────────────────────────────────────────────────────────
@@ -243,4 +245,61 @@ export async function upsertShuDistributionConfig(tenantId: string, data: Upsert
     create: { tenantId, ...data },
     update: data
   });
+}
+
+// ── Whitelabel ───────────────────────────────────────────────────────────────
+// Read is never gated — a tenant that loses the entitlement (e.g. downgraded
+// package) still sees its frozen values; only writes require requireWhitelabelEntitlement.
+
+export async function getWhitelabelConfig(tenantId: string) {
+  return db.whitelabelConfig.findUnique({ where: { tenantId } });
+}
+
+export async function upsertWhitelabelConfig(tenantId: string, data: UpsertWhitelabelConfigInput) {
+  if (data.customDomain) {
+    const duplicate = await db.whitelabelConfig.findFirst({
+      where: { customDomain: data.customDomain, NOT: { tenantId } }
+    });
+    if (duplicate) throw conflict(`Domain ${data.customDomain} sudah digunakan koperasi lain`);
+  }
+
+  return db.whitelabelConfig.upsert({
+    where: { tenantId },
+    create: { tenantId, ...data },
+    // A newly submitted customDomain always restarts verification at PENDING;
+    // leaving it out of the payload (re-saving colors, say) leaves domainStatus untouched.
+    update: { ...data, ...(data.customDomain !== undefined ? { domainStatus: "PENDING" } : {}) }
+  });
+}
+
+// ── Modal Disetor ────────────────────────────────────────────────────────────
+// Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp5M) compliance
+// field — a general tenant field, independent of the "accounting" entitlement.
+
+function serializeModalDisetor(tenant: { modalDisetor: Prisma.Decimal | null; auditThresholdNotifiedAt: Date | null }) {
+  return {
+    modalDisetor: tenant.modalDisetor?.toString() ?? null,
+    auditThresholdNotifiedAt: tenant.auditThresholdNotifiedAt
+  };
+}
+
+export async function getModalDisetor(tenantId: string) {
+  const tenant = await db.tenant.findUniqueOrThrow({
+    where: { id: tenantId },
+    select: { modalDisetor: true, auditThresholdNotifiedAt: true }
+  });
+  return serializeModalDisetor(tenant);
+}
+
+export async function updateModalDisetor(tenantId: string, data: UpdateModalDisetorInput) {
+  if (data.modalDisetor !== null && data.modalDisetor < 0) {
+    throw validationError("Modal disetor tidak boleh negatif");
+  }
+
+  const tenant = await db.tenant.update({
+    where: { id: tenantId },
+    data: { modalDisetor: data.modalDisetor },
+    select: { modalDisetor: true, auditThresholdNotifiedAt: true }
+  });
+  return serializeModalDisetor(tenant);
 }

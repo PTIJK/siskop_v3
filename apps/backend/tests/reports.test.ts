@@ -398,3 +398,49 @@ describe("GET /api/reports/*/pdf", () => {
     expect(res.headers["content-type"]).toBe("application/pdf");
   }, 20_000);
 });
+
+describe("regulatory reports accounting entitlement gate", () => {
+  it("blocks every /regulatory endpoint for a tenant with no accounting package, but not /financial or /rat", async () => {
+    const admin = await setupTenant({}, { entitled: false });
+
+    const neraca = await request(app())
+      .get("/api/reports/regulatory/neraca")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(neraca.status).toBe(403);
+    expect(neraca.body.error.code).toBe("FEATURE_NOT_ENTITLED");
+
+    const arusKas = await request(app())
+      .get("/api/reports/regulatory/arus-kas")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(arusKas.status).toBe(403);
+
+    const shu = await request(app())
+      .get("/api/reports/regulatory/shu-distribution")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(shu.status).toBe(403);
+
+    const calk = await request(app())
+      .get("/api/reports/regulatory/calk")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(calk.status).toBe(403);
+
+    // Base reports (pre-ledger RPT-01/02) are never gated by a package.
+    const financial = await request(app())
+      .get("/api/reports/financial")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(financial.status).toBe(200);
+
+    const rat = await request(app())
+      .get("/api/reports/rat")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(rat.status).toBe(200);
+  });
+
+  it("allows regulatory reports once the tenant's package includes the accounting module", async () => {
+    const admin = await setupTenant();
+    const res = await request(app())
+      .get("/api/reports/regulatory/neraca")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(res.status).toBe(200);
+  });
+});

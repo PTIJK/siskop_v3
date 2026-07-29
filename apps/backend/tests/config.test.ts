@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import request from "supertest";
 import { db } from "../src/lib/db.js";
-import { app, createMemberAs, createStaffSession, setupTenant } from "./helpers.js";
+import { app, createMemberAs, createPlatformAdminSession, createStaffSession, setupTenant } from "./helpers.js";
 
 beforeAll(() => {
   process.env.JWT_SECRET = "test-secret";
@@ -445,5 +445,160 @@ describe("GET/PUT /api/config/shu-distribution", () => {
       .get("/api/config/shu-distribution")
       .set("Authorization", `Bearer ${admin.accessToken}`);
     expect(fetched.body.data.jasaSimpananPercent).toBe("25");
+  });
+});
+
+// ── Accounting entitlement gate ───────────────────────────────────────────────
+
+describe("accounting entitlement gate", () => {
+  it("blocks accounts/account-mappings/shu-distribution for a tenant with no package", async () => {
+    const admin = await setupTenant({}, { entitled: false });
+
+    const accounts = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(accounts.status).toBe(403);
+    expect(accounts.body.error.code).toBe("FEATURE_NOT_ENTITLED");
+
+    const mappings = await request(app())
+      .get("/api/config/account-mappings")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(mappings.status).toBe(403);
+
+    const shu = await request(app())
+      .get("/api/config/shu-distribution")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(shu.status).toBe(403);
+  });
+
+  it("blocks a package assigned but without the accounting module", async () => {
+    const platformAdmin = await createPlatformAdminSession();
+    const admin = await setupTenant({ slug: "noaccounting", registrationNo: "KOP-NOACC" }, { entitled: false });
+    const pkg = await request(app())
+      .post("/api/platform/packages")
+      .set("Authorization", `Bearer ${platformAdmin.accessToken}`)
+      .send({ name: "Paket Dasar", price: 0, modules: [], maxUsers: 5, maxMembers: 100 });
+    await db.tenant.update({ where: { id: admin.user.tenantId }, data: { packageId: pkg.body.data.id } });
+
+    const res = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("allows accounts once a package with the accounting module is assigned", async () => {
+    const admin = await setupTenant();
+    const res = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(res.status).toBe(200);
+  });
+});
+
+// ── Whitelabel ───────────────────────────────────────────────────────────────
+
+describe("GET/PUT /api/config/whitelabel", () => {
+  it("returns null when not yet configured", async () => {
+    const admin = await setupTenant();
+    const res = await request(app())
+      .get("/api/config/whitelabel")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toBeNull();
+  });
+
+  it("saves whitelabel config for an entitled tenant", async () => {
+    const admin = await setupTenant();
+    const res = await request(app())
+      .put("/api/config/whitelabel")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ customDomain: "koperasi-demo.test", primaryColor: "#1D4ED8", hideBranding: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.customDomain).toBe("koperasi-demo.test");
+    expect(res.body.data.domainStatus).toBe("PENDING");
+    expect(res.body.data.hideBranding).toBe(true);
+  });
+
+  it("rejects a write for a tenant whose package does not enable whitelabel", async () => {
+    const admin = await setupTenant({}, { entitled: false });
+    const res = await request(app())
+      .put("/api/config/whitelabel")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ primaryColor: "#1D4ED8" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("FEATURE_NOT_ENTITLED");
+  });
+
+  it("still allows reading whitelabel config for a non-entitled tenant", async () => {
+    const admin = await setupTenant({}, { entitled: false });
+    const res = await request(app())
+      .get("/api/config/whitelabel")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects a duplicate custom domain across tenants", async () => {
+    const tenantA = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
+    const tenantB = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
+    await request(app())
+      .put("/api/config/whitelabel")
+      .set("Authorization", `Bearer ${tenantA.accessToken}`)
+      .send({ customDomain: "shared-domain.test" });
+
+    const res = await request(app())
+      .put("/api/config/whitelabel")
+      .set("Authorization", `Bearer ${tenantB.accessToken}`)
+      .send({ customDomain: "shared-domain.test" });
+    expect(res.status).toBe(409);
+  });
+});
+
+// ── Modal Disetor ────────────────────────────────────────────────────────────
+
+describe("GET/PUT /api/config/modal-disetor", () => {
+  it("returns null when not yet set", async () => {
+    const admin = await setupTenant();
+    const res = await request(app())
+      .get("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.modalDisetor).toBeNull();
+  });
+
+  it("saves and clears the modal disetor value", async () => {
+    const admin = await setupTenant();
+    const saved = await request(app())
+      .put("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ modalDisetor: 6_000_000 });
+    expect(saved.status).toBe(200);
+    expect(saved.body.data.modalDisetor).toBe("6000000");
+
+    const cleared = await request(app())
+      .put("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ modalDisetor: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data.modalDisetor).toBeNull();
+  });
+
+  it("rejects a negative value", async () => {
+    const admin = await setupTenant();
+    const res = await request(app())
+      .put("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ modalDisetor: -1 });
+    expect(res.status).toBe(422);
+  });
+
+  it("is not gated by the accounting entitlement", async () => {
+    const admin = await setupTenant({}, { entitled: false });
+    const res = await request(app())
+      .put("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ modalDisetor: 1_000_000 });
+    expect(res.status).toBe(200);
   });
 });

@@ -9,6 +9,8 @@ import { UsersTab } from "./UsersTab";
 import { AccountsTab } from "./AccountsTab";
 import { AccountMappingsTab } from "./AccountMappingsTab";
 import { ShuConfigTab } from "./ShuConfigTab";
+import { WhitelabelConfigTab } from "./WhitelabelConfigTab";
+import { ModalDisetorConfigTab } from "./ModalDisetorConfigTab";
 
 export function ConfigPage() {
   const { can } = usePermissions();
@@ -21,7 +23,9 @@ export function ConfigPage() {
     { value: "users", label: "Pengguna", show: can("users", "read"), content: <UsersTab /> },
     { value: "accounts", label: "Chart of Accounts", show: can("accounting", "read"), content: <AccountsTab /> },
     { value: "mappings", label: "Pemetaan Akun", show: can("accounting", "read"), content: <AccountMappingsTab /> },
-    { value: "shu", label: "Konfigurasi SHU", show: can("accounting", "read"), content: <ShuConfigTab /> }
+    { value: "shu", label: "Konfigurasi SHU", show: can("accounting", "read"), content: <ShuConfigTab /> },
+    { value: "whitelabel", label: "Whitelabel", show: can("config", "read"), content: <WhitelabelConfigTab /> },
+    { value: "modal-disetor", label: "Modal Disetor", show: can("config", "read"), content: <ModalDisetorConfigTab /> }
   ].filter((t) => t.show);
 
   return (

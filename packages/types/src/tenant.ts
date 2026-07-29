@@ -19,3 +19,37 @@ export interface Tenant {
   isActive: boolean;
   createdAt: string;
 }
+
+export type DomainStatus = "PENDING" | "VERIFIED" | "FAILED";
+
+/** A tenant's whitelabel branding config — gated behind the SubscriptionPackage.whitelabelEnabled entitlement (writes only). */
+export interface WhitelabelConfig {
+  id: string;
+  tenantId: string;
+  customDomain: string | null;
+  domainStatus: DomainStatus;
+  primaryColor: string | null;
+  hideBranding: boolean;
+  emailSenderName: string | null;
+  emailSenderAddress: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertWhitelabelConfigRequest {
+  customDomain?: string | null;
+  primaryColor?: string | null;
+  hideBranding?: boolean;
+  emailSenderName?: string | null;
+  emailSenderAddress?: string | null;
+}
+
+/** Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp5M) compliance field. */
+export interface ModalDisetorInfo {
+  modalDisetor: string | null;
+  auditThresholdNotifiedAt: string | null;
+}
+
+export interface UpdateModalDisetorRequest {
+  modalDisetor: number | null;
+}

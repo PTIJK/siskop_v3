@@ -17,6 +17,9 @@ import { ConfigPage } from "@/pages/config/ConfigPage";
 import { ProfilePage } from "@/pages/profile/ProfilePage";
 import { ReportsPage } from "@/pages/reports/ReportsPage";
 import { RegulatoryReportsPage } from "@/pages/reports/RegulatoryReportsPage";
+import { PlatformTenantsPage } from "@/pages/platform/PlatformTenantsPage";
+import { PlatformPackagesPage } from "@/pages/platform/PlatformPackagesPage";
+import { PlatformAdminsPage } from "@/pages/platform/PlatformAdminsPage";
 
 export default function App() {
   return (
@@ -49,6 +52,10 @@ export default function App() {
 
             <Route path="/config" element={<ConfigPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+
+            <Route path="/platform/tenants" element={<PlatformTenantsPage />} />
+            <Route path="/platform/packages" element={<PlatformPackagesPage />} />
+            <Route path="/platform/admins" element={<PlatformAdminsPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
