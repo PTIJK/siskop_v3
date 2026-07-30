@@ -11,13 +11,39 @@ import {
   CartesianGrid,
   Tooltip
 } from "recharts";
-import { PiggyBank, CreditCard, Users, TrendingUp, AlertTriangle } from "lucide-react";
+import {
+  PiggyBank,
+  CreditCard,
+  Users,
+  TrendingUp,
+  AlertTriangle,
+  Sparkles,
+  AlertCircle,
+  Info,
+  CheckCircle2
+} from "lucide-react";
 import type { ChartPoint, DashboardSummary } from "@siskop/types";
 import { apiFetch } from "@/api/client";
 import { formatRupiah, formatRupiahSingkat } from "@/lib/format";
+import { buildAiSuggestions, type SuggestionTone } from "@/lib/aiSuggestions";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatCard } from "@/components/shared/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const SUGGESTION_ICONS: Record<SuggestionTone, typeof AlertTriangle> = {
+  danger: AlertTriangle,
+  warning: AlertCircle,
+  info: Info,
+  success: CheckCircle2
+};
+
+const SUGGESTION_COLORS: Record<SuggestionTone, string> = {
+  danger: "text-red-600",
+  warning: "text-amber-600",
+  info: "text-blue-600",
+  success: "text-green-600"
+};
 
 function CustomTooltip({
   active,
@@ -57,6 +83,8 @@ export function DashboardPage() {
   const isLoading = summaryQuery.isPending;
   const loanChartData = (loanChartQuery.data ?? []).map((d) => ({ ...d, value: parseFloat(d.value) }));
   const paymentChartData = (paymentChartQuery.data ?? []).map((d) => ({ ...d, value: parseFloat(d.value) }));
+  const suggestionsLoading = summaryQuery.isPending || loanChartQuery.isPending || paymentChartQuery.isPending;
+  const suggestions = buildAiSuggestions(summary, loanChartData, paymentChartData);
 
   return (
     <div className="space-y-6">
@@ -105,6 +133,35 @@ export function DashboardPage() {
           alert={(summary?.overdueCount ?? 0) > 0}
         />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Sparkles className="h-4 w-4 text-primary" />
+            Rekomendasi AI
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {suggestionsLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-4/5" />
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {suggestions.map((s) => {
+                const Icon = SUGGESTION_ICONS[s.tone];
+                return (
+                  <li key={s.id} className="flex items-start gap-2.5">
+                    <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${SUGGESTION_COLORS[s.tone]}`} />
+                    <span className="text-sm text-muted-foreground">{s.text}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
