@@ -43,7 +43,7 @@ function LoansTable({
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["loans", { page, search, status, loanConfigId }],
     queryFn: () =>
       apiFetchPage<LoanRow[]>(
@@ -81,6 +81,9 @@ function LoansTable({
       columns={columns}
       data={data?.items ?? []}
       isLoading={isPending}
+      isError={isError}
+      errorMessage={error instanceof Error ? error.message : undefined}
+      onRetry={refetch}
       pagination={{ page, limit: LIMIT, total: data?.meta.total ?? 0, onPageChange: setPage }}
       onRowClick={(row) => navigate(`/loans/${row.id}`)}
       emptyMessage="Belum ada data pinjaman"

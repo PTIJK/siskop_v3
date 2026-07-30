@@ -53,7 +53,7 @@ export function AccountsTab() {
   const [editing, setEditing] = useState<Account | null>(null);
   const [apiError, setApiError] = useState("");
 
-  const { data, isPending, error, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["config", "accounts"],
     queryFn: () => apiFetch<Account[]>("/config/accounts"),
     retry: (failureCount, err) => err instanceof ApiRequestError && err.code === "FEATURE_NOT_ENTITLED" ? false : failureCount < 3
@@ -169,6 +169,9 @@ export function AccountsTab() {
         columns={columns}
         data={data ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         emptyMessage="Belum ada akun — mulai dengan menambahkan Chart of Accounts"
         headerActions={
           can("accounting", "create") && (

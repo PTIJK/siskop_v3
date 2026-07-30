@@ -42,7 +42,7 @@ export function UsersTab() {
   const [editing, setEditing] = useState<User | null>(null);
   const [apiError, setApiError] = useState("");
 
-  const { data, isPending, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["users"],
     queryFn: () => apiFetch<User[]>("/users")
   });
@@ -152,6 +152,9 @@ export function UsersTab() {
         columns={columns}
         data={data ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         emptyMessage="Belum ada pengguna"
         headerActions={
           can("users", "create") && (

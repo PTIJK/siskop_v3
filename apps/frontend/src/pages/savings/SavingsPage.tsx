@@ -28,7 +28,7 @@ export function SavingsPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["savings", { page, search, typeFilter }],
     queryFn: () =>
       apiFetchPage<SavingRow[]>(
@@ -109,6 +109,9 @@ export function SavingsPage() {
         columns={columns}
         data={data?.items ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         search={{
           value: search,
           onChange: (v) => {

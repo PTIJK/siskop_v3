@@ -67,7 +67,7 @@ export function PlatformTenantsPage() {
   const [manageError, setManageError] = useState("");
   const [manageSaving, setManageSaving] = useState(false);
 
-  const { data, isPending, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["platform", "tenants"],
     queryFn: () => apiFetch<PlatformTenantSummary[]>("/platform/tenants")
   });
@@ -187,6 +187,9 @@ export function PlatformTenantsPage() {
         columns={columns}
         data={data ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         emptyMessage="Belum ada koperasi terdaftar"
         headerActions={
           <Button onClick={openCreate}>

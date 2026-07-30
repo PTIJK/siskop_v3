@@ -64,12 +64,21 @@ export function LoanDetailPage() {
   }, [loan?.monthlyPayment]);
 
   const handlePayment = async () => {
+    if (!loan) return;
     setIsSubmitting(true);
     try {
+      // No per-installment schedule exists; the backend infers overdue status by
+      // matching payments to expected due months (disbursedAt + N months, see
+      // lib/kol.ts), so the next unpaid installment's due month must be sent here.
+      const disbursed = new Date(loan.disbursedAt ?? payDate ?? new Date().toISOString());
+      disbursed.setMonth(disbursed.getMonth() + loan.payments.length + 1);
+      const dueDate = disbursed.toISOString().split("T")[0];
+
       await apiPost(`/loans/${id}/pay`, {
         amount: parseFloat(payAmount),
         penalty: parseFloat(penalty) || 0,
         paidAt: payDate,
+        dueDate,
         note: payNote || undefined
       });
       toast({ title: "Pembayaran berhasil dicatat" });

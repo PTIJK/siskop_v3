@@ -30,7 +30,7 @@ const ROW_TINT: Record<string, string> = {
 export function OverduePage() {
   const navigate = useNavigate();
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["loans", "overdue"],
     queryFn: async () => {
       const items = await apiFetch<OverdueLoan[]>("/loans/overdue");
@@ -102,6 +102,9 @@ export function OverduePage() {
         columns={columns}
         data={rows}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         onRowClick={(row) => navigate(`/loans/${row.id}`)}
         rowClassName={(row) => ROW_TINT[row.kolCategory]}
         emptyMessage="Tidak ada pinjaman bermasalah"

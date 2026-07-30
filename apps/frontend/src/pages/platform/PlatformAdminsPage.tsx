@@ -44,7 +44,7 @@ export function PlatformAdminsPage() {
   const [deactivating, setDeactivating] = useState<PlatformAdmin | null>(null);
   const [apiError, setApiError] = useState("");
 
-  const { data, isPending, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["platform", "admins"],
     queryFn: () => apiFetch<PlatformAdmin[]>("/platform/admins")
   });
@@ -148,6 +148,9 @@ export function PlatformAdminsPage() {
         columns={columns}
         data={data ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         emptyMessage="Belum ada admin platform"
         headerActions={
           <Button onClick={openCreate}>

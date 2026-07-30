@@ -52,7 +52,7 @@ export function RolesTab() {
   const [submitting, setSubmitting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
 
-  const { data, isPending, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["config", "roles"],
     queryFn: () => apiFetch<Role[]>("/config/roles")
   });
@@ -147,6 +147,9 @@ export function RolesTab() {
         columns={columns}
         data={data ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         emptyMessage="Belum ada role"
         headerActions={
           can("roles", "create") && (

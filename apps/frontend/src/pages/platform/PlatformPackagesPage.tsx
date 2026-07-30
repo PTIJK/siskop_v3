@@ -49,7 +49,7 @@ export function PlatformPackagesPage() {
   const [deactivating, setDeactivating] = useState<SubscriptionPackage | null>(null);
   const [apiError, setApiError] = useState("");
 
-  const { data, isPending, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["platform", "packages"],
     queryFn: () => apiFetch<SubscriptionPackage[]>("/platform/packages")
   });
@@ -184,6 +184,9 @@ export function PlatformPackagesPage() {
         columns={columns}
         data={data ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         emptyMessage="Belum ada paket langganan"
         headerActions={
           <Button onClick={openCreate}>

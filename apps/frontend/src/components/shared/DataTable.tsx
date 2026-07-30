@@ -3,7 +3,7 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { Search, ChevronLeft, ChevronRight, Inbox } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Inbox, AlertTriangle } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 export interface ColumnDef<T> {
@@ -17,6 +17,9 @@ interface DataTableProps<T> {
   columns: ColumnDef<T>[];
   data: T[];
   isLoading?: boolean;
+  isError?: boolean;
+  errorMessage?: string;
+  onRetry?: () => void;
   pagination?: {
     page: number;
     limit: number;
@@ -38,6 +41,9 @@ export function DataTable<T>({
   columns,
   data,
   isLoading,
+  isError,
+  errorMessage = "Gagal memuat data",
+  onRetry,
   pagination,
   search,
   onRowClick,
@@ -107,6 +113,20 @@ export function DataTable<T>({
                   ))}
                 </TableRow>
               ))
+            ) : isError ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="py-12 text-center">
+                  <div className="flex flex-col items-center gap-2 text-destructive">
+                    <AlertTriangle className="h-8 w-8" />
+                    <p className="text-sm">{errorMessage}</p>
+                    {onRetry && (
+                      <Button variant="outline" size="sm" onClick={onRetry}>
+                        Coba lagi
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
             ) : data.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={columns.length} className="py-12 text-center">

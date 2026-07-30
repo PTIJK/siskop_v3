@@ -1,5 +1,5 @@
 import type { ApiResponse } from "@siskop/types";
-import { getAccessToken } from "@/stores/auth";
+import { getAccessToken, getRefreshToken, useAuth } from "@/stores/auth";
 
 export class ApiRequestError extends Error {
   constructor(
@@ -12,21 +12,78 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function envelope<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
-  const token = getAccessToken();
+// These don't carry (or aren't protecting with) an access token, so a 401 from
+// them is a real auth failure, not an expired-access-token situation — chasing
+// them through the refresh-and-retry path below would just loop.
+const NO_REFRESH_PATHS = ["/auth/login", "/auth/refresh", "/auth/register"];
 
-  const res = await fetch(`/api${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers ?? {})
+// Concurrent 401s (several queries expiring at once) must share one refresh
+// call rather than each minting — and rotating — their own token pair.
+let refreshPromise: Promise<string> | null = null;
+
+async function refreshAccessToken(): Promise<string> {
+  refreshPromise ??= (async () => {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) throw new ApiRequestError("No refresh token", "UNAUTHORIZED", 401);
+
+    const res = await fetch("/api/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken })
+    });
+    const body = (await res.json()) as ApiResponse<{ accessToken: string; refreshToken: string }>;
+    if (!res.ok || !body.success || body.data === undefined) {
+      throw new ApiRequestError(body.error?.message ?? "Session expired", body.error?.code ?? "UNAUTHORIZED", res.status);
     }
+
+    useAuth.getState().setTokens(body.data.accessToken, body.data.refreshToken);
+    return body.data.accessToken;
+  })().finally(() => {
+    refreshPromise = null;
   });
+
+  return refreshPromise;
+}
+
+/** Retries once with a refreshed token on a 401; falls through to the original response on any other failure. */
+async function withAuthRetry(
+  path: string,
+  doRequest: (token: string | null) => Promise<Response>
+): Promise<Response> {
+  const token = getAccessToken();
+  const res = await doRequest(token);
+
+  if (res.status !== 401 || !token || NO_REFRESH_PATHS.includes(path)) {
+    return res;
+  }
+
+  try {
+    const newToken = await refreshAccessToken();
+    return await doRequest(newToken);
+  } catch {
+    useAuth.getState().clear();
+    return res;
+  }
+}
+
+async function envelope<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
+  const res = await withAuthRetry(path, (token) =>
+    fetch(`/api${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init.headers ?? {})
+      }
+    })
+  );
 
   const body = (await res.json()) as ApiResponse<T>;
 
   if (!res.ok || !body.success || body.data === undefined) {
+    // A 401 that survived a refresh attempt (or had no token to refresh) means
+    // the session is truly gone — clear it so AppLayout's guard redirects to /login.
+    if (res.status === 401) useAuth.getState().clear();
     throw new ApiRequestError(
       body.error?.message ?? "Request failed",
       body.error?.code ?? "INTERNAL_ERROR",
@@ -69,16 +126,17 @@ export function apiDelete<T>(path: string): Promise<T> {
 
 /** Multipart upload (e.g. KTP photo) — omits the JSON Content-Type header so the browser sets the boundary. */
 export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
-  const token = getAccessToken();
-
-  const res = await fetch(`/api${path}`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: formData
-  });
+  const res = await withAuthRetry(path, (token) =>
+    fetch(`/api${path}`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData
+    })
+  );
 
   const body = (await res.json()) as ApiResponse<T>;
   if (!res.ok || !body.success || body.data === undefined) {
+    if (res.status === 401) useAuth.getState().clear();
     throw new ApiRequestError(
       body.error?.message ?? "Request failed",
       body.error?.code ?? "INTERNAL_ERROR",

@@ -19,7 +19,7 @@ export function MembersPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["members", { page, search }],
     queryFn: () =>
       apiFetchPage<Member[]>(
@@ -92,6 +92,9 @@ export function MembersPage() {
         columns={columns}
         data={data?.items ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         search={{
           value: search,
           onChange: (v) => {

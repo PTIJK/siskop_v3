@@ -32,7 +32,7 @@ export function UnitsTab() {
   const [editing, setEditing] = useState<CooperativeUnit | null>(null);
   const [apiError, setApiError] = useState("");
 
-  const { data, isPending, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["config", "units"],
     queryFn: () => apiFetch<CooperativeUnit[]>("/config/units")
   });
@@ -121,6 +121,9 @@ export function UnitsTab() {
         columns={columns}
         data={data ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         emptyMessage="Belum ada unit koperasi"
         headerActions={
           can("config", "update") && (

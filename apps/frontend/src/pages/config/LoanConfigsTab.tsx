@@ -33,7 +33,7 @@ export function LoanConfigsTab() {
   const [editing, setEditing] = useState<LoanConfig | null>(null);
   const [apiError, setApiError] = useState("");
 
-  const { data, isPending, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["config", "loan-configs"],
     queryFn: () => apiFetch<LoanConfig[]>("/loans/configs")
   });
@@ -112,6 +112,9 @@ export function LoanConfigsTab() {
         columns={columns}
         data={data ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         emptyMessage="Belum ada konfigurasi pinjaman"
         headerActions={
           can("config", "update") && (

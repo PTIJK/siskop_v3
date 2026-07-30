@@ -44,7 +44,7 @@ export function AccountMappingsTab() {
   const [apiError, setApiError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<AccountMapping | null>(null);
 
-  const { data, isPending, error, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["config", "account-mappings"],
     queryFn: () => apiFetch<AccountMapping[]>("/config/account-mappings"),
     retry: (failureCount, err) => err instanceof ApiRequestError && err.code === "FEATURE_NOT_ENTITLED" ? false : failureCount < 3
@@ -137,6 +137,9 @@ export function AccountMappingsTab() {
         columns={columns}
         data={data ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         emptyMessage="Belum ada pemetaan akun — transaksi akan tercatat sebagai belum terposting sampai dipetakan"
         headerActions={
           can("accounting", "create") && (

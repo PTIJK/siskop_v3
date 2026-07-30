@@ -33,7 +33,7 @@ export function SavingConfigsTab() {
   const [editing, setEditing] = useState<SavingConfig | null>(null);
   const [apiError, setApiError] = useState("");
 
-  const { data, isPending, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["config", "saving-configs"],
     queryFn: () => apiFetch<SavingConfig[]>("/savings/configs")
   });
@@ -112,6 +112,9 @@ export function SavingConfigsTab() {
         columns={columns}
         data={data ?? []}
         isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : undefined}
+        onRetry={refetch}
         emptyMessage="Belum ada konfigurasi simpanan"
         headerActions={
           can("config", "update") && (
