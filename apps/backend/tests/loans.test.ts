@@ -129,7 +129,7 @@ describe("POST /api/loans", () => {
       });
 
     expect(res.status).toBe(201);
-    const loans = await db.loan.findMany({ where: { memberId: member.id } });
+    const loans = await db.loan.findMany({ where: { tenantId: admin.user.tenantId, memberId: member.id } });
     expect(loans).toHaveLength(2);
   });
 
@@ -308,7 +308,7 @@ describe("GET /api/loans/overdue", () => {
     // No payments recorded since disbursement 1+ year ago — every installment
     // is overdue, so KOL classification should have degraded past LANCAR.
     await db.loan.update({
-      where: { id: created.body.data.id },
+      where: { id: created.body.data.id, tenantId: admin.user.tenantId },
       data: { kolCategory: "MACET", daysOverdue: 200 }
     });
 

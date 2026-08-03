@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/stores/auth";
+import { apiPost } from "@/api/client";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import {
   DropdownMenu,
@@ -43,8 +44,13 @@ export function Topbar() {
     )?.[1] ?? "SISKOP";
 
   function logout() {
-    clear();
-    navigate("/login", { replace: true });
+    // The refresh token is an httpOnly cookie this page can't see, let alone
+    // delete — clearing local state alone would leave it valid server-side.
+    // Best-effort: navigate away regardless of whether the request succeeds.
+    void apiPost("/auth/logout", {}).finally(() => {
+      clear();
+      navigate("/login", { replace: true });
+    });
   }
 
   return (

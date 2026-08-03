@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import type { Permissions } from "@siskop/types";
-import { db } from "../../lib/db.js";
+import { db, type TxClient } from "../../lib/db.js";
 import { CooperativeType } from "@siskop/types";
 
 const unitInput = z.object({
@@ -33,7 +33,7 @@ const provisionInput = z.object({
 
 export type ProvisionTenantInput = z.input<typeof provisionInput>;
 
-type Tx = Prisma.TransactionClient;
+type Tx = TxClient;
 
 const FULL: Permissions["members"] = { create: true, read: true, update: true, delete: true };
 const READ_ONLY = { read: true };

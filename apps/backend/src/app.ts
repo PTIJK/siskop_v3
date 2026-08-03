@@ -1,6 +1,7 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import helmet from "helmet";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
@@ -31,6 +32,9 @@ export function createApp(): Express {
     })
   );
   app.use(express.json({ limit: "1mb" }));
+  // The refresh token rides in an httpOnly cookie (see modules/auth/refresh-cookie.ts);
+  // nothing else in the app reads cookies, so this only exists for that.
+  app.use(cookieParser());
 
   // Serves KTP uploads (members/routes.ts) at the same URL path they're stored
   // under (/uploads/ktp/{tenantId}/{file}). Helmet's default CORP header would

@@ -1,8 +1,6 @@
-import type { Prisma } from "@prisma/client";
 import { ErrorCode } from "@siskop/types";
 import { AppError } from "./errors.js";
-
-type TxClient = Prisma.TransactionClient;
+import type { TxClient } from "./db.js";
 
 interface JournalLineInput {
   accountId: string;

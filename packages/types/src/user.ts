@@ -32,9 +32,13 @@ export interface LoginRequest {
   password: string;
 }
 
+/**
+ * The refresh token is deliberately absent here — it travels only in an
+ * httpOnly cookie (see backend modules/auth/refresh-cookie.ts) so client-side
+ * JS, and therefore an XSS payload, can never read it.
+ */
 export interface LoginResponse {
   accessToken: string;
-  refreshToken: string;
   user: User;
 }
 
@@ -52,10 +56,6 @@ export interface RegisterTenantRequest {
   adminEmail: string;
   password: string;
   firstUnit: { type: string; name: string };
-}
-
-export interface RefreshRequest {
-  refreshToken: string;
 }
 
 /** Config > Pengguna: creates a tenant staff login. Members never appear here — see Member. */
@@ -84,9 +84,9 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
+/** Same rationale as `LoginResponse` — the rotated refresh token rides the cookie, not this body. */
 export interface RefreshResponse {
   accessToken: string;
-  refreshToken: string;
 }
 
 /**

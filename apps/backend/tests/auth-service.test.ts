@@ -50,9 +50,11 @@ describe("registerTenant", () => {
   });
 
   it("stores the password hashed, never in plaintext", async () => {
-    await registerTenant(REGISTRATION);
+    const session = await registerTenant(REGISTRATION);
 
-    const user = await db.user.findFirst({ where: { email: "admin@demo.test" } });
+    const user = await db.user.findFirst({
+      where: { tenantId: session.user.tenantId, email: "admin@demo.test" }
+    });
     expect(user?.passwordHash).toBeDefined();
     expect(user?.passwordHash).not.toBe(REGISTRATION.password);
     expect(user?.passwordHash).toMatch(/^\$2[aby]\$/);
@@ -80,8 +82,10 @@ describe("registerTenant", () => {
 });
 
 describe("login", () => {
+  let session: Awaited<ReturnType<typeof registerTenant>>;
+
   beforeEach(async () => {
-    await registerTenant(REGISTRATION);
+    session = await registerTenant(REGISTRATION);
   });
 
   it("issues a token carrying tenantId and the admin's units", async () => {
@@ -136,7 +140,10 @@ describe("login", () => {
   });
 
   it("rejects a deactivated user", async () => {
-    await db.user.updateMany({ where: { email: "admin@demo.test" }, data: { isActive: false } });
+    await db.user.updateMany({
+      where: { tenantId: session.user.tenantId, email: "admin@demo.test" },
+      data: { isActive: false }
+    });
     await expect(login("demo", "admin@demo.test", "rahasia123")).rejects.toThrow(/UNAUTHORIZED/);
   });
 
@@ -147,7 +154,9 @@ describe("login", () => {
 
   it("records lastLoginAt", async () => {
     await login("demo", "admin@demo.test", "rahasia123");
-    const user = await db.user.findFirst({ where: { email: "admin@demo.test" } });
+    const user = await db.user.findFirst({
+      where: { tenantId: session.user.tenantId, email: "admin@demo.test" }
+    });
     expect(user?.lastLoginAt).toBeInstanceOf(Date);
   });
 });

@@ -182,7 +182,7 @@ prior version of this document.
 | Framework | React 18 + Vite 5 + TypeScript | `apps/frontend` |
 | Routing | React Router 6 | `App.tsx` — `/login` (public), everything else behind `AppLayout` |
 | Server state | TanStack Query 5 | Used throughout — every list/detail page fetches via `useQuery`, mutations via `apiPost`/`apiPut`/`apiDelete` + manual `refetch()` (no optimistic updates) |
-| Client/auth state | Zustand | `stores/auth.ts` — `accessToken`/`user` persisted to `localStorage` |
+| Client/auth state | Zustand | `stores/auth.ts` — `accessToken` is memory-only (never persisted); `user` is cached to `localStorage` for instant UI |
 | Styling | Tailwind CSS 3 + shadcn/ui | Full component kit (`components/ui/*`): dialog, dropdown-menu, table, tabs, toast, alert-dialog, checkbox, select, etc. |
 | Icons | `lucide-react` | |
 | API client | Hand-written `apiFetch<T>()` (`api/client.ts`) | Prefixes every call with `/api`, attaches the bearer token, unwraps `ApiResponse<T>`, throws `ApiRequestError` (carries `.code`/`.status`) on `!success` |
@@ -245,6 +245,14 @@ design (`GET /platform/tenants` lists every tenant).
 - **Password storage**: bcrypt, 10 rounds.
 - **Session**: short-lived access JWT (15m default) + longer-lived refresh JWT (7d default), both
   signed with separate secrets that must be set — no fallback default.
+- **Token transport**: the access token rides in the response body and is attached by the client
+  as a `Bearer` header, kept in memory only (never `localStorage`). The refresh token never
+  reaches client JS at all — the backend sets it as an `httpOnly`, `SameSite=Strict` cookie scoped
+  to `/api/auth` (`modules/auth/refresh-cookie.ts`), so an XSS payload that can execute JS on the
+  page still cannot read either token. `POST /api/auth/refresh` reads the cookie, not the request
+  body; `POST /api/auth/logout` clears it. The frontend restores a session after a page reload by
+  calling `/auth/refresh` once on `AppLayout` mount (`refreshAccessToken()` in `api/client.ts`) —
+  there is nothing durable client-side to read back.
 - **Refresh tokens are stateless**: a signed JWT carrying identity only (`userId`, `tenantId`,
   `typ: "refresh"`), *not* a DB-backed row. This is a deliberate divergence from the pre-rescaffold
   backup this product was merged from, which had a persisted, individually-revocable `RefreshToken`

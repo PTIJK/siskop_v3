@@ -98,7 +98,7 @@ export async function updateMember(tenantId: string, id: string, data: UpdateMem
   }
 
   return db.member.update({
-    where: { id },
+    where: { id, tenantId },
     data: {
       ...(data.fullName && { fullName: data.fullName }),
       ...(data.nik && { nik: data.nik }),
@@ -114,12 +114,12 @@ export async function deactivateMember(tenantId: string, id: string): Promise<vo
   const member = await db.member.findFirst({ where: { id, tenantId } });
   if (!member) throw notFound("Anggota tidak ditemukan");
 
-  await db.member.update({ where: { id }, data: { isActive: false } });
+  await db.member.update({ where: { id, tenantId }, data: { isActive: false } });
 }
 
 export async function uploadMemberKtp(tenantId: string, id: string, filePath: string) {
   const member = await db.member.findFirst({ where: { id, tenantId } });
   if (!member) throw notFound("Anggota tidak ditemukan");
 
-  return db.member.update({ where: { id }, data: { ktpPhotoUrl: filePath } });
+  return db.member.update({ where: { id, tenantId }, data: { ktpPhotoUrl: filePath } });
 }

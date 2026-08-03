@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import type { LoginResponse, User } from "@siskop/types";
 
-const ACCESS_KEY = "siskop.accessToken";
-const REFRESH_KEY = "siskop.refreshToken";
 const USER_KEY = "siskop.user";
 
 function readUser(): User | null {
@@ -20,30 +18,28 @@ interface AuthState {
   user: User | null;
   accessToken: string | null;
   setSession: (session: LoginResponse) => void;
-  setTokens: (accessToken: string, refreshToken: string) => void;
+  setAccessToken: (accessToken: string) => void;
   updateUser: (user: User) => void;
   clear: () => void;
 }
 
+// The access token lives in memory only — not localStorage — so an XSS
+// payload reading storage at rest finds nothing, and it disappears on
+// reload/tab-close by construction. The refresh token never reaches this
+// store at all: it rides an httpOnly cookie set by the backend (see
+// modules/auth/refresh-cookie.ts), invisible to any JS on this page. A page
+// reload restores the session via api/client.ts's bootstrap silent-refresh
+// call, not from anything persisted here.
 export const useAuth = create<AuthState>((set) => ({
-  // Seeded from localStorage so a reload does not bounce the user to /login.
   user: readUser(),
-  accessToken: localStorage.getItem(ACCESS_KEY),
+  accessToken: null,
 
   setSession: (session) => {
-    localStorage.setItem(ACCESS_KEY, session.accessToken);
-    localStorage.setItem(REFRESH_KEY, session.refreshToken);
     localStorage.setItem(USER_KEY, JSON.stringify(session.user));
     set({ user: session.user, accessToken: session.accessToken });
   },
 
-  // Silent refresh (api/client.ts) only mints a new token pair, not a new
-  // user/permissions snapshot — the cached user record is left untouched.
-  setTokens: (accessToken, refreshToken) => {
-    localStorage.setItem(ACCESS_KEY, accessToken);
-    localStorage.setItem(REFRESH_KEY, refreshToken);
-    set({ accessToken });
-  },
+  setAccessToken: (accessToken) => set({ accessToken }),
 
   // Profile self-edit (name/email) doesn't mint new tokens, so only the
   // cached user record needs updating — see pages/profile/ProfilePage.
@@ -53,17 +49,11 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   clear: () => {
-    localStorage.removeItem(ACCESS_KEY);
-    localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
     set({ user: null, accessToken: null });
   }
 }));
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_KEY);
-}
-
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
+  return useAuth.getState().accessToken;
 }

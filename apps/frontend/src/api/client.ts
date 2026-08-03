@@ -1,5 +1,5 @@
 import type { ApiResponse } from "@siskop/types";
-import { getAccessToken, getRefreshToken, useAuth } from "@/stores/auth";
+import { getAccessToken, useAuth } from "@/stores/auth";
 
 export class ApiRequestError extends Error {
   constructor(
@@ -18,25 +18,29 @@ export class ApiRequestError extends Error {
 const NO_REFRESH_PATHS = ["/auth/login", "/auth/refresh", "/auth/register"];
 
 // Concurrent 401s (several queries expiring at once) must share one refresh
-// call rather than each minting — and rotating — their own token pair.
+// call rather than each minting its own new access token.
 let refreshPromise: Promise<string> | null = null;
 
-async function refreshAccessToken(): Promise<string> {
+/**
+ * Exchanges the httpOnly refresh cookie (invisible to this JS — the browser
+ * attaches it automatically via `credentials: "include"`) for a new access
+ * token. Also the app's bootstrap call: since the access token lives only in
+ * memory (see stores/auth.ts), a page reload has none, and this is what
+ * restores the session from the cookie without redirecting to /login first.
+ */
+export async function refreshAccessToken(): Promise<string> {
   refreshPromise ??= (async () => {
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) throw new ApiRequestError("No refresh token", "UNAUTHORIZED", 401);
-
     const res = await fetch("/api/auth/refresh", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken })
+      credentials: "include",
+      headers: { "Content-Type": "application/json" }
     });
-    const body = (await res.json()) as ApiResponse<{ accessToken: string; refreshToken: string }>;
+    const body = (await res.json()) as ApiResponse<{ accessToken: string }>;
     if (!res.ok || !body.success || body.data === undefined) {
       throw new ApiRequestError(body.error?.message ?? "Session expired", body.error?.code ?? "UNAUTHORIZED", res.status);
     }
 
-    useAuth.getState().setTokens(body.data.accessToken, body.data.refreshToken);
+    useAuth.getState().setAccessToken(body.data.accessToken);
     return body.data.accessToken;
   })().finally(() => {
     refreshPromise = null;

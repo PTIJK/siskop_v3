@@ -42,7 +42,7 @@ export async function createSavingConfig(tenantId: string, data: CreateSavingCon
 export async function updateSavingConfig(tenantId: string, id: string, data: UpdateSavingConfigInput) {
   const config = await db.savingConfig.findFirst({ where: { id, tenantId } });
   if (!config) throw notFound("Konfigurasi simpanan tidak ditemukan");
-  return db.savingConfig.update({ where: { id }, data });
+  return db.savingConfig.update({ where: { id, tenantId }, data });
 }
 
 // ── Saving accounts ───────────────────────────────────────────────────────
@@ -183,7 +183,7 @@ export async function depositToSaving(
     const saving = await tx.saving.findUnique({ where: { id: savingId } });
     if (!saving || saving.tenantId !== tenantId) throw notFound("Rekening simpanan tidak ditemukan");
 
-    await tx.saving.update({ where: { id: savingId }, data: { balance: { increment: data.amount } } });
+    await tx.saving.update({ where: { id: savingId, tenantId }, data: { balance: { increment: data.amount } } });
 
     const transaction = await tx.savingTransaction.create({
       data: { savingId, tenantId, type: "DEPOSIT", amount: data.amount, note: data.note, createdBy }
@@ -234,7 +234,7 @@ export async function withdrawFromSaving(
       }
     }
 
-    await tx.saving.update({ where: { id: savingId }, data: { balance: { decrement: data.amount } } });
+    await tx.saving.update({ where: { id: savingId, tenantId }, data: { balance: { decrement: data.amount } } });
 
     const transaction = await tx.savingTransaction.create({
       data: { savingId, tenantId, type: "WITHDRAWAL", amount: data.amount, note: data.note, createdBy }

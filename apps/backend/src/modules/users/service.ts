@@ -58,7 +58,7 @@ export async function updateUser(
   }
 
   const updated = await db.user.update({
-    where: { id },
+    where: { id, tenantId },
     data: {
       ...(data.name !== undefined ? { name: data.name } : {}),
       ...(data.email !== undefined ? { email: data.email } : {}),

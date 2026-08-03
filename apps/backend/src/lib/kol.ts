@@ -49,7 +49,7 @@ export async function recalculateKOL(loanId: string): Promise<KOLCategory> {
   const newCategory = getKOLCategory(maxDaysOverdue);
 
   await db.loan.update({
-    where: { id: loanId },
+    where: { id: loanId, tenantId: loan.tenantId },
     data: { kolCategory: newCategory, daysOverdue: maxDaysOverdue }
   });
 

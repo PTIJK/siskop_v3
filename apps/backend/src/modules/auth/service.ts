@@ -18,6 +18,14 @@ import { deriveUserRole, toPublicUser, type UserWithRole } from "../../lib/user-
 
 const BCRYPT_ROUNDS = 10;
 
+// The wire types (LoginResponse/RefreshResponse) omit the refresh token — it
+// travels only in an httpOnly cookie set by the route layer. Service
+// functions still need to hand that token to the route to put in the cookie,
+// so they return this superset; routes.ts strips `refreshToken` back out
+// before the response body is built.
+type Session = LoginResponse & { refreshToken: string };
+type RefreshedSession = RefreshResponse & { refreshToken: string };
+
 const registerSchema = z.object({
   tenantName: z.string().min(1),
   slug: slugSchema,
@@ -67,7 +75,7 @@ function issue(claims: AuthClaims): { accessToken: string; refreshToken: string 
   };
 }
 
-async function sessionFor(user: UserWithRole): Promise<LoginResponse> {
+async function sessionFor(user: UserWithRole): Promise<Session> {
   const unitIds = await resolveUnitIds(user.tenantId);
   if (unitIds.length === 0) {
     // Deliberately not a silent empty-scope login: a user who can reach no unit
@@ -87,7 +95,7 @@ async function sessionFor(user: UserWithRole): Promise<LoginResponse> {
   return { ...issue(claims), user: toPublicUser(user) };
 }
 
-export async function registerTenant(input: RegisterTenantInput): Promise<LoginResponse> {
+export async function registerTenant(input: RegisterTenantInput): Promise<Session> {
   const data = registerSchema.parse(input);
   const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
 
@@ -140,7 +148,7 @@ export async function login(
   slug: string | null,
   email: string,
   password: string
-): Promise<LoginResponse> {
+): Promise<Session> {
   if (!slug) {
     throw validationError("Cooperative not identified — use your cooperative's subdomain");
   }
@@ -162,11 +170,11 @@ export async function login(
   if (!user || !ok || !user.isActive) throw unauthorized();
 
   const session = await sessionFor(user);
-  await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  await db.user.update({ where: { id: user.id, tenantId: user.tenantId }, data: { lastLoginAt: new Date() } });
   return session;
 }
 
-export async function refreshSession(token: string): Promise<RefreshResponse> {
+export async function refreshSession(token: string): Promise<RefreshedSession> {
   let payload: unknown;
   try {
     payload = jwt.verify(token, secret("JWT_REFRESH_SECRET"));
@@ -215,7 +223,7 @@ export async function updateProfile(
   }
 
   const updated = await db.user.update({
-    where: { id: userId },
+    where: { id: userId, tenantId },
     data: { name: data.name, email: data.email },
     include: { role: true }
   });
@@ -235,5 +243,5 @@ export async function changePassword(
   if (!ok) throw unauthorized("Password saat ini salah");
 
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-  await db.user.update({ where: { id: userId }, data: { passwordHash } });
+  await db.user.update({ where: { id: userId, tenantId }, data: { passwordHash } });
 }

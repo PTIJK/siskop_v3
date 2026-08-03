@@ -37,6 +37,21 @@ describe("POST /api/auth/register", () => {
     expect(res.body.meta.requestId).toBeTypeOf("string");
   });
 
+  it("never puts the refresh token in the response body — only in an httpOnly cookie", async () => {
+    const res = await request(app()).post("/api/auth/register").send(REGISTRATION);
+
+    expect(res.body.data.refreshToken).toBeUndefined();
+
+    const cookie = res.headers["set-cookie"]?.[0] ?? "";
+    expect(cookie).toMatch(/^siskop_refresh_token=/);
+    expect(cookie).toMatch(/HttpOnly/i);
+    expect(cookie).toMatch(/SameSite=Strict/i);
+    expect(cookie).toMatch(/Path=\/api\/auth/i);
+    // NODE_ENV is not "production" under the test runner — the dev server is
+    // plain HTTP, so a `Secure` cookie there would never be sent at all.
+    expect(cookie).not.toMatch(/Secure/i);
+  });
+
   it("rejects a short password with VALIDATION_ERROR, not a 500", async () => {
     const res = await request(app())
       .post("/api/auth/register")
@@ -81,6 +96,16 @@ describe("POST /api/auth/login", () => {
     expect(JSON.stringify(res.body)).not.toContain("$2");
   });
 
+  it("sets the refresh token as an httpOnly cookie instead of returning it in the body", async () => {
+    const res = await request(app())
+      .post("/api/auth/login")
+      .set("Host", "demo.localhost")
+      .send({ email: "admin@demo.test", password: "rahasia123" });
+
+    expect(res.body.data.refreshToken).toBeUndefined();
+    expect(res.headers["set-cookie"]?.[0]).toMatch(/^siskop_refresh_token=.+HttpOnly/is);
+  });
+
   it("rejects a wrong password with 401 and the UNAUTHORIZED code", async () => {
     const res = await request(app())
       .post("/api/auth/login")
@@ -120,18 +145,72 @@ describe("GET /api/auth/me", () => {
 });
 
 describe("POST /api/auth/refresh", () => {
-  it("exchanges a refresh token for a new pair", async () => {
-    const reg = await request(app()).post("/api/auth/register").send(REGISTRATION);
-    const res = await request(app())
-      .post("/api/auth/refresh")
-      .send({ refreshToken: reg.body.data.refreshToken });
+  it("exchanges the refresh cookie for a new access token", async () => {
+    const agent = request.agent(app());
+    await agent.post("/api/auth/register").send(REGISTRATION);
+
+    const res = await agent.post("/api/auth/refresh").send();
 
     expect(res.status).toBe(200);
     expect(res.body.data.accessToken).toBeTypeOf("string");
+    expect(res.body.data.refreshToken).toBeUndefined();
   });
 
-  it("rejects a garbage refresh token", async () => {
-    const res = await request(app()).post("/api/auth/refresh").send({ refreshToken: "nope" });
+  it("re-issues the refresh cookie on every use", async () => {
+    // Not asserting it differs from the cookie issued at registration: a JWT's
+    // `iat` has one-second resolution, so two tokens for the same user minted
+    // within the same wall-clock second are byte-identical — that's a JWT
+    // property, not a rotation bug. What must hold is that refresh always sets
+    // a fresh cookie rather than relying on the one already on the client.
+    const agent = request.agent(app());
+    await agent.post("/api/auth/register").send(REGISTRATION);
+
+    const res = await agent.post("/api/auth/refresh").send();
+
+    expect(res.headers["set-cookie"]?.[0]).toMatch(/^siskop_refresh_token=.+HttpOnly/is);
+  });
+
+  it("rejects a request carrying no refresh cookie", async () => {
+    const res = await request(app()).post("/api/auth/refresh").send();
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a garbage refresh cookie", async () => {
+    const res = await request(app())
+      .post("/api/auth/refresh")
+      .set("Cookie", "siskop_refresh_token=garbage")
+      .send();
+    expect(res.status).toBe(401);
+  });
+
+  it("no longer accepts a refresh token supplied in the request body", async () => {
+    const reg = await request(app()).post("/api/auth/register").send(REGISTRATION);
+    // Simulates the pre-fix client: no cookie set, token only in the body —
+    // must fail now that the cookie is the only accepted source.
+    const legacyToken = reg.body.data.refreshToken as string | undefined;
+    const res = await request(app())
+      .post("/api/auth/refresh")
+      .send({ refreshToken: legacyToken });
+
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("POST /api/auth/logout", () => {
+  it("clears the refresh cookie", async () => {
+    const res = await request(app()).post("/api/auth/logout").send();
+
+    expect(res.status).toBe(200);
+    const cookie = res.headers["set-cookie"]?.[0] ?? "";
+    expect(cookie).toMatch(/^siskop_refresh_token=;/);
+  });
+
+  it("a cookie cleared by logout no longer refreshes a session", async () => {
+    const agent = request.agent(app());
+    await agent.post("/api/auth/register").send(REGISTRATION);
+    await agent.post("/api/auth/logout").send();
+
+    const res = await agent.post("/api/auth/refresh").send();
     expect(res.status).toBe(401);
   });
 });

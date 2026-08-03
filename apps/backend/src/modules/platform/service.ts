@@ -10,6 +10,7 @@ import type {
 } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { conflict, notFound } from "../../lib/errors.js";
+import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import { toPublicUser } from "../../lib/user-mapper.js";
 import { provisionTenantInTx } from "../tenants/provision.js";
 import {
@@ -176,13 +177,19 @@ export async function deactivatePackage(id: string): Promise<SubscriptionPackage
 // gated purely on isPlatformAdmin (see middleware/rbac.ts#requirePlatformAdmin),
 // never on role.permissions — so a new platform admin is attached to the
 // creating admin's own tenantId/roleId purely to satisfy the FK constraint.
+//
+// These are the one legitimate class of cross-tenant User query, so they run
+// through withoutTenantScope() to opt out of the tenant-scope guard in
+// lib/tenant-scope.ts — every other call in this module keeps the guard on.
 
 export async function listPlatformAdmins(): Promise<PlatformAdmin[]> {
-  const users = await db.user.findMany({
-    where: { isPlatformAdmin: true },
-    include: { role: true },
-    orderBy: { createdAt: "desc" }
-  });
+  const users = await withoutTenantScope(() =>
+    db.user.findMany({
+      where: { isPlatformAdmin: true },
+      include: { role: true },
+      orderBy: { createdAt: "desc" }
+    })
+  );
   return users.map(toPublicUser);
 }
 
@@ -190,7 +197,9 @@ export async function createPlatformAdmin(
   creator: { tenantId: string; roleId: string },
   data: CreatePlatformAdminRequest
 ): Promise<PlatformAdmin> {
-  const existing = await db.user.findFirst({ where: { email: data.email, isPlatformAdmin: true } });
+  const existing = await withoutTenantScope(() =>
+    db.user.findFirst({ where: { email: data.email, isPlatformAdmin: true } })
+  );
   if (existing) throw conflict(`Email ${data.email} sudah terdaftar sebagai platform admin`);
 
   const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
@@ -209,33 +218,37 @@ export async function createPlatformAdmin(
 }
 
 export async function updatePlatformAdmin(id: string, data: UpdatePlatformAdminRequest): Promise<PlatformAdmin> {
-  const user = await db.user.findFirst({ where: { id, isPlatformAdmin: true } });
+  const user = await withoutTenantScope(() => db.user.findFirst({ where: { id, isPlatformAdmin: true } }));
   if (!user) throw notFound("Platform admin tidak ditemukan");
 
   if (data.email && data.email !== user.email) {
-    const duplicate = await db.user.findFirst({ where: { email: data.email, isPlatformAdmin: true } });
+    const duplicate = await withoutTenantScope(() =>
+      db.user.findFirst({ where: { email: data.email, isPlatformAdmin: true } })
+    );
     if (duplicate) throw conflict(`Email ${data.email} sudah digunakan`);
   }
 
-  const updated = await db.user.update({
-    where: { id },
-    data: {
-      ...(data.name !== undefined ? { name: data.name } : {}),
-      ...(data.email !== undefined ? { email: data.email } : {}),
-      ...(data.isActive !== undefined ? { isActive: data.isActive } : {})
-    },
-    include: { role: true }
-  });
+  const updated = await withoutTenantScope(() =>
+    db.user.update({
+      where: { id },
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.email !== undefined ? { email: data.email } : {}),
+        ...(data.isActive !== undefined ? { isActive: data.isActive } : {})
+      },
+      include: { role: true }
+    })
+  );
   return toPublicUser(updated);
 }
 
 export async function deactivatePlatformAdmin(id: string, requestingUserId: string): Promise<void> {
-  const user = await db.user.findFirst({ where: { id, isPlatformAdmin: true } });
+  const user = await withoutTenantScope(() => db.user.findFirst({ where: { id, isPlatformAdmin: true } }));
   if (!user) throw notFound("Platform admin tidak ditemukan");
 
   if (id === requestingUserId) {
     throw conflict("Anda tidak dapat menonaktifkan akun sendiri");
   }
 
-  await db.user.update({ where: { id }, data: { isActive: false } });
+  await withoutTenantScope(() => db.user.update({ where: { id }, data: { isActive: false } }));
 }

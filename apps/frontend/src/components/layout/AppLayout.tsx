@@ -1,5 +1,8 @@
+import { useEffect, useState } from "react";
 import { Outlet, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/stores/auth";
+import { refreshAccessToken } from "@/api/client";
+import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { Toaster } from "../ui/toaster";
@@ -8,6 +11,27 @@ export function AppLayout() {
   const accessToken = useAuth((s) => s.accessToken);
   const isPlatformAdmin = useAuth((s) => s.user?.role === "super_admin");
   const location = useLocation();
+
+  // The access token lives only in memory (stores/auth.ts) — a hard reload
+  // always starts with none. Try one silent refresh against the httpOnly
+  // refresh cookie before deciding the session is gone, so reloading a page
+  // doesn't bounce a still-valid session to /login.
+  const [bootstrapping, setBootstrapping] = useState(!accessToken);
+
+  useEffect(() => {
+    if (accessToken) return;
+    void refreshAccessToken()
+      .catch(() => {})
+      .finally(() => setBootstrapping(false));
+  }, []);
+
+  if (bootstrapping) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   if (!accessToken) return <Navigate to="/login" replace />;
 

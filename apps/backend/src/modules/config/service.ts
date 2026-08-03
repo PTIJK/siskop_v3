@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "../../lib/db.js";
 import { conflict, notFound, validationError } from "../../lib/errors.js";
+import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import type {
   CreateAccountInput,
   CreateRoleInput,
@@ -36,7 +37,7 @@ export async function updateUnit(tenantId: string, id: string, data: UpdateUnitI
     if (activeCount <= 1) throw conflict("Koperasi harus memiliki minimal 1 unit aktif");
   }
 
-  return db.cooperativeUnit.update({ where: { id }, data });
+  return db.cooperativeUnit.update({ where: { id, tenantId }, data });
 }
 
 // ── Roles ────────────────────────────────────────────────────────────────────
@@ -56,7 +57,7 @@ export async function updateRole(tenantId: string, id: string, data: UpdateRoleI
   if (!role) throw notFound("Role tidak ditemukan");
 
   return db.role.update({
-    where: { id },
+    where: { id, tenantId },
     data: {
       ...(data.name !== undefined ? { name: data.name } : {}),
       ...(data.permissions !== undefined
@@ -70,12 +71,12 @@ export async function deleteRole(tenantId: string, id: string): Promise<void> {
   const role = await db.role.findFirst({ where: { id, tenantId } });
   if (!role) throw notFound("Role tidak ditemukan");
 
-  const usersCount = await db.user.count({ where: { roleId: id } });
+  const usersCount = await db.user.count({ where: { tenantId, roleId: id } });
   if (usersCount > 0) {
     throw conflict("Role masih digunakan oleh pengguna aktif — pindahkan pengguna ke role lain terlebih dahulu");
   }
 
-  await db.role.delete({ where: { id } });
+  await db.role.delete({ where: { id, tenantId } });
 }
 
 // ── Accounts (Chart of Accounts) ───────────────────────────────────────────────
@@ -125,9 +126,9 @@ export async function updateAccount(tenantId: string, id: string, data: UpdateAc
 
   if (data.isActive === false && account.isActive) {
     const [childCount, mappingCount, journalLineCount] = await Promise.all([
-      db.account.count({ where: { parentId: id } }),
-      db.accountMapping.count({ where: { OR: [{ debitAccountId: id }, { creditAccountId: id }] } }),
-      db.journalLine.count({ where: { accountId: id } })
+      db.account.count({ where: { tenantId, parentId: id } }),
+      db.accountMapping.count({ where: { tenantId, OR: [{ debitAccountId: id }, { creditAccountId: id }] } }),
+      db.journalLine.count({ where: { tenantId, accountId: id } })
     ]);
     if (childCount > 0) throw conflict("Akun ini masih memiliki akun anak — nonaktifkan akun anak terlebih dahulu");
     if (mappingCount > 0) {
@@ -139,7 +140,7 @@ export async function updateAccount(tenantId: string, id: string, data: UpdateAc
   }
 
   return db.account.update({
-    where: { id },
+    where: { id, tenantId },
     data: {
       ...(data.code !== undefined ? { code: data.code } : {}),
       ...(data.name !== undefined ? { name: data.name } : {}),
@@ -206,7 +207,7 @@ export async function upsertAccountMapping(tenantId: string, data: UpsertAccount
 
   if (existing) {
     const updated = await db.accountMapping.update({
-      where: { id: existing.id },
+      where: { id: existing.id, tenantId },
       data: { debitAccountId: data.debitAccountId, creditAccountId: data.creditAccountId }
     });
     return { mapping: updated, created: false };
@@ -228,7 +229,7 @@ export async function upsertAccountMapping(tenantId: string, data: UpsertAccount
 export async function deleteAccountMapping(tenantId: string, id: string): Promise<void> {
   const mapping = await db.accountMapping.findFirst({ where: { id, tenantId } });
   if (!mapping) throw notFound("Pemetaan akun tidak ditemukan");
-  await db.accountMapping.delete({ where: { id } });
+  await db.accountMapping.delete({ where: { id, tenantId } });
 }
 
 // ── SHU Distribution ─────────────────────────────────────────────────────────
@@ -257,9 +258,14 @@ export async function getWhitelabelConfig(tenantId: string) {
 
 export async function upsertWhitelabelConfig(tenantId: string, data: UpsertWhitelabelConfigInput) {
   if (data.customDomain) {
-    const duplicate = await db.whitelabelConfig.findFirst({
-      where: { customDomain: data.customDomain, NOT: { tenantId } }
-    });
+    // Global uniqueness check by design: a custom domain must not collide
+    // with any *other* tenant's, so this one query legitimately spans all
+    // tenants — see lib/tenant-scope.ts.
+    const duplicate = await withoutTenantScope(() =>
+      db.whitelabelConfig.findFirst({
+        where: { customDomain: data.customDomain, NOT: { tenantId } }
+      })
+    );
     if (duplicate) throw conflict(`Domain ${data.customDomain} sudah digunakan koperasi lain`);
   }
 

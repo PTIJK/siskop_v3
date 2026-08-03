@@ -38,7 +38,7 @@ export async function createLoanConfig(tenantId: string, data: CreateLoanConfigI
 export async function updateLoanConfig(tenantId: string, id: string, data: UpdateLoanConfigInput) {
   const config = await db.loanConfig.findFirst({ where: { id, tenantId } });
   if (!config) throw notFound("Konfigurasi pinjaman tidak ditemukan");
-  return db.loanConfig.update({ where: { id }, data });
+  return db.loanConfig.update({ where: { id, tenantId }, data });
 }
 
 // ── Loans ─────────────────────────────────────────────────────────────────
@@ -238,7 +238,7 @@ export async function recordLoanPayment(
     const newStatus = newRemaining <= 0 ? ("COMPLETED" as const) : ("ACTIVE" as const);
 
     await tx.loan.update({
-      where: { id: loanId },
+      where: { id: loanId, tenantId },
       data: { remainingAmount: newRemaining, status: newStatus }
     });
 

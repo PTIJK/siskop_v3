@@ -3,14 +3,13 @@ import { z } from "zod";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { unauthorized } from "../../lib/errors.js";
 import { slugFromHost } from "./tenant-host.js";
+import { clearRefreshCookie, REFRESH_COOKIE_NAME, setRefreshCookie } from "./refresh-cookie.js";
 import { changePassword, getMe, login, refreshSession, registerTenant, updateProfile } from "./service.js";
 
 const loginBody = z.object({
   email: z.string().email(),
   password: z.string().min(1)
 });
-
-const refreshBody = z.object({ refreshToken: z.string().min(1) });
 
 const updateProfileBody = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
@@ -35,7 +34,8 @@ export function authRoutes(): Router {
   router.post(
     "/register",
     handle(async (req, res) => {
-      const session = await registerTenant(req.body);
+      const { refreshToken, ...session } = await registerTenant(req.body);
+      setRefreshCookie(res, refreshToken);
       res.status(201).json({ success: true, data: session, meta: res.locals.meta });
     })
   );
@@ -46,7 +46,8 @@ export function authRoutes(): Router {
       const { email, password } = loginBody.parse(req.body);
       // The tenant comes from the Host header, never the body — a caller must
       // not be able to name the tenant it wants to authenticate against.
-      const session = await login(slugFromHost(req.headers.host), email, password);
+      const { refreshToken, ...session } = await login(slugFromHost(req.headers.host), email, password);
+      setRefreshCookie(res, refreshToken);
       res.json({ success: true, data: session, meta: res.locals.meta });
     })
   );
@@ -54,8 +55,22 @@ export function authRoutes(): Router {
   router.post(
     "/refresh",
     handle(async (req, res) => {
-      const { refreshToken } = refreshBody.parse(req.body);
-      res.json({ success: true, data: await refreshSession(refreshToken), meta: res.locals.meta });
+      // httpOnly, so this is the only place the token can come from — a body
+      // field here would just reopen the XSS exposure this cookie closes.
+      const token = req.cookies?.[REFRESH_COOKIE_NAME];
+      if (typeof token !== "string" || !token) throw unauthorized("Missing refresh token");
+
+      const { refreshToken, ...rest } = await refreshSession(token);
+      setRefreshCookie(res, refreshToken);
+      res.json({ success: true, data: rest, meta: res.locals.meta });
+    })
+  );
+
+  router.post(
+    "/logout",
+    handle(async (_req, res) => {
+      clearRefreshCookie(res);
+      res.json({ success: true, data: { loggedOut: true }, meta: res.locals.meta });
     })
   );
 
