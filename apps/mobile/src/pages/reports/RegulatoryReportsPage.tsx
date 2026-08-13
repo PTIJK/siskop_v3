@@ -2,21 +2,23 @@ import { useState } from "react";
 import { NeracaTab } from "./regulatory/NeracaTab";
 import { ArusKasTab } from "./regulatory/ArusKasTab";
 import { LabaRugiTab } from "./regulatory/LabaRugiTab";
+import { ShuDistribusiTab } from "./regulatory/ShuDistribusiTab";
+import { CalkTab } from "./regulatory/CalkTab";
 import { cn } from "@/lib/utils";
 
 // FR-MOB-RPT-01 extension (docs/06-PRD-SISKOP-Mobile-Version.md §7/§12) —
-// the 3 "easy" regulatory reports (Neraca, Arus Kas, Laporan Hasil Usaha)
-// are now all built one at a time; SHU distribution and CALK stay deferred
-// (see conversation record — unpaginated member roster / inline narrative
-// editing respectively). Desktop's RegulatoryReportsPage.tsx uses a
-// `TabsList` that the original UI audit flagged as wrapping onto multiple
-// rows at 5 tabs (docs/06 §8.1) — this uses a horizontal-scroll strip
-// instead from the start, so it doesn't need reworking if SHU/CALK are ever
-// added later.
+// all 5 regulatory reports are now built, view-only. CALK's narrative
+// sections use only the "read" half of desktop's own canEdit-gated
+// NarrativeEditor (docs/06 §12) — editing is Fase 2 (input) work, not a
+// missing screen. Desktop's RegulatoryReportsPage.tsx uses a `TabsList`
+// that the original UI audit flagged as wrapping onto multiple rows at 5
+// tabs (docs/06 §8.1) — this uses a horizontal-scroll strip instead.
 const TABS = [
   { value: "neraca", label: "Neraca" },
   { value: "arus-kas", label: "Arus Kas" },
-  { value: "laba-rugi", label: "Hasil Usaha" }
+  { value: "laba-rugi", label: "Hasil Usaha" },
+  { value: "shu", label: "Pembagian SHU" },
+  { value: "calk", label: "CALK" }
 ] as const;
 
 export function RegulatoryReportsPage() {
@@ -47,6 +49,8 @@ export function RegulatoryReportsPage() {
       {tab === "neraca" && <NeracaTab />}
       {tab === "arus-kas" && <ArusKasTab />}
       {tab === "laba-rugi" && <LabaRugiTab />}
+      {tab === "shu" && <ShuDistribusiTab />}
+      {tab === "calk" && <CalkTab />}
     </div>
   );
 }

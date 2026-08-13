@@ -113,7 +113,7 @@ scope) that full-parity-within-scope doesn't override.
 | Members | ✅ Built — list + detail (view only, including KTP photo view) | Core field-staff lookup use case |
 | Savings | ✅ Built — list + detail, balance + transaction history, product-type filter (view only) | Core field-staff lookup use case |
 | Loans | ✅ Built — list + detail, KOL status, overdue view, status tabs, overdue banner, progress indicator (view only) | Core field-staff lookup use case |
-| Reports | ✅ Built — full financial/RAT summary views, all sub-sections (view only); **+ Neraca/Arus Kas/Laporan Hasil Usaha** (added 2026-08-13, see §11); Pembagian SHU/CALK still deferred | Core management use case |
+| Reports | ✅ Built — full financial/RAT summary views, all sub-sections; **+ all 5 regulatory reports** (Neraca/Arus Kas/Laporan Hasil Usaha/Pembagian SHU/CALK, completed 2026-08-13, see §11) — **100% view-only, nothing deferred within Reports** | Core management use case |
 | Profile | ✅ Built — **view only** (name, email, role); password change and profile editing remain write actions, excluded (§11). Reachable via a new avatar chip in the mobile `Topbar` (no bottom-tab slot exists for it) — added deliberately so the screen wasn't unreachable the way the Rekomendasi AI card briefly was (§8.5) | Was missing from the original Fase 1 draft (§12) — added under the parity principle |
 | Config | **Recommended out for Fase 1** (open item — see below) | Write-heavy by nature (COA, roles, mappings); read-only view of config screens has little standalone value, and it carries the heaviest UI risk in the whole app (§8: `RolesTab`'s permission matrix, `AccountsTab`'s indented COA) |
 | Platform Admin | **Out for Fase 1** | `super_admin`-only, cross-tenant SaaS-operator console, architecturally confined to `/platform/*` (`docs/01-PRD-SISKOP.md` §4a) — not used by koperasi field/management staff at all |
@@ -270,15 +270,25 @@ audit (§8.1–8.3) already exists to prevent for *layout* — this section exte
   Hasil Usaha are now built** (`apps/mobile/src/pages/reports/regulatory/`, reachable via a "Laporan
   Regulasi →" link on the main Laporan screen) — the original blanket deferral bundled all 5 together
   under one UI-complexity rationale that, on closer inspection, only really applied to two of them.
-  **Pembagian SHU and CALK remain deferred**, each for its own specific reason, not the original
-  generic one: SHU because `getShuDistribution()` returns its entire member roster with no
-  pagination (a real scalability question, unrelated to read/write scope); CALK because its
-  narrative sections are edited inline on desktop, so a clean read-only cut of it isn't just a
-  layout exercise — that decision belongs with Fase 2 (input), per the user's own staged plan
-  (read-only → input → new features). This also introduced a pattern with no earlier equivalent —
-  entitlement-gated routes (`requireAccountingEntitlement`) — handled with a new
-  `EntitlementNotice` component (untested against a real not-entitled tenant so far; the `demo`
-  seed tenant has the entitlement, `barokah` does not).
+  **Pembagian SHU is also now built** (added 2026-08-13, same file), closing out the read-only
+  technical debt flagged before Fase 2 started — its unpaginated-roster issue was fixed
+  client-side: the full `anggota` array is still fetched in one call (the backend can't easily
+  paginate it anyway, since `alokasi`/`shuBerjalan` are aggregates over the whole set), but rendered
+  15 rows per page instead of all at once. Demo data only has 10 members, so the fix couldn't be
+  stress-tested against a large roster — only the slicing logic itself, which is unaffected by row
+  count. **CALK is also now built** (added 2026-08-13, same file) — **all 5 regulatory reports are
+  complete, view-only.** The earlier reasoning for deferring CALK ("a clean read-only cut of it
+  isn't just a layout exercise — that decision belongs with Fase 2") was **wrong, not just
+  cautious**: desktop's own `NarrativeEditor` component already has a `canEdit`-gated read path (a
+  plain `<p>` instead of a `<Textarea>`) — the same read/write split already used for
+  `ProfilePage.tsx`. The mistake was concluding this from a structural description of the report
+  rather than from reading `CalkTab.tsx` itself; caught when the user asked "why isn't this
+  read-only too" rather than accepting the earlier call. Only CALK's *editing* capability is Fase 2
+  work — its narrative and ledger sections were exactly as buildable read-only as the other 4 all
+  along. Building the regulatory reports also introduced a pattern with no earlier mobile
+  equivalent — entitlement-gated routes (`requireAccountingEntitlement`) — handled with a new
+  `EntitlementNotice` component (still untested against a real not-entitled tenant; the `demo` seed
+  tenant has the entitlement, `barokah` does not).
 - Push notifications (the desktop `Notification`/`NotificationRead` schema exists but nothing
   consumes it yet, per `docs/03-ERD-SISKOP.md` §4 — mobile doesn't change that).
 - KTP photo **upload**/capture from mobile — Fase 1 is read-only, so only *viewing* an already-uploaded
