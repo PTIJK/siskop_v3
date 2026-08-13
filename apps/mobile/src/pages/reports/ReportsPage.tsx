@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { FinancialReport, RATReport } from "@siskop/types";
 import { apiFetch, ApiRequestError } from "@/api/client";
 import { openPdf } from "@/lib/pdf";
@@ -102,7 +103,12 @@ export function ReportsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Laporan</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold tracking-tight">Laporan</h1>
+        <Link to="/reports/regulatory" className="text-xs font-medium text-primary">
+          Laporan Regulasi →
+        </Link>
+      </div>
 
       <div className="rounded-lg border bg-card p-4">
         <p className="mb-2 text-xs font-medium text-muted-foreground">Periode</p>

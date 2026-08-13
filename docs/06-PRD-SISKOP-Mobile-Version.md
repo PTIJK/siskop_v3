@@ -109,15 +109,19 @@ scope) that full-parity-within-scope doesn't override.
 
 | Module | Fase 1 mobile scope | Rationale |
 |---|---|---|
-| Dashboard | In — full parity with `DashboardPage.tsx`: summary stat cards, both charts, and the Rekomendasi AI card (§7) | Core "check status on the go" use case for both personas |
-| Members | In — list + detail (view only, including KTP photo view) | Core field-staff lookup use case |
-| Savings | In — list + detail, balance + transaction history, product-type filter (view only) | Core field-staff lookup use case |
-| Loans | In — list + detail, KOL status, overdue view, status tabs, overdue banner, progress indicator (view only) | Core field-staff lookup use case |
-| Reports | In — full financial/RAT summary views, all sub-sections (view only); regulatory reports (Neraca/Arus Kas/etc.) deferred — see below | Core management use case |
-| Profile | In — **view only** (name, email, role); password change and profile editing remain write actions, excluded (§11) | Was missing from the original Fase 1 draft (§12) — added under the parity principle |
+| Dashboard | ✅ Built — full parity with `DashboardPage.tsx`: summary stat cards, both charts, and the Rekomendasi AI card (§7) | Core "check status on the go" use case for both personas |
+| Members | ✅ Built — list + detail (view only, including KTP photo view) | Core field-staff lookup use case |
+| Savings | ✅ Built — list + detail, balance + transaction history, product-type filter (view only) | Core field-staff lookup use case |
+| Loans | ✅ Built — list + detail, KOL status, overdue view, status tabs, overdue banner, progress indicator (view only) | Core field-staff lookup use case |
+| Reports | ✅ Built — full financial/RAT summary views, all sub-sections (view only); **+ Neraca/Arus Kas/Laporan Hasil Usaha** (added 2026-08-13, see §11); Pembagian SHU/CALK still deferred | Core management use case |
+| Profile | ✅ Built — **view only** (name, email, role); password change and profile editing remain write actions, excluded (§11). Reachable via a new avatar chip in the mobile `Topbar` (no bottom-tab slot exists for it) — added deliberately so the screen wasn't unreachable the way the Rekomendasi AI card briefly was (§8.5) | Was missing from the original Fase 1 draft (§12) — added under the parity principle |
 | Config | **Recommended out for Fase 1** (open item — see below) | Write-heavy by nature (COA, roles, mappings); read-only view of config screens has little standalone value, and it carries the heaviest UI risk in the whole app (§8: `RolesTab`'s permission matrix, `AccountsTab`'s indented COA) |
 | Platform Admin | **Out for Fase 1** | `super_admin`-only, cross-tenant SaaS-operator console, architecturally confined to `/platform/*` (`docs/01-PRD-SISKOP.md` §4a) — not used by koperasi field/management staff at all |
 | Users (Pengguna) | Out for Fase 1 | Staff-management, not a field/monitoring need |
+
+**All 6 "In" modules above are now built and real-device-verified at 375px** (2026-08-13) — Fase 1's
+full-parity read-only scope, as defined in this document, is complete. Remaining exclusions
+(Config/Platform Admin/Users, regulatory reports) are confirmed decisions, not gaps.
 
 Config's exclusion is **this document's recommendation, not a confirmed decision** — flagged
 separately in §12 since it wasn't explicitly put to the user the way Platform Admin's exclusion was.
@@ -140,7 +144,7 @@ much lower UI risk.
 | FR-MOB-MEM-02 | View a member's detail (identity, KTP photo, enrolled units) and their savings/loan summary | `FR-MEM-01`, `MemberDetailPage.tsx` |
 | FR-MOB-SAV-01 | List a member's (or all) savings accounts with balance, searchable **and filterable by product type** (Pokok/Wajib/Sukarela dropdown — same as desktop, not optional) | `FR-SAV-*`, `SavingsPage.tsx` |
 | FR-MOB-SAV-02 | View a savings account's transaction history (deposit/withdrawal ledger) without the "Catatan" free-text column causing overflow | `SavingDetailPage.tsx` — see §8 risk |
-| FR-MOB-LOAN-01 | List loans with status, KOL classification, and remaining balance, without the desktop's 9-column table; **including** the overdue-count alert banner (links to FR-MOB-LOAN-03's view), the Semua/Aktif/Lunas status tabs, and the loan-type filter — all three are on desktop's `LoansDashboardPage.tsx` and are in scope, not just the raw table data | `LoansDashboardPage.tsx` — see §8 risk |
+| FR-MOB-LOAN-01 | List loans with status, KOL classification, and remaining balance, without the desktop's 9-column table; **including** the overdue-count alert banner (links to FR-MOB-LOAN-03's view — must be **always rendered**, not conditional on `overdueCount > 0`, since mobile's bottom-nav has no submenu equivalent to desktop's always-visible "Anggota Menunggak" sidebar item; a conditional-only banner leaves that screen unreachable whenever the count is 0 — fixed 2026-08-13), the Semua/Aktif/Lunas status tabs, and the loan-type filter — all three are on desktop's `LoansDashboardPage.tsx` and are in scope, not just the raw table data | `LoansDashboardPage.tsx` — see §8 risk |
 | FR-MOB-LOAN-02 | View a loan's detail: amortization terms, KOL status, payment history, **and the paid/remaining progress indicator** (% lunas + Dibayar/Sisa figures) — a distinct visual element on desktop's `LoanDetailPage.tsx`, not just the raw numbers | `LoanDetailPage.tsx` |
 | FR-MOB-LOAN-03 | "Anggota Menunggak" (overdue) view, same data as `OverduePage.tsx`, including its alert banner and KOL-severity row highlighting (already noted as functionally important in §8.2) | `FR-LOAN-07` |
 | FR-MOB-RPT-01 | View the financial and RAT summary reports (`ReportsPage.tsx`) for a date range, with **full parity on sub-sections**, not just headline figures: all 3 period-selection modes (Range Tanggal/Bulanan/Tahunan); Financial tab's 3 stat cards + 3 detail tables (Rincian Simpanan per Jenis, Rincian Transaksi Simpanan, Rincian Pinjaman); RAT tab's 6 stat cards + 2 detail tables (Simpanan per Jenis, Distribusi Kualitas Pinjaman/KOL) | `FR-RPT-01`, `FR-RPT-02` |
@@ -262,8 +266,19 @@ audit (§8.1–8.3) already exists to prevent for *layout* — this section exte
 - Native app / app-store distribution (§4) — conditional on director approval, not scheduled.
 - Offline support (§9, NFR-MOB-OFFLINE-01).
 - Config, Platform Admin, Users (Pengguna) modules (§6).
-- The 5 Permenkop UKM regulatory reports (Neraca/Arus Kas/Laporan Hasil Usaha/Pembagian SHU/CALK)
-  (§6) — deferred past Fase 1 alongside Config, for the same reasons.
+- **Revised 2026-08-13**: of the 5 Permenkop UKM regulatory reports, **Neraca, Arus Kas, and Laporan
+  Hasil Usaha are now built** (`apps/mobile/src/pages/reports/regulatory/`, reachable via a "Laporan
+  Regulasi →" link on the main Laporan screen) — the original blanket deferral bundled all 5 together
+  under one UI-complexity rationale that, on closer inspection, only really applied to two of them.
+  **Pembagian SHU and CALK remain deferred**, each for its own specific reason, not the original
+  generic one: SHU because `getShuDistribution()` returns its entire member roster with no
+  pagination (a real scalability question, unrelated to read/write scope); CALK because its
+  narrative sections are edited inline on desktop, so a clean read-only cut of it isn't just a
+  layout exercise — that decision belongs with Fase 2 (input), per the user's own staged plan
+  (read-only → input → new features). This also introduced a pattern with no earlier equivalent —
+  entitlement-gated routes (`requireAccountingEntitlement`) — handled with a new
+  `EntitlementNotice` component (untested against a real not-entitled tenant so far; the `demo`
+  seed tenant has the entitlement, `barokah` does not).
 - Push notifications (the desktop `Notification`/`NotificationRead` schema exists but nothing
   consumes it yet, per `docs/03-ERD-SISKOP.md` §4 — mobile doesn't change that).
 - KTP photo **upload**/capture from mobile — Fase 1 is read-only, so only *viewing* an already-uploaded

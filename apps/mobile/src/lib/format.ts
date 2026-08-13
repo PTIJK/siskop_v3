@@ -14,12 +14,20 @@ export function formatRupiah(amount: number | string): string {
   }).format(num);
 }
 
+// Magnitude checks use the absolute value with the sign re-applied — the
+// original (apps/frontend/src/lib/format.ts, ported verbatim at first) compared
+// the signed number directly, so e.g. -3_483_202 failed every `>=` threshold
+// and silently fell through to the long form. Only surfaced once a screen
+// (Neraca — a negative cash balance is a real accounting case) actually
+// rendered a negative amount through this function; found 2026-08-13.
 export function formatRupiahSingkat(amount: number | string): string {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
   if (isNaN(num)) return "Rp 0";
-  if (num >= 1_000_000_000) return `Rp ${(num / 1_000_000_000).toFixed(1)}M`;
-  if (num >= 1_000_000) return `Rp ${(num / 1_000_000).toFixed(1)}jt`;
-  if (num >= 1_000) return `Rp ${(num / 1_000).toFixed(0)}rb`;
+  const sign = num < 0 ? "-" : "";
+  const abs = Math.abs(num);
+  if (abs >= 1_000_000_000) return `${sign}Rp ${(abs / 1_000_000_000).toFixed(1)}M`;
+  if (abs >= 1_000_000) return `${sign}Rp ${(abs / 1_000_000).toFixed(1)}jt`;
+  if (abs >= 1_000) return `${sign}Rp ${(abs / 1_000).toFixed(0)}rb`;
   return formatRupiah(num);
 }
 

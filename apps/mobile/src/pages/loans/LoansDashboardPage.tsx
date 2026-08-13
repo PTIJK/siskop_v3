@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import type { LoanConfig } from "@siskop/types";
 import { apiFetch, apiFetchPage } from "@/api/client";
 import { formatRupiahSingkat } from "@/lib/format";
@@ -67,17 +67,28 @@ export function LoansDashboardPage() {
     <div className="space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Pinjaman</h1>
 
-      {overdueCount > 0 && (
-        <button
-          onClick={() => navigate("/loans/overdue")}
-          className="flex w-full items-center gap-2.5 rounded-lg border border-red-300 bg-red-50 px-3 py-2.5 text-left"
-        >
-          <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
-          <p className="flex-1 text-xs font-medium text-red-800">
-            {overdueCount} anggota memiliki pinjaman bermasalah (MACET/DIRAGUKAN)
-          </p>
-        </button>
-      )}
+      {/* Always rendered (not conditional on overdueCount) — desktop's
+          Sidebar has "Anggota Menunggak" as a permanent submenu item
+          regardless of whether any loan is currently overdue, and mobile's
+          bottom-nav has no equivalent submenu, so this is the only entry
+          point (docs/06-PRD-SISKOP-Mobile-Version.md §7, FR-MOB-LOAN-01). A
+          conditional-only banner would make the screen unreachable whenever
+          overdueCount is 0. */}
+      <button
+        onClick={() => navigate("/loans/overdue")}
+        className={cn(
+          "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left",
+          overdueCount > 0 ? "border-red-300 bg-red-50" : "border-muted bg-muted/40"
+        )}
+      >
+        <AlertTriangle className={cn("h-4 w-4 shrink-0", overdueCount > 0 ? "text-red-600" : "text-muted-foreground")} />
+        <p className={cn("flex-1 text-xs font-medium", overdueCount > 0 ? "text-red-800" : "text-muted-foreground")}>
+          {overdueCount > 0
+            ? `${overdueCount} anggota memiliki pinjaman bermasalah (MACET/DIRAGUKAN)`
+            : "Tidak ada pinjaman bermasalah saat ini"}
+        </p>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
 
       <select
         value={typeFilter}
