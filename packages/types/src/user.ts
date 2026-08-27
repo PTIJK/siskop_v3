@@ -103,3 +103,50 @@ export interface AuthClaims {
   roleId: string;
   permissions: Permissions;
 }
+
+// ── MEMBER PORTAL (mobile self-service) ────────────────────────────────────
+// A cooperative Member's own read-only login — entirely separate from staff
+// AuthClaims above (different shape, different JWT, different middleware).
+// See backend modules/member-auth and modules/member-portal.
+
+/** JWT payload for a member's own session — deliberately has no `permissions`/`unitIds`. */
+export interface MemberAuthClaims {
+  memberId: string;
+  tenantId: string;
+  role: "member";
+}
+
+/** The member types their NIK, not an email — Member has no email field. */
+export interface MemberLoginRequest {
+  nik: string;
+  password: string;
+}
+
+/** Safe subset of Member exposed to the member themself — no nik/ktpPhotoUrl/passwordHash. */
+export interface MemberProfile {
+  id: string;
+  memberId: string;
+  accountNumber: string;
+  fullName: string;
+  mustChangePassword: boolean;
+}
+
+export interface MemberLoginResponse {
+  accessToken: string;
+  member: MemberProfile;
+}
+
+export interface MemberRefreshResponse {
+  accessToken: string;
+}
+
+export interface ChangeMemberPasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+/** Staff-triggered activation/reset of a member's portal access — see members/routes.ts. */
+export interface PortalAccessResponse {
+  defaultPassword: string;
+  mustChangePassword: true;
+}

@@ -21,6 +21,32 @@ const MEMBER = {
   occupation: "Pedagang"
 };
 
+describe("passwordHash never reaches the wire", () => {
+  it("is absent from create/list/get responses, even after portal access is activated", async () => {
+    const admin = await setupTenant();
+    const created = await request(app())
+      .post("/api/members")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send(MEMBER);
+    expect(JSON.stringify(created.body)).not.toContain("passwordHash");
+
+    await request(app())
+      .post(`/api/members/${created.body.data.id}/portal-access`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send();
+
+    const list = await request(app()).get("/api/members").set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(JSON.stringify(list.body)).not.toContain("passwordHash");
+    expect(JSON.stringify(list.body)).not.toMatch(/\$2[aby]\$/);
+
+    const detail = await request(app())
+      .get(`/api/members/${created.body.data.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(JSON.stringify(detail.body)).not.toContain("passwordHash");
+    expect(JSON.stringify(detail.body)).not.toMatch(/\$2[aby]\$/);
+  });
+});
+
 describe("POST /api/members", () => {
   it("rejects an unauthenticated request", async () => {
     const res = await request(app()).post("/api/members").send(MEMBER);

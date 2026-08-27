@@ -8,6 +8,8 @@ import { ZodError } from "zod";
 import { ErrorCode } from "@siskop/types";
 import { AppError } from "./lib/errors.js";
 import { authRoutes } from "./modules/auth/routes.js";
+import { memberAuthRoutes } from "./modules/member-auth/routes.js";
+import { memberPortalRoutes } from "./modules/member-portal/routes.js";
 import { membersRoutes } from "./modules/members/routes.js";
 import { savingsRoutes } from "./modules/savings/routes.js";
 import { loansRoutes } from "./modules/loans/routes.js";
@@ -66,6 +68,8 @@ export function createApp(): Express {
   });
 
   app.use("/api/auth", authRoutes());
+  app.use("/api/member-auth", memberAuthRoutes());
+  app.use("/api/member", memberPortalRoutes());
   app.use("/api/members", membersRoutes());
   app.use("/api/savings", savingsRoutes());
   app.use("/api/loans", loansRoutes());

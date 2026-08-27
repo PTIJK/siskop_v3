@@ -1,23 +1,21 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import type { LoginResponse } from "@siskop/types";
-import { apiPost, ApiRequestError } from "@/api/client";
-import { useAuth } from "@/stores/auth";
+import type { MemberLoginResponse } from "@siskop/types";
+import { memberApiPost, ApiRequestError } from "@/api/memberClient";
+import { useMemberAuth } from "@/stores/memberAuth";
 
-// Ported verbatim (markup + colors) from apps/frontend/src/pages/LoginPage.tsx —
-// docs/06-PRD-SISKOP-Mobile-Version.md §12 item 5: the login screen especially
-// should look identical to desktop, since it's already a single-column,
-// already-mobile-ready layout (confirmed in the UI audit) with nothing to fix.
+// Mirrors pages/LoginPage.tsx, but the member types their NIK — Member has
+// no email field (see packages/types/src/user.ts#MemberLoginRequest).
 function currentSlug(): string | null {
   const [first, ...rest] = window.location.hostname.split(".");
   return rest.length > 0 && first ? first : null;
 }
 
-export default function LoginPage() {
+export default function MemberLoginPage() {
   const navigate = useNavigate();
-  const setSession = useAuth((s) => s.setSession);
+  const setSession = useMemberAuth((s) => s.setSession);
 
-  const [email, setEmail] = useState("");
+  const [nik, setNik] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -30,9 +28,11 @@ export default function LoginPage() {
     setPending(true);
 
     try {
-      const session = await apiPost<LoginResponse>("/auth/login", { email, password });
+      const session = await memberApiPost<MemberLoginResponse>("/member-auth/login", { nik, password });
       setSession(session);
-      navigate("/", { replace: true });
+      navigate(session.member.mustChangePassword ? "/anggota/ganti-password" : "/anggota/dashboard", {
+        replace: true
+      });
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Tidak dapat terhubung ke server");
     } finally {
@@ -45,11 +45,11 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-semibold text-slate-900">SISKOP</h1>
-          <p className="mt-1 text-sm text-slate-600">Sistem Informasi Koperasi — Mobile</p>
+          <p className="mt-1 text-sm text-slate-600">Portal Anggota</p>
         </div>
 
         <form onSubmit={onSubmit} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-medium text-slate-900">Masuk</h2>
+          <h2 className="text-lg font-medium text-slate-900">Masuk Anggota</h2>
           {slug ? (
             <p className="mt-1 text-sm text-slate-500">
               Koperasi: <span className="font-medium text-slate-700">{slug}</span>
@@ -60,16 +60,17 @@ export default function LoginPage() {
             </p>
           )}
 
-          <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="email">
-            Email
+          <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="nik">
+            NIK
           </label>
           <input
-            id="email"
-            type="email"
+            id="nik"
+            type="text"
+            inputMode="numeric"
             required
             autoComplete="username"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={nik}
+            onChange={(e) => setNik(e.target.value)}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-500"
           />
 
@@ -85,6 +86,9 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-500"
           />
+          <p className="mt-1 text-xs text-slate-500">
+            Kata sandi awal adalah tanggal lahir Anda (format DDMMYYYY), diaktifkan oleh petugas koperasi.
+          </p>
 
           {error && (
             <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -102,8 +106,8 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-4 text-center text-sm text-slate-600">
-          Anggota koperasi?{" "}
-          <a href="/anggota/login" className="font-medium text-slate-900 underline">
+          Petugas koperasi?{" "}
+          <a href="/login" className="font-medium text-slate-900 underline">
             Masuk di sini
           </a>
         </p>

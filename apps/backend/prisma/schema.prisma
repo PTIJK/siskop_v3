@@ -252,26 +252,32 @@ model User {
 
 // ── MEMBER ────────────────────────────────────────────────────────────────────
 
-// A koperasi member's identity. Deliberately carries no User/login — members
-// are managed by staff (tenant_admin/accountant), they do not self-service log
-// in (matches the pre-rescaffold product; the new scaffold's 1:1 Member<->User
-// requirement was dropped in the merge — see merge plan "Auth + RBAC merge").
+// A koperasi member's identity. Members are managed by staff
+// (tenant_admin/accountant) and carry no primary login of their own — but see
+// `passwordHash` below for the read-only mobile self-service portal, which
+// staff activate per member rather than the member self-registering.
 model Member {
-  id            String   @id @default(cuid())
-  tenantId      String
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  memberId      String   @unique
-  accountNumber String   @unique
-  fullName      String
-  nik           String
-  address       String
-  birthPlace    String
-  birthDate     DateTime
-  occupation    String
-  ktpPhotoUrl   String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  tenantId           String
+  tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberId           String    @unique
+  accountNumber      String    @unique
+  fullName           String
+  nik                String
+  address            String
+  birthPlace         String
+  birthDate          DateTime
+  occupation         String
+  ktpPhotoUrl        String?
+  isActive           Boolean   @default(true)
+  // Portal (mobile self-service) credentials. Null passwordHash means staff
+  // has never activated portal access for this member — see
+  // modules/member-auth/service.ts#activatePortalAccess.
+  passwordHash       String?
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   savings     Saving[]
   loans       Loan[]

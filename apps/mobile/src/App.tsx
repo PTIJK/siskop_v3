@@ -13,6 +13,15 @@ import { OverduePage } from "@/pages/loans/OverduePage";
 import { ReportsPage } from "@/pages/reports/ReportsPage";
 import { RegulatoryReportsPage } from "@/pages/reports/RegulatoryReportsPage";
 import { ProfilePage } from "@/pages/profile/ProfilePage";
+import MemberLoginPage from "@/pages/member/MemberLoginPage";
+import { MemberChangePasswordPage } from "@/pages/member/MemberChangePasswordPage";
+import { MemberAppLayout } from "@/components/layout/MemberAppLayout";
+import { MemberDashboardPage } from "@/pages/member/DashboardPage";
+import { MemberSavingsPage } from "@/pages/member/SavingsPage";
+import { MemberSavingDetailPage } from "@/pages/member/SavingDetailPage";
+import { MemberLoansPage } from "@/pages/member/LoansPage";
+import { MemberLoanDetailPage } from "@/pages/member/LoanDetailPage";
+import { MemberProfilePage } from "@/pages/member/ProfilePage";
 
 export default function App() {
   return (
@@ -20,6 +29,17 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+
+          <Route path="/anggota/login" element={<MemberLoginPage />} />
+          <Route path="/anggota/ganti-password" element={<MemberChangePasswordPage />} />
+          <Route element={<MemberAppLayout />}>
+            <Route path="/anggota/dashboard" element={<MemberDashboardPage />} />
+            <Route path="/anggota/simpanan" element={<MemberSavingsPage />} />
+            <Route path="/anggota/simpanan/:id" element={<MemberSavingDetailPage />} />
+            <Route path="/anggota/pinjaman" element={<MemberLoansPage />} />
+            <Route path="/anggota/pinjaman/:id" element={<MemberLoanDetailPage />} />
+            <Route path="/anggota/profil" element={<MemberProfilePage />} />
+          </Route>
 
           <Route element={<AppLayout />}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />

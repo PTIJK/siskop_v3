@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import type { Member } from "@siskop/types";
-import { apiFetch } from "@/api/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Member, PortalAccessResponse } from "@siskop/types";
+import { apiFetch, apiPost, ApiRequestError } from "@/api/client";
 import { formatRupiah, formatTanggalIndonesia } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { KOLBadge } from "@/components/shared/KOLBadge";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
@@ -12,7 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Edit, PiggyBank, CreditCard, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Edit, PiggyBank, CreditCard, ArrowDownCircle, ArrowUpCircle, Smartphone } from "lucide-react";
 
 interface MemberDetail extends Member {
   savings: { id: string; savingConfig: { name: string; type: string }; balance: string; isActive: boolean }[];
@@ -33,12 +35,32 @@ export function MemberDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { can } = usePermissions();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [ktpLightbox, setKtpLightbox] = useState(false);
+  const [portalDialog, setPortalDialog] = useState(false);
+  const [portalResult, setPortalResult] = useState<PortalAccessResponse | null>(null);
+  const [isActivatingPortal, setIsActivatingPortal] = useState(false);
 
   const { data: member, isPending } = useQuery({
     queryKey: ["members", id],
     queryFn: () => apiFetch<MemberDetail>(`/members/${id}`)
   });
+
+  async function handleActivatePortal() {
+    setIsActivatingPortal(true);
+    try {
+      const result = await apiPost<PortalAccessResponse>(`/members/${id}/portal-access`, {});
+      setPortalResult(result);
+      await queryClient.invalidateQueries({ queryKey: ["members", id] });
+    } catch (err) {
+      const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
+      toast({ title: "Gagal", description: message, variant: "destructive" });
+      setPortalDialog(false);
+    } finally {
+      setIsActivatingPortal(false);
+    }
+  }
 
   if (isPending) return <PageLoading />;
   if (!member) return <p className="text-center text-muted-foreground">Anggota tidak ditemukan</p>;
@@ -53,9 +75,20 @@ export function MemberDetailPage() {
         breadcrumb={[{ label: "Anggota", href: "/members" }, { label: member.fullName }]}
         actions={
           can("members", "update") && (
-            <Button variant="outline" onClick={() => navigate(`/members/${id}/edit`)}>
-              <Edit className="mr-2 h-4 w-4" /> Edit
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPortalResult(null);
+                  setPortalDialog(true);
+                }}
+              >
+                <Smartphone className="mr-2 h-4 w-4" /> Akses Mobile
+              </Button>
+              <Button variant="outline" onClick={() => navigate(`/members/${id}/edit`)}>
+                <Edit className="mr-2 h-4 w-4" /> Edit
+              </Button>
+            </div>
           )
         }
       />
@@ -231,6 +264,47 @@ export function MemberDetailPage() {
           <img src={member.ktpPhotoUrl} alt="KTP" className="max-h-[90vh] max-w-[90vw] rounded-lg" />
         </div>
       )}
+
+      <Dialog open={portalDialog} onOpenChange={(o) => !o && setPortalDialog(false)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Akses Mobile Anggota</DialogTitle>
+          </DialogHeader>
+          {portalResult ? (
+            <div className="space-y-3 text-sm">
+              <p>Akses portal mobile anggota berhasil diaktifkan/direset.</p>
+              <div className="rounded-md border bg-muted p-3">
+                <p className="text-xs text-muted-foreground">NIK (untuk login)</p>
+                <p className="font-mono font-semibold">{member.nik}</p>
+                <p className="mt-2 text-xs text-muted-foreground">Kata sandi awal</p>
+                <p className="font-mono font-semibold">{portalResult.defaultPassword}</p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Sampaikan ke anggota. Anggota wajib mengganti kata sandi saat login pertama.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Aktifkan atau reset akses portal mobile untuk anggota ini? Kata sandi akan diatur ulang ke tanggal
+              lahir anggota (format DDMMYYYY).
+            </p>
+          )}
+          <DialogFooter>
+            {portalResult ? (
+              <Button onClick={() => setPortalDialog(false)}>Selesai</Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setPortalDialog(false)}>
+                  Batal
+                </Button>
+                <Button onClick={handleActivatePortal} disabled={isActivatingPortal}>
+                  {isActivatingPortal ? "Memproses..." : "Konfirmasi"}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

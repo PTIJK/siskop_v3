@@ -7,6 +7,7 @@ import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { AppError } from "../../lib/errors.js";
 import { requireParam } from "../../lib/http.js";
+import { activatePortalAccess } from "../member-auth/service.js";
 import { createMemberSchema, listMembersQuerySchema, updateMemberSchema } from "./schema.js";
 import {
   createMember,
@@ -103,6 +104,19 @@ export function membersRoutes(): Router {
       res.json({
         success: true,
         data: { message: "Anggota berhasil dinonaktifkan" },
+        meta: res.locals.meta
+      });
+    })
+  );
+
+  router.post(
+    "/:id/portal-access",
+    requirePermission("members", "update"),
+    handle(async (req, res) => {
+      const result = await activatePortalAccess(authClaims(req).tenantId, requireParam(req, "id"));
+      res.json({
+        success: true,
+        data: { defaultPassword: result.defaultPassword, mustChangePassword: true as const },
         meta: res.locals.meta
       });
     })

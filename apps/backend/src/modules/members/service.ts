@@ -6,6 +6,30 @@ import { generateAccountNumber, generateMemberId } from "../../lib/id-generator.
 import { getDefaultUnitId } from "../../lib/units.js";
 import type { CreateMemberInput, ListMembersQueryInput, UpdateMemberInput } from "./schema.js";
 
+// `Prisma.$extends()`-wrapped clients (see lib/db.ts) don't carry the `omit`
+// query option through their generated types, so the passwordHash column
+// (added for the mobile self-service portal, see modules/member-auth) is
+// kept off the wire with an explicit select instead — same technique
+// savings/loans already use for the nested `member` relation.
+const memberSelect = {
+  id: true,
+  tenantId: true,
+  memberId: true,
+  accountNumber: true,
+  fullName: true,
+  nik: true,
+  address: true,
+  birthPlace: true,
+  birthDate: true,
+  occupation: true,
+  ktpPhotoUrl: true,
+  isActive: true,
+  mustChangePassword: true,
+  lastLoginAt: true,
+  createdAt: true,
+  updatedAt: true
+} satisfies Prisma.MemberSelect;
+
 export async function listMembers(tenantId: string, query: ListMembersQueryInput) {
   const { page, limit, search, sortBy, sortOrder, isActive } = query;
   const skip = (page - 1) * limit;
@@ -26,7 +50,7 @@ export async function listMembers(tenantId: string, query: ListMembersQueryInput
   };
 
   const [items, total] = await Promise.all([
-    db.member.findMany({ where, skip, take: limit, orderBy: { [sortBy]: sortOrder } }),
+    db.member.findMany({ where, skip, take: limit, orderBy: { [sortBy]: sortOrder }, select: memberSelect }),
     db.member.count({ where })
   ]);
 
@@ -36,7 +60,8 @@ export async function listMembers(tenantId: string, query: ListMembersQueryInput
 export async function getMemberById(tenantId: string, id: string) {
   const member = await db.member.findFirst({
     where: { id, tenantId },
-    include: {
+    select: {
+      ...memberSelect,
       savings: { where: { isActive: true }, include: { savingConfig: true } },
       loans: {
         where: { status: { in: ["ACTIVE", "PENDING"] } },
@@ -77,7 +102,8 @@ export async function createMember(tenantId: string, data: CreateMemberInput) {
         birthDate: new Date(data.birthDate),
         occupation: data.occupation,
         isActive: true
-      }
+      },
+      select: memberSelect
     });
 
     // Auto-enrolled into the tenant's sole unit — no picker UI in Phase 1
@@ -106,7 +132,8 @@ export async function updateMember(tenantId: string, id: string, data: UpdateMem
       ...(data.birthPlace && { birthPlace: data.birthPlace }),
       ...(data.birthDate && { birthDate: new Date(data.birthDate) }),
       ...(data.occupation && { occupation: data.occupation })
-    }
+    },
+    select: memberSelect
   });
 }
 
@@ -121,5 +148,5 @@ export async function uploadMemberKtp(tenantId: string, id: string, filePath: st
   const member = await db.member.findFirst({ where: { id, tenantId } });
   if (!member) throw notFound("Anggota tidak ditemukan");
 
-  return db.member.update({ where: { id, tenantId }, data: { ktpPhotoUrl: filePath } });
+  return db.member.update({ where: { id, tenantId }, data: { ktpPhotoUrl: filePath }, select: memberSelect });
 }
