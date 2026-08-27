@@ -35,7 +35,9 @@ Non-goals for the current phase (not committed, not in the schema or codebase):
 
 - Payment gateway integration (bank transfer / e-wallet settlement) — subscription packages exist
   and can be assigned, but nothing collects payment for one yet
-- Mobile native apps (the frontend is a responsive web app only)
+- Mobile native apps (the frontend is a responsive web app only) — a phone-optimized *responsive web*
+  version is in planning as of 2026-08-12, see `docs/06-PRD-SISKOP-Mobile-Version.md`; this line still
+  holds for native/app-store distribution specifically
 - Government/regulatory e-filing integration (e.g. to Kemenkop UKM systems) — the regulatory
   *reports* (Neraca, Arus Kas, etc.) are implemented; submitting them anywhere is not
 - Multi-currency (Rupiah only; no money field carries a currency code)
@@ -225,4 +227,5 @@ this document; still a gap to close, not a documentation oversight to ignore.
 - `docs/03-ERD-SISKOP.md` — entity-relationship diagram
 - `docs/04-System-Architecture-SISKOP.md` — system architecture
 - `docs/05-DB-Schema-SISKOP.md` — database schema reference
+- `docs/06-PRD-SISKOP-Mobile-Version.md` — mobile-specific PRD, additive to this document
 - `docs/claude-integration/PM-INSTRUCTIONS.md` — PM decision authority and targets

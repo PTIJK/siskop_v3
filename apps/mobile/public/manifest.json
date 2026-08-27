@@ -1,0 +1,13 @@
+{
+  "name": "SISKOP Mobile",
+  "short_name": "SISKOP",
+  "description": "Sistem Informasi Koperasi — versi mobile (read-only)",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "hsl(222.2 47.4% 11.2%)",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

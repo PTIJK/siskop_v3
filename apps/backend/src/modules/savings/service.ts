@@ -48,13 +48,14 @@ export async function updateSavingConfig(tenantId: string, id: string, data: Upd
 // ── Saving accounts ───────────────────────────────────────────────────────
 
 export async function listSavings(tenantId: string, query: ListSavingsQueryInput) {
-  const { page, limit, search, memberId } = query;
+  const { page, limit, search, memberId, type } = query;
   const skip = (page - 1) * limit;
 
   const where: Prisma.SavingWhereInput = {
     tenantId,
     isActive: true,
     ...(memberId ? { memberId } : {}),
+    ...(type ? { savingConfig: { type } } : {}),
     ...(search
       ? {
           OR: [

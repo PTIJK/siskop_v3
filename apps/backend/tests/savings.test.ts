@@ -299,4 +299,30 @@ describe("GET /api/savings", () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
   });
+
+  it("filters by saving config type when ?type= is provided", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    const pokokConfig = await createConfigAs(admin.accessToken);
+    const sukarelaConfig = await createConfigAs(admin.accessToken, {
+      type: "SUKARELA",
+      name: "Simpanan Sukarela"
+    });
+    await request(app())
+      .post("/api/savings")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, savingConfigId: pokokConfig.id });
+    await request(app())
+      .post("/api/savings")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, savingConfigId: sukarelaConfig.id });
+
+    const res = await request(app())
+      .get("/api/savings?type=SUKARELA")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].savingConfigId).toBe(sukarelaConfig.id);
+  });
 });

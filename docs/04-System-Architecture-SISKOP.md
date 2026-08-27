@@ -362,4 +362,6 @@ Carried and extended — listed here because they shape how new modules should b
 - `docs/02-System-Requirements-SISKOP.md` — the NFRs this architecture is accountable to
 - `docs/03-ERD-SISKOP.md` — entity relationships
 - `docs/05-DB-Schema-SISKOP.md` — column-level schema, indexes, migrations
+- `docs/07-System-Architecture-SISKOP-Mobile-Version.md` — mobile-specific architecture, additive to
+  this document (backend/multi-tenancy/authN/authZ/data layer described here are reused unchanged)
 - `docs/claude-integration/ENGINEER-INSTRUCTIONS.md`, `OPS-INSTRUCTIONS.md` — role-level ownership
