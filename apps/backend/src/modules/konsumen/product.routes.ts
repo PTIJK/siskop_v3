@@ -9,6 +9,7 @@ import {
   recordStockMovementSchema
 } from "./product.schema.js";
 import { createProduct, listProducts, listStockMovements, recordStockMovement } from "./product.service.js";
+import { ppobRoutes } from "./ppob.routes.js";
 import { saleRoutes } from "./sale.routes.js";
 
 /** Forwards rejected promises to the error handler; Express 4 will not. */
@@ -70,6 +71,9 @@ export function konsumenRoutes(): Router {
   // requireAuth and mounts at the same /api/konsumen prefix (app.ts is
   // unchanged).
   router.use(saleRoutes());
+
+  // Phase 2 Task 4 — /ppob/check and /ppob/pay (stub), composed the same way.
+  router.use(ppobRoutes());
 
   return router;
 }

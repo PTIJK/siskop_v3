@@ -90,3 +90,43 @@ export interface PosSaleListItem {
   soldAt: string;
   lineCount: number;
 }
+
+// ── PPOB (Payment Point Online Bank) — Phase 2 Task 4 ───────────────────────
+// Deliberately a STUB: no real biller integration, purely a deterministic
+// in-process simulation (see modules/konsumen/ppob.service.ts#simulateBill).
+// No journal entry is posted for PPOB in this MVP — see that file's doc.
+
+export type PpobBillType = "LISTRIK" | "PULSA" | "BPJS" | "AIR";
+
+export interface CheckPPOBBillRequest {
+  /** unitId must resolve to a CooperativeUnit owned by the caller's tenant. */
+  unitId: string;
+  billType: PpobBillType;
+  customerNumber: string;
+}
+
+/** Simulated — amount/adminFee are Decimal-as-string per this codebase's money convention, even though nothing is real. */
+export interface CheckPPOBBillResponse {
+  amount: string;
+  adminFee: string;
+  customerName: string;
+}
+
+/**
+ * Note: deliberately no `amount` field — the server re-derives it from the
+ * same deterministic simulation `checkBill` used, so a client can never
+ * assert an arbitrary paid amount. `adminFee` is accepted for API-contract
+ * symmetry with the check step but is likewise re-derived server-side, never
+ * trusted at face value.
+ */
+export interface PayPPOBBillRequest {
+  unitId: string;
+  billType: PpobBillType;
+  customerNumber: string;
+  adminFee: string;
+}
+
+export interface PayPPOBBillResponse {
+  id: string;
+  status: string;
+}
