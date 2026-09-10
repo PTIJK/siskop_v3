@@ -9,6 +9,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { UNIT_TYPE_ICON, UNIT_TYPE_LABEL } from "@/lib/unitTypeMeta";
 import { cn } from "@/lib/utils";
 
+/** Tabs shown only for a KONSUMEN-type unit — extend this array to add another, the isKonsumen gate below wraps all of them alike. */
+const KONSUMEN_TABS = [
+  { path: "products", label: "Produk" },
+  { path: "stock", label: "Stok" },
+  { path: "pos", label: "POS" }
+];
+
 /**
  * Per-unit detail shell at /ksu/units/:unitId (nested routes render inside
  * via <Outlet/>). There is no `GET /api/config/units/:id` — only list — so
@@ -70,28 +77,20 @@ export function UnitLayout() {
       {isKonsumen ? (
         <>
           <nav className="inline-flex h-10 items-center justify-center gap-1 rounded-md bg-muted p-1 text-muted-foreground">
-            <NavLink
-              to={`${basePath}/products`}
-              className={({ isActive }) =>
-                cn(
-                  "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all",
-                  isActive ? "bg-background text-foreground shadow-sm" : "hover:text-foreground"
-                )
-              }
-            >
-              Produk
-            </NavLink>
-            <NavLink
-              to={`${basePath}/stock`}
-              className={({ isActive }) =>
-                cn(
-                  "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all",
-                  isActive ? "bg-background text-foreground shadow-sm" : "hover:text-foreground"
-                )
-              }
-            >
-              Stok
-            </NavLink>
+            {KONSUMEN_TABS.map((tab) => (
+              <NavLink
+                key={tab.path}
+                to={`${basePath}/${tab.path}`}
+                className={({ isActive }) =>
+                  cn(
+                    "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all",
+                    isActive ? "bg-background text-foreground shadow-sm" : "hover:text-foreground"
+                  )
+                }
+              >
+                {tab.label}
+              </NavLink>
+            ))}
           </nav>
 
           <Outlet />

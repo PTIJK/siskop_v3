@@ -1,4 +1,11 @@
-import type { CreateProductRequest, Product, RecordStockMovementRequest, StockMovement } from "@siskop/types";
+import type {
+  CreateProductRequest,
+  CreateSaleRequest,
+  CreateSaleResponse,
+  Product,
+  RecordStockMovementRequest,
+  StockMovement
+} from "@siskop/types";
 import { apiFetch, apiPost } from "./client";
 
 // Typed wrappers over apiFetch/apiPost for the Phase 2 Konsumen/Toko API
@@ -25,4 +32,13 @@ export function getStockMovements(unitId: string) {
  */
 export function recordStockMovement(productId: string, input: RecordStockMovementRequest) {
   return apiPost<Product>(`/konsumen/products/${productId}/stock-movements`, input);
+}
+
+/**
+ * POS checkout (sale.routes.ts's `POST /pos/sales`). `unitId` is part of the
+ * body here (not a path param) per the real contract — callers pass it in
+ * `input`, same as CreateSaleRequest requires.
+ */
+export function createPOSSale(input: CreateSaleRequest) {
+  return apiPost<CreateSaleResponse>("/konsumen/pos/sales", input);
 }
