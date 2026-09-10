@@ -23,6 +23,9 @@ import { PlatformAdminsPage } from "@/pages/platform/PlatformAdminsPage";
 import { UnitsPage } from "@/pages/ksu/UnitsPage";
 import { ConsolidatedReportPage } from "@/pages/ksu/ConsolidatedReportPage";
 import { MemberStatementPage } from "@/pages/ksu/MemberStatementPage";
+import { UnitLayout } from "@/pages/ksu/UnitLayout";
+import { ProductsPage } from "@/pages/konsumen/ProductsPage";
+import { StockPage } from "@/pages/konsumen/StockPage";
 import { RequireMultiUnit } from "@/components/shared/RequireMultiUnit";
 
 export default function App() {
@@ -85,6 +88,17 @@ export default function App() {
                 </RequireMultiUnit>
               }
             />
+
+            {/* Per-unit detail shell — NOT gated by RequireMultiUnit: any
+                tenant with at least one unit can view that unit's own detail
+                page, single-unit or not. The KONSUMEN-type tab gate (Produk/
+                Stok only shown for a KONSUMEN-type unit) lives inside
+                UnitLayout itself, per-unit, a different axis from the
+                tenant-level isMultiUnit gate above. */}
+            <Route path="/ksu/units/:unitId" element={<UnitLayout />}>
+              <Route path="products" element={<ProductsPage />} />
+              <Route path="stock" element={<StockPage />} />
+            </Route>
 
             <Route path="/platform/tenants" element={<PlatformTenantsPage />} />
             <Route path="/platform/packages" element={<PlatformPackagesPage />} />
