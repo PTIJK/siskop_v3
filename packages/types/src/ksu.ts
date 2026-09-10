@@ -16,3 +16,19 @@ export interface ConsolidatedReport {
   totalAssets: number;
   byUnit: ConsolidatedUnitAsset[];
 }
+
+// Response shape of GET /api/ksu/members/:memberId/statement
+// (apps/backend/src/modules/ksu/service.ts#getMemberUnitStatement). Like
+// ConsolidatedReport above, `shu` serializes as a plain JSON number (the
+// service computes it with `Number(...)` and `round2`, never a Decimal
+// string) — format with `formatRupiah(n)` on a number.
+export interface MemberUnitShu {
+  unitId: string;
+  unitName: string;
+  shu: number;
+}
+
+export interface MemberUnitStatement {
+  memberId: string;
+  units: MemberUnitShu[];
+}

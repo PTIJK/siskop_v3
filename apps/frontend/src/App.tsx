@@ -20,6 +20,10 @@ import { RegulatoryReportsPage } from "@/pages/reports/RegulatoryReportsPage";
 import { PlatformTenantsPage } from "@/pages/platform/PlatformTenantsPage";
 import { PlatformPackagesPage } from "@/pages/platform/PlatformPackagesPage";
 import { PlatformAdminsPage } from "@/pages/platform/PlatformAdminsPage";
+import { UnitsPage } from "@/pages/ksu/UnitsPage";
+import { ConsolidatedReportPage } from "@/pages/ksu/ConsolidatedReportPage";
+import { MemberStatementPage } from "@/pages/ksu/MemberStatementPage";
+import { RequireMultiUnit } from "@/components/shared/RequireMultiUnit";
 
 export default function App() {
   return (
@@ -52,6 +56,35 @@ export default function App() {
 
             <Route path="/config" element={<ConfigPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+
+            {/* KSU (multi-unit) routes — reachable only when the tenant has
+                2+ active CooperativeUnits (RequireMultiUnit reads the same
+                useIsMultiUnit() hook Sidebar.tsx uses for its nav items),
+                never based on a tenant "type". */}
+            <Route
+              path="/ksu/units"
+              element={
+                <RequireMultiUnit>
+                  <UnitsPage />
+                </RequireMultiUnit>
+              }
+            />
+            <Route
+              path="/ksu/report"
+              element={
+                <RequireMultiUnit>
+                  <ConsolidatedReportPage />
+                </RequireMultiUnit>
+              }
+            />
+            <Route
+              path="/ksu/members/:memberId/statement"
+              element={
+                <RequireMultiUnit>
+                  <MemberStatementPage />
+                </RequireMultiUnit>
+              }
+            />
 
             <Route path="/platform/tenants" element={<PlatformTenantsPage />} />
             <Route path="/platform/packages" element={<PlatformPackagesPage />} />
