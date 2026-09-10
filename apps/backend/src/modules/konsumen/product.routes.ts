@@ -9,6 +9,7 @@ import {
   recordStockMovementSchema
 } from "./product.schema.js";
 import { createProduct, listProducts, listStockMovements, recordStockMovement } from "./product.service.js";
+import { saleRoutes } from "./sale.routes.js";
 
 /** Forwards rejected promises to the error handler; Express 4 will not. */
 function handle(fn: (req: Request, res: Response) => Promise<void>) {
@@ -64,6 +65,11 @@ export function konsumenRoutes(): Router {
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );
+
+  // Phase 2 Task 3 — /pos/sales, composed here so it shares this router's
+  // requireAuth and mounts at the same /api/konsumen prefix (app.ts is
+  // unchanged).
+  router.use(saleRoutes());
 
   return router;
 }

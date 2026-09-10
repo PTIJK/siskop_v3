@@ -55,3 +55,38 @@ export interface StockMovement {
   reason: string;
   createdAt: string;
 }
+
+// ── POS Sales — Phase 2 Task 3 ──────────────────────────────────────────────
+// Cash-only first pass (no returns/refunds/utang toko) — see
+// docs/ksu-konsumen-backend.md "Explicitly out of scope for this plan".
+
+export type PosPaymentMethod = "CASH" | "TRANSFER" | "MEMBER_CREDIT";
+
+export interface CreateSaleLineRequest {
+  productId: string;
+  quantity: number;
+}
+
+export interface CreateSaleRequest {
+  /** unitId must resolve to a KONSUMEN-type CooperativeUnit owned by the caller's tenant. */
+  unitId: string;
+  items: CreateSaleLineRequest[];
+  paymentMethod: PosPaymentMethod;
+  memberId?: string;
+}
+
+/** POSSale.totalPrice, Decimal(15,2) serialized as a string over the wire. */
+export interface CreateSaleResponse {
+  id: string;
+  totalAmount: string;
+}
+
+/** A POSSale row (list view), serialized for the API. */
+export interface PosSaleListItem {
+  id: string;
+  totalAmount: string;
+  paymentMethod: string;
+  memberId: string | null;
+  soldAt: string;
+  lineCount: number;
+}

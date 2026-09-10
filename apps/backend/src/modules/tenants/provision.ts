@@ -87,9 +87,9 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       config: {},
       users: {},
       roles: {},
-      // Front-counter staff record stock movements (and, once POS exists,
-      // ring up sales) but don't add/remove SKUs — that's Manager territory.
-      konsumen: { read: true, update: true }
+      // Front-counter staff record stock movements and ring up POS sales
+      // (create) but don't add/remove SKUs — that's Manager territory.
+      konsumen: { create: true, read: true, update: true }
     }
   },
   {
