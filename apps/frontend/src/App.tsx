@@ -27,6 +27,7 @@ import { UnitLayout } from "@/pages/ksu/UnitLayout";
 import { ProductsPage } from "@/pages/konsumen/ProductsPage";
 import { StockPage } from "@/pages/konsumen/StockPage";
 import { POSPage } from "@/pages/konsumen/POSPage";
+import { PPOBPage } from "@/pages/konsumen/PPOBPage";
 import { RequireMultiUnit } from "@/components/shared/RequireMultiUnit";
 
 export default function App() {
@@ -100,6 +101,7 @@ export default function App() {
               <Route path="products" element={<ProductsPage />} />
               <Route path="stock" element={<StockPage />} />
               <Route path="pos" element={<POSPage />} />
+              <Route path="ppob" element={<PPOBPage />} />
             </Route>
 
             <Route path="/platform/tenants" element={<PlatformTenantsPage />} />

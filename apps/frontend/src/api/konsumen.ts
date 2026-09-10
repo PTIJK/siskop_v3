@@ -1,7 +1,11 @@
 import type {
+  CheckPPOBBillRequest,
+  CheckPPOBBillResponse,
   CreateProductRequest,
   CreateSaleRequest,
   CreateSaleResponse,
+  PayPPOBBillRequest,
+  PayPPOBBillResponse,
   Product,
   RecordStockMovementRequest,
   StockMovement
@@ -41,4 +45,21 @@ export function recordStockMovement(productId: string, input: RecordStockMovemen
  */
 export function createPOSSale(input: CreateSaleRequest) {
   return apiPost<CreateSaleResponse>("/konsumen/pos/sales", input);
+}
+
+/**
+ * PPOB (ppob.routes.ts, mounted alongside the rest of this module at
+ * `/api/konsumen/*`) — a deterministic-simulation stub, no real biller. `check`
+ * is a pure read (no side effect, safe to call repeatedly); `pay` re-derives
+ * `amount` server-side from `(billType, customerNumber)` regardless of what a
+ * client sends, so this wrapper doesn't even accept an `amount` param — the
+ * request shape matches PayPPOBBillRequest exactly (unitId/billType/
+ * customerNumber/adminFee only).
+ */
+export function checkPPOBBill(input: CheckPPOBBillRequest) {
+  return apiPost<CheckPPOBBillResponse>("/konsumen/ppob/check", input);
+}
+
+export function payPPOBBill(input: PayPPOBBillRequest) {
+  return apiPost<PayPPOBBillResponse>("/konsumen/ppob/pay", input);
 }

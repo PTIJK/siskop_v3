@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils";
 const KONSUMEN_TABS = [
   { path: "products", label: "Produk" },
   { path: "stock", label: "Stok" },
-  { path: "pos", label: "POS" }
+  { path: "pos", label: "POS" },
+  { path: "ppob", label: "PPOB" }
 ];
 
 /**
