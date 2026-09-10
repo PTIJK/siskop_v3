@@ -68,6 +68,11 @@ async function sumAssetLinesForSourceIds(tenantId: string, sourceIds: string[]):
  * and this MVP does not attribute savings deposits/withdrawals or loan
  * repayments to a unit. Extending that (resolving each unit's child
  * transaction ids too) is future work, not this spike's scope.
+ *
+ * `POSSale` IS included, for symmetry with Loan: a POS_SALE entry's
+ * `sourceId` is the POSSale's own id (lib/journal.ts#postPosSale), same
+ * direct-attribution pattern as LOAN_DISBURSEMENT — no child-row indirection
+ * like Saving/LoanPayment above, so no analogous gap to call out here.
  */
 export async function getConsolidatedAssets(tenantId: string): Promise<ConsolidatedAssets> {
   const units = await db.cooperativeUnit.findMany({
@@ -77,11 +82,12 @@ export async function getConsolidatedAssets(tenantId: string): Promise<Consolida
 
   const byUnit = await Promise.all(
     units.map(async (unit) => {
-      const [loans, savings] = await Promise.all([
+      const [loans, savings, sales] = await Promise.all([
         db.loan.findMany({ where: { tenantId, unitId: unit.id }, select: { id: true } }),
-        db.saving.findMany({ where: { tenantId, unitId: unit.id }, select: { id: true } })
+        db.saving.findMany({ where: { tenantId, unitId: unit.id }, select: { id: true } }),
+        db.pOSSale.findMany({ where: { tenantId, unitId: unit.id }, select: { id: true } })
       ]);
-      const sourceIds = [...loans.map((l) => l.id), ...savings.map((s) => s.id)];
+      const sourceIds = [...loans.map((l) => l.id), ...savings.map((s) => s.id), ...sales.map((s) => s.id)];
       const assets = await sumAssetLinesForSourceIds(tenantId, sourceIds);
       return { unitId: unit.id, unitName: unit.name, assets };
     })
