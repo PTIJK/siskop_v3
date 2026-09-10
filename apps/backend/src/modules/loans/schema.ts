@@ -19,7 +19,10 @@ export const createLoanSchema = z.object({
   disbursedAt: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD")
-    .optional()
+    .optional(),
+  // Optional KSU override: when omitted, createLoan falls back to the
+  // tenant's default unit exactly as before (see lib/units.ts#resolveUnitId).
+  unitId: z.string().cuid("Unit ID tidak valid").optional()
 });
 
 export const loanPaymentSchema = z.object({

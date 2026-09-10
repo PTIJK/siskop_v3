@@ -5,7 +5,7 @@ import { AppError, notFound } from "../../lib/errors.js";
 import { calculateLoan } from "../../lib/loan-calc.js";
 import { recalculateKOL } from "../../lib/kol.js";
 import { postLoanDisbursement, postLoanPayment, splitPrincipalAndInterest } from "../../lib/journal.js";
-import { getDefaultUnitId } from "../../lib/units.js";
+import { resolveUnitId } from "../../lib/units.js";
 import { hasPokokSaving } from "../savings/service.js";
 import type {
   CreateLoanConfigInput,
@@ -150,7 +150,7 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
   );
 
   const disbursedAt = data.disbursedAt ? new Date(data.disbursedAt) : new Date();
-  const unitId = await getDefaultUnitId(tenantId);
+  const unitId = await resolveUnitId(tenantId, data.unitId);
 
   return db.$transaction(async (tx) => {
     const loan = await tx.loan.create({
