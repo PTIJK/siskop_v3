@@ -26,7 +26,11 @@ const permissionsSchema = z.object({
   config: permissionActions,
   users: permissionActions,
   roles: permissionActions,
-  accounting: permissionActions.optional()
+  accounting: permissionActions.optional(),
+  // Phase 2 (KSU Konsumen/Toko) — optional like `accounting`: a token signed
+  // before this module existed still parses, `permissions.konsumen` just
+  // comes back undefined (requirePermission("konsumen", ...) then denies).
+  konsumen: permissionActions.optional()
 });
 
 const claimsSchema = z.object({

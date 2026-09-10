@@ -25,6 +25,9 @@ export interface Permissions {
   users: ModulePermissions;
   roles: ModulePermissions;
   accounting?: ModulePermissions;
+  // Phase 2 (KSU Konsumen/Toko) — optional like `accounting` above, so a role
+  // permissions blob seeded before this module existed still parses.
+  konsumen?: ModulePermissions;
 }
 
 export type PermissionModule = keyof Permissions;

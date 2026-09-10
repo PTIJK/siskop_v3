@@ -57,7 +57,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       config: { read: true, update: true },
       users: FULL,
       roles: FULL,
-      accounting: FULL
+      accounting: FULL,
+      konsumen: FULL
     }
   },
   {
@@ -71,7 +72,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       config: { read: true, update: false },
       users: { create: false, read: true, update: false, delete: false },
       roles: { read: true },
-      accounting: { create: false, read: false, update: false, delete: false }
+      accounting: { create: false, read: false, update: false, delete: false },
+      konsumen: FULL
     }
   },
   {
@@ -84,7 +86,10 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       reports: {},
       config: {},
       users: {},
-      roles: {}
+      roles: {},
+      // Front-counter staff record stock movements (and, once POS exists,
+      // ring up sales) but don't add/remove SKUs — that's Manager territory.
+      konsumen: { read: true, update: true }
     }
   },
   {
@@ -97,7 +102,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       reports: READ_ONLY,
       config: {},
       users: {},
-      roles: {}
+      roles: {},
+      konsumen: READ_ONLY
     }
   }
 ];

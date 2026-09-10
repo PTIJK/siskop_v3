@@ -24,7 +24,14 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   "JournalEntry",
   "JournalLine",
   "ShuDistributionConfig",
-  "CalkNarrative"
+  "CalkNarrative",
+  // Phase 2 (KSU Konsumen/Toko) — only the two models this task's service
+  // layer actually queries by tenantId. POSSale/PPOBTransaction (also
+  // tenantId-bearing) are left out: their service layers don't exist yet
+  // (later tasks), so adding them here now would guard code that isn't
+  // written, out of scope for this change.
+  "Product",
+  "StockMovement"
 ]);
 
 const WHERE_REQUIRED_ACTIONS = new Set([

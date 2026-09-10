@@ -10,3 +10,4 @@ export * from "./dashboard";
 export * from "./accounting";
 export * from "./reports";
 export * from "./platform";
+export * from "./konsumen";

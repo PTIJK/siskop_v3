@@ -33,7 +33,9 @@ const permissionsSchema = z.object({
   config: modulePermissionsSchema,
   users: modulePermissionsSchema,
   roles: modulePermissionsSchema,
-  accounting: modulePermissionsSchema.optional()
+  accounting: modulePermissionsSchema.optional(),
+  // Phase 2 (KSU Konsumen/Toko) — optional like `accounting`, additive.
+  konsumen: modulePermissionsSchema.optional()
 });
 
 export const createRoleSchema = z.object({
