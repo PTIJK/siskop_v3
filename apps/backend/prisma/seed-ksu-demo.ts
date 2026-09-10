@@ -30,6 +30,12 @@ import { createUnit, createAccount, upsertAccountMapping, listUnits } from "../s
 import { createMember } from "../src/modules/members/service.js";
 import { createSavingConfig, createSaving } from "../src/modules/savings/service.js";
 import { createLoanConfig, createLoan, recordLoanPayment } from "../src/modules/loans/service.js";
+// Phase 2 (KSU Konsumen/Toko) — additive: a third (KONSUMEN) unit, products,
+// one POS sale, and one PPOB stub transaction, all via the real service-layer
+// functions the HTTP routes call, same discipline as everything above.
+import { createProduct, recordStockMovement } from "../src/modules/konsumen/product.service.js";
+import { createSale } from "../src/modules/konsumen/sale.service.js";
+import { payBill } from "../src/modules/konsumen/ppob.service.js";
 
 const TENANT_SLUG = "ksu-sejahtera-mandiri";
 const ADMIN_EMAIL = "admin@ksu-sejahtera.demo";
@@ -279,6 +285,116 @@ async function main() {
   );
   console.log("One payment recorded on each loan");
 
+  // ── 11. Unit C (KONSUMEN/Toko) — Phase 2's addition to the original ──────
+  //       two-KSP-unit spike (see docs/ksu-mvp-week1-demo.md's "What this
+  //       explicitly does NOT prove" — that gap is now closed).
+  const unitC = await createUnit(tenantId, { type: "KONSUMEN", name: "Toko Koperasi Sejahtera" });
+  console.log(`Unit C: ${unitC.id} (${unitC.name})`);
+
+  // ── 12. Toko chart-of-accounts additions + SYSTEM/SALE_* mappings ─────────
+  //       Kas already exists (step 4, reused here); Penjualan/HPP/Persediaan
+  //       are new. SALE_REVENUE and SALE_COGS are tenant-wide (sourceType:
+  //       "SYSTEM", no sourceId), mirroring lib/journal.ts#postPosSale and
+  //       tests/konsumen-sale.test.ts#setupSaleMappings exactly.
+  const penjualan = await createAccount(tenantId, {
+    code: "4-2000",
+    name: "Penjualan Toko",
+    category: "PENDAPATAN",
+    normalBalance: "KREDIT",
+    isHeader: false,
+    isCashEquivalent: false
+  });
+  const hpp = await createAccount(tenantId, {
+    code: "5-1000",
+    name: "Harga Pokok Penjualan",
+    category: "BEBAN",
+    normalBalance: "DEBIT",
+    isHeader: false,
+    isCashEquivalent: false
+  });
+  const persediaan = await createAccount(tenantId, {
+    code: "1-1300",
+    name: "Persediaan Barang Dagang",
+    category: "ASET",
+    normalBalance: "DEBIT",
+    isHeader: false,
+    isCashEquivalent: false
+  });
+  await upsertAccountMapping(tenantId, {
+    sourceType: "SYSTEM",
+    transactionKind: "SALE_REVENUE",
+    debitAccountId: kas.id,
+    creditAccountId: penjualan.id
+  });
+  await upsertAccountMapping(tenantId, {
+    sourceType: "SYSTEM",
+    transactionKind: "SALE_COGS",
+    debitAccountId: hpp.id,
+    creditAccountId: persediaan.id
+  });
+  console.log("Toko chart of accounts + SYSTEM/SALE_REVENUE + SYSTEM/SALE_COGS mappings created");
+
+  // ── 13. Five sembako products with realistic Rupiah prices + opening stock ─
+  const SEMBAKO_PRODUCTS = [
+    { sku: "SKU-BERAS-5KG", name: "Beras Premium 5kg", category: "Sembako", sellPrice: 65_000, costPrice: 58_000, openingStock: 50 },
+    { sku: "SKU-MYK-2L", name: "Minyak Goreng 2L", category: "Sembako", sellPrice: 32_000, costPrice: 28_000, openingStock: 40 },
+    { sku: "SKU-GULA-1KG", name: "Gula Pasir 1kg", category: "Sembako", sellPrice: 15_000, costPrice: 13_000, openingStock: 60 },
+    { sku: "SKU-MIE-GORENG", name: "Indomie Goreng", category: "Makanan Instan", sellPrice: 3_500, costPrice: 2_800, openingStock: 200 },
+    { sku: "SKU-AIR-600ML", name: "Air Mineral 600ml", category: "Minuman", sellPrice: 4_000, costPrice: 3_200, openingStock: 150 }
+  ] as const;
+
+  const products: ((typeof SEMBAKO_PRODUCTS)[number] & { id: string })[] = [];
+  for (const p of SEMBAKO_PRODUCTS) {
+    const product = await createProduct(tenantId, {
+      unitId: unitC.id,
+      sku: p.sku,
+      name: p.name,
+      category: p.category,
+      sellPrice: p.sellPrice,
+      costPrice: p.costPrice
+    });
+    await recordStockMovement(
+      tenantId,
+      product.id,
+      { type: "IN", quantity: p.openingStock, reason: "Stok awal Toko" },
+      admin.user.id
+    );
+    products.push({ ...p, id: product.id });
+    console.log(`  Product: ${p.name} — Rp${p.sellPrice.toLocaleString("id-ID")} (stock ${p.openingStock})`);
+  }
+  const beras = products[0]!; // Beras Premium 5kg
+  const minyak = products[1]!; // Minyak Goreng 2L
+  const gula = products[2]!; // Gula Pasir 1kg
+
+  // ── 14. One realistic POS sale, via createSale() — goes through the same ──
+  //       stock-decrement + journal-posting path a real cashier transaction
+  //       would (see modules/konsumen/sale.service.ts#createSale's own doc).
+  const sale = await createSale(
+    tenantId,
+    {
+      unitId: unitC.id,
+      items: [
+        { productId: beras.id, quantity: 2 },
+        { productId: minyak.id, quantity: 3 },
+        { productId: gula.id, quantity: 5 }
+      ],
+      paymentMethod: "CASH"
+    },
+    admin.user.id
+  );
+  console.log(`POS sale recorded: ${sale.id} — total Rp${Number(sale.totalAmount).toLocaleString("id-ID")}`);
+
+  // ── 15. One PPOB stub transaction, via payBill() — a stub with no real ────
+  //       biller integration (see modules/konsumen/ppob.service.ts's own doc);
+  //       amount is deterministically simulated from the customer number, not
+  //       hardcoded here.
+  const ppobTransaction = await payBill(
+    tenantId,
+    { unitId: unitC.id, billType: "LISTRIK", customerNumber: "532100123456" },
+    admin.user.id
+  );
+  console.log(`PPOB transaction recorded: ${ppobTransaction.id} (status: ${ppobTransaction.status})`);
+
   console.log("");
   console.log("KSU demo seed complete!");
   console.log("");
@@ -286,6 +402,7 @@ async function main() {
   console.log(`  Admin login:   ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   console.log(`  Unit A id:     ${unitA.id} (${unitA.name})`);
   console.log(`  Unit B id:     ${unitB.id} (${unitB.name})`);
+  console.log(`  Unit C id:     ${unitC.id} (${unitC.name})`);
   console.log(`  Member ids:    Made=${made.id}  Siti=${siti.id} (active in both units)  Budi=${budi.id}`);
 }
 
