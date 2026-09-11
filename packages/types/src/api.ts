@@ -40,7 +40,9 @@ export interface ApiResponse<T> {
   error?: ApiError;
   // page/limit/total are present on paginated list endpoints (Members/
   // Savings/Loans), merged alongside timestamp/requestId in the same object.
-  meta: { timestamp: string; requestId: string; page?: number; limit?: number; total?: number };
+  // totalOutstanding is specific to GET /konsumen/pos/credit (the tenant-wide
+  // Piutang Anggota total, independent of the current page/search filter).
+  meta: { timestamp: string; requestId: string; page?: number; limit?: number; total?: number; totalOutstanding?: string };
 }
 
 export interface Paginated<T> {
