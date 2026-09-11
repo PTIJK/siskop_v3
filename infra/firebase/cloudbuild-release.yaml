@@ -1,0 +1,77 @@
+# Triggered only by pushes to main (including merged PRs).
+# Manual verification uses _DEPLOY=false; it builds/tests without publishing.
+steps:
+  - id: test-database
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        docker run -d --network cloudbuild --name siskop-ci-postgres \
+          -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=ci-only-password \
+          -e POSTGRES_DB=siskop_ci_test postgres:18
+        for attempt in {1..30}; do
+          if docker exec siskop-ci-postgres pg_isready -U postgres; then exit 0; fi
+          sleep 2
+        done
+        exit 1
+
+  - id: verify-and-build-frontend
+    name: node:22-bookworm
+    entrypoint: bash
+    env:
+      - CI=true
+      - DATABASE_URL=postgresql://postgres:ci-only-password@siskop-ci-postgres:5432/siskop_ci_test
+      - JWT_SECRET=cloud-build-test-only
+      - JWT_REFRESH_SECRET=cloud-build-refresh-test-only
+      - PUPPETEER_SKIP_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+    args: ['infra/firebase/verify-release.sh']
+
+  - id: build-backend
+    name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', 'apps/backend/Dockerfile', '-t', '${_IMAGE}:$BUILD_ID', '.']
+
+  - id: push-backend
+    name: gcr.io/cloud-builders/docker
+    args: ['push', '${_IMAGE}:$BUILD_ID']
+
+  - id: acquire-release
+    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: bash
+    args: ['infra/firebase/run-release.sh', 'acquire']
+
+  - id: migrate-and-deploy-backend
+    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: bash
+    args: ['infra/firebase/run-release.sh', 'backend']
+
+  - id: publish-frontend
+    name: us-docker.pkg.dev/firebase-cli/us/firebase:15.12.0
+    entrypoint: sh
+    args:
+      - -ceu
+      - |
+        if [ ! -f .release/state.json ]; then exit 0; fi
+        firebase deploy --only hosting --project siskop-d0f8c --non-interactive \
+          --message "main@$COMMIT_SHA (Cloud Build $BUILD_ID)"
+
+  - id: verify-and-finish-release
+    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: bash
+    args: ['infra/firebase/run-release.sh', 'finish']
+
+images: ['${_IMAGE}:$BUILD_ID']
+timeout: 2400s
+substitutions:
+  _DEPLOY: 'true'
+  _IMAGE: asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api
+options:
+  logging: CLOUD_LOGGING_ONLY
+  env:
+    - RELEASE_DEPLOY=${_DEPLOY}
+    - RELEASE_BUILD_ID=$BUILD_ID
+    - RELEASE_COMMIT=$COMMIT_SHA
+    - RELEASE_BRANCH=$BRANCH_NAME
+    - RELEASE_IMAGE=${_IMAGE}:$BUILD_ID
+serviceAccount: projects/siskop-d0f8c/serviceAccounts/siskop-cloud-build@siskop-d0f8c.iam.gserviceaccount.com

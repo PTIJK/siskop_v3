@@ -1,0 +1,11 @@
+name: siskop-main-deploy
+description: Verify main, migrate PostgreSQL, deploy Cloud Run and Firebase Hosting together
+filename: infra/firebase/cloudbuild-release.yaml
+serviceAccount: projects/siskop-d0f8c/serviceAccounts/siskop-cloud-build@siskop-d0f8c.iam.gserviceaccount.com
+repositoryEventConfig:
+  repository: projects/siskop-d0f8c/locations/asia-southeast2/connections/siskop-github/repositories/siskop-v3
+  push:
+    branch: ^main$
+substitutions:
+  _DEPLOY: 'true'
+includeBuildLogs: INCLUDE_BUILD_LOGS_WITH_STATUS

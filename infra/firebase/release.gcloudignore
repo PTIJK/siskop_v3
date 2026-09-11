@@ -1,0 +1,29 @@
+# Explicit source allowlist for manual verification builds. GitHub triggers use
+# the committed checkout, so local ignored credentials cannot enter those builds.
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!turbo.json
+!.dockerignore
+!firebase.json
+!.firebaserc
+!apps/
+!apps/**
+!packages/
+!packages/**
+!infra/
+!infra/firebase/
+!infra/firebase/**
+**/.env*
+!apps/frontend/.env.staging
+**/node_modules/**
+**/dist/**
+**/coverage/**
+**/.turbo/**
+**/uploads/**
+**/__pycache__/**
+**/*.log
+**/*.local
+**/*.tsbuildinfo

@@ -1,5 +1,7 @@
 node_modules/
 .pnpm-store/
+.release/
+__pycache__/
 dist/
 build/
 coverage/

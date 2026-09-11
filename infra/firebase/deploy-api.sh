@@ -6,6 +6,7 @@ if [[ "$image_ref" != asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging
   echo "Expected the staging API image digest." >&2
   exit 1
 fi
+shift
 gcloud run deploy siskop-staging-api \
   --project=siskop-d0f8c --region=asia-southeast2 \
   --image="$image_ref" \
@@ -17,4 +18,4 @@ gcloud run deploy siskop-staging-api \
   --min-instances=0 --max-instances=1 --timeout=60 --cpu-throttling \
   --add-volume='name=uploads,type=cloud-storage,bucket=siskop-d0f8c-staging-uploads,mount-options=uid=1000;gid=1000' \
   --add-volume-mount=volume=uploads,mount-path=/mnt/uploads \
-  --allow-unauthenticated --quiet
+  --quiet "$@"
