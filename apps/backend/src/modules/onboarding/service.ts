@@ -253,7 +253,10 @@ export async function complete(orderId: string) {
 export async function firebaseSignIn(input: unknown, resumeOnly = false) {
   const { idToken } = firebaseSignInSchema.parse(input);
   const identity = await verifyFirebaseIdentity(idToken);
-  const user = await db.user.findUnique({ where: { firebaseUid: identity.uid }, include: { role: true } });
+  const user = await db.user.findUnique({
+    where: { firebaseUid: identity.uid },
+    include: { role: true, unitAssignments: true }
+  });
   if (!user?.isActive) throw unauthorized("Akun belum terdaftar di SISKOP atau tidak aktif.");
   const tenant = await db.tenant.findUnique({ where: { id: user.tenantId }, include: { onboardingOrder: true } });
   if (!tenant) throw unauthorized();
