@@ -12,6 +12,12 @@ beforeEach(async () => {
   await db.tenant.deleteMany({});
 });
 
+/** Every setupTenant() tenant provisions with exactly one CooperativeUnit — its id. */
+async function defaultUnitId(tenantId: string): Promise<string> {
+  const unit = await db.cooperativeUnit.findFirstOrThrow({ where: { tenantId } });
+  return unit.id;
+}
+
 describe("GET/POST/PUT /api/users", () => {
   it("lists the tenant's users, including the admin auto-created at registration", async () => {
     const admin = await setupTenant();
@@ -31,7 +37,13 @@ describe("GET/POST/PUT /api/users", () => {
     const res = await request(app())
       .post("/api/users")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ name: "Teller Baru", email: "teller-baru@demo.test", password: "rahasia123", roleId: tellerRole.id });
+      .send({
+        name: "Teller Baru",
+        email: "teller-baru@demo.test",
+        password: "rahasia123",
+        roleId: tellerRole.id,
+        unitIds: [await defaultUnitId(admin.user.tenantId)]
+      });
 
     expect(res.status).toBe(201);
     expect(res.body.data.email).toBe("teller-baru@demo.test");
@@ -52,7 +64,13 @@ describe("GET/POST/PUT /api/users", () => {
     const res = await request(app())
       .post("/api/users")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ name: "Dup", email: "admin@demo.test", password: "rahasia123", roleId: tellerRole.id });
+      .send({
+        name: "Dup",
+        email: "admin@demo.test",
+        password: "rahasia123",
+        roleId: tellerRole.id,
+        unitIds: [await defaultUnitId(admin.user.tenantId)]
+      });
 
     expect(res.status).toBe(409);
   });
@@ -65,7 +83,13 @@ describe("GET/POST/PUT /api/users", () => {
     const res = await request(app())
       .post("/api/users")
       .set("Authorization", `Bearer ${tenantA.accessToken}`)
-      .send({ name: "Hijack", email: "hijack@demo.test", password: "rahasia123", roleId: roleB.id });
+      .send({
+        name: "Hijack",
+        email: "hijack@demo.test",
+        password: "rahasia123",
+        roleId: roleB.id,
+        unitIds: [await defaultUnitId(tenantA.user.tenantId)]
+      });
 
     expect(res.status).toBe(404);
   });
@@ -77,7 +101,13 @@ describe("GET/POST/PUT /api/users", () => {
     const created = await request(app())
       .post("/api/users")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ name: "Teller Baru", email: "teller-baru@demo.test", password: "rahasia123", roleId: tellerRole.id });
+      .send({
+        name: "Teller Baru",
+        email: "teller-baru@demo.test",
+        password: "rahasia123",
+        roleId: tellerRole.id,
+        unitIds: [await defaultUnitId(admin.user.tenantId)]
+      });
 
     const res = await request(app())
       .put(`/api/users/${created.body.data.id}`)
@@ -95,7 +125,13 @@ describe("GET/POST/PUT /api/users", () => {
     const created = await request(app())
       .post("/api/users")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ name: "Teller Baru", email: "teller-baru@demo.test", password: "rahasia123", roleId: tellerRole.id });
+      .send({
+        name: "Teller Baru",
+        email: "teller-baru@demo.test",
+        password: "rahasia123",
+        roleId: tellerRole.id,
+        unitIds: [await defaultUnitId(admin.user.tenantId)]
+      });
 
     const deactivated = await request(app())
       .put(`/api/users/${created.body.data.id}`)
@@ -130,7 +166,13 @@ describe("GET/POST/PUT /api/users", () => {
     const res = await request(app())
       .post("/api/users")
       .set("Authorization", `Bearer ${teller.accessToken}`)
-      .send({ name: "X", email: "x@demo.test", password: "rahasia123", roleId: tellerRole.id });
+      .send({
+        name: "X",
+        email: "x@demo.test",
+        password: "rahasia123",
+        roleId: tellerRole.id,
+        unitIds: [await defaultUnitId(admin.user.tenantId)]
+      });
 
     expect(res.status).toBe(403);
   });
@@ -146,7 +188,13 @@ describe("GET/POST/PUT /api/users", () => {
     const created = await request(app())
       .post("/api/users")
       .set("Authorization", `Bearer ${manager.accessToken}`)
-      .send({ name: "X", email: "x@demo.test", password: "rahasia123", roleId: tellerRole.id });
+      .send({
+        name: "X",
+        email: "x@demo.test",
+        password: "rahasia123",
+        roleId: tellerRole.id,
+        unitIds: [await defaultUnitId(admin.user.tenantId)]
+      });
     expect(created.status).toBe(403);
   });
 

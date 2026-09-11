@@ -91,12 +91,15 @@ enum MappingTransactionKind {
   PAYMENT_PRINCIPAL
   PAYMENT_INTEREST
   PAYMENT_PENALTY
+  SALE_REVENUE
+  SALE_COGS
 }
 
 enum JournalSourceType {
   SAVING_TRANSACTION
   LOAN_PAYMENT
   LOAN_DISBURSEMENT
+  POS_SALE
   MANUAL
 }
 
@@ -199,6 +202,10 @@ model Tenant {
   journalLines          JournalLine[]
   shuDistributionConfig ShuDistributionConfig?
   calkNarratives        CalkNarrative[]
+  products              Product[]
+  posSales              POSSale[]
+  stockMovements        StockMovement[]
+  ppobTransactions      PPOBTransaction[]
   onboardingOrder       OnboardingOrder?
 }
 
@@ -216,10 +223,15 @@ model CooperativeUnit {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  memberships UnitMembership[]
-  savings     Saving[]
-  loans       Loan[]
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships      UnitMembership[]
+  savings          Saving[]
+  loans            Loan[]
+  products         Product[]
+  posSales         POSSale[]
+  stockMovements   StockMovement[]
+  ppobTransactions PPOBTransaction[]
+  userAssignments  UserUnit[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
@@ -258,28 +270,52 @@ model Role {
 }
 
 model User {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   tenantId        String
-  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roleId          String
-  role            Role     @relation(fields: [roleId], references: [id])
+  role            Role      @relation(fields: [roleId], references: [id])
   email           String
   passwordHash    String?
   firebaseUid     String? @unique
   authProvider    String?
   name            String
-  isActive        Boolean  @default(true)
-  isPlatformAdmin Boolean  @default(false)
+  isActive        Boolean   @default(true)
+  isPlatformAdmin Boolean   @default(false)
   lastLoginAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  savingTransactions SavingTransaction[]
-  loanPayments       LoanPayment[]
-  notificationReads  NotificationRead[]
+  savingTransactions      SavingTransaction[]
+  loanPayments            LoanPayment[]
+  notificationReads       NotificationRead[]
+  posSalesCreated         POSSale[]
+  stockMovementsCreated   StockMovement[]
+  ppobTransactionsCreated PPOBTransaction[]
+  unitAssignments         UserUnit[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
+}
+
+// Explicit per-user unit scoping (e.g. a Kasir restricted to one Toko unit).
+// A user with zero rows here falls back to every active unit in their
+// tenant — see lib/unit-access.ts#getEffectiveUnitIds — so this table starts
+// empty and every pre-existing user keeps working exactly as before; only
+// users assigned through Konfigurasi > Pengguna going forward get scoped.
+// Mirrors UnitMembership's member<->unit join shape above.
+model UserUnit {
+  id        String   @id @default(cuid())
+  userId    String
+  unitId    String
+  createdAt DateTime @default(now())
+
+  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  unit CooperativeUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, unitId])
+  @@index([unitId])
+  @@index([userId])
 }
 
 // ── MEMBER ────────────────────────────────────────────────────────────────────
@@ -314,6 +350,7 @@ model Member {
   savings     Saving[]
   loans       Loan[]
   memberships UnitMembership[]
+  posSales    POSSale[]
 
   @@unique([tenantId, nik])
   @@index([tenantId])
@@ -386,19 +423,19 @@ model NotificationRead {
 // tenant's sole CooperativeUnit (CLAUDE.md rule 2b) — never accepted from the
 // client, so no unit-picker UI exists in Phase 1.
 model Saving {
-  id             String       @id @default(cuid())
+  id             String          @id @default(cuid())
   tenantId       String
-  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   unitId         String
   unit           CooperativeUnit @relation(fields: [unitId], references: [id])
   memberId       String
-  member         Member       @relation(fields: [memberId], references: [id])
+  member         Member          @relation(fields: [memberId], references: [id])
   savingConfigId String
-  savingConfig   SavingConfig @relation(fields: [savingConfigId], references: [id])
-  balance        Decimal      @default(0) @db.Decimal(15, 2)
-  isActive       Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  savingConfig   SavingConfig    @relation(fields: [savingConfigId], references: [id])
+  balance        Decimal         @default(0) @db.Decimal(15, 2)
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   transactions SavingTransaction[]
 
@@ -492,6 +529,121 @@ model LoanPayment {
   @@index([loanId])
   @@index([tenantId])
   @@index([dueDate])
+}
+
+// ── KONSUMEN (Toko/POS) ────────────────────────────────────────────────────────
+// Phase 2 KSU MVP — schema only (no service/route layer yet). Same required
+// tenantId+unitId convention as Saving/Loan; unitId here is expected to point
+// at a KONSUMEN-type CooperativeUnit, though that's a service-layer check
+// (Prisma has no cross-column-value FK constraint), not a DB-level one.
+//
+// POSSaleLine.product and StockMovement.product are `onDelete: Cascade`
+// (Product itself already cascades from Tenant). Confirmed by direct SQL
+// reproduction that plain RESTRICT here deadlocks tenant-cascade deletes:
+// deleting a Tenant cascades Product and POSSale/StockMovement independently,
+// and Postgres does not guarantee Product's RESTRICT-by-default children are
+// already gone by the time Product's own row is removed via the sibling
+// Tenant->Product cascade path. Cascading through Product closes that gap
+// the same way JournalLine/SavingTransaction/LoanPayment avoid it elsewhere
+// in this schema (a direct, unambiguous cascade path to every leaf row).
+
+model Product {
+  id        String          @id @default(cuid())
+  tenantId  String
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId    String
+  unit      CooperativeUnit @relation(fields: [unitId], references: [id])
+  sku       String
+  name      String
+  category  String?
+  uom       String          @default("pcs")
+  price     Decimal         @db.Decimal(15, 2)
+  cost      Decimal         @db.Decimal(15, 2)
+  stockQty  Int             @default(0)
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  saleLines      POSSaleLine[]
+  stockMovements StockMovement[]
+
+  @@unique([tenantId, unitId, sku])
+  @@index([tenantId, unitId])
+}
+
+model POSSale {
+  id            String          @id @default(cuid())
+  tenantId      String
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId        String
+  unit          CooperativeUnit @relation(fields: [unitId], references: [id])
+  memberId      String?
+  member        Member?         @relation(fields: [memberId], references: [id])
+  paymentMethod String          @default("CASH")
+  totalPrice    Decimal         @db.Decimal(15, 2)
+  totalCost     Decimal         @db.Decimal(15, 2)
+  soldAt        DateTime        @default(now())
+  createdBy     String
+  createdByUser User            @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime        @default(now())
+
+  lines POSSaleLine[]
+
+  @@index([tenantId, unitId])
+  @@index([memberId])
+}
+
+model POSSaleLine {
+  id        String  @id @default(cuid())
+  saleId    String
+  sale      POSSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  qty       Int
+  unitPrice Decimal @db.Decimal(15, 2)
+  unitCost  Decimal @db.Decimal(15, 2)
+  subtotal  Decimal @db.Decimal(15, 2)
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model StockMovement {
+  id            String          @id @default(cuid())
+  tenantId      String
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId        String
+  unit          CooperativeUnit @relation(fields: [unitId], references: [id])
+  productId     String
+  product       Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type          String // IN | OUT | ADJUSTMENT
+  quantity      Int
+  reason        String
+  createdBy     String
+  createdByUser User            @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime        @default(now())
+
+  @@index([tenantId, unitId])
+  @@index([productId])
+}
+
+model PPOBTransaction {
+  id             String          @id @default(cuid())
+  tenantId       String
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId         String
+  unit           CooperativeUnit @relation(fields: [unitId], references: [id])
+  billType       String // LISTRIK | PULSA | BPJS | AIR
+  customerNumber String
+  customerName   String
+  amount         Decimal         @db.Decimal(15, 2)
+  adminFee       Decimal         @db.Decimal(15, 2)
+  status         String          @default("PENDING") // PENDING | PAID | FAILED
+  createdBy      String
+  createdByUser  User            @relation(fields: [createdBy], references: [id])
+  createdAt      DateTime        @default(now())
+
+  @@index([tenantId, unitId])
 }
 
 // ── ACCOUNTING CONFIGURATION (Konfigurasi Akun / COA) ─────────────────────────

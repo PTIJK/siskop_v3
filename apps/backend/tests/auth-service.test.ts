@@ -27,7 +27,7 @@ beforeEach(async () => {
 });
 
 describe("registerTenant", () => {
-  it("creates tenant, first unit, 4 seed roles, and an admin user with Super Admin permissions", async () => {
+  it("creates tenant, first unit, 5 seed roles, and an admin user with Super Admin permissions", async () => {
     const session = await registerTenant(REGISTRATION);
 
     expect(session.user.email).toBe("admin@demo.test");
@@ -46,7 +46,7 @@ describe("registerTenant", () => {
     expect(claims.permissions.members.create).toBe(true);
 
     const roles = await db.role.findMany({ where: { tenantId: claims.tenantId } });
-    expect(roles.map((r) => r.name).sort()).toEqual(["Manager", "Super Admin", "Teller", "Viewer"]);
+    expect(roles.map((r) => r.name).sort()).toEqual(["Kasir", "Manager", "Super Admin", "Teller", "Viewer"]);
   });
 
   it("stores the password hashed, never in plaintext", async () => {

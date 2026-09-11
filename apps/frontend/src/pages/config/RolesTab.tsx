@@ -23,7 +23,8 @@ const MODULES: { key: PermissionModule; label: string }[] = [
   { key: "config", label: "Konfigurasi" },
   { key: "users", label: "Pengguna" },
   { key: "roles", label: "Role" },
-  { key: "accounting", label: "Akuntansi" }
+  { key: "accounting", label: "Akuntansi" },
+  { key: "konsumen", label: "Toko" }
 ];
 const ACTIONS: { key: PermissionAction; label: string }[] = [
   { key: "create", label: "Buat" },

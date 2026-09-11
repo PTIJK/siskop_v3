@@ -46,6 +46,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Explicit, independent of pnpm's postinstall/build-script cache: when
+      # the pnpm store cache is warm, pnpm treats puppeteer as already built
+      # and skips its postinstall, but the downloaded browser lives in
+      # ~/.cache/puppeteer (outside the store) and doesn't survive onto a
+      # fresh runner — leaving reports.test.ts's PDF tests unable to launch
+      # Chrome. This step is idempotent and always ensures it's present.
+      - run: pnpm --filter @siskop/backend exec puppeteer browsers install chrome
+
       - run: pnpm --filter @siskop/backend db:generate
 
       - run: pnpm run lint

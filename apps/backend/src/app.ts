@@ -19,6 +19,8 @@ import { configRoutes } from "./modules/config/routes.js";
 import { usersRoutes } from "./modules/users/routes.js";
 import { reportsRoutes } from "./modules/reports/routes.js";
 import { platformRoutes } from "./modules/platform/routes.js";
+import { ksuRoutes } from "./modules/ksu/routes.js";
+import { konsumenRoutes } from "./modules/konsumen/product.routes.js";
 
 function meta() {
   return { timestamp: new Date().toISOString(), requestId: randomUUID() };
@@ -79,6 +81,8 @@ export function createApp(): Express {
   app.use("/api/users", usersRoutes());
   app.use("/api/reports", reportsRoutes());
   app.use("/api/platform", platformRoutes());
+  app.use("/api/ksu", ksuRoutes());
+  app.use("/api/konsumen", konsumenRoutes());
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({

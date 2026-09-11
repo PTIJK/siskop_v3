@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Navigate, Route, BrowserRouter, Routes } from "react-router-dom";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
+import { RequireMultiUnit } from "@/components/shared/RequireMultiUnit";
 import { onboardingRoutes } from "@/features/onboarding/routes";
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const AppLayout = lazy(() =>
@@ -62,6 +63,30 @@ const PlatformPackagesPage = lazy(() =>
 const PlatformAdminsPage = lazy(() =>
   import("@/pages/platform/PlatformAdminsPage").then((module) => ({ default: module.PlatformAdminsPage }))
 );
+const UnitsPage = lazy(() =>
+  import("@/pages/ksu/UnitsPage").then((module) => ({ default: module.UnitsPage }))
+);
+const ConsolidatedReportPage = lazy(() =>
+  import("@/pages/ksu/ConsolidatedReportPage").then((module) => ({ default: module.ConsolidatedReportPage }))
+);
+const MemberStatementPage = lazy(() =>
+  import("@/pages/ksu/MemberStatementPage").then((module) => ({ default: module.MemberStatementPage }))
+);
+const UnitLayout = lazy(() =>
+  import("@/pages/ksu/UnitLayout").then((module) => ({ default: module.UnitLayout }))
+);
+const ProductsPage = lazy(() =>
+  import("@/pages/konsumen/ProductsPage").then((module) => ({ default: module.ProductsPage }))
+);
+const StockPage = lazy(() =>
+  import("@/pages/konsumen/StockPage").then((module) => ({ default: module.StockPage }))
+);
+const POSPage = lazy(() =>
+  import("@/pages/konsumen/POSPage").then((module) => ({ default: module.POSPage }))
+);
+const PPOBPage = lazy(() =>
+  import("@/pages/konsumen/PPOBPage").then((module) => ({ default: module.PPOBPage }))
+);
 
 export default function App() {
   return (
@@ -100,6 +125,48 @@ export default function App() {
 
               <Route path='/config' element={<ConfigPage />} />
               <Route path='/profile' element={<ProfilePage />} />
+
+              {/* KSU (multi-unit) routes — reachable only when the tenant has
+                  2+ active CooperativeUnits (RequireMultiUnit reads the same
+                  useIsMultiUnit() hook Sidebar.tsx uses for its nav items),
+                  never based on a tenant "type". */}
+              <Route
+                path='/ksu/units'
+                element={
+                  <RequireMultiUnit>
+                    <UnitsPage />
+                  </RequireMultiUnit>
+                }
+              />
+              <Route
+                path='/ksu/report'
+                element={
+                  <RequireMultiUnit>
+                    <ConsolidatedReportPage />
+                  </RequireMultiUnit>
+                }
+              />
+              <Route
+                path='/ksu/members/:memberId/statement'
+                element={
+                  <RequireMultiUnit>
+                    <MemberStatementPage />
+                  </RequireMultiUnit>
+                }
+              />
+
+              {/* Per-unit detail shell — NOT gated by RequireMultiUnit: any
+                  tenant with at least one unit can view that unit's own detail
+                  page, single-unit or not. The KONSUMEN-type tab gate (Produk/
+                  Stok only shown for a KONSUMEN-type unit) lives inside
+                  UnitLayout itself, per-unit, a different axis from the
+                  tenant-level isMultiUnit gate above. */}
+              <Route path='/ksu/units/:unitId' element={<UnitLayout />}>
+                <Route path='products' element={<ProductsPage />} />
+                <Route path='stock' element={<StockPage />} />
+                <Route path='pos' element={<POSPage />} />
+                <Route path='ppob' element={<PPOBPage />} />
+              </Route>
 
               <Route path='/platform/tenants' element={<PlatformTenantsPage />} />
               <Route path='/platform/packages' element={<PlatformPackagesPage />} />

@@ -6,11 +6,18 @@ import { toPublicUser } from "../../lib/user-mapper.js";
 import type { CreateUserInput, UpdateUserInput } from "./schema.js";
 
 const BCRYPT_ROUNDS = 10;
+const USER_INCLUDE = { role: true, unitAssignments: true } as const;
+
+/** Every id in `unitIds` must be an active CooperativeUnit owned by `tenantId` — never trusted at face value (CLAUDE.md rule 1). */
+async function assertUnitsBelongToTenant(tenantId: string, unitIds: string[]): Promise<void> {
+  const units = await db.cooperativeUnit.findMany({ where: { tenantId, id: { in: unitIds } } });
+  if (units.length !== unitIds.length) throw validationError("Salah satu unit tidak valid");
+}
 
 export async function listUsers(tenantId: string): Promise<User[]> {
   const users = await db.user.findMany({
     where: { tenantId },
-    include: { role: true },
+    include: USER_INCLUDE,
     orderBy: { createdAt: "asc" }
   });
   return users.map(toPublicUser);
@@ -23,10 +30,15 @@ export async function createUser(tenantId: string, data: CreateUserInput): Promi
   const duplicate = await db.user.findUnique({ where: { tenantId_email: { tenantId, email: data.email } } });
   if (duplicate) throw conflict(`Email ${data.email} sudah digunakan`);
 
+  await assertUnitsBelongToTenant(tenantId, data.unitIds);
+
   const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
-  const created = await db.user.create({
-    data: { tenantId, roleId: data.roleId, name: data.name, email: data.email, passwordHash },
-    include: { role: true }
+  const created = await db.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: { tenantId, roleId: data.roleId, name: data.name, email: data.email, passwordHash }
+    });
+    await tx.userUnit.createMany({ data: data.unitIds.map((unitId) => ({ userId: user.id, unitId })) });
+    return tx.user.findUniqueOrThrow({ where: { id: user.id }, include: USER_INCLUDE });
   });
   return toPublicUser(created);
 }
@@ -58,15 +70,26 @@ export async function updateUser(
     if (duplicate) throw conflict(`Email ${data.email} sudah digunakan`);
   }
 
-  const updated = await db.user.update({
-    where: { id, tenantId },
-    data: {
-      ...(data.name !== undefined ? { name: data.name } : {}),
-      ...(data.email !== undefined ? { email: data.email } : {}),
-      ...(data.roleId !== undefined ? { roleId: data.roleId } : {}),
-      ...(data.isActive !== undefined ? { isActive: data.isActive } : {})
-    },
-    include: { role: true }
+  if (data.unitIds !== undefined) {
+    await assertUnitsBelongToTenant(tenantId, data.unitIds);
+  }
+
+  const updated = await db.$transaction(async (tx) => {
+    if (data.unitIds !== undefined) {
+      await tx.userUnit.deleteMany({ where: { userId: id } });
+      await tx.userUnit.createMany({ data: data.unitIds.map((unitId) => ({ userId: id, unitId })) });
+    }
+
+    return tx.user.update({
+      where: { id, tenantId },
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.email !== undefined ? { email: data.email } : {}),
+        ...(data.roleId !== undefined ? { roleId: data.roleId } : {}),
+        ...(data.isActive !== undefined ? { isActive: data.isActive } : {})
+      },
+      include: USER_INCLUDE
+    });
   });
   return toPublicUser(updated);
 }

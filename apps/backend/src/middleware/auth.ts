@@ -3,7 +3,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { ErrorCode, type AuthClaims } from "@siskop/types";
-import { forbidden, unauthorized as unauthorizedError } from "../lib/errors.js";
+import { unauthorized as unauthorizedError } from "../lib/errors.js";
 
 // Every action is optional: a role's permissions blob only sets the actions it
 // actually grants (see the SEED_ROLES default permission sets in
@@ -26,7 +26,11 @@ const permissionsSchema = z.object({
   config: permissionActions,
   users: permissionActions,
   roles: permissionActions,
-  accounting: permissionActions.optional()
+  accounting: permissionActions.optional(),
+  // Phase 2 (KSU Konsumen/Toko) — optional like `accounting`: a token signed
+  // before this module existed still parses, `permissions.konsumen` just
+  // comes back undefined (requirePermission("konsumen", ...) then denies).
+  konsumen: permissionActions.optional()
 });
 
 const claimsSchema = z.object({
@@ -40,15 +44,13 @@ const claimsSchema = z.object({
 
 // Carrying unitIds in the token trades staleness for a saved permission lookup
 // on every request: a unit-access change takes up to JWT_EXPIRES_IN (15m) to
-// take effect. If staff start moving between units often, swap this for a
-// cached per-request lookup and drop unitIds from the claims — call sites of
-// assertUnitAccess do not change. `permissions` (see requirePermission in
-// middleware/rbac.ts) rides in the same token for the same reason.
-export function assertUnitAccess(claims: AuthClaims, unitId: string): void {
-  if (!claims.unitIds.includes(unitId)) {
-    throw forbidden(`No access to unit ${unitId}`);
-  }
-}
+// take effect. `permissions` (see requirePermission in middleware/rbac.ts)
+// accepts that tradeoff. Real unit-access enforcement does not: it needs a
+// brand-new CooperativeUnit to be usable by its creator immediately, not
+// after JWT_EXPIRES_IN — see lib/unit-access.ts#assertUnitAccess, which
+// re-derives the caller's unit scope from the DB on every request instead of
+// trusting this claim. `unitIds` here is kept for the token's shape/audit
+// value only; nothing reads it for enforcement.
 
 export function signAccessToken(claims: AuthClaims, secret: string, expiresIn: string): string {
   return jwt.sign(claims, secret, { expiresIn } as jwt.SignOptions);

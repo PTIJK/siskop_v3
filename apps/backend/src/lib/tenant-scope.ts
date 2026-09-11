@@ -24,7 +24,19 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   "JournalEntry",
   "JournalLine",
   "ShuDistributionConfig",
-  "CalkNarrative"
+  "CalkNarrative",
+  // Phase 2 (KSU Konsumen/Toko), Task 2 — only the two models that task's
+  // service layer actually queries by tenantId.
+  "Product",
+  "StockMovement",
+  // Phase 2, Task 3 — sale.service.ts now queries POSSale by tenantId.
+  // POSSaleLine is deliberately NOT added: it carries no tenantId column of
+  // its own (only saleId), so this guard doesn't apply to it — see
+  // modules/konsumen/sale.service.ts.
+  "POSSale",
+  // Phase 2, Task 4 — ppob.service.ts now queries/creates PPOBTransaction by
+  // tenantId (a stub check-and-pay skeleton, no journal posting involved).
+  "PPOBTransaction"
 ]);
 
 const WHERE_REQUIRED_ACTIONS = new Set([

@@ -1,7 +1,7 @@
-import type { User as DbUser, Role as DbRole } from "@prisma/client";
+import type { User as DbUser, Role as DbRole, UserUnit as DbUserUnit } from "@prisma/client";
 import type { Permissions, User, UserRole } from "@siskop/types";
 
-export type UserWithRole = DbUser & { role: DbRole };
+export type UserWithRole = DbUser & { role: DbRole; unitAssignments: DbUserUnit[] };
 
 /**
  * `AuthClaims.role` (coarse, fixed) is derived here, not stored — the tenant's
@@ -28,6 +28,7 @@ export function toPublicUser(user: UserWithRole): User {
     roleId: user.roleId,
     roleName: user.role.name,
     permissions: user.role.permissions as unknown as Permissions,
+    unitIds: user.unitAssignments.map((a) => a.unitId),
     isActive: user.isActive,
     isPlatformAdmin: user.isPlatformAdmin,
     createdAt: user.createdAt.toISOString(),

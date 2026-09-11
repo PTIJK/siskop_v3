@@ -57,10 +57,21 @@ interface SavingsBreakdown {
  * then approximated as the mean of those two points rather than a true daily
  * time-weighted average — documented simplification, ported as-is from the
  * pre-rescaffold system (Design Spec 2026-07-22-pelaporan-regulasi §6.4).
+ *
+ * `unitId` (Day 4 KSU spike) is an optional narrowing filter, added so
+ * modules/ksu/service.ts#getMemberUnitStatement can reuse this exact
+ * calculation restricted to one CooperativeUnit's Saving rows — every
+ * existing caller omits it and gets byte-for-byte the prior (tenant+member,
+ * every unit) behavior.
  */
-async function memberSavingsBreakdownAsOf(tenantId: string, memberId: string, date: Date): Promise<SavingsBreakdown> {
+export async function memberSavingsBreakdownAsOf(
+  tenantId: string,
+  memberId: string,
+  date: Date,
+  unitId?: string
+): Promise<SavingsBreakdown> {
   const savings = await db.saving.findMany({
-    where: { tenantId, memberId },
+    where: { tenantId, memberId, ...(unitId ? { unitId } : {}) },
     select: { id: true, balance: true, savingConfig: { select: { type: true } } }
   });
   if (savings.length === 0) return { total: 0, pokokWajib: 0, sukarela: 0 };
@@ -85,6 +96,45 @@ async function memberSavingsBreakdownAsOf(tenantId: string, memberId: string, da
     else pokokWajib += balance; // POKOK or WAJIB
   }
   return { total: round2(total), pokokWajib: round2(pokokWajib), sukarela: round2(sukarela) };
+}
+
+/**
+ * One member's total interest paid within [from, to], via the same
+ * `splitPrincipalAndInterest` flat-ratio approximation getShuDistribution
+ * applies to every member's LoanPayments (see that function's own comment)
+ * — re-derived from LoanPayment rows directly, not read off JournalLine.
+ *
+ * Day 4 KSU spike: extracted as its own single-member, optionally
+ * unit-scoped function (rather than reusing getShuDistribution's internal
+ * tenant-wide `interestByMember` loop, which computes every member's total
+ * in one pass purely as a bulk-query optimization) so
+ * modules/ksu/service.ts#getMemberUnitStatement can ask for just one
+ * member's interest paid, restricted to one CooperativeUnit's Loan rows,
+ * without needing that whole-tenant loop exposed. `unitId` omitted matches
+ * the tenant-wide, every-unit figure getShuDistribution computes internally.
+ */
+export async function getMemberInterestPaidInPeriod(
+  tenantId: string,
+  memberId: string,
+  from: Date,
+  to: Date,
+  unitId?: string
+): Promise<number> {
+  const payments = await db.loanPayment.findMany({
+    where: {
+      tenantId,
+      paidAt: { gte: from, lte: to },
+      loan: { memberId, ...(unitId ? { unitId } : {}) }
+    },
+    select: { amount: true, loan: { select: { principalAmount: true, totalAmount: true } } }
+  });
+
+  return round2(
+    payments.reduce((sum, p) => {
+      const { interest } = splitPrincipalAndInterest(Number(p.amount), Number(p.loan.principalAmount), Number(p.loan.totalAmount));
+      return sum + interest;
+    }, 0)
+  );
 }
 
 /**

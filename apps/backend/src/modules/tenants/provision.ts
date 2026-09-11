@@ -57,7 +57,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       config: { read: true, update: true },
       users: FULL,
       roles: FULL,
-      accounting: FULL
+      accounting: FULL,
+      konsumen: FULL
     }
   },
   {
@@ -71,7 +72,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       config: { read: true, update: false },
       users: { create: false, read: true, update: false, delete: false },
       roles: { read: true },
-      accounting: { create: false, read: false, update: false, delete: false }
+      accounting: { create: false, read: false, update: false, delete: false },
+      konsumen: FULL
     }
   },
   {
@@ -84,7 +86,10 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       reports: {},
       config: {},
       users: {},
-      roles: {}
+      roles: {},
+      // Front-counter staff record stock movements and ring up POS sales
+      // (create) but don't add/remove SKUs — that's Manager territory.
+      konsumen: { create: true, read: true, update: true }
     }
   },
   {
@@ -97,7 +102,25 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       reports: READ_ONLY,
       config: {},
       users: {},
-      roles: {}
+      roles: {},
+      konsumen: READ_ONLY
+    }
+  },
+  {
+    name: "Kasir",
+    permissions: {
+      // Toko-only: konsumen access and nothing else. No members/savings/loans/
+      // reports/config/users/roles/accounting — a Kasir cannot reach any
+      // other module's data even before unit scoping is considered.
+      dashboard: READ_ONLY,
+      members: {},
+      savings: {},
+      loans: {},
+      reports: {},
+      config: {},
+      users: {},
+      roles: {},
+      konsumen: { create: true, read: true, update: true }
     }
   }
 ];
