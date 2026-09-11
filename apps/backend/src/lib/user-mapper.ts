@@ -23,6 +23,7 @@ export function toPublicUser(user: UserWithRole): User {
     tenantId: user.tenantId,
     email: user.email,
     name: user.name,
+    authProvider: user.authProvider,
     role: deriveUserRole(user),
     roleId: user.roleId,
     roleName: user.role.name,
