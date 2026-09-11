@@ -1,7 +1,11 @@
+import base64
 import importlib.util
+import json
 import pathlib
+import tempfile
 import unittest
-from unittest.mock import Mock
+import uuid
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("release", pathlib.Path(__file__).parents[1] / "release.py")
 release = importlib.util.module_from_spec(SPEC)
@@ -13,6 +17,52 @@ COMMIT = "a" * 40
 
 
 class ReleaseSafetyTests(unittest.TestCase):
+    def test_backend_uses_a_valid_unique_tag_for_the_failed_release(self):
+        build_id = "c4fd419b-fdb3-4d75-a0b2-2fd5c2942d61"
+        cloud = Mock()
+        cloud.read_lock.return_value = ({"buildId": build_id}, "8")
+        state = {"buildId": build_id, "generation": "8", "commit": COMMIT}
+        selected_tag = None
+
+        def command(args):
+            nonlocal selected_tag
+            if args[:4] == ["gcloud", "artifacts", "docker", "images"]:
+                return "sha256:" + "b" * 64
+            if args[:2] == ["bash", "infra/firebase/deploy-api.sh"]:
+                selected_tag = next(arg.removeprefix("--tag=") for arg in args if arg.startswith("--tag="))
+                # Include the hostname separator in the budget as well.
+                self.assertLessEqual(len(selected_tag + "-" + release.SERVICE), 46)
+                self.assertRegex(selected_tag, r"^[a-z][a-z0-9-]*[a-z0-9]$")
+                self.assertIn("--no-traffic", args)
+            if args[:4] == ["gcloud", "run", "services", "describe"]:
+                return json.dumps({"status": {"latestReadyRevisionName": "revision-4", "traffic": [
+                    {"tag": selected_tag, "revisionName": "revision-4", "url": "https://candidate.example"}
+                ]}})
+            return ""
+
+        cloud.command.side_effect = command
+        cloud.public_json.side_effect = [
+            {"success": True}, {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}}
+        ]
+        with tempfile.TemporaryDirectory() as directory, patch.object(release, "STATE", pathlib.Path(directory) / "state.json"):
+            release.backend(cloud, state, release.IMAGE + ":test")
+            self.assertEqual(json.loads(release.STATE.read_text())["revision"], "revision-4")
+
+    def test_traffic_tags_preserve_all_uuid_bits(self):
+        # These differ only at the end; truncating a UUID would reuse a pinned tag.
+        for build_id in [BUILD, BUILD[:-1] + "d", "00000000-0000-0000-0000-000000000000", "ffffffff-ffff-ffff-ffff-ffffffffffff"]:
+            with self.subTest(build_id=build_id):
+                tag = release.traffic_tag(build_id)
+                decoded = base64.b32decode(tag[1:].upper() + "======")
+                self.assertEqual(uuid.UUID(bytes=decoded), uuid.UUID(build_id))
+                self.assertLessEqual(len(tag + "-" + release.SERVICE), 46)
+
+    def test_invalid_tag_input_stops_before_database_migration(self):
+        cloud = Mock()
+        with self.assertRaises(ValueError):
+            release.backend(cloud, {"buildId": "not-a-build-id"}, release.IMAGE + ":test")
+        self.assertEqual(cloud.mock_calls, [])
+
     def test_verification_build_never_needs_cloud_credentials(self):
         cloud = Mock()
         self.assertIsNone(release.acquire(cloud, "false", "feature/cloud-build", COMMIT, BUILD))

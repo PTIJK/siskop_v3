@@ -4,6 +4,7 @@
 The GCS object is a generation-checked mutex across all deployment steps. A later
 build can reclaim it only after Cloud Build confirms its owner has terminated.
 """
+import base64
 import json
 import os
 import pathlib
@@ -14,6 +15,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 
 PROJECT = "siskop-d0f8c"
 REGION = "asia-southeast2"
@@ -144,9 +146,21 @@ def check_api(cloud, origin):
         raise RuntimeError("Database/package checkout readiness check failed")
 
 
+def traffic_tag(build_id):
+    if not UUID.fullmatch(build_id):
+        raise ValueError("Invalid Cloud Build ID for traffic tag")
+    # Encode all 128 UUID bits in 26 DNS-safe characters. Keeping the entire ID
+    # prevents later builds from reusing tags pinned by Firebase Hosting.
+    tag = "c" + base64.b32encode(uuid.UUID(build_id).bytes).decode("ascii").rstrip("=").lower()
+    if len(tag + "-" + SERVICE) > 46:
+        raise ValueError("Cloud Run traffic tag and service exceed the hostname limit")
+    return tag
+
+
 def backend(cloud, state, image):
     if state is None:
         return
+    tag = traffic_tag(state["buildId"])
     assert_owner(cloud, state)
     if not image.startswith(IMAGE + ":"):
         raise ValueError("Unexpected image repository")
@@ -163,7 +177,6 @@ def backend(cloud, state, image):
         "--command=node", "--args=/app/apps/backend/node_modules/prisma/build/index.js,migrate,deploy,--schema=/app/apps/backend/prisma/schema.prisma",
         "--cpu=1", "--memory=512Mi", "--tasks=1", "--parallelism=1", "--max-retries=0", "--task-timeout=600s", "--execute-now", "--wait",
     ))
-    tag = "cb-" + state["buildId"]
     cloud.command([
         "bash", "infra/firebase/deploy-api.sh", image_ref, "--no-traffic", f"--tag={tag}",
         f"--labels=commit-sha={state['commit']},cloud-build-id={state['buildId']}",
