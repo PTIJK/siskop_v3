@@ -3,10 +3,15 @@
 Target: **https://siskop-d0f8c.web.app**, with API `siskop-staging-api` in
 `asia-southeast2`. This remains the existing Firebase/Xendit sandbox environment.
 
-Setup status (2026-09-11): the deployment identities and private lock bucket exist.
-The GitHub connection is authorized but is still `PENDING_INSTALL_APP`; the main
-trigger must be created after that installation finishes. This configuration has
-not been merged into main and automatic publishing is not active yet.
+Setup status (2026-09-11): the GitHub connection is `COMPLETE`, `siskop-v3` is
+linked to `PTIJK/siskop_v3`, and `siskop-main-deploy` is enabled in
+`asia-southeast2` (trigger ID `8346644b-e829-4692-8226-fad4c3c5ce28`). The deployment
+identities and private lock bucket are configured. The temporary Secret Manager
+Admin permission used for connection setup has been removed.
+
+The pipeline files are still on `feature/cloud-build`. Merge that branch into
+main to start the first automatic deployment; creating the trigger did not
+publish the site or migrate its database.
 
 Verification: commit `719b3ae` passed the full
 [Cloud Build verification run](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/37b3a90e-9011-4668-a6da-61ca558d8a44?project=866351101735)
@@ -15,7 +20,7 @@ typechecks, frontend builds, and the backend container startup check. The
 [deployment account access check](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/07e9d6e2-f4e4-490d-b54a-f60b2d7810fb?project=866351101735)
 also passed for Cloud Run, Firebase Hosting, and both runtime identities. These
 checks did not migrate Cloud SQL or publish the live site. The first real
-deployment remains to be verified after installation, trigger creation, and merge.
+deployment remains to be verified after merging the pipeline into main.
 
 The regional Cloud Build trigger `siskop-main-deploy` watches
 `PTIJK/siskop_v3` with branch pattern `^main$`. Merging a GitHub pull request updates
@@ -71,14 +76,8 @@ CLOUDSDK_CORE_ACCOUNT=yudith.octo@gmail.com bash infra/firebase/setup-release.sh
 
 The GitHub host connection is `siskop-github` in `asia-southeast2`; its linked
 repository is `siskop-v3`. The Google Cloud Build GitHub app must be authorized
-and installed for `PTIJK/siskop_v3`. Then create the trigger:
-
-```sh
-gcloud builds triggers create github --project=siskop-d0f8c \
-  --region=asia-southeast2 --trigger-config=infra/firebase/release-trigger.yaml
-```
-
-For an existing trigger, update its configuration instead of creating a duplicate:
+and installed for `PTIJK/siskop_v3`. Import the configuration to create the trigger
+or update the existing trigger with the same name:
 
 ```sh
 gcloud builds triggers import --project=siskop-d0f8c --region=asia-southeast2 \
