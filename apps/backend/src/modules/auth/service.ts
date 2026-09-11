@@ -15,6 +15,7 @@ import { provisionTenantInTx, slugSchema } from "../tenants/provision.js";
 import { signAccessToken } from "../../middleware/auth.js";
 import { unauthorized, conflict, validationError } from "../../lib/errors.js";
 import { deriveUserRole, toPublicUser, type UserWithRole } from "../../lib/user-mapper.js";
+import { getEffectiveUnitIds } from "../../lib/unit-access.js";
 
 const BCRYPT_ROUNDS = 10;
 
@@ -47,19 +48,6 @@ function secret(name: "JWT_SECRET" | "JWT_REFRESH_SECRET"): string {
   return value;
 }
 
-/**
- * Which units this user may act on. Every user in Phase 1 is staff (members
- * carry no login), so this is always every active unit in the tenant — at
- * single-unit scale that's just the tenant's one CooperativeUnit.
- */
-async function resolveUnitIds(tenantId: string): Promise<string[]> {
-  const units = await db.cooperativeUnit.findMany({
-    where: { tenantId, isActive: true },
-    select: { id: true }
-  });
-  return units.map((u) => u.id);
-}
-
 function issue(claims: AuthClaims): { accessToken: string; refreshToken: string } {
   return {
     accessToken: signAccessToken(claims, secret("JWT_SECRET"), process.env.JWT_EXPIRES_IN ?? "15m"),
@@ -76,7 +64,7 @@ function issue(claims: AuthClaims): { accessToken: string; refreshToken: string 
 }
 
 async function sessionFor(user: UserWithRole): Promise<Session> {
-  const unitIds = await resolveUnitIds(user.tenantId);
+  const unitIds = await getEffectiveUnitIds(user.id, user.tenantId);
   if (unitIds.length === 0) {
     // Deliberately not a silent empty-scope login: a user who can reach no unit
     // can do nothing, and an empty unitIds claim is rejected at verify time.
@@ -123,7 +111,7 @@ export async function registerTenant(input: RegisterTenantInput): Promise<Sessio
           name: data.adminName,
           passwordHash
         },
-        include: { role: true }
+        include: { role: true, unitAssignments: true }
       });
     })
     .catch((err: unknown) => {
@@ -159,7 +147,7 @@ export async function login(
   // Scoped by tenantId, not email alone: email is unique only within a tenant.
   const user = await db.user.findUnique({
     where: { tenantId_email: { tenantId: tenant.id, email } },
-    include: { role: true }
+    include: { role: true, unitAssignments: true }
   });
 
   // Hash a throwaway when the user is absent so the response time does not
@@ -189,7 +177,7 @@ export async function refreshSession(token: string): Promise<RefreshedSession> {
 
   const user = await db.user.findUnique({
     where: { id: parsed.data.userId },
-    include: { role: true }
+    include: { role: true, unitAssignments: true }
   });
   if (!user || !user.isActive) throw unauthorized("Invalid or expired refresh token");
 
@@ -203,7 +191,7 @@ export async function refreshSession(token: string): Promise<RefreshedSession> {
 export async function getMe(userId: string, tenantId: string): Promise<User | null> {
   const user = await db.user.findFirst({
     where: { id: userId, tenantId },
-    include: { role: true }
+    include: { role: true, unitAssignments: true }
   });
   return user ? toPublicUser(user) : null;
 }
@@ -225,7 +213,7 @@ export async function updateProfile(
   const updated = await db.user.update({
     where: { id: userId, tenantId },
     data: { name: data.name, email: data.email },
-    include: { role: true }
+    include: { role: true, unitAssignments: true }
   });
   return toPublicUser(updated);
 }

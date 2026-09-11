@@ -33,7 +33,9 @@ const permissionsSchema = z.object({
   config: modulePermissionsSchema,
   users: modulePermissionsSchema,
   roles: modulePermissionsSchema,
-  accounting: modulePermissionsSchema.optional()
+  accounting: modulePermissionsSchema.optional(),
+  // Phase 2 (KSU Konsumen/Toko) — optional like `accounting`, additive.
+  konsumen: modulePermissionsSchema.optional()
 });
 
 export const createRoleSchema = z.object({
@@ -80,7 +82,11 @@ export const upsertAccountMappingSchema = z.object({
     "DISBURSEMENT",
     "PAYMENT_PRINCIPAL",
     "PAYMENT_INTEREST",
-    "PAYMENT_PENALTY"
+    "PAYMENT_PENALTY",
+    // Phase 2 (KSU Konsumen/Toko) — posted by lib/journal.ts#postPosSale
+    // under a tenant-wide SYSTEM mapping (sourceId: null), not a per-config one.
+    "SALE_REVENUE",
+    "SALE_COGS"
   ]),
   debitAccountId: z.string().cuid("Akun debit tidak valid"),
   creditAccountId: z.string().cuid("Akun kredit tidak valid")

@@ -15,6 +15,14 @@ export interface User {
   /** Display name of that Role row, e.g. "Super Admin"/"Teller" — for UI chrome only. */
   roleName: string;
   permissions: Permissions;
+  /**
+   * Explicit unit scoping — empty means "no explicit assignment", which
+   * resolves to every active unit in the tenant (see backend
+   * lib/unit-access.ts#getEffectiveUnitIds). Not the same axis as
+   * `permissions`: this is *which* CooperativeUnit rows, that is *which*
+   * actions.
+   */
+  unitIds: string[];
   isActive: boolean;
   isPlatformAdmin: boolean;
   createdAt: string;
@@ -58,12 +66,18 @@ export interface RegisterTenantRequest {
   firstUnit: { type: string; name: string };
 }
 
-/** Config > Pengguna: creates a tenant staff login. Members never appear here — see Member. */
+/**
+ * Config > Pengguna: creates a tenant staff login. Members never appear here
+ * — see Member. `unitIds` is required (min 1) here specifically: this is the
+ * one path that can produce a genuinely unit-scoped user (e.g. a Toko-only
+ * Kasir) — see `User.unitIds`'s doc comment.
+ */
 export interface CreateUserRequest {
   name: string;
   email: string;
   password: string;
   roleId: string;
+  unitIds: string[];
 }
 
 export type UpdateUserRequest = Partial<{
@@ -71,6 +85,8 @@ export type UpdateUserRequest = Partial<{
   email: string;
   roleId: string;
   isActive: boolean;
+  /** When provided, replaces the user's unit assignment set entirely (never an empty array — that would fall back to "all units", the opposite of a revoke; use `isActive: false` to fully revoke instead). */
+  unitIds: string[];
 }>;
 
 /** Self-service profile edit — no password/role/isActive here, see ChangePasswordRequest. */

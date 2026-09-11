@@ -21,15 +21,17 @@ function round2(n: number): number {
 async function buildComponentLines(
   tx: TxClient,
   tenantId: string,
-  sourceType: "SAVING_CONFIG" | "LOAN_CONFIG",
-  sourceId: string,
+  sourceType: "SAVING_CONFIG" | "LOAN_CONFIG" | "SYSTEM",
+  sourceId: string | null,
   transactionKind:
     | "DEPOSIT"
     | "WITHDRAWAL"
     | "DISBURSEMENT"
     | "PAYMENT_PRINCIPAL"
     | "PAYMENT_INTEREST"
-    | "PAYMENT_PENALTY",
+    | "PAYMENT_PENALTY"
+    | "SALE_REVENUE"
+    | "SALE_COGS",
   amount: number
 ): Promise<JournalLineInput[]> {
   if (amount <= 0) return [];
@@ -59,7 +61,7 @@ async function createJournalEntry(
   params: {
     tenantId: string;
     entryDate: Date;
-    sourceType: "SAVING_TRANSACTION" | "LOAN_PAYMENT" | "LOAN_DISBURSEMENT";
+    sourceType: "SAVING_TRANSACTION" | "LOAN_PAYMENT" | "LOAN_DISBURSEMENT" | "POS_SALE";
     sourceId: string;
     description: string;
     lines: JournalLineInput[];
@@ -204,4 +206,30 @@ export function splitPrincipalAndInterest(
   const interest = round2(paymentAmount * interestRatio);
   const principal = round2(paymentAmount - interest);
   return { principal, interest };
+}
+
+/**
+ * Posts a POS sale's revenue and COGS as one balanced journal entry (up to
+ * 4 lines: a Kas/Penjualan pair plus an HPP/Persediaan pair). Unlike the
+ * SAVING_CONFIG/LOAN_CONFIG mappings above (one per config row), a POS sale
+ * mapping is tenant-wide: `sourceType: "SYSTEM"` with `sourceId: null` — see
+ * `AccountMapping.sourceId` (nullable) and config/service.ts's own
+ * `sourceId ?? null` handling for the same SYSTEM scope.
+ */
+export async function postPosSale(
+  tx: TxClient,
+  params: { tenantId: string; saleId: string; totalPrice: number; totalCost: number; entryDate: Date; description: string }
+): Promise<void> {
+  const [revenueLines, cogsLines] = await Promise.all([
+    buildComponentLines(tx, params.tenantId, "SYSTEM", null, "SALE_REVENUE", params.totalPrice),
+    buildComponentLines(tx, params.tenantId, "SYSTEM", null, "SALE_COGS", params.totalCost)
+  ]);
+  await createJournalEntry(tx, {
+    tenantId: params.tenantId,
+    entryDate: params.entryDate,
+    sourceType: "POS_SALE",
+    sourceId: params.saleId,
+    description: params.description,
+    lines: [...revenueLines, ...cogsLines]
+  });
 }

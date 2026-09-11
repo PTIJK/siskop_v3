@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useIsMultiUnit } from "@/hooks/useIsMultiUnit";
 import { useAuth } from "@/stores/auth";
 import {
   LayoutDashboard,
@@ -14,7 +15,9 @@ import {
   X,
   Menu,
   Package as PackageIcon,
-  ShieldCheck
+  ShieldCheck,
+  Layers,
+  PieChart
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -47,6 +50,23 @@ const NAV_ITEMS = [
       { label: "Laporan Keuangan", href: "/reports" },
       { label: "Laporan Regulasi", href: "/reports/regulatory" }
     ]
+  },
+  // KSU (multi-unit) items — same reports:read permission gate the backend
+  // routes require (requireAccountingEntitlement + requirePermission("reports",
+  // "read"), see modules/ksu/routes.ts), plus requiresMultiUnit below so they
+  // only show for a tenant with 2+ active CooperativeUnits. Not a replacement
+  // of the permission filter, an addition to it — see the render loop.
+  //
+  // "Unit Usaha" is rendered separately below (not in this array) since it
+  // also needs to show for a Toko-only Kasir (konsumen:read, no reports:read)
+  // — it's the only nav path into a unit's Produk/Stok/POS/PPOB tabs.
+  {
+    label: "Laporan Konsolidasi",
+    href: "/ksu/report",
+    icon: PieChart,
+    module: "reports" as const,
+    action: "read" as const,
+    requiresMultiUnit: true
   }
 ];
 
@@ -56,6 +76,7 @@ interface NavItemWithChildren {
   icon: React.ElementType;
   module: PermissionModule;
   action: PermissionAction;
+  requiresMultiUnit?: boolean;
   children?: { label: string; href: string; icon?: React.ElementType }[];
 }
 
@@ -128,6 +149,12 @@ function NavItemComponent({ item, onClose }: { item: NavItemWithChildren; onClos
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { can } = usePermissions();
   const isPlatformAdmin = useAuth((s) => s.user?.role === "super_admin");
+  // Same useIsMultiUnit() hook App.tsx's RequireMultiUnit route gate uses —
+  // one source of truth, so nav items and routes can never disagree. `data`
+  // is undefined while /config/units is still pending or on error; treat
+  // that as "not multi-unit" (fail closed) rather than flashing KSU items
+  // before we've actually confirmed the tenant has 2+ active units.
+  const isMultiUnit = useIsMultiUnit().data ?? false;
 
   return (
     <div className="flex h-full flex-col bg-slate-900">
@@ -156,8 +183,20 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
             entirely rather than exposing them because of an incidental role. */}
         {!isPlatformAdmin && (
           <>
+            {/* Unit Usaha needs its own OR-gate (reports:read OR konsumen:read)
+                instead of the single-module check the NAV_ITEMS loop below
+                does — a Toko-only Kasir has konsumen:read but not reports:read,
+                and this is the only nav path into a unit's POS/Produk/Stok/
+                PPOB tabs (see UnitLayout.tsx). */}
+            {(can("reports", "read") || can("konsumen", "read")) && isMultiUnit && (
+              <NavItemComponent
+                item={{ label: "Unit Usaha", href: "/ksu/units", icon: Layers, module: "reports", action: "read" }}
+                onClose={onClose}
+              />
+            )}
             {NAV_ITEMS.map((item) => {
               if (!can(item.module, item.action)) return null;
+              if (item.requiresMultiUnit && !isMultiUnit) return null;
               return <NavItemComponent key={item.href} item={item} onClose={onClose} />;
             })}
             {(can("config", "read") || can("roles", "read") || can("accounting", "read")) && (

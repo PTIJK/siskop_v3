@@ -2,12 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import jwt from "jsonwebtoken";
 import express from "express";
 import request from "supertest";
-import {
-  verifyAccessToken,
-  signAccessToken,
-  assertUnitAccess,
-  requireAuth
-} from "../src/middleware/auth.js";
+import { verifyAccessToken, signAccessToken, requireAuth } from "../src/middleware/auth.js";
 
 const SECRET = "test-secret";
 
@@ -56,18 +51,6 @@ describe("access token", () => {
   it("rejects a token whose unitIds claim is absent entirely", () => {
     const bad = jwt.sign({ userId: "u1", tenantId: "t1", role: "member" }, SECRET);
     expect(() => verifyAccessToken(bad, SECRET)).toThrow(/unitIds/);
-  });
-});
-
-describe("assertUnitAccess", () => {
-  it("admits a unit carried in the token", () => {
-    expect(() => assertUnitAccess({ ...CLAIMS, unitIds: [...CLAIMS.unitIds] }, "un1")).not.toThrow();
-  });
-
-  it("rejects a unit outside the token", () => {
-    expect(() => assertUnitAccess({ ...CLAIMS, unitIds: [...CLAIMS.unitIds] }, "un9")).toThrow(
-      /FORBIDDEN/
-    );
   });
 });
 

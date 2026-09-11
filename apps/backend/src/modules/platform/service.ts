@@ -186,7 +186,7 @@ export async function listPlatformAdmins(): Promise<PlatformAdmin[]> {
   const users = await withoutTenantScope(() =>
     db.user.findMany({
       where: { isPlatformAdmin: true },
-      include: { role: true },
+      include: { role: true, unitAssignments: true },
       orderBy: { createdAt: "desc" }
     })
   );
@@ -212,7 +212,7 @@ export async function createPlatformAdmin(
       passwordHash,
       isPlatformAdmin: true
     },
-    include: { role: true }
+    include: { role: true, unitAssignments: true }
   });
   return toPublicUser(created);
 }
@@ -236,7 +236,7 @@ export async function updatePlatformAdmin(id: string, data: UpdatePlatformAdminR
         ...(data.email !== undefined ? { email: data.email } : {}),
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {})
       },
-      include: { role: true }
+      include: { role: true, unitAssignments: true }
     })
   );
   return toPublicUser(updated);

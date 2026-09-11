@@ -20,6 +20,15 @@ import { RegulatoryReportsPage } from "@/pages/reports/RegulatoryReportsPage";
 import { PlatformTenantsPage } from "@/pages/platform/PlatformTenantsPage";
 import { PlatformPackagesPage } from "@/pages/platform/PlatformPackagesPage";
 import { PlatformAdminsPage } from "@/pages/platform/PlatformAdminsPage";
+import { UnitsPage } from "@/pages/ksu/UnitsPage";
+import { ConsolidatedReportPage } from "@/pages/ksu/ConsolidatedReportPage";
+import { MemberStatementPage } from "@/pages/ksu/MemberStatementPage";
+import { UnitLayout } from "@/pages/ksu/UnitLayout";
+import { ProductsPage } from "@/pages/konsumen/ProductsPage";
+import { StockPage } from "@/pages/konsumen/StockPage";
+import { POSPage } from "@/pages/konsumen/POSPage";
+import { PPOBPage } from "@/pages/konsumen/PPOBPage";
+import { RequireMultiUnit } from "@/components/shared/RequireMultiUnit";
 
 export default function App() {
   return (
@@ -52,6 +61,48 @@ export default function App() {
 
             <Route path="/config" element={<ConfigPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+
+            {/* KSU (multi-unit) routes — reachable only when the tenant has
+                2+ active CooperativeUnits (RequireMultiUnit reads the same
+                useIsMultiUnit() hook Sidebar.tsx uses for its nav items),
+                never based on a tenant "type". */}
+            <Route
+              path="/ksu/units"
+              element={
+                <RequireMultiUnit>
+                  <UnitsPage />
+                </RequireMultiUnit>
+              }
+            />
+            <Route
+              path="/ksu/report"
+              element={
+                <RequireMultiUnit>
+                  <ConsolidatedReportPage />
+                </RequireMultiUnit>
+              }
+            />
+            <Route
+              path="/ksu/members/:memberId/statement"
+              element={
+                <RequireMultiUnit>
+                  <MemberStatementPage />
+                </RequireMultiUnit>
+              }
+            />
+
+            {/* Per-unit detail shell — NOT gated by RequireMultiUnit: any
+                tenant with at least one unit can view that unit's own detail
+                page, single-unit or not. The KONSUMEN-type tab gate (Produk/
+                Stok only shown for a KONSUMEN-type unit) lives inside
+                UnitLayout itself, per-unit, a different axis from the
+                tenant-level isMultiUnit gate above. */}
+            <Route path="/ksu/units/:unitId" element={<UnitLayout />}>
+              <Route path="products" element={<ProductsPage />} />
+              <Route path="stock" element={<StockPage />} />
+              <Route path="pos" element={<POSPage />} />
+              <Route path="ppob" element={<PPOBPage />} />
+            </Route>
 
             <Route path="/platform/tenants" element={<PlatformTenantsPage />} />
             <Route path="/platform/packages" element={<PlatformPackagesPage />} />

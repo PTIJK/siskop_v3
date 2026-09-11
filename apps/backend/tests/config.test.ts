@@ -107,8 +107,10 @@ describe("GET/POST/PUT /api/config/units", () => {
 
 // ── Roles ────────────────────────────────────────────────────────────────────
 
-const KASIR_ROLE = {
-  name: "Kasir",
+// Named distinctly from the seeded "Kasir" role (tenants/provision.ts) so this
+// custom-role fixture never collides with it in a tenant's role list.
+const CUSTOM_ROLE = {
+  name: "Frontliner",
   permissions: {
     dashboard: { read: true },
     members: { read: true },
@@ -122,17 +124,17 @@ const KASIR_ROLE = {
 };
 
 describe("GET/POST/PUT/DELETE /api/config/roles", () => {
-  it("lists the 4 seed roles and creates a new one", async () => {
+  it("lists the 5 seed roles and creates a new one", async () => {
     const admin = await setupTenant();
     const list = await request(app()).get("/api/config/roles").set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(4);
+    expect(list.body.data).toHaveLength(5);
 
     const created = await request(app())
       .post("/api/config/roles")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send(KASIR_ROLE);
+      .send(CUSTOM_ROLE);
     expect(created.status).toBe(201);
-    expect(created.body.data.name).toBe("Kasir");
+    expect(created.body.data.name).toBe("Frontliner");
   });
 
   it("updates a role's permissions", async () => {
@@ -140,12 +142,12 @@ describe("GET/POST/PUT/DELETE /api/config/roles", () => {
     const created = await request(app())
       .post("/api/config/roles")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send(KASIR_ROLE);
+      .send(CUSTOM_ROLE);
 
     const res = await request(app())
       .put(`/api/config/roles/${created.body.data.id}`)
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ permissions: { ...KASIR_ROLE.permissions, loans: { read: true } } });
+      .send({ permissions: { ...CUSTOM_ROLE.permissions, loans: { read: true } } });
 
     expect(res.status).toBe(200);
     expect(res.body.data.permissions.loans.read).toBe(true);
@@ -168,7 +170,7 @@ describe("GET/POST/PUT/DELETE /api/config/roles", () => {
     const created = await request(app())
       .post("/api/config/roles")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send(KASIR_ROLE);
+      .send(CUSTOM_ROLE);
 
     const res = await request(app())
       .delete(`/api/config/roles/${created.body.data.id}`)
@@ -187,7 +189,7 @@ describe("GET/POST/PUT/DELETE /api/config/roles", () => {
     const created = await request(app())
       .post("/api/config/roles")
       .set("Authorization", `Bearer ${manager.accessToken}`)
-      .send(KASIR_ROLE);
+      .send(CUSTOM_ROLE);
     expect(created.status).toBe(403);
   });
 
