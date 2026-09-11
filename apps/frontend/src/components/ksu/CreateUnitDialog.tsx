@@ -33,7 +33,15 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
-export function CreateUnitDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function CreateUnitDialog({
+  open,
+  onOpenChange,
+  defaultType = "KSP"
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  defaultType?: CooperativeType;
+}) {
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -44,7 +52,7 @@ export function CreateUnitDialog({ open, onOpenChange }: { open: boolean; onOpen
     setValue,
     watch,
     formState: { errors }
-  } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { type: "KSP", name: "" } });
+  } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { type: defaultType, name: "" } });
   const values = watch();
 
   const mutation = useMutation({
@@ -52,7 +60,7 @@ export function CreateUnitDialog({ open, onOpenChange }: { open: boolean; onOpen
     onSuccess: () => {
       toast({ title: "Unit koperasi ditambahkan" });
       void qc.invalidateQueries({ queryKey: ["config", "units"] });
-      reset({ type: "KSP", name: "" });
+      reset({ type: defaultType, name: "" });
       onOpenChange(false);
     },
     onError: (err) => {

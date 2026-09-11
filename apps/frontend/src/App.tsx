@@ -66,6 +66,9 @@ const PlatformAdminsPage = lazy(() =>
 const UnitsPage = lazy(() =>
   import("@/pages/ksu/UnitsPage").then((module) => ({ default: module.UnitsPage }))
 );
+const TokoPage = lazy(() =>
+  import("@/pages/ksu/TokoPage").then((module) => ({ default: module.TokoPage }))
+);
 const ConsolidatedReportPage = lazy(() =>
   import("@/pages/ksu/ConsolidatedReportPage").then((module) => ({ default: module.ConsolidatedReportPage }))
 );
@@ -138,6 +141,13 @@ export default function App() {
                   </RequireMultiUnit>
                 }
               />
+              {/* Not RequireMultiUnit-gated, unlike /ksu/units above: a
+                  tenant whose only CooperativeUnit is a Toko still needs to
+                  reach it, and gating on units.length > 1 here would strand
+                  every single-unit Konsumen tenant with no nav path to their
+                  own store (CLAUDE.md rule 2b — unit count is never a type
+                  gate). See TokoPage.tsx and Sidebar.tsx's Unit Usaha tree. */}
+              <Route path='/ksu/toko' element={<TokoPage />} />
               <Route
                 path='/ksu/report'
                 element={
