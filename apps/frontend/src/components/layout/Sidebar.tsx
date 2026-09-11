@@ -56,14 +56,10 @@ const NAV_ITEMS = [
   // "read"), see modules/ksu/routes.ts), plus requiresMultiUnit below so they
   // only show for a tenant with 2+ active CooperativeUnits. Not a replacement
   // of the permission filter, an addition to it — see the render loop.
-  {
-    label: "Unit Usaha",
-    href: "/ksu/units",
-    icon: Layers,
-    module: "reports" as const,
-    action: "read" as const,
-    requiresMultiUnit: true
-  },
+  //
+  // "Unit Usaha" is rendered separately below (not in this array) since it
+  // also needs to show for a Toko-only Kasir (konsumen:read, no reports:read)
+  // — it's the only nav path into a unit's Produk/Stok/POS/PPOB tabs.
   {
     label: "Laporan Konsolidasi",
     href: "/ksu/report",
@@ -187,6 +183,17 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
             entirely rather than exposing them because of an incidental role. */}
         {!isPlatformAdmin && (
           <>
+            {/* Unit Usaha needs its own OR-gate (reports:read OR konsumen:read)
+                instead of the single-module check the NAV_ITEMS loop below
+                does — a Toko-only Kasir has konsumen:read but not reports:read,
+                and this is the only nav path into a unit's POS/Produk/Stok/
+                PPOB tabs (see UnitLayout.tsx). */}
+            {(can("reports", "read") || can("konsumen", "read")) && isMultiUnit && (
+              <NavItemComponent
+                item={{ label: "Unit Usaha", href: "/ksu/units", icon: Layers, module: "reports", action: "read" }}
+                onClose={onClose}
+              />
+            )}
             {NAV_ITEMS.map((item) => {
               if (!can(item.module, item.action)) return null;
               if (item.requiresMultiUnit && !isMultiUnit) return null;

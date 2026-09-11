@@ -270,6 +270,39 @@ describe("POST /api/konsumen/products/:id/stock-movements", () => {
   });
 });
 
+describe("Kasir role (Toko-only)", () => {
+  it("can read products and record POS sales, but cannot reach any other module", async () => {
+    const admin = await setupTenant();
+    const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
+    await request(app())
+      .post("/api/konsumen/products")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ unitId: tokoUnit.id, ...SAMPLE_PRODUCT_BODY });
+
+    const kasir = await createStaffSession(admin.user.tenantId, "demo", "Kasir", "kasir@demo.test");
+
+    const products = await request(app())
+      .get(`/api/konsumen/products?unitId=${tokoUnit.id}`)
+      .set("Authorization", `Bearer ${kasir.accessToken}`);
+    expect(products.status).toBe(200);
+
+    const savings = await request(app()).get("/api/savings").set("Authorization", `Bearer ${kasir.accessToken}`);
+    expect(savings.status).toBe(403);
+
+    const loans = await request(app()).get("/api/loans").set("Authorization", `Bearer ${kasir.accessToken}`);
+    expect(loans.status).toBe(403);
+
+    const members = await request(app()).get("/api/members").set("Authorization", `Bearer ${kasir.accessToken}`);
+    expect(members.status).toBe(403);
+
+    const users = await request(app()).get("/api/users").set("Authorization", `Bearer ${kasir.accessToken}`);
+    expect(users.status).toBe(403);
+
+    const roles = await request(app()).get("/api/config/roles").set("Authorization", `Bearer ${kasir.accessToken}`);
+    expect(roles.status).toBe(403);
+  });
+});
+
 describe("GET /api/konsumen/stock-movements", () => {
   it("lists movements newest first with the DTO shape (productName joined, createdAt ISO)", async () => {
     const admin = await setupTenant();

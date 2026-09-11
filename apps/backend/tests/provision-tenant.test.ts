@@ -37,7 +37,7 @@ describe("provisionTenant", () => {
     expect(units).toHaveLength(2);
   });
 
-  it("seeds the 4 standard roles (Super Admin/Manager/Teller/Viewer) for every tenant", async () => {
+  it("seeds the 5 standard roles (Super Admin/Manager/Teller/Viewer/Kasir) for every tenant", async () => {
     const { tenant, roles } = await provisionTenant({
       name: "KSP Sejahtera",
       slug: "sejahtera",
@@ -47,7 +47,7 @@ describe("provisionTenant", () => {
       firstUnit: { type: "KSP", name: "Simpan Pinjam" }
     });
 
-    expect(roles.map((r) => r.name).sort()).toEqual(["Manager", "Super Admin", "Teller", "Viewer"]);
+    expect(roles.map((r) => r.name).sort()).toEqual(["Kasir", "Manager", "Super Admin", "Teller", "Viewer"]);
     expect(roles.every((r) => r.tenantId === tenant.id)).toBe(true);
 
     const superAdmin = roles.find((r) => r.name === "Super Admin");
@@ -59,6 +59,33 @@ describe("provisionTenant", () => {
     expect(teller?.permissions).toMatchObject({
       members: { read: true },
       savings: { create: true, read: true, update: true, delete: false }
+    });
+  });
+
+  // Kasir is the Toko-only role: konsumen (Toko/POS) access and nothing else
+  // — no members/savings/loans/reports/config/users/roles/accounting, so a
+  // Kasir account cannot reach any other unit's financial data even if it
+  // somehow had unit access to it (defense in depth alongside unit scoping).
+  it("seeds a Toko-only Kasir role", async () => {
+    const { roles } = await provisionTenant({
+      name: "KSP Sejahtera",
+      slug: "sejahtera-kasir",
+      registrationNo: "KOP-004",
+      address: "Jl. Merdeka 1",
+      type: "KONVENSIONAL",
+      firstUnit: { type: "KSP", name: "Simpan Pinjam" }
+    });
+
+    const kasir = roles.find((r) => r.name === "Kasir");
+    expect(kasir?.permissions).toMatchObject({
+      konsumen: { create: true, read: true, update: true },
+      members: {},
+      savings: {},
+      loans: {},
+      reports: {},
+      config: {},
+      users: {},
+      roles: {}
     });
   });
 

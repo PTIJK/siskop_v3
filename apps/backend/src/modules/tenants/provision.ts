@@ -105,6 +105,23 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       roles: {},
       konsumen: READ_ONLY
     }
+  },
+  {
+    name: "Kasir",
+    permissions: {
+      // Toko-only: konsumen access and nothing else. No members/savings/loans/
+      // reports/config/users/roles/accounting — a Kasir cannot reach any
+      // other module's data even before unit scoping is considered.
+      dashboard: READ_ONLY,
+      members: {},
+      savings: {},
+      loans: {},
+      reports: {},
+      config: {},
+      users: {},
+      roles: {},
+      konsumen: { create: true, read: true, update: true }
+    }
   }
 ];
 
