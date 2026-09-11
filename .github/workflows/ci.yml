@@ -69,6 +69,9 @@ jobs:
 
       - run: pnpm run typecheck
 
+      # Bundlers tolerate extensionless exports; the deployed Node ESM runtime does not.
+      - run: node --input-type=module -e "await import('./packages/types/dist/index.js')"
+
       - run: pnpm --filter @siskop/backend exec prisma migrate deploy
 
       - run: pnpm run test

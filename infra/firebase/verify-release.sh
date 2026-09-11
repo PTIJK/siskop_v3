@@ -12,6 +12,7 @@ python3 -m unittest discover -s infra/firebase/tests -v
 pnpm --filter @siskop/backend db:generate
 pnpm run lint
 pnpm run typecheck
+node --input-type=module -e "await import('./packages/types/dist/index.js')"
 pnpm --filter @siskop/backend exec prisma migrate deploy
 pnpm run test
 pnpm run build

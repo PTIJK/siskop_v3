@@ -3,6 +3,11 @@
 Target: **https://siskop-d0f8c.web.app**, with API `siskop-staging-api` in
 `asia-southeast2`. This remains the existing Firebase/Xendit sandbox environment.
 
+Setup status (2026-09-11): the deployment identities and private lock bucket exist.
+The GitHub connection is authorized but is still `PENDING_INSTALL_APP`; the main
+trigger must be created after that installation finishes. This configuration has
+not been merged into main and automatic publishing is not active yet.
+
 The regional Cloud Build trigger `siskop-main-deploy` watches
 `PTIJK/siskop_v3` with branch pattern `^main$`. Merging a GitHub pull request updates
 main and starts a release. Direct pushes to main also trigger it. Open pull
@@ -13,7 +18,7 @@ pipeline. Repository branch protection controls who can merge or push main.
 
 1. Start a disposable PostgreSQL 18 container, install dependencies with Node 22
    and pnpm 11.19.0, run release safety tests, lint, typecheck, database migrations,
-   application tests with coverage, and workspace builds. No staging database
+   application tests with coverage, compiled Node ESM imports, and workspace builds. No staging database
    credentials are available to the tests.
 2. Build and push the backend container, including the committed Prisma
    migrations. Build the frontend with `vite build --mode staging` so it includes
