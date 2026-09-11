@@ -1,3 +1,4 @@
+import { onboardingRoutes } from "./modules/onboarding/routes.js";
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import helmet from "helmet";
 import cors from "cors";
@@ -36,8 +37,7 @@ export function createApp(): Express {
     })
   );
   app.use(express.json({ limit: "1mb" }));
-  // The refresh token rides in an httpOnly cookie (see modules/auth/refresh-cookie.ts);
-  // nothing else in the app reads cookies, so this only exists for that.
+  // Authentication refresh and onboarding recovery use httpOnly cookies.
   app.use(cookieParser());
 
   // Serves KTP uploads (members/routes.ts) at the same URL path they're stored
@@ -69,6 +69,7 @@ export function createApp(): Express {
     });
   });
 
+  app.use("/api/onboarding", onboardingRoutes());
   app.use("/api/auth", authRoutes());
   app.use("/api/member-auth", memberAuthRoutes());
   app.use("/api/member", memberPortalRoutes());

@@ -134,6 +134,35 @@ model SubscriptionPackage {
   tenants Tenant[]
 }
 
+// Platform onboarding records, accessed only through a signed order cookie or
+// an authenticated provider callback. Amount/name are immutable checkout snapshots.
+model OnboardingOrder {
+  id           String   @id @default(cuid())
+  tenantId     String   @unique
+  adminId      String
+  packageId    String
+  packageName  String
+  amount       Decimal  @db.Decimal(15, 2)
+  status       String   @default("PENDING")
+  paidAt       DateTime?
+  createdAt    DateTime @default(now())
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attempts     CheckoutAttempt[]
+}
+
+model CheckoutAttempt {
+  id                String   @id @default(cuid())
+  orderId           String
+  status            String   @default("CREATING")
+  providerSessionId String?  @unique
+  paymentUrl        String?
+  expiresAt         DateTime?
+  createdAt         DateTime @default(now())
+  order             OnboardingOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
 model Tenant {
   id                       String               @id @default(cuid())
   name                     String
@@ -177,6 +206,7 @@ model Tenant {
   posSales              POSSale[]
   stockMovements        StockMovement[]
   ppobTransactions      PPOBTransaction[]
+  onboardingOrder       OnboardingOrder?
 }
 
 // Every tenant has at least one unit: a single-purpose KSP is a tenant with one,
@@ -246,7 +276,9 @@ model User {
   roleId          String
   role            Role      @relation(fields: [roleId], references: [id])
   email           String
-  passwordHash    String
+  passwordHash    String?
+  firebaseUid     String? @unique
+  authProvider    String?
   name            String
   isActive        Boolean   @default(true)
   isPlatformAdmin Boolean   @default(false)

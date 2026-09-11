@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
-import { unauthorized } from "../../lib/errors.js";
+import { forbidden, unauthorized } from "../../lib/errors.js";
 import { slugFromHost } from "./tenant-host.js";
 import { clearRefreshCookie, REFRESH_COOKIE_NAME, setRefreshCookie } from "./refresh-cookie.js";
 import { changePassword, getMe, login, refreshSession, registerTenant, updateProfile } from "./service.js";
@@ -34,6 +34,9 @@ export function authRoutes(): Router {
   router.post(
     "/register",
     handle(async (req, res) => {
+      if (process.env.NODE_ENV !== "test" && !(process.env.NODE_ENV === "development" && process.env.ALLOW_LEGACY_REGISTRATION === "true")) {
+        throw forbidden("Daftar melalui halaman paket untuk melanjutkan ke pembayaran");
+      }
       const { refreshToken, ...session } = await registerTenant(req.body);
       setRefreshCookie(res, refreshToken);
       res.status(201).json({ success: true, data: session, meta: res.locals.meta });

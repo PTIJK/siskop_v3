@@ -1,0 +1,13 @@
+**/node_modules
+**/.env*
+**/dist
+**/coverage
+**/uploads
+**/*.log
+.git
+.firebase
+apps/frontend
+apps/mobile
+apps/backend/scripts
+apps/backend/tests
+apps/backend/prisma/seed*
