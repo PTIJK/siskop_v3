@@ -1,39 +1,25 @@
-import { useEffect, useState } from "react";
 import { Outlet, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/stores/auth";
-import { refreshAccessToken } from "@/api/client";
-import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { Toaster } from "../ui/toaster";
 
 export function AppLayout() {
-  const accessToken = useAuth((s) => s.accessToken);
+  const user = useAuth((s) => s.user);
   const isPlatformAdmin = useAuth((s) => s.user?.role === "super_admin");
   const location = useLocation();
 
-  // The access token lives only in memory (stores/auth.ts) — a hard reload
-  // always starts with none. Try one silent refresh against the httpOnly
-  // refresh cookie before deciding the session is gone, so reloading a page
-  // doesn't bounce a still-valid session to /login.
-  const [bootstrapping, setBootstrapping] = useState(!accessToken);
-
-  useEffect(() => {
-    if (accessToken) return;
-    void refreshAccessToken()
-      .catch(() => {})
-      .finally(() => setBootstrapping(false));
-  }, []);
-
-  if (bootstrapping) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
-  if (!accessToken) return <Navigate to="/login" replace />;
+  // The access token lives only in memory (stores/auth.ts), so it's always
+  // null right after a hard reload — but `user` is cached in localStorage and
+  // available synchronously, so the shell renders from it immediately instead
+  // of blanking behind a spinner while waiting on a token. Nothing here needs
+  // to kick off the refresh itself: Sidebar's useIsMultiUnit() (and whichever
+  // page query fires first) will 401 once with no token and transparently
+  // refresh-and-retry via withAuthRetry (api/client.ts) — same shared,
+  // deduped refresh call as a token expiring mid-session. If that refresh
+  // genuinely fails (dead session), those queries clear() the auth store,
+  // `user` becomes null, and this redirects to /login on the next render.
+  if (!user) return <Navigate to="/login" replace />;
 
   // Platform admins are attached to a real tenant's role purely to satisfy a
   // DB FK (see modules/platform/service.ts) — that must not let them browse

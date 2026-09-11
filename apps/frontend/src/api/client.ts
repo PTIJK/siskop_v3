@@ -49,7 +49,15 @@ export async function refreshAccessToken(): Promise<string> {
   return refreshPromise;
 }
 
-/** Retries once with a refreshed token on a 401; falls through to the original response on any other failure. */
+/**
+ * Retries once with a refreshed token on a 401; falls through to the original
+ * response on any other failure. Also covers a *missing* token (not just a
+ * rejected one) — the access token lives only in memory (stores/auth.ts), so
+ * it's always null right after a page reload, and the app deliberately
+ * doesn't block rendering on a separate bootstrap step waiting for one (see
+ * AppLayout.tsx): the first query fired with no token yet just 401s here and
+ * transparently refreshes-and-retries, same as a token that expired mid-session.
+ */
 async function withAuthRetry(
   path: string,
   doRequest: (token: string | null) => Promise<Response>
@@ -57,7 +65,7 @@ async function withAuthRetry(
   const token = getAccessToken();
   const res = await doRequest(token);
 
-  if (res.status !== 401 || !token || NO_REFRESH_PATHS.includes(path)) {
+  if (res.status !== 401 || NO_REFRESH_PATHS.includes(path)) {
     return res;
   }
 
