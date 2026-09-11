@@ -93,6 +93,12 @@ enum MappingTransactionKind {
   PAYMENT_PENALTY
   SALE_REVENUE
   SALE_COGS
+  // Member-credit (Kredit Anggota) POS payments — a MEMBER_CREDIT sale debits
+  // a receivable instead of Kas (the coop hasn't received cash yet), and a
+  // later repayment reverses that. Both tenant-wide SYSTEM mappings, same as
+  // SALE_REVENUE/SALE_COGS above — see lib/journal.ts#postPosSale.
+  SALE_RECEIVABLE
+  MEMBER_CREDIT_REPAYMENT
 }
 
 enum JournalSourceType {
@@ -100,6 +106,7 @@ enum JournalSourceType {
   LOAN_PAYMENT
   LOAN_DISBURSEMENT
   POS_SALE
+  MEMBER_CREDIT_REPAYMENT
   MANUAL
 }
 
@@ -137,27 +144,27 @@ model SubscriptionPackage {
 // Platform onboarding records, accessed only through a signed order cookie or
 // an authenticated provider callback. Amount/name are immutable checkout snapshots.
 model OnboardingOrder {
-  id           String   @id @default(cuid())
-  tenantId     String   @unique
-  adminId      String
-  packageId    String
-  packageName  String
-  amount       Decimal  @db.Decimal(15, 2)
-  status       String   @default("PENDING")
-  paidAt       DateTime?
-  createdAt    DateTime @default(now())
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  attempts     CheckoutAttempt[]
+  id          String            @id @default(cuid())
+  tenantId    String            @unique
+  adminId     String
+  packageId   String
+  packageName String
+  amount      Decimal           @db.Decimal(15, 2)
+  status      String            @default("PENDING")
+  paidAt      DateTime?
+  createdAt   DateTime          @default(now())
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attempts    CheckoutAttempt[]
 }
 
 model CheckoutAttempt {
-  id                String   @id @default(cuid())
+  id                String          @id @default(cuid())
   orderId           String
-  status            String   @default("CREATING")
-  providerSessionId String?  @unique
+  status            String          @default("CREATING")
+  providerSessionId String?         @unique
   paymentUrl        String?
   expiresAt         DateTime?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime        @default(now())
   order             OnboardingOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
@@ -184,29 +191,30 @@ model Tenant {
   auditThresholdNotifiedAt DateTime?
   createdAt                DateTime             @default(now())
 
-  units                 CooperativeUnit[]
-  users                 User[]
-  roles                 Role[]
-  members               Member[]
-  savingConfigs         SavingConfig[]
-  loanConfigs           LoanConfig[]
-  savings               Saving[]
-  loans                 Loan[]
-  savingTxns            SavingTransaction[]
-  loanPayments          LoanPayment[]
-  whitelabelConfig      WhitelabelConfig?
-  notifications         Notification[]
-  accounts              Account[]
-  accountMappings       AccountMapping[]
-  journalEntries        JournalEntry[]
-  journalLines          JournalLine[]
-  shuDistributionConfig ShuDistributionConfig?
-  calkNarratives        CalkNarrative[]
-  products              Product[]
-  posSales              POSSale[]
-  stockMovements        StockMovement[]
-  ppobTransactions      PPOBTransaction[]
-  onboardingOrder       OnboardingOrder?
+  units                  CooperativeUnit[]
+  users                  User[]
+  roles                  Role[]
+  members                Member[]
+  savingConfigs          SavingConfig[]
+  loanConfigs            LoanConfig[]
+  savings                Saving[]
+  loans                  Loan[]
+  savingTxns             SavingTransaction[]
+  loanPayments           LoanPayment[]
+  whitelabelConfig       WhitelabelConfig?
+  notifications          Notification[]
+  accounts               Account[]
+  accountMappings        AccountMapping[]
+  journalEntries         JournalEntry[]
+  journalLines           JournalLine[]
+  shuDistributionConfig  ShuDistributionConfig?
+  calkNarratives         CalkNarrative[]
+  products               Product[]
+  posSales               POSSale[]
+  stockMovements         StockMovement[]
+  ppobTransactions       PPOBTransaction[]
+  memberCreditRepayments MemberCreditRepayment[]
+  onboardingOrder        OnboardingOrder?
 }
 
 // Every tenant has at least one unit: a single-purpose KSP is a tenant with one,
@@ -277,7 +285,7 @@ model User {
   role            Role      @relation(fields: [roleId], references: [id])
   email           String
   passwordHash    String?
-  firebaseUid     String? @unique
+  firebaseUid     String?   @unique
   authProvider    String?
   name            String
   isActive        Boolean   @default(true)
@@ -286,13 +294,14 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  savingTransactions      SavingTransaction[]
-  loanPayments            LoanPayment[]
-  notificationReads       NotificationRead[]
-  posSalesCreated         POSSale[]
-  stockMovementsCreated   StockMovement[]
-  ppobTransactionsCreated PPOBTransaction[]
-  unitAssignments         UserUnit[]
+  savingTransactions            SavingTransaction[]
+  loanPayments                  LoanPayment[]
+  notificationReads             NotificationRead[]
+  posSalesCreated               POSSale[]
+  stockMovementsCreated         StockMovement[]
+  ppobTransactionsCreated       PPOBTransaction[]
+  memberCreditRepaymentsCreated MemberCreditRepayment[]
+  unitAssignments               UserUnit[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -347,10 +356,11 @@ model Member {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  savings     Saving[]
-  loans       Loan[]
-  memberships UnitMembership[]
-  posSales    POSSale[]
+  savings          Saving[]
+  loans            Loan[]
+  memberships      UnitMembership[]
+  posSales         POSSale[]
+  creditRepayments MemberCreditRepayment[]
 
   @@unique([tenantId, nik])
   @@index([tenantId])
@@ -625,6 +635,30 @@ model StockMovement {
 
   @@index([tenantId, unitId])
   @@index([productId])
+}
+
+// A member's store-credit ("Kredit Anggota") repayment — the reverse side of
+// a MEMBER_CREDIT POSSale. Outstanding balance is never stored directly, it's
+// derived (sum of the member's MEMBER_CREDIT POSSale.totalPrice minus sum of
+// these rows) — see modules/konsumen/credit.service.ts#getMemberCreditStatus,
+// same "derive, don't cache" approach as Saving.balance's own transactions.
+// Deliberately no unitId: eligibility/limit is tenant-wide (based on total
+// active savings across all units, CLAUDE.md rule 2b), and the Kas/Piutang
+// accounts it posts through are tenant-wide SYSTEM mappings too, so which
+// till physically received the repayment isn't load-bearing for anything.
+model MemberCreditRepayment {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberId      String
+  member        Member   @relation(fields: [memberId], references: [id])
+  amount        Decimal  @db.Decimal(15, 2)
+  note          String?
+  createdBy     String
+  createdByUser User     @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId, memberId])
 }
 
 model PPOBTransaction {

@@ -57,8 +57,11 @@ export interface StockMovement {
 }
 
 // ── POS Sales — Phase 2 Task 3 ──────────────────────────────────────────────
-// Cash-only first pass (no returns/refunds/utang toko) — see
-// docs/ksu-konsumen-backend.md "Explicitly out of scope for this plan".
+// Cash/transfer were the first pass — see docs/ksu-konsumen-backend.md
+// "Explicitly out of scope for this plan". MEMBER_CREDIT ("Kredit Anggota")
+// went from an inert selectable value to a real payment method with
+// eligibility checks and its own repayment flow — see the Member Credit
+// section further below.
 
 export type PosPaymentMethod = "CASH" | "TRANSFER" | "MEMBER_CREDIT";
 
@@ -89,6 +92,46 @@ export interface PosSaleListItem {
   memberId: string | null;
   soldAt: string;
   lineCount: number;
+}
+
+// ── Member Credit ("Kredit Anggota") ────────────────────────────────────────
+// A member-credit sale is a receivable, not cash-in-hand: `creditLimit` is
+// auto-computed (50% of the member's total active savings balance across all
+// types — no manually-set field), `outstandingBalance` is derived (sum of
+// their MEMBER_CREDIT POSSale totals minus sum of their repayments), and
+// `eligible` requires both an active saving AND a positive limit. Route
+// permission is `konsumen:read`/`konsumen:update`, deliberately not
+// `members:*` — a Kasir role typically has konsumen but not members
+// permissions, and still needs to use this at the register.
+
+export interface MemberCreditStatus {
+  memberId: string;
+  fullName: string;
+  savingsBalance: string;
+  creditLimit: string;
+  outstandingBalance: string;
+  availableCredit: string;
+  hasActiveSaving: boolean;
+  eligible: boolean;
+}
+
+/** A lightweight member lookup result for the POS "Kredit Anggota" search — narrower than the full `Member` shape. */
+export interface CreditMemberSearchResult {
+  id: string;
+  fullName: string;
+  memberId: string;
+  accountNumber: string;
+}
+
+export interface RecordCreditRepaymentRequest {
+  memberId: string;
+  amount: string | number;
+  note?: string;
+}
+
+export interface RecordCreditRepaymentResponse {
+  id: string;
+  outstandingBalance: string;
 }
 
 // ── PPOB (Payment Point Online Bank) — Phase 2 Task 4 ───────────────────────

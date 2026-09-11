@@ -320,6 +320,18 @@ async function main() {
     isHeader: false,
     isCashEquivalent: false
   });
+  // Piutang Anggota (Toko) — the receivable a MEMBER_CREDIT sale debits
+  // instead of Kas (see lib/journal.ts#postPosSale's SALE_RECEIVABLE branch),
+  // reversed by a repayment's MEMBER_CREDIT_REPAYMENT posting. Distinct from
+  // step 4's "Piutang Pinjaman Anggota" (loan receivable) — a different debt.
+  const piutangToko = await createAccount(tenantId, {
+    code: "1-1150",
+    name: "Piutang Anggota (Toko)",
+    category: "ASET",
+    normalBalance: "DEBIT",
+    isHeader: false,
+    isCashEquivalent: false
+  });
   await upsertAccountMapping(tenantId, {
     sourceType: "SYSTEM",
     transactionKind: "SALE_REVENUE",
@@ -332,7 +344,19 @@ async function main() {
     debitAccountId: hpp.id,
     creditAccountId: persediaan.id
   });
-  console.log("Toko chart of accounts + SYSTEM/SALE_REVENUE + SYSTEM/SALE_COGS mappings created");
+  await upsertAccountMapping(tenantId, {
+    sourceType: "SYSTEM",
+    transactionKind: "SALE_RECEIVABLE",
+    debitAccountId: piutangToko.id,
+    creditAccountId: penjualan.id
+  });
+  await upsertAccountMapping(tenantId, {
+    sourceType: "SYSTEM",
+    transactionKind: "MEMBER_CREDIT_REPAYMENT",
+    debitAccountId: kas.id,
+    creditAccountId: piutangToko.id
+  });
+  console.log("Toko chart of accounts + SYSTEM/SALE_REVENUE + SYSTEM/SALE_COGS + SYSTEM/SALE_RECEIVABLE + SYSTEM/MEMBER_CREDIT_REPAYMENT mappings created");
 
   // ── 13. Five sembako products with realistic Rupiah prices + opening stock ─
   const SEMBAKO_PRODUCTS = [
