@@ -21,6 +21,7 @@ COPY --from=build /app/packages/types/ packages/types/
 COPY --from=build /app/apps/backend/node_modules/ apps/backend/node_modules/
 COPY --from=build /app/apps/backend/dist/ apps/backend/dist/
 COPY --from=build /app/apps/backend/package.json apps/backend/
+COPY --from=build /app/apps/backend/prisma/ apps/backend/prisma/
 USER node
 # Execute compiled imports with plain Node, the same runtime Cloud Run uses.
 RUN node --input-type=module -e "const { createApp } = await import('./apps/backend/dist/app.js'); createApp();"

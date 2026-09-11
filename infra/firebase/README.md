@@ -71,6 +71,10 @@ actual browser payment test and deployed image.
 
 ## Repeat a deployment
 
+For automatic releases after merging into main, see
+[continuous deployment](CONTINUOUS-DEPLOYMENT.md). The commands below are the
+manual backend/frontend fallback; avoid running them during a pipeline release.
+
 Run the backend tests against a separate local test database first, then typecheck
 and lint. Build and deploy from the repository root:
 
