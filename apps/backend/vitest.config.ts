@@ -15,7 +15,7 @@ export default defineConfig({
       // main.ts and lib/db.ts are bootstrap wiring, not logic: one binds a
       // port, the other constructs the Prisma singleton. Both need a live
       // process/DB to execute, so they are measured by integration tests.
-      exclude: ["src/main.ts", "src/lib/db.ts", "src/**/*.d.ts"],
+      exclude: ["src/main.ts", "src/hosting/main.ts", "src/lib/db.ts", "src/**/*.d.ts"],
       thresholds: { lines: 80, functions: 80, branches: 70, statements: 80 }
     }
   }

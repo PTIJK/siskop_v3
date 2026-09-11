@@ -33,14 +33,20 @@ hosts-file entry.
 
 ```bash
 curl -X POST http://demo.localhost:3000/api/auth/register -H "Content-Type: application/json" -d '{
-  "tenantName": "KSP Demo", "slug": "demo", "cooperativeId": "KOP-DEMO-01",
+  "tenantName": "KSP Demo", "slug": "demo", "registrationNo": "KOP-DEMO-01", "type": "KONVENSIONAL",
   "address": "Jl. Merdeka 1", "adminName": "Admin Demo", "adminEmail": "admin@demo.test",
   "adminPhone": "0812000000", "password": "demopassword123",
   "firstUnit": { "type": "KSP", "name": "Simpan Pinjam" }
 }'
 ```
 
-Then open `http://demo.localhost:3000/login` and sign in with `admin@demo.test`.
+Public signup now starts at `http://localhost:3000/`: choose an active paid package,
+register using Google or email/password, complete Xendit checkout, then sign in
+after payment confirmation to enter the dashboard. See [landing and Xendit setup](docs/landing-page/README.md).
+
+The legacy curl example above requires `NODE_ENV=development` and the explicit
+`ALLOW_LEGACY_REGISTRATION=true` setting; it is disabled in production. For that
+local provisioning path, open `http://demo.localhost:3000/login/legacy` afterward.
 
 > **Postgres runs on host port 5433, not 5432.** Development machines in this project
 > already have an unrelated native Postgres service bound to 5432; the compose file maps

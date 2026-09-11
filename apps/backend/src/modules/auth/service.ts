@@ -16,6 +16,8 @@ import { signAccessToken } from "../../middleware/auth.js";
 import { unauthorized, conflict, validationError } from "../../lib/errors.js";
 import { deriveUserRole, toPublicUser, type UserWithRole } from "../../lib/user-mapper.js";
 
+import { assertFirebaseSession } from "../onboarding/firebase.js";
+
 const BCRYPT_ROUNDS = 10;
 
 // The wire types (LoginResponse/RefreshResponse) omit the refresh token — it
@@ -60,7 +62,7 @@ async function resolveUnitIds(tenantId: string): Promise<string[]> {
   return units.map((u) => u.id);
 }
 
-function issue(claims: AuthClaims): { accessToken: string; refreshToken: string } {
+function issue(claims: AuthClaims, firebaseAuthTime?: number): { accessToken: string; refreshToken: string } {
   return {
     accessToken: signAccessToken(claims, secret("JWT_SECRET"), process.env.JWT_EXPIRES_IN ?? "15m"),
     // The refresh token carries identity only. Units, role, and permissions are
@@ -68,14 +70,14 @@ function issue(claims: AuthClaims): { accessToken: string; refreshToken: string 
     // access-token lifetime instead of persisting for the refresh token's
     // whole validity.
     refreshToken: jwt.sign(
-      { userId: claims.userId, tenantId: claims.tenantId, typ: "refresh" },
+      { userId: claims.userId, tenantId: claims.tenantId, typ: "refresh", ...(firebaseAuthTime ? { firebaseAuthTime } : {}) },
       secret("JWT_REFRESH_SECRET"),
       { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? "7d" } as jwt.SignOptions
     )
   };
 }
 
-async function sessionFor(user: UserWithRole): Promise<Session> {
+export async function sessionFor(user: UserWithRole, firebaseAuthTime?: number): Promise<Session> {
   const unitIds = await resolveUnitIds(user.tenantId);
   if (unitIds.length === 0) {
     // Deliberately not a silent empty-scope login: a user who can reach no unit
@@ -92,7 +94,7 @@ async function sessionFor(user: UserWithRole): Promise<Session> {
     permissions: user.role.permissions as unknown as Permissions
   };
 
-  return { ...issue(claims), user: toPublicUser(user) };
+  return { ...issue(claims, firebaseAuthTime), user: toPublicUser(user) };
 }
 
 export async function registerTenant(input: RegisterTenantInput): Promise<Session> {
@@ -182,13 +184,13 @@ export async function refreshSession(token: string): Promise<RefreshedSession> {
     throw unauthorized("Invalid or expired refresh token");
   }
 
-  const parsed = z.object({ userId: z.string().min(1), typ: z.literal("refresh") }).safeParse(payload);
+  const parsed = z.object({ userId: z.string().min(1), tenantId: z.string().min(1), typ: z.literal("refresh"), firebaseAuthTime: z.number().optional() }).safeParse(payload);
   // An access token verified with the refresh secret would already have failed
   // above; the `typ` check also rejects any future token minted with it.
   if (!parsed.success) throw unauthorized("Invalid or expired refresh token");
 
   const user = await db.user.findUnique({
-    where: { id: parsed.data.userId },
+    where: { id: parsed.data.userId, tenantId: parsed.data.tenantId },
     include: { role: true }
   });
   if (!user || !user.isActive) throw unauthorized("Invalid or expired refresh token");
@@ -196,7 +198,8 @@ export async function refreshSession(token: string): Promise<RefreshedSession> {
   const tenant = await db.tenant.findUnique({ where: { id: user.tenantId } });
   if (!tenant?.isActive) throw unauthorized("Invalid or expired refresh token");
 
-  const { accessToken, refreshToken } = await sessionFor(user);
+  if (user.firebaseUid) await assertFirebaseSession(user.firebaseUid, parsed.data.firebaseAuthTime);
+  const { accessToken, refreshToken } = await sessionFor(user, parsed.data.firebaseAuthTime);
   return { accessToken, refreshToken };
 }
 
@@ -217,6 +220,7 @@ export async function updateProfile(
   const user = await db.user.findFirst({ where: { id: userId, tenantId } });
   if (!user) throw unauthorized();
 
+  if (user.firebaseUid && data.email !== user.email) throw validationError("Email masuk dikelola melalui Firebase.");
   if (data.email !== user.email) {
     const duplicate = await db.user.findUnique({ where: { tenantId_email: { tenantId, email: data.email } } });
     if (duplicate) throw conflict(`Email ${data.email} sudah digunakan`);
@@ -239,6 +243,7 @@ export async function changePassword(
   const user = await db.user.findFirst({ where: { id: userId, tenantId } });
   if (!user) throw unauthorized();
 
+  if (user.firebaseUid || !user.passwordHash) throw validationError("Gunakan Lupa kata sandi pada halaman masuk untuk akun Firebase.");
   const ok = await bcrypt.compare(currentPassword, user.passwordHash);
   if (!ok) throw unauthorized("Password saat ini salah");
 

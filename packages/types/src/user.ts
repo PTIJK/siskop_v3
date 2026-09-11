@@ -8,6 +8,8 @@ export interface User {
   tenantId: string;
   email: string;
   name: string;
+  /** Firebase manages credentials when set. Older staff accounts use local bcrypt. */
+  authProvider?: string | null;
   /** Coarse role, derived at login from `isPlatformAdmin`/`role.name` — not a stored column. */
   role: UserRole;
   /** The tenant-scoped `Role` row this user has — see `role.ts`. */

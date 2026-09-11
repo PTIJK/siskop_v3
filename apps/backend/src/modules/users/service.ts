@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import type { User } from "@siskop/types";
 import { db } from "../../lib/db.js";
-import { conflict, notFound } from "../../lib/errors.js";
+import { conflict, notFound, validationError } from "../../lib/errors.js";
 import { toPublicUser } from "../../lib/user-mapper.js";
 import type { CreateUserInput, UpdateUserInput } from "./schema.js";
 
@@ -52,6 +52,7 @@ export async function updateUser(
     if (!role) throw notFound("Role tidak ditemukan");
   }
 
+  if (user.firebaseUid && data.email && data.email !== user.email) throw validationError("Email masuk dikelola melalui Firebase.");
   if (data.email && data.email !== user.email) {
     const duplicate = await db.user.findUnique({ where: { tenantId_email: { tenantId, email: data.email } } });
     if (duplicate) throw conflict(`Email ${data.email} sudah digunakan`);

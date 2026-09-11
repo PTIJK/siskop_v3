@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -119,7 +120,7 @@ export function ProfilePage() {
 
               <div className="space-y-1.5">
                 <Label>Email *</Label>
-                <Input type="email" {...profileForm.register("email")} />
+                <Input type="email" readOnly={!!user.authProvider} {...profileForm.register("email")} />
                 {profileForm.formState.errors.email && (
                   <p className="text-xs text-destructive">{profileForm.formState.errors.email.message}</p>
                 )}
@@ -140,7 +141,9 @@ export function ProfilePage() {
             <CardDescription>Gunakan password yang kuat dan tidak dipakai di tempat lain</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={passwordForm.handleSubmit(onSubmitPassword)} className="space-y-4">
+            {user.authProvider ? <p className="text-sm text-muted-foreground">
+              {user.authProvider === "google.com" ? "Kata sandi akun Google dikelola melalui akun Google Anda." : <>Gunakan <Link className="underline" to="/login">Lupa kata sandi di halaman masuk</Link> untuk mengganti kata sandi.</>}
+            </p> : <form onSubmit={passwordForm.handleSubmit(onSubmitPassword)} className="space-y-4">
               {passwordForm.formState.errors.root && (
                 <FormError error={passwordForm.formState.errors.root.message} />
               )}
@@ -174,7 +177,7 @@ export function ProfilePage() {
                   {passwordForm.formState.isSubmitting ? "Menyimpan..." : "Ubah Password"}
                 </Button>
               </div>
-            </form>
+            </form>}
           </CardContent>
         </Card>
       </div>

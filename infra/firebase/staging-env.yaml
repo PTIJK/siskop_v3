@@ -1,0 +1,5 @@
+NODE_ENV: production
+PUBLIC_APP_URL: https://siskop-d0f8c.web.app
+CORS_ORIGIN: https://siskop-d0f8c.web.app
+STORAGE_PATH: /mnt/uploads
+FIREBASE_PROJECT_ID: siskop-d0f8c
