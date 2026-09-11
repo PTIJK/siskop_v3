@@ -8,6 +8,15 @@ The GitHub connection is authorized but is still `PENDING_INSTALL_APP`; the main
 trigger must be created after that installation finishes. This configuration has
 not been merged into main and automatic publishing is not active yet.
 
+Verification: commit `719b3ae` passed the full
+[Cloud Build verification run](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/37b3a90e-9011-4668-a6da-61ca558d8a44?project=866351101735)
+with `_DEPLOY=false`: 377 application tests, 14 release safety tests, lint,
+typechecks, frontend builds, and the backend container startup check. The
+[deployment account access check](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/07e9d6e2-f4e4-490d-b54a-f60b2d7810fb?project=866351101735)
+also passed for Cloud Run, Firebase Hosting, and both runtime identities. These
+checks did not migrate Cloud SQL or publish the live site. The first real
+deployment remains to be verified after installation, trigger creation, and merge.
+
 The regional Cloud Build trigger `siskop-main-deploy` watches
 `PTIJK/siskop_v3` with branch pattern `^main$`. Merging a GitHub pull request updates
 main and starts a release. Direct pushes to main also trigger it. Open pull
