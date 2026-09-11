@@ -12,7 +12,7 @@ gcloud run deploy siskop-staging-api \
   --image="$image_ref" \
   --service-account=siskop-staging-api@siskop-d0f8c.iam.gserviceaccount.com \
   --add-cloudsql-instances=siskop-d0f8c:asia-southeast2:siskop-staging \
-  --set-secrets=DATABASE_URL=DATABASE_URL:2,JWT_SECRET=JWT_SECRET:1,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:1,XENDIT_SECRET_KEY=XENDIT_SECRET_KEY:1,XENDIT_WEBHOOK_TOKEN=XENDIT_WEBHOOK_TOKEN:1 \
+  --update-secrets=DATABASE_URL=DATABASE_URL:2,JWT_SECRET=JWT_SECRET:1,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:1,XENDIT_SECRET_KEY=XENDIT_SECRET_KEY:1,XENDIT_WEBHOOK_TOKEN=XENDIT_WEBHOOK_TOKEN:1 \
   --env-vars-file=infra/firebase/staging-env.yaml \
   --execution-environment=gen2 --cpu=1 --memory=1Gi --concurrency=20 \
   --min-instances=0 --max-instances=1 --timeout=60 --cpu-throttling \

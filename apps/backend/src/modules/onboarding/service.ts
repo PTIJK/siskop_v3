@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 import { addMonths } from "date-fns";
 import { Prisma } from "@prisma/client";
 import type { OnboardingStatus, PackageCatalog } from "@siskop/types";
@@ -8,6 +9,7 @@ import { provisionTenantInTx } from "../tenants/provision.js";
 import { verifyFirebaseIdentity } from "./firebase.js";
 import { sessionFor } from "../auth/service.js";
 import { registrationSchema, resumeSchema, firebaseSignInSchema } from "./schema.js";
+import { deliverRegistrationEmail, tryRegistrationEmail } from "./email.js";
 import {
   checkoutConfigured,
   createPaymentSession,
@@ -43,16 +45,20 @@ export async function register(input: unknown): Promise<string> {
   const pkg = await db.subscriptionPackage.findUnique({ where: { id: data.packageId } });
   if (!pkg?.isActive || !pkg.price.gt(0) || !pkg.price.isInteger()) throw notFound("Paket tidak tersedia");
   const identity = await verifyFirebaseIdentity(data.idToken);
+  const nameSlug = data.tenantName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50).replace(/-+$/g, "") || "koperasi";
+  const slug = data.slug ?? `${nameSlug}-${randomBytes(6).toString("hex")}`;
+  const firstUnit = data.firstUnit ?? { type: "KSP" as const, name: "Simpan pinjam" };
   try {
     return await db.$transaction(async (tx) => {
       const { tenant, roles } = await provisionTenantInTx(tx, {
         name: data.tenantName,
-        slug: data.slug,
+        slug,
         registrationNo: data.registrationNo,
         address: data.address,
         type: data.type,
-        cooperativeType: data.firstUnit.type,
-        firstUnit: data.firstUnit
+        cooperativeType: firstUnit.type,
+        firstUnit
       });
       await tx.tenant.update({ where: { id: tenant.id }, data: { isActive: false, packageId: pkg.id } });
       const role = roles.find((r) => r.name === "Super Admin");
@@ -169,16 +175,19 @@ export async function checkout(orderId: string): Promise<OnboardingStatus> {
     }
     throw conflict("Tautan pembayaran belum dapat dikonfirmasi. Periksa status sebelum mencoba lagi.");
   }
+  await tryRegistrationEmail(orderId);
   return status(orderId);
 }
 export async function handleSessionWebhook(referenceId: string, sessionId: string): Promise<void> {
   // The dashboard sends sample references, and this account may serve other apps.
   // Acknowledge unrelated sessions without changing an order or fetching provider data.
-  const attempt = await db.checkoutAttempt.findUnique({ where: { id: referenceId }, select: { id: true } });
+  const attempt = await db.checkoutAttempt.findUnique({ where: { id: referenceId }, select: { id: true, orderId: true } });
   if (!attempt) return;
   // Checkout attempts exist before calling Xendit, so this also recovers CREATING
   // attempts whose provider response timed out. applySession validates every match.
   await applySession(attempt.id, await getPaymentSession(sessionId));
+  // Returning an error asks Xendit to retry delivery; payment is already committed.
+  await deliverRegistrationEmail(attempt.orderId);
 }
 export async function applySession(attemptId: string, value: unknown): Promise<void> {
   await db.$transaction(async (tx) => {
@@ -209,10 +218,16 @@ export async function applySession(attemptId: string, value: unknown): Promise<v
       data: { status: "PAID", paidAt }
     });
     if (activated.count) {
-      await tx.tenant.update({
+      const tenant = await tx.tenant.update({
         where: { id: attempt.order.tenantId },
         data: { isActive: true, packageId: attempt.order.packageId, nextBillingDate: addMonths(paidAt, 1) }
       });
+      const admin = await tx.user.findFirstOrThrow({ where: { id: attempt.order.adminId, tenantId: tenant.id } });
+      await tx.registrationEmail.create({ data: {
+        orderId: attempt.orderId,
+        details: { orderId: attempt.orderId, email: admin.email, adminName: admin.name,
+          tenantName: tenant.name, packageName: attempt.order.packageName, amount: attempt.order.amount.toString(), authProvider: admin.authProvider ?? "password" }
+      } });
     }
   });
 }
@@ -234,6 +249,7 @@ export async function reconcile(orderId: string): Promise<OnboardingStatus> {
       throw conflict("Status pembayaran belum dapat diperbarui. Silakan coba lagi.");
     }
   }
+  await tryRegistrationEmail(orderId);
   return status(orderId);
 }
 export async function complete(orderId: string) {
@@ -245,6 +261,7 @@ export async function complete(orderId: string) {
     include: { role: true }
   });
   if (!user) throw unauthorized();
+  await tryRegistrationEmail(orderId);
   return { next: "login" as const };
 }
 

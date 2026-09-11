@@ -23,13 +23,14 @@ const RESERVED = new Set(["www", "api", "admin", "app", "static", "cdn", "localh
 export const registrationSchema = z.object({
   packageId: z.string().min(1).max(100),
   tenantName: z.string().trim().min(2).max(150),
-  slug: slugSchema.refine((value) => !RESERVED.has(value), "Alamat workspace ini tidak tersedia"),
+  // Accept older clients while the current form generates these values server-side.
+  slug: slugSchema.refine((value) => !RESERVED.has(value), "Alamat workspace ini tidak tersedia").optional(),
   registrationNo: z.string().trim().min(1).max(100),
   address: z.string().trim().min(5).max(500),
   type: z.enum(["SYARIAH", "KONVENSIONAL"]),
   adminName: z.string().trim().min(2).max(100),
   idToken: z.string().min(1).max(10000),
-  firstUnit: z.object({ type: z.nativeEnum(CooperativeType), name: z.string().trim().min(1).max(100) })
+  firstUnit: z.object({ type: z.nativeEnum(CooperativeType), name: z.string().trim().min(1).max(100) }).optional()
 });
 export const resumeSchema = z.object({
   slug: slugSchema,

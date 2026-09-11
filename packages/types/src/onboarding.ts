@@ -9,10 +9,20 @@ export interface PackageCatalog {
   packages: PublicPackage[];
   checkoutAvailable: boolean;
 }
-export type OnboardingRegistration = Omit<RegisterTenantRequest, "adminEmail" | "password"> & {
+export type OnboardingRegistration = Omit<RegisterTenantRequest, "adminEmail" | "password" | "slug" | "firstUnit"> & {
   packageId: string;
   idToken: string;
 };
+/** Immutable registration details used by the confirmation email. No credentials. */
+export interface RegistrationConfirmation {
+  orderId: string;
+  email: string;
+  adminName: string;
+  tenantName: string;
+  packageName: string;
+  amount: string;
+  authProvider: string;
+}
 export interface FirebaseSignInRequest { idToken: string }
 export type OnboardingSignInResponse =
   | { next: "checkout"; order: OnboardingStatus }

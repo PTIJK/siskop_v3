@@ -9,6 +9,9 @@ Firebase Hosting serves the existing Vite frontend and forwards `/api/**` and
 Prisma/PostgreSQL database. New registrations and public login use Firebase
 Authentication (Google or email/password); Firestore and Data Connect are not used.
 
+Registration confirmation emails use Resend after verified payment. Follow
+[Resend setup](RESEND.md) to configure a sender, test the key, and enable Cloud Run.
+
 ## Session compatibility
 
 Firebase forwards only the `__session` cookie. `apps/backend/src/hosting/firebase.ts`
