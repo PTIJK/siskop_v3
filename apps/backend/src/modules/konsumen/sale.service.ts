@@ -4,6 +4,7 @@ import { db } from "../../lib/db.js";
 import { notFound, validationError } from "../../lib/errors.js";
 import { postPosSale } from "../../lib/journal.js";
 import { resolveUnitId } from "../../lib/units.js";
+import { assertUnitAccess } from "../../lib/unit-access.js";
 import type { CreateSaleInput, ListSalesQueryInput } from "./sale.schema.js";
 
 const OUT_REASON = "Penjualan POS";
@@ -28,6 +29,7 @@ export async function createSale(
   createdBy: string
 ): Promise<CreateSaleResponse> {
   const unitId = await resolveUnitId(tenantId, data.unitId);
+  await assertUnitAccess(createdBy, tenantId, unitId);
 
   return db.$transaction(async (tx) => {
     // memberId is optional (Toko serves walk-in non-members too, unlike
@@ -138,8 +140,13 @@ export async function createSale(
   });
 }
 
-export async function listSales(tenantId: string, query: ListSalesQueryInput): Promise<PosSaleListItem[]> {
+export async function listSales(
+  tenantId: string,
+  query: ListSalesQueryInput,
+  userId: string
+): Promise<PosSaleListItem[]> {
   const unitId = await resolveUnitId(tenantId, query.unitId);
+  await assertUnitAccess(userId, tenantId, unitId);
 
   const sales = await db.pOSSale.findMany({
     where: { tenantId, unitId },

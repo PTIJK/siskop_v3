@@ -31,7 +31,8 @@ export function ppobRoutes(): Router {
     requirePermission("konsumen", "read"),
     handle(async (req, res) => {
       const data = checkPPOBBillSchema.parse(req.body);
-      const result = await checkBill(authClaims(req).tenantId, data);
+      const auth = authClaims(req);
+      const result = await checkBill(auth.tenantId, data, auth.userId);
       res.json({ success: true, data: result, meta: res.locals.meta });
     })
   );

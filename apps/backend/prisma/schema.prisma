@@ -201,6 +201,7 @@ model CooperativeUnit {
   posSales         POSSale[]
   stockMovements   StockMovement[]
   ppobTransactions PPOBTransaction[]
+  userAssignments  UserUnit[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
@@ -259,9 +260,30 @@ model User {
   posSalesCreated         POSSale[]
   stockMovementsCreated   StockMovement[]
   ppobTransactionsCreated PPOBTransaction[]
+  unitAssignments         UserUnit[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
+}
+
+// Explicit per-user unit scoping (e.g. a Kasir restricted to one Toko unit).
+// A user with zero rows here falls back to every active unit in their
+// tenant — see lib/unit-access.ts#getEffectiveUnitIds — so this table starts
+// empty and every pre-existing user keeps working exactly as before; only
+// users assigned through Konfigurasi > Pengguna going forward get scoped.
+// Mirrors UnitMembership's member<->unit join shape above.
+model UserUnit {
+  id        String   @id @default(cuid())
+  userId    String
+  unitId    String
+  createdAt DateTime @default(now())
+
+  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  unit CooperativeUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, unitId])
+  @@index([unitId])
+  @@index([userId])
 }
 
 // ── MEMBER ────────────────────────────────────────────────────────────────────

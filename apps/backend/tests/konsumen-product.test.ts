@@ -42,7 +42,7 @@ describe("createProduct", () => {
     const admin = await setupTenant();
     const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
 
-    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT });
+    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT }, admin.user.id);
 
     expect(product.id).toEqual(expect.any(String));
     expect(product.sku).toBe("SKU-BERAS-5KG");
@@ -63,13 +63,11 @@ describe("createProduct", () => {
     const admin = await setupTenant();
     const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
 
-    const product = await createProduct(admin.user.tenantId, {
-      unitId: tokoUnit.id,
-      sku: "SKU-MINIMAL",
-      name: "Produk Minimal",
-      sellPrice: 1000,
-      costPrice: 700
-    });
+    const product = await createProduct(
+      admin.user.tenantId,
+      { unitId: tokoUnit.id, sku: "SKU-MINIMAL", name: "Produk Minimal", sellPrice: 1000, costPrice: 700 },
+      admin.user.id
+    );
 
     expect(product.uom).toBe("pcs");
     expect(product.category).toBeNull();
@@ -80,7 +78,7 @@ describe("createProduct", () => {
     const kspUnit = await db.cooperativeUnit.findFirstOrThrow({ where: { tenantId: admin.user.tenantId } });
 
     await expect(
-      createProduct(admin.user.tenantId, { unitId: kspUnit.id, ...SAMPLE_PRODUCT })
+      createProduct(admin.user.tenantId, { unitId: kspUnit.id, ...SAMPLE_PRODUCT }, admin.user.id)
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
 
     const products = await db.product.findMany({ where: { tenantId: admin.user.tenantId } });
@@ -90,10 +88,10 @@ describe("createProduct", () => {
   it("rejects a duplicate SKU within the same unit with a conflict error", async () => {
     const admin = await setupTenant();
     const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
-    await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT });
+    await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT }, admin.user.id);
 
     await expect(
-      createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT, name: "Beras Lain" })
+      createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT, name: "Beras Lain" }, admin.user.id)
     ).rejects.toMatchObject({ code: "CONFLICT" });
 
     const products = await db.product.findMany({ where: { tenantId: admin.user.tenantId, sku: SAMPLE_PRODUCT.sku } });
@@ -105,8 +103,8 @@ describe("createProduct", () => {
     const tokoA = await createUnit(admin.accessToken, "KONSUMEN", "Toko A");
     const tokoB = await createUnit(admin.accessToken, "KONSUMEN", "Toko B");
 
-    const productA = await createProduct(admin.user.tenantId, { unitId: tokoA.id, ...SAMPLE_PRODUCT });
-    const productB = await createProduct(admin.user.tenantId, { unitId: tokoB.id, ...SAMPLE_PRODUCT });
+    const productA = await createProduct(admin.user.tenantId, { unitId: tokoA.id, ...SAMPLE_PRODUCT }, admin.user.id);
+    const productB = await createProduct(admin.user.tenantId, { unitId: tokoB.id, ...SAMPLE_PRODUCT }, admin.user.id);
 
     expect(productA.id).not.toBe(productB.id);
   });
@@ -117,7 +115,7 @@ describe("createProduct", () => {
     const tokoB = await createUnit(tenantB.accessToken, "KONSUMEN", "Toko B");
 
     await expect(
-      createProduct(tenantA.user.tenantId, { unitId: tokoB.id, ...SAMPLE_PRODUCT })
+      createProduct(tenantA.user.tenantId, { unitId: tokoB.id, ...SAMPLE_PRODUCT }, tenantA.user.id)
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
@@ -126,16 +124,14 @@ describe("listProducts", () => {
   it("lists only active products for the given unit", async () => {
     const admin = await setupTenant();
     const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
-    await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT });
-    await createProduct(admin.user.tenantId, {
-      unitId: tokoUnit.id,
-      sku: "SKU-GULA-1KG",
-      name: "Gula Pasir 1kg",
-      sellPrice: 15_000,
-      costPrice: 12_000
-    });
+    await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT }, admin.user.id);
+    await createProduct(
+      admin.user.tenantId,
+      { unitId: tokoUnit.id, sku: "SKU-GULA-1KG", name: "Gula Pasir 1kg", sellPrice: 15_000, costPrice: 12_000 },
+      admin.user.id
+    );
 
-    const products = await listProducts(admin.user.tenantId, { unitId: tokoUnit.id });
+    const products = await listProducts(admin.user.tenantId, { unitId: tokoUnit.id }, admin.user.id);
 
     expect(products).toHaveLength(2);
     expect(products.map((p) => p.sku).sort()).toEqual(["SKU-BERAS-5KG", "SKU-GULA-1KG"]);
@@ -145,9 +141,9 @@ describe("listProducts", () => {
     const admin = await setupTenant();
     const tokoA = await createUnit(admin.accessToken, "KONSUMEN", "Toko A");
     const tokoB = await createUnit(admin.accessToken, "KONSUMEN", "Toko B");
-    await createProduct(admin.user.tenantId, { unitId: tokoA.id, ...SAMPLE_PRODUCT });
+    await createProduct(admin.user.tenantId, { unitId: tokoA.id, ...SAMPLE_PRODUCT }, admin.user.id);
 
-    const productsB = await listProducts(admin.user.tenantId, { unitId: tokoB.id });
+    const productsB = await listProducts(admin.user.tenantId, { unitId: tokoB.id }, admin.user.id);
 
     expect(productsB).toEqual([]);
   });
@@ -157,7 +153,7 @@ describe("recordStockMovement", () => {
   it("IN adds quantity on top of the current stock", async () => {
     const admin = await setupTenant();
     const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
-    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT });
+    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT }, admin.user.id);
 
     const afterFirst = await recordStockMovement(
       admin.user.tenantId,
@@ -179,7 +175,7 @@ describe("recordStockMovement", () => {
   it("ADJUSTMENT sets stockQty to the given quantity directly, not a delta", async () => {
     const admin = await setupTenant();
     const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
-    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT });
+    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT }, admin.user.id);
     await recordStockMovement(admin.user.tenantId, product.id, { type: "IN", quantity: 20, reason: "Restok awal" }, admin.user.id);
 
     // A physical stock-take counted 12 units on hand — the true count, not
@@ -197,7 +193,7 @@ describe("recordStockMovement", () => {
   it("ADJUSTMENT can lower stock down from a higher IN total", async () => {
     const admin = await setupTenant();
     const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
-    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT });
+    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT }, admin.user.id);
     await recordStockMovement(admin.user.tenantId, product.id, { type: "IN", quantity: 100, reason: "Restok" }, admin.user.id);
 
     const adjusted = await recordStockMovement(
@@ -213,7 +209,7 @@ describe("recordStockMovement", () => {
   it("creates a StockMovement row recording createdBy, type, quantity, and reason", async () => {
     const admin = await setupTenant();
     const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
-    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT });
+    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT }, admin.user.id);
 
     await recordStockMovement(admin.user.tenantId, product.id, { type: "IN", quantity: 20, reason: "Restok awal" }, admin.user.id);
 
@@ -232,7 +228,7 @@ describe("recordStockMovement", () => {
     const tenantA = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
     const tenantB = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
     const tokoB = await createUnit(tenantB.accessToken, "KONSUMEN", "Toko B");
-    const productB = await createProduct(tenantB.user.tenantId, { unitId: tokoB.id, ...SAMPLE_PRODUCT });
+    const productB = await createProduct(tenantB.user.tenantId, { unitId: tokoB.id, ...SAMPLE_PRODUCT }, tenantB.user.id);
 
     await expect(
       recordStockMovement(tenantA.user.tenantId, productB.id, { type: "IN", quantity: 5, reason: "Test" }, tenantA.user.id)
@@ -244,12 +240,12 @@ describe("listStockMovements", () => {
   it("lists movements for a unit newest first, joining the product name", async () => {
     const admin = await setupTenant();
     const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
-    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT });
+    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT }, admin.user.id);
 
     await recordStockMovement(admin.user.tenantId, product.id, { type: "IN", quantity: 20, reason: "Restok awal" }, admin.user.id);
     await recordStockMovement(admin.user.tenantId, product.id, { type: "ADJUSTMENT", quantity: 15, reason: "Stok opname" }, admin.user.id);
 
-    const movements = await listStockMovements(admin.user.tenantId, { unitId: tokoUnit.id });
+    const movements = await listStockMovements(admin.user.tenantId, { unitId: tokoUnit.id }, admin.user.id);
 
     expect(movements).toHaveLength(2);
     expect(movements[0].type).toBe("ADJUSTMENT");
@@ -265,10 +261,10 @@ describe("listStockMovements", () => {
     const admin = await setupTenant();
     const tokoA = await createUnit(admin.accessToken, "KONSUMEN", "Toko A");
     const tokoB = await createUnit(admin.accessToken, "KONSUMEN", "Toko B");
-    const productA = await createProduct(admin.user.tenantId, { unitId: tokoA.id, ...SAMPLE_PRODUCT });
+    const productA = await createProduct(admin.user.tenantId, { unitId: tokoA.id, ...SAMPLE_PRODUCT }, admin.user.id);
     await recordStockMovement(admin.user.tenantId, productA.id, { type: "IN", quantity: 20, reason: "Restok" }, admin.user.id);
 
-    const movementsB = await listStockMovements(admin.user.tenantId, { unitId: tokoB.id });
+    const movementsB = await listStockMovements(admin.user.tenantId, { unitId: tokoB.id }, admin.user.id);
 
     expect(movementsB).toEqual([]);
   });

@@ -31,7 +31,8 @@ export function konsumenRoutes(): Router {
     requirePermission("konsumen", "read"),
     handle(async (req, res) => {
       const query = listProductsQuerySchema.parse(req.query);
-      const data = await listProducts(authClaims(req).tenantId, query);
+      const auth = authClaims(req);
+      const data = await listProducts(auth.tenantId, query, auth.userId);
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );
@@ -41,7 +42,8 @@ export function konsumenRoutes(): Router {
     requirePermission("konsumen", "create"),
     handle(async (req, res) => {
       const data = createProductSchema.parse(req.body);
-      const product = await createProduct(authClaims(req).tenantId, data);
+      const auth = authClaims(req);
+      const product = await createProduct(auth.tenantId, data, auth.userId);
       res.status(201).json({ success: true, data: product, meta: res.locals.meta });
     })
   );
@@ -62,7 +64,8 @@ export function konsumenRoutes(): Router {
     requirePermission("konsumen", "read"),
     handle(async (req, res) => {
       const query = listStockMovementsQuerySchema.parse(req.query);
-      const data = await listStockMovements(authClaims(req).tenantId, query);
+      const auth = authClaims(req);
+      const data = await listStockMovements(auth.tenantId, query, auth.userId);
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );

@@ -36,7 +36,8 @@ export function saleRoutes(): Router {
     requirePermission("konsumen", "read"),
     handle(async (req, res) => {
       const query = listSalesQuerySchema.parse(req.query);
-      const data = await listSales(authClaims(req).tenantId, query);
+      const auth = authClaims(req);
+      const data = await listSales(auth.tenantId, query, auth.userId);
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );

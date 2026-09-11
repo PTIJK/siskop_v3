@@ -74,11 +74,11 @@ describe("checkBill", () => {
 
     const before = await db.pPOBTransaction.count({ where: { tenantId: admin.user.tenantId } });
 
-    const result = await checkBill(admin.user.tenantId, {
-      unitId: unit.id,
-      billType: "LISTRIK",
-      customerNumber: "123456789"
-    });
+    const result = await checkBill(
+      admin.user.tenantId,
+      { unitId: unit.id, billType: "LISTRIK", customerNumber: "123456789" },
+      admin.user.id
+    );
 
     expect(result).toEqual({ amount: "500000", adminFee: "2500", customerName: "Pelanggan Demo" });
 
@@ -92,7 +92,11 @@ describe("checkBill", () => {
     const unitB = await createUnit(tenantB.accessToken, "KONSUMEN", "Toko B");
 
     await expect(
-      checkBill(tenantA.user.tenantId, { unitId: unitB.id, billType: "LISTRIK", customerNumber: "123456789" })
+      checkBill(
+        tenantA.user.tenantId,
+        { unitId: unitB.id, billType: "LISTRIK", customerNumber: "123456789" },
+        tenantA.user.id
+      )
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
@@ -102,11 +106,11 @@ describe("payBill", () => {
     const admin = await setupTenant();
     const unit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
 
-    const checked = await checkBill(admin.user.tenantId, {
-      unitId: unit.id,
-      billType: "LISTRIK",
-      customerNumber: "123456789"
-    });
+    const checked = await checkBill(
+      admin.user.tenantId,
+      { unitId: unit.id, billType: "LISTRIK", customerNumber: "123456789" },
+      admin.user.id
+    );
 
     const result = await payBill(
       admin.user.tenantId,

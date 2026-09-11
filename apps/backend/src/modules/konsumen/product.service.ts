@@ -3,6 +3,7 @@ import { CooperativeType, type Product as ProductDTO, type StockMovement as Stoc
 import { db } from "../../lib/db.js";
 import { conflict, notFound, validationError } from "../../lib/errors.js";
 import { resolveUnitId } from "../../lib/units.js";
+import { assertUnitAccess } from "../../lib/unit-access.js";
 import type {
   CreateProductInput,
   ListProductsQueryInput,
@@ -36,8 +37,13 @@ function toProductDTO(product: ProductRow): ProductDTO {
   };
 }
 
-export async function listProducts(tenantId: string, query: ListProductsQueryInput): Promise<ProductDTO[]> {
+export async function listProducts(
+  tenantId: string,
+  query: ListProductsQueryInput,
+  userId: string
+): Promise<ProductDTO[]> {
   const unitId = await resolveUnitId(tenantId, query.unitId);
+  await assertUnitAccess(userId, tenantId, unitId);
 
   const products = await db.product.findMany({
     where: { tenantId, unitId, isActive: true },
@@ -47,8 +53,9 @@ export async function listProducts(tenantId: string, query: ListProductsQueryInp
   return products.map(toProductDTO);
 }
 
-export async function createProduct(tenantId: string, data: CreateProductInput): Promise<ProductDTO> {
+export async function createProduct(tenantId: string, data: CreateProductInput, userId: string): Promise<ProductDTO> {
   const unitId = await resolveUnitId(tenantId, data.unitId);
+  await assertUnitAccess(userId, tenantId, unitId);
 
   // resolveUnitId already proved this unit belongs to tenantId and is
   // active; findUniqueOrThrow (not tenant-scope-guarded, see lib/tenant-scope.ts)
@@ -92,6 +99,7 @@ export async function recordStockMovement(
 ): Promise<ProductDTO> {
   const product = await db.product.findFirst({ where: { id: productId, tenantId } });
   if (!product) throw notFound("Produk tidak ditemukan");
+  await assertUnitAccess(createdBy, tenantId, product.unitId);
 
   const newStockQty = data.type === "IN" ? product.stockQty + data.quantity : data.quantity;
 
@@ -119,9 +127,11 @@ export async function recordStockMovement(
 
 export async function listStockMovements(
   tenantId: string,
-  query: ListStockMovementsQueryInput
+  query: ListStockMovementsQueryInput,
+  userId: string
 ): Promise<StockMovementDTO[]> {
   const unitId = await resolveUnitId(tenantId, query.unitId);
+  await assertUnitAccess(userId, tenantId, unitId);
 
   const movements = await db.stockMovement.findMany({
     where: { tenantId, unitId },

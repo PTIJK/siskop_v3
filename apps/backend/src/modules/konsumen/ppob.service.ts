@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { CheckPPOBBillResponse, PayPPOBBillResponse } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { resolveUnitId } from "../../lib/units.js";
+import { assertUnitAccess } from "../../lib/unit-access.js";
 import type { CheckPPOBBillInput, PayPPOBBillInput } from "./ppob.schema.js";
 
 /**
@@ -64,11 +65,16 @@ export function simulateBill(_billType: string, customerNumber: string): Simulat
 }
 
 /** Pure read — simulates and returns a quote, writes nothing to the database. */
-export async function checkBill(tenantId: string, data: CheckPPOBBillInput): Promise<CheckPPOBBillResponse> {
+export async function checkBill(
+  tenantId: string,
+  data: CheckPPOBBillInput,
+  userId: string
+): Promise<CheckPPOBBillResponse> {
   // Still validates the unit belongs to tenantId even though nothing is
   // persisted here — a caller must not be able to probe whether a unitId
   // exists across tenants via this endpoint either (CLAUDE.md rule 1).
-  await resolveUnitId(tenantId, data.unitId);
+  const unitId = await resolveUnitId(tenantId, data.unitId);
+  await assertUnitAccess(userId, tenantId, unitId);
 
   const simulated = simulateBill(data.billType, data.customerNumber);
   return {
@@ -90,6 +96,7 @@ export async function payBill(
   createdBy: string
 ): Promise<PayPPOBBillResponse> {
   const unitId = await resolveUnitId(tenantId, data.unitId);
+  await assertUnitAccess(createdBy, tenantId, unitId);
 
   const simulated = simulateBill(data.billType, data.customerNumber);
 

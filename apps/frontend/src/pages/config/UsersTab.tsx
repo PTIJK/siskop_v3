@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { Role, User } from "@siskop/types";
+import type { CooperativeUnit, Role, User } from "@siskop/types";
 import { apiFetch, apiPost, apiPut, ApiRequestError } from "@/api/client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/stores/auth";
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
 
@@ -22,13 +23,15 @@ const createSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
   email: z.string().email("Email tidak valid"),
   password: z.string().min(8, "Password minimal 8 karakter"),
-  roleId: z.string().min(1, "Role wajib dipilih")
+  roleId: z.string().min(1, "Role wajib dipilih"),
+  unitIds: z.array(z.string()).min(1, "Pilih minimal 1 unit")
 });
 
 const editSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
   email: z.string().email("Email tidak valid"),
-  roleId: z.string().min(1, "Role wajib dipilih")
+  roleId: z.string().min(1, "Role wajib dipilih"),
+  unitIds: z.array(z.string()).min(1, "Pilih minimal 1 unit")
 });
 
 type CreateValues = z.infer<typeof createSchema>;
@@ -52,21 +55,43 @@ export function UsersTab() {
     queryFn: () => apiFetch<Role[]>("/config/roles")
   });
 
+  // Same ["config","units"] cache RolesTab/UnitsPage/UnitLayout already share.
+  const { data: units } = useQuery({
+    queryKey: ["config", "units"],
+    queryFn: () => apiFetch<CooperativeUnit[]>("/config/units")
+  });
+
   const createForm = useForm<CreateValues>({ resolver: zodResolver(createSchema) });
   const editForm = useForm<EditValues>({ resolver: zodResolver(editSchema) });
 
   const openCreate = () => {
     setEditing(null);
     setApiError("");
-    createForm.reset({ name: "", email: "", password: "", roleId: "" });
+    createForm.reset({ name: "", email: "", password: "", roleId: "", unitIds: [] });
     setDialogOpen(true);
   };
 
   const openEdit = (user: User) => {
     setEditing(user);
     setApiError("");
-    editForm.reset({ name: user.name, email: user.email, roleId: user.roleId });
+    // An unscoped user (empty unitIds — see User.unitIds's doc comment) shows
+    // every unit pre-checked, matching what it actually resolves to today.
+    // Saving the form then locks that in as an explicit assignment.
+    const unitIds = user.unitIds.length > 0 ? user.unitIds : (units ?? []).map((u) => u.id);
+    editForm.reset({ name: user.name, email: user.email, roleId: user.roleId, unitIds });
     setDialogOpen(true);
+  };
+
+  const toggleCreateUnit = (unitId: string) => {
+    const current = createForm.getValues("unitIds") ?? [];
+    const next = current.includes(unitId) ? current.filter((id) => id !== unitId) : [...current, unitId];
+    createForm.setValue("unitIds", next, { shouldValidate: true });
+  };
+
+  const toggleEditUnit = (unitId: string) => {
+    const current = editForm.getValues("unitIds") ?? [];
+    const next = current.includes(unitId) ? current.filter((id) => id !== unitId) : [...current, unitId];
+    editForm.setValue("unitIds", next, { shouldValidate: true });
   };
 
   const onCreate = async (values: CreateValues) => {
@@ -211,6 +236,24 @@ export function UsersTab() {
                 </Select>
               </div>
 
+              <div className="space-y-1.5">
+                <Label>Unit *</Label>
+                <div className="space-y-2 rounded-md border p-3">
+                  {units?.map((unit) => (
+                    <div key={unit.id} className="flex items-center gap-2">
+                      <Checkbox
+                        checked={editForm.watch("unitIds")?.includes(unit.id) ?? false}
+                        onCheckedChange={() => toggleEditUnit(unit.id)}
+                      />
+                      <span className="text-sm">{unit.name}</span>
+                    </div>
+                  ))}
+                </div>
+                {editForm.formState.errors.unitIds && (
+                  <p className="text-xs text-destructive">{editForm.formState.errors.unitIds.message}</p>
+                )}
+              </div>
+
               <div className="flex justify-end gap-3 pt-2">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                   Batal
@@ -267,6 +310,24 @@ export function UsersTab() {
                 </Select>
                 {createForm.formState.errors.roleId && (
                   <p className="text-xs text-destructive">{createForm.formState.errors.roleId.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Unit *</Label>
+                <div className="space-y-2 rounded-md border p-3">
+                  {units?.map((unit) => (
+                    <div key={unit.id} className="flex items-center gap-2">
+                      <Checkbox
+                        checked={createForm.watch("unitIds")?.includes(unit.id) ?? false}
+                        onCheckedChange={() => toggleCreateUnit(unit.id)}
+                      />
+                      <span className="text-sm">{unit.name}</span>
+                    </div>
+                  ))}
+                </div>
+                {createForm.formState.errors.unitIds && (
+                  <p className="text-xs text-destructive">{createForm.formState.errors.unitIds.message}</p>
                 )}
               </div>
 
