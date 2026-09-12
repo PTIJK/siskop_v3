@@ -115,6 +115,12 @@ export interface MemberCreditStatus {
   eligible: boolean;
 }
 
+/** A row in the tenant-wide "Piutang Anggota" list (GET /konsumen/pos/credit) — adds the display fields the list table needs (MemberDetailPage already has the full Member loaded, so the single-member status above doesn't carry them). */
+export interface MemberCreditSummary extends MemberCreditStatus {
+  memberNumber: string;
+  accountNumber: string;
+}
+
 /** A lightweight member lookup result for the POS "Kredit Anggota" search — narrower than the full `Member` shape. */
 export interface CreditMemberSearchResult {
   id: string;
