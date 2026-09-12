@@ -26,3 +26,11 @@ After confirmed payment, checkout clears the onboarding session and redirects to
 login. Only explicit Firebase authentication creates a dashboard session. New
 accounts store a Firebase UID/provider and no local password hash. The existing
 profile screen delegates credential management to Firebase for those accounts.
+
+The registration form no longer asks for **Alamat workspace** or **Jenis koperasi**.
+The onboarding backend creates a unique hostname label from the cooperative name
+and a random suffix, and provisions the existing default KSP / Simpan pinjam unit.
+The cooperative's postal address and operational principle remain registration fields.
+After verified payment, the backend queues an Indonesian confirmation email with
+the package, amount, registration reference, and public login link. Resend setup
+and retry behavior are documented in `infra/firebase/RESEND.md`.

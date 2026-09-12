@@ -144,17 +144,38 @@ model SubscriptionPackage {
 // Platform onboarding records, accessed only through a signed order cookie or
 // an authenticated provider callback. Amount/name are immutable checkout snapshots.
 model OnboardingOrder {
-  id          String            @id @default(cuid())
-  tenantId    String            @unique
-  adminId     String
-  packageId   String
-  packageName String
-  amount      Decimal           @db.Decimal(15, 2)
-  status      String            @default("PENDING")
-  paidAt      DateTime?
-  createdAt   DateTime          @default(now())
-  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  attempts    CheckoutAttempt[]
+  id           String             @id @default(cuid())
+  tenantId     String             @unique
+  adminId      String
+  packageId    String
+  packageName  String
+  amount       Decimal            @db.Decimal(15, 2)
+  status       String             @default("PENDING")
+  paidAt       DateTime?
+  createdAt    DateTime           @default(now())
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attempts     CheckoutAttempt[]
+  confirmation RegistrationEmail?
+}
+
+// One durable confirmation per paid onboarding order. Provider calls run outside
+// transactions; payload is frozen on first send for Resend idempotency retries.
+model RegistrationEmail {
+  orderId        String          @id
+  status         String          @default("PENDING")
+  details        Json
+  payload        Json?
+  attempts       Int             @default(0)
+  firstAttemptAt DateTime?
+  leaseUntil     DateTime?
+  leaseToken     String?
+  resendId       String?
+  sentAt         DateTime?
+  lastError      String?
+  createdAt      DateTime        @default(now())
+  order          OnboardingOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
 }
 
 model CheckoutAttempt {

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PackageFeatures } from "../components/PackageFeatures";
-import { errorMessage, onboardingApi, rupiah, unitNames } from "../api";
+import { errorMessage, onboardingApi, rupiah } from "../api";
 
 import { AuthMethodSwitch } from "../components/AuthMethodSwitch";
 import { identityToken, clearFirebaseIdentity, firebaseError, type AuthMethod } from "../firebase";
@@ -43,16 +43,13 @@ export default function RegisterPage() {
     setError("");
     setPending(true);
     submitting.current = true;
-    const unitType = value("unitType") as keyof typeof unitNames;
     const input: Omit<OnboardingRegistration, "idToken"> = {
       packageId: pkg.id,
       tenantName: value("tenantName"),
-      slug: value("slug"),
       registrationNo: value("registrationNo"),
       address: value("address"),
       type: value("type") as "SYARIAH" | "KONVENSIONAL",
-      adminName: value("adminName"),
-      firstUnit: { type: unitType, name: unitNames[unitType] }
+      adminName: value("adminName")
     };
     try {
       const idToken = await identityToken(method, value("adminEmail"), password, true);
@@ -108,21 +105,6 @@ export default function RegisterPage() {
                       />
                     </div>
                     <div className='field'>
-                      <Label htmlFor='slug'>Alamat workspace</Label>
-                      <Input
-                        id='slug'
-                        name='slug'
-                        required
-                        maxLength={63}
-                        pattern='[a-z0-9]([a-z0-9-]*[a-z0-9])?'
-                        placeholder='sejahtera-bersama'
-                        aria-describedby='slug-help'
-                        autoCapitalize='none'
-                        autoCorrect='off'
-                      />
-                      <small id='slug-help'>Huruf kecil, angka, dan tanda hubung.</small>
-                    </div>
-                    <div className='field'>
                       <Label htmlFor='registrationNo'>Nomor badan hukum</Label>
                       <Input
                         id='registrationNo'
@@ -131,16 +113,6 @@ export default function RegisterPage() {
                         maxLength={100}
                         placeholder='123/BH/2026'
                       />
-                    </div>
-                    <div className='field'>
-                      <Label htmlFor='unitType'>Jenis koperasi</Label>
-                      <select id='unitType' name='unitType' required defaultValue='KSP'>
-                        {Object.entries(unitNames).map(([id, name]) => (
-                          <option value={id} key={id}>
-                            {name}
-                          </option>
-                        ))}
-                      </select>
                     </div>
                     <div className='field field-wide'>
                       <Label htmlFor='type'>Prinsip operasional</Label>

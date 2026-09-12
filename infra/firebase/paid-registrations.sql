@@ -17,9 +17,14 @@ SELECT
   o."amount" AS amount_idr,
   o."status" AS payment_status,
   o."paidAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta' AS paid_at_wib,
-  t."isActive" AS workspace_active
+  t."isActive" AS workspace_active,
+  email."status" AS email_status,
+  email."resendId" AS resend_email_id,
+  email."sentAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta' AS email_accepted_at_wib,
+  email."lastError" AS email_last_error
 FROM "OnboardingOrder" AS o
 JOIN "Tenant" AS t ON t."id" = o."tenantId"
+LEFT JOIN "RegistrationEmail" AS email ON email."orderId" = o."id"
 LEFT JOIN "User" AS u
   ON u."id" = o."adminId" AND u."tenantId" = o."tenantId"
 LEFT JOIN LATERAL (

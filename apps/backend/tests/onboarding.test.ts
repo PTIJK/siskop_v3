@@ -25,8 +25,16 @@ const registration = {
   firstUnit: { type: "KSP", name: "Simpan pinjam" }
 };
 const sessions = new Map<string, Record<string, unknown>>();
+const emailRequests: RequestInit[] = [];
+let emailStatus = 200;
+let emailWait: Promise<void> | undefined;
 let calls = 0;
 const fetchProvider = vi.fn(async (url: string, init?: RequestInit) => {
+  if (url === "https://api.resend.com/emails") {
+    emailRequests.push(init!);
+    await emailWait;
+    return new Response(JSON.stringify(emailStatus === 200 ? { id: "email-test-id" } : { message: "Temporarily unavailable" }), { status: emailStatus });
+  }
   if (init?.method === "POST") {
     calls++;
     const body = JSON.parse(String(init.body));
@@ -46,7 +54,9 @@ const fetchProvider = vi.fn(async (url: string, init?: RequestInit) => {
   return new Response(JSON.stringify(sessions.get(url.split("/").pop()!)));
 });
 async function clean() {
-  await db.tenant.deleteMany({ where: { slug: { startsWith: "onboarding-test" } } });
+  await db.tenant.deleteMany({ where: { OR: [
+    { slug: { startsWith: "onboarding-test" } }, { registrationNo: { startsWith: "ONBOARDING-TEST" } }
+  ] } });
 }
 beforeEach(async () => {
   if (!new URL(process.env.DATABASE_URL ?? "postgresql://localhost/missing").pathname.endsWith("_test"))
@@ -54,6 +64,11 @@ beforeEach(async () => {
   await clean();
   vi.mocked(verifyFirebaseIdentity).mockReset().mockResolvedValue({ uid: "onboarding-test-uid", email: registration.adminEmail, provider: "password", authTime: Math.floor(Date.now() / 1000) });
   calls = 0;
+  emailRequests.length = 0;
+  emailStatus = 200;
+  emailWait = undefined;
+  vi.stubEnv("RESEND_API_KEY", "");
+  vi.stubEnv("RESEND_FROM_EMAIL", "");
   sessions.clear();
   vi.stubEnv("PUBLIC_APP_URL", "https://siskop.example");
   vi.stubEnv("XENDIT_SECRET_KEY", "test-only");
@@ -99,6 +114,127 @@ async function callback(
     .send({ event: "payment_session.completed", data: session });
 }
 describe("cooperative onboarding", () => {
+  it("generates a valid unique workspace and a default unit when the removed form fields are absent", async () => {
+    const app = createApp();
+    for (const [index, tenantName] of ["Onboarding Test Sérba Usaha", "Onboarding Test Sérba Usaha", "合作社"].entries()) {
+      vi.mocked(verifyFirebaseIdentity).mockResolvedValue({ uid: `onboarding-test-auto-${index}`, email: `auto-${index}@example.test`, provider: "password", authTime: Math.floor(Date.now() / 1000) });
+      const response = await request(app).post("/api/onboarding/register").send({
+        ...registration, tenantName, slug: undefined, firstUnit: undefined, registrationNo: `ONBOARDING-TEST-${index}`
+      });
+      expect(response.status).toBe(201);
+      expect(response.body.data.slug).toMatch(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/);
+      expect(response.body.data.slug.length).toBeLessThanOrEqual(63);
+      const tenant = await db.tenant.findUniqueOrThrow({ where: { slug: response.body.data.slug }, include: { units: true } });
+      expect(tenant.units).toHaveLength(1);
+      expect(tenant.units[0]).toMatchObject({ type: "KSP", name: "Simpan pinjam" });
+    }
+  });
+  it("sends one confirmation to the verified administrator only after payment, including duplicate callbacks", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_only");
+    vi.stubEnv("RESEND_FROM_EMAIL", "SISKOP <noreply@siskop.example>");
+    const { app, agent, order } = await begin();
+    expect(emailRequests).toHaveLength(0);
+    await agent.post("/api/onboarding/checkout").send({});
+    const session = [...sessions.values()][0]!;
+    expect(emailRequests).toHaveLength(0);
+    expect((await callback(app, { ...session, status: "COMPLETED", amount: 1 })).status).toBe(422);
+    expect(emailRequests).toHaveLength(0);
+    const paid = { ...session, status: "COMPLETED" };
+    expect((await callback(app, paid)).status).toBe(200);
+    await Promise.all([callback(app, paid), callback(app, paid)]);
+    expect(emailRequests).toHaveLength(1);
+    const body = JSON.parse(String(emailRequests[0]!.body));
+    expect(body.to).toEqual([registration.adminEmail]);
+    expect(body.text).toContain("https://siskop.example/login");
+    expect(body.text).toContain(order.id);
+    expect(body.text).not.toContain(registration.password);
+    const delivery = await db.registrationEmail.findUniqueOrThrow({ where: { orderId: order.id } });
+    expect(delivery.status).toBe("SENT");
+    expect(delivery.resendId).toBe("email-test-id");
+  });
+  it("preserves a paid workspace when Resend fails and retries the same message on the next callback", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_only");
+    vi.stubEnv("RESEND_FROM_EMAIL", "SISKOP <noreply@siskop.example>");
+    const { app, agent, order } = await begin();
+    await agent.post("/api/onboarding/checkout").send({});
+    const paid = { ...[...sessions.values()][0]!, status: "COMPLETED" };
+    emailStatus = 503;
+    expect((await callback(app, paid)).status).toBe(500);
+    const stored = await db.onboardingOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tenant: true } });
+    expect(stored.status).toBe("PAID");
+    expect(stored.tenant.isActive).toBe(true);
+    expect((await agent.post("/api/onboarding/complete").send({})).status).toBe(200);
+    emailStatus = 200;
+    expect((await callback(app, paid)).status).toBe(200);
+    expect(emailRequests.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(emailRequests.map((r) => String(r.body))).size).toBe(1);
+    expect(new Set(emailRequests.map((r) => new Headers(r.headers).get("Idempotency-Key"))).size).toBe(1);
+    expect((await db.registrationEmail.findUniqueOrThrow({ where: { orderId: order.id } })).status).toBe("SENT");
+  });
+  it("queues confirmation without credentials, then sends after configuration and payment reconciliation", async () => {
+    const { agent, order } = await begin();
+    await agent.post("/api/onboarding/checkout").send({});
+    const session = [...sessions.values()][0]!;
+    sessions.set(String(session.payment_session_id), { ...session, status: "COMPLETED" });
+    expect((await agent.post("/api/onboarding/reconcile").send({})).body.data.status).toBe("PAID");
+    expect(emailRequests).toHaveLength(0);
+    expect((await db.registrationEmail.findUniqueOrThrow({ where: { orderId: order.id } })).status).toBe("PENDING");
+    vi.stubEnv("RESEND_API_KEY", "re_test_only");
+    vi.stubEnv("RESEND_FROM_EMAIL", "SISKOP <noreply@siskop.example>");
+    expect((await agent.post("/api/onboarding/reconcile").send({})).body.data.status).toBe("PAID");
+    expect(emailRequests).toHaveLength(1);
+  });
+  it("serializes simultaneous first deliveries without holding the payment transaction open", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_only");
+    vi.stubEnv("RESEND_FROM_EMAIL", "SISKOP <noreply@siskop.example>");
+    const { app, agent, order } = await begin();
+    await agent.post("/api/onboarding/checkout").send({});
+    const paid = { ...[...sessions.values()][0]!, status: "COMPLETED" };
+    let releaseEmail!: () => void;
+    emailWait = new Promise<void>((resolve) => { releaseEmail = resolve; });
+    const first = callback(app, paid);
+    try {
+      await vi.waitFor(() => expect(emailRequests).toHaveLength(1));
+      expect((await callback(app, paid)).status).toBe(500);
+      expect((await agent.get("/api/onboarding/status")).body.data.status).toBe("PAID");
+    } finally { releaseEmail(); }
+    expect((await first).status).toBe(200);
+    expect(emailRequests).toHaveLength(1);
+    expect((await db.registrationEmail.findUniqueOrThrow({ where: { orderId: order.id } })).status).toBe("SENT");
+  });
+  it("recovers an interrupted email attempt using its frozen payload and idempotency key", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_only");
+    vi.stubEnv("RESEND_FROM_EMAIL", "SISKOP <noreply@siskop.example>");
+    const { app, agent, order } = await begin();
+    await agent.post("/api/onboarding/checkout").send({});
+    const paid = { ...[...sessions.values()][0]!, status: "COMPLETED" };
+    emailStatus = 503;
+    await callback(app, paid);
+    await db.registrationEmail.update({ where: { orderId: order.id }, data: {
+      status: "SENDING", leaseUntil: new Date(Date.now() - 1000), leaseToken: "interrupted-process"
+    } });
+    vi.stubEnv("RESEND_FROM_EMAIL", "Changed sender <other@siskop.example>");
+    vi.stubEnv("PUBLIC_APP_URL", "https://changed.example");
+    emailStatus = 200;
+    expect((await callback(app, paid)).status).toBe(200);
+    expect(emailRequests).toHaveLength(2);
+    expect(emailRequests[1]!.body).toBe(emailRequests[0]!.body);
+  });
+  it("stops automatic retries before Resend's idempotency window expires", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_only");
+    vi.stubEnv("RESEND_FROM_EMAIL", "SISKOP <noreply@siskop.example>");
+    const { app, agent, order } = await begin();
+    await agent.post("/api/onboarding/checkout").send({});
+    const paid = { ...[...sessions.values()][0]!, status: "COMPLETED" };
+    emailStatus = 503;
+    await callback(app, paid);
+    await db.registrationEmail.update({ where: { orderId: order.id }, data: { firstAttemptAt: new Date(Date.now() - 24 * 60 * 60_000) } });
+    emailStatus = 200;
+    expect((await callback(app, paid)).status).toBe(200);
+    expect(emailRequests).toHaveLength(1);
+    expect((await db.registrationEmail.findUniqueOrThrow({ where: { orderId: order.id } })).status).toBe("REVIEW");
+    expect((await agent.post("/api/onboarding/complete").send({})).status).toBe(200);
+  });
   it("requires a verified Firebase identity for new registrations", async () => {
     const response = await request(createApp()).post("/api/onboarding/register").send({ ...registration, idToken: undefined });
     expect(response.status).toBe(422);
