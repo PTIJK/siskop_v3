@@ -18,7 +18,8 @@ import {
   Package as PackageIcon,
   ShieldCheck,
   Layers,
-  PieChart
+  PieChart,
+  Receipt
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -34,7 +35,12 @@ import { cn } from "@/lib/utils";
 // then Konfigurasi — see the render order in SidebarContent below.
 const NAV_ITEMS_TOP = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, module: "dashboard" as const, action: "read" as const },
-  { label: "Anggota", href: "/members", icon: Users, module: "members" as const, action: "read" as const }
+  { label: "Anggota", href: "/members", icon: Users, module: "members" as const, action: "read" as const },
+  // Tenant-wide (not unit-scoped, even though the credit originates at
+  // Konsumen/Toko's POS) — top-level rather than nested under Unit Usaha >
+  // Konsumen, which would misleadingly imply unit-scoping. Reuses the
+  // konsumen permission scope, same gate credit.routes.ts already uses.
+  { label: "Piutang Anggota", href: "/piutang", icon: Receipt, module: "konsumen" as const, action: "read" as const }
 ];
 
 const NAV_ITEMS_REPORTS = [
