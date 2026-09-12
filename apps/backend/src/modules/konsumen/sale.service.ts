@@ -1,10 +1,12 @@
 import { Prisma } from "@prisma/client";
+import { ErrorCode } from "@siskop/types";
 import type { CreateSaleResponse, PosSaleListItem } from "@siskop/types";
 import { db } from "../../lib/db.js";
-import { notFound, validationError } from "../../lib/errors.js";
+import { AppError, notFound, validationError } from "../../lib/errors.js";
 import { postPosSale } from "../../lib/journal.js";
 import { resolveUnitId } from "../../lib/units.js";
 import { assertUnitAccess } from "../../lib/unit-access.js";
+import { getMemberCreditStatus } from "./credit.service.js";
 import type { CreateSaleInput, ListSalesQueryInput } from "./sale.schema.js";
 
 const OUT_REASON = "Penjualan POS";
@@ -30,6 +32,30 @@ export async function createSale(
 ): Promise<CreateSaleResponse> {
   const unitId = await resolveUnitId(tenantId, data.unitId);
   await assertUnitAccess(createdBy, tenantId, unitId);
+
+  // Eligibility is checked before the transaction (same "validate, then
+  // mutate" ordering loans/service.ts#createLoan uses for hasPokokSaving),
+  // using a preliminary price lookup — the transaction below re-validates
+  // stock/price and computes the authoritative totalPrice regardless, so a
+  // price/stock change in between is caught there, not silently accepted.
+  // Zod's schema-level refine already guarantees memberId is present here.
+  if (data.paymentMethod === "MEMBER_CREDIT") {
+    const products = await db.product.findMany({
+      where: { tenantId, unitId, id: { in: data.items.map((item) => item.productId) } }
+    });
+    const estimatedTotal = data.items.reduce((sum, item) => {
+      const product = products.find((p) => p.id === item.productId);
+      return product ? sum.add(product.price.mul(item.quantity)) : sum;
+    }, new Prisma.Decimal(0));
+
+    const status = await getMemberCreditStatus(tenantId, data.memberId!);
+    if (!status.hasActiveSaving) {
+      throw new AppError(ErrorCode.MEMBER_HAS_NO_ACTIVE_SAVING, "Anggota belum memiliki simpanan aktif");
+    }
+    if (status.availableCredit.lt(estimatedTotal)) {
+      throw new AppError(ErrorCode.MEMBER_CREDIT_LIMIT_EXCEEDED, "Limit kredit anggota tidak mencukupi");
+    }
+  }
 
   return db.$transaction(async (tx) => {
     // memberId is optional (Toko serves walk-in non-members too, unlike
@@ -130,6 +156,7 @@ export async function createSale(
     await postPosSale(tx, {
       tenantId,
       saleId: sale.id,
+      paymentMethod: data.paymentMethod,
       totalPrice: totalPrice.toNumber(),
       totalCost: totalCost.toNumber(),
       entryDate: soldAt,

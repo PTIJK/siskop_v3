@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Member, PortalAccessResponse } from "@siskop/types";
 import { apiFetch, apiPost, ApiRequestError } from "@/api/client";
+import { getMemberCreditStatus, recordCreditRepayment } from "@/api/konsumen";
 import { formatRupiah, formatTanggalIndonesia } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
@@ -12,9 +13,11 @@ import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Edit, PiggyBank, CreditCard, ArrowDownCircle, ArrowUpCircle, Smartphone } from "lucide-react";
+import { Edit, PiggyBank, CreditCard, ArrowDownCircle, ArrowUpCircle, Smartphone, Store } from "lucide-react";
 
 interface MemberDetail extends Member {
   savings: { id: string; savingConfig: { name: string; type: string }; balance: string; isActive: boolean }[];
@@ -41,11 +44,47 @@ export function MemberDetailPage() {
   const [portalDialog, setPortalDialog] = useState(false);
   const [portalResult, setPortalResult] = useState<PortalAccessResponse | null>(null);
   const [isActivatingPortal, setIsActivatingPortal] = useState(false);
+  const [repayDialog, setRepayDialog] = useState(false);
+  const [repayAmount, setRepayAmount] = useState("");
+  const [repayError, setRepayError] = useState("");
+  const [isRepaying, setIsRepaying] = useState(false);
 
   const { data: member, isPending } = useQuery({
     queryKey: ["members", id],
     queryFn: () => apiFetch<MemberDetail>(`/members/${id}`)
   });
+
+  // Konsumen-gated (not members-gated): "Kredit Toko" is a konsumen-module
+  // concept — see api/konsumen.ts's credit endpoints, deliberately reachable
+  // without members:read so a Kasir could reuse them, though this page
+  // itself already requires members:read to view at all.
+  const canReadCredit = can("konsumen", "read");
+  const { data: creditStatus, isPending: creditPending } = useQuery({
+    queryKey: ["konsumen", "credit", id],
+    queryFn: () => getMemberCreditStatus(id as string),
+    enabled: Boolean(id) && canReadCredit
+  });
+
+  async function handleRepay() {
+    setRepayError("");
+    const amount = parseFloat(repayAmount);
+    if (!amount || amount <= 0) {
+      setRepayError("Jumlah harus lebih dari 0");
+      return;
+    }
+    setIsRepaying(true);
+    try {
+      await recordCreditRepayment({ memberId: id as string, amount });
+      toast({ title: "Pembayaran kredit dicatat" });
+      setRepayDialog(false);
+      setRepayAmount("");
+      await queryClient.invalidateQueries({ queryKey: ["konsumen", "credit", id] });
+    } catch (err) {
+      setRepayError(err instanceof ApiRequestError ? err.message : "Terjadi kesalahan");
+    } finally {
+      setIsRepaying(false);
+    }
+  }
 
   async function handleActivatePortal() {
     setIsActivatingPortal(true);
@@ -108,6 +147,7 @@ export function MemberDetailPage() {
           <TabsTrigger value="info">Info Pribadi</TabsTrigger>
           <TabsTrigger value="savings">Simpanan</TabsTrigger>
           <TabsTrigger value="loans">Pinjaman</TabsTrigger>
+          {canReadCredit && <TabsTrigger value="credit">Kredit Toko</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="info" className="mt-4">
@@ -254,7 +294,85 @@ export function MemberDetailPage() {
             </Card>
           )}
         </TabsContent>
+
+        {canReadCredit && (
+          <TabsContent value="credit" className="mt-4 space-y-4">
+            {creditPending ? (
+              <PageLoading />
+            ) : creditStatus ? (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="text-base">Kredit Anggota (Toko)</CardTitle>
+                    {can("konsumen", "update") && creditStatus.outstandingBalance !== "0" && (
+                      <Button size="sm" onClick={() => setRepayDialog(true)}>
+                        <Store className="mr-2 h-4 w-4" /> Bayar Kredit
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Limit (50% Simpanan)</dt>
+                      <dd className="font-semibold">{formatRupiah(creditStatus.creditLimit)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Terpakai</dt>
+                      <dd className="font-semibold text-orange-600">{formatRupiah(creditStatus.outstandingBalance)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Sisa Limit</dt>
+                      <dd className="font-semibold text-primary">{formatRupiah(creditStatus.availableCredit)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Status</dt>
+                      <dd>
+                        <Badge variant={creditStatus.eligible ? "default" : "secondary"}>
+                          {creditStatus.eligible ? "Layak" : "Tidak Layak"}
+                        </Badge>
+                      </dd>
+                    </div>
+                  </dl>
+                  {!creditStatus.hasActiveSaving && (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      Anggota belum memiliki simpanan aktif, sehingga belum memenuhi syarat kredit anggota.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
+          </TabsContent>
+        )}
       </Tabs>
+
+      <Dialog open={repayDialog} onOpenChange={(o) => { setRepayDialog(o); if (!o) setRepayError(""); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Bayar Kredit Toko</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {creditStatus && (
+              <p className="text-sm text-muted-foreground">
+                Sisa kredit saat ini: <span className="font-medium text-foreground">{formatRupiah(creditStatus.outstandingBalance)}</span>
+              </p>
+            )}
+            <div className="space-y-1.5">
+              <Label>Jumlah Pembayaran (Rp)</Label>
+              <Input type="number" min="1" value={repayAmount} onChange={(e) => setRepayAmount(e.target.value)} />
+              {repayError && <p className="text-xs text-destructive">{repayError}</p>}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRepayDialog(false)}>
+              Batal
+            </Button>
+            <Button onClick={handleRepay} disabled={isRepaying}>
+              {isRepaying ? "Memproses..." : "Bayar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {ktpLightbox && member.ktpPhotoUrl && (
         <div

@@ -4,9 +4,13 @@ import type {
   CreateProductRequest,
   CreateSaleRequest,
   CreateSaleResponse,
+  CreditMemberSearchResult,
+  MemberCreditStatus,
   PayPPOBBillRequest,
   PayPPOBBillResponse,
   Product,
+  RecordCreditRepaymentRequest,
+  RecordCreditRepaymentResponse,
   RecordStockMovementRequest,
   StockMovement
 } from "@siskop/types";
@@ -62,4 +66,22 @@ export function checkPPOBBill(input: CheckPPOBBillRequest) {
 
 export function payPPOBBill(input: PayPPOBBillRequest) {
   return apiPost<PayPPOBBillResponse>("/konsumen/ppob/pay", input);
+}
+
+/**
+ * "Kredit Anggota" (member store credit) — credit.routes.ts, mounted
+ * alongside pos/sales at `/api/konsumen/*`, gated on konsumen:read/update
+ * (not members:*) so a Kasir who lacks members permissions can still use
+ * these at the register.
+ */
+export function searchCreditMembers(search: string) {
+  return apiFetch<CreditMemberSearchResult[]>(`/konsumen/pos/credit/members?search=${encodeURIComponent(search)}`);
+}
+
+export function getMemberCreditStatus(memberId: string) {
+  return apiFetch<MemberCreditStatus>(`/konsumen/pos/credit/${memberId}`);
+}
+
+export function recordCreditRepayment(input: RecordCreditRepaymentRequest) {
+  return apiPost<RecordCreditRepaymentResponse>("/konsumen/pos/credit/repayments", input);
 }

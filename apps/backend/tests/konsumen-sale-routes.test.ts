@@ -166,6 +166,49 @@ describe("POST /api/konsumen/pos/sales", () => {
 
     expect(res.status).toBe(201);
   });
+
+  it("rejects MEMBER_CREDIT with no memberId", async () => {
+    const admin = await setupTenant();
+    const { tokoUnit, product } = await seedTokoWithStock(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/konsumen/pos/sales")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 1 }], paymentMethod: "MEMBER_CREDIT" });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("surfaces MEMBER_HAS_NO_ACTIVE_SAVING as a 422 with that error code", async () => {
+    const admin = await setupTenant();
+    const { tokoUnit, product } = await seedTokoWithStock(admin.accessToken);
+    const memberRes = await request(app())
+      .post("/api/members")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({
+        fullName: "Anggota Tanpa Simpanan",
+        nik: "3171234567890099",
+        address: "Jl. Test No. 1",
+        birthPlace: "Jakarta",
+        birthDate: "1990-01-01",
+        occupation: "Wiraswasta"
+      });
+    const member = memberRes.body.data as { id: string };
+
+    const res = await request(app())
+      .post("/api/konsumen/pos/sales")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({
+        unitId: tokoUnit.id,
+        items: [{ productId: product.id, quantity: 1 }],
+        paymentMethod: "MEMBER_CREDIT",
+        memberId: member.id
+      });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("MEMBER_HAS_NO_ACTIVE_SAVING");
+  });
 });
 
 describe("GET /api/konsumen/pos/sales", () => {

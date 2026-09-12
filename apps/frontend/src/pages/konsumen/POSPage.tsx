@@ -2,7 +2,7 @@ import { useReducer, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateSaleResponse, PosPaymentMethod, Product } from "@siskop/types";
-import { createPOSSale, getProducts } from "@/api/konsumen";
+import { createPOSSale, getMemberCreditStatus, getProducts } from "@/api/konsumen";
 import { ApiRequestError } from "@/api/client";
 import { formatRupiah } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
@@ -94,6 +94,23 @@ export function POSPage() {
   const [cart, dispatch] = useReducer(cartReducer, INITIAL_CART);
   const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>("CASH");
   const [receipt, setReceipt] = useState<CreateSaleResponse | null>(null);
+  const [creditMember, setCreditMember] = useState<{ id: string; fullName: string } | null>(null);
+
+  // Fetched here (not inside POSCart) because checkout also needs
+  // availableCredit — the mutationFn below reads it via this same query's
+  // cache key rather than duplicating the fetch. Cleared alongside the cart
+  // on a successful sale and whenever the payment method changes away from
+  // MEMBER_CREDIT (see resetPaymentMethod below).
+  const { data: creditStatus, isPending: creditStatusPending } = useQuery({
+    queryKey: ["konsumen", "credit", creditMember?.id],
+    queryFn: () => getMemberCreditStatus(creditMember!.id),
+    enabled: Boolean(creditMember)
+  });
+
+  function resetPaymentMethod(method: PosPaymentMethod) {
+    setPaymentMethod(method);
+    if (method !== "MEMBER_CREDIT") setCreditMember(null);
+  }
 
   // Same ["konsumen","products",unitId] key ProductsPage/StockMovementForm
   // use — the grid shares that cache, and checkout invalidates it below so
@@ -115,14 +132,17 @@ export function POSPage() {
       return createPOSSale({
         unitId,
         items: cart.lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
-        paymentMethod
+        paymentMethod,
+        memberId: paymentMethod === "MEMBER_CREDIT" ? creditMember?.id : undefined
       });
     },
     onSuccess: (sale) => {
       setReceipt(sale);
       dispatch({ type: "CLEAR" });
-      setPaymentMethod("CASH");
+      resetPaymentMethod("CASH");
       void qc.invalidateQueries({ queryKey: ["konsumen", "products", unitId] });
+      // The sale just changed this member's outstanding store-credit balance.
+      void qc.invalidateQueries({ queryKey: ["konsumen", "credit", creditMember?.id] });
       toast({ title: "Transaksi berhasil" });
     },
     onError: (err) => {
@@ -178,7 +198,12 @@ export function POSPage() {
             <POSCart
               lines={cart.lines}
               paymentMethod={paymentMethod}
-              onPaymentMethodChange={setPaymentMethod}
+              onPaymentMethodChange={resetPaymentMethod}
+              creditMemberId={creditMember?.id ?? null}
+              creditMemberName={creditMember?.fullName ?? null}
+              onCreditMemberChange={setCreditMember}
+              creditStatus={creditStatus}
+              creditStatusPending={creditStatusPending}
               onIncrement={(productId) => {
                 const line = cart.lines.find((l) => l.productId === productId);
                 if (line) dispatch({ type: "SET_QUANTITY", productId, quantity: line.quantity + 1 });

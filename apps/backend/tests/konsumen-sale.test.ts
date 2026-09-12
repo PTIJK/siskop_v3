@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import request from "supertest";
 import { db } from "../src/lib/db.js";
-import { app, createMemberAs, setupTenant } from "./helpers.js";
+import { app, createMemberAs, createMemberWithPokokSaving, setupTenant } from "./helpers.js";
 import { createProduct, recordStockMovement } from "../src/modules/konsumen/product.service.js";
 import { createSale, listSales } from "../src/modules/konsumen/sale.service.js";
 
@@ -326,6 +326,93 @@ describe("createSale", () => {
     );
     const rowWithoutMember = await db.pOSSale.findUniqueOrThrow({ where: { id: saleWithoutMember.id } });
     expect(rowWithoutMember.memberId).toBeNull();
+  });
+});
+
+/** Wires up tenant-wide SYSTEM/SALE_RECEIVABLE (Piutang/Penjualan) mapping — the debit side for a MEMBER_CREDIT sale, replacing SALE_REVENUE. */
+async function setupReceivableMapping(accessToken: string) {
+  const piutang = await createAccount(accessToken, {
+    code: "1-1400",
+    name: "Piutang Anggota (Toko)",
+    category: "ASET",
+    normalBalance: "DEBIT"
+  });
+  const penjualan = await createAccount(accessToken, {
+    code: "4-1000",
+    name: "Penjualan",
+    category: "PENDAPATAN",
+    normalBalance: "KREDIT"
+  });
+  await createAccountMapping(accessToken, {
+    sourceType: "SYSTEM",
+    transactionKind: "SALE_RECEIVABLE",
+    debitAccountId: piutang.id,
+    creditAccountId: penjualan.id
+  });
+  return { piutang, penjualan };
+}
+
+describe("createSale — MEMBER_CREDIT (Kredit Anggota)", () => {
+  it("throws MEMBER_HAS_NO_ACTIVE_SAVING for a member with no active saving", async () => {
+    const admin = await setupTenant();
+    const { tokoUnit, product } = await seedTokoWithStock(admin, 10);
+    const member = await createMemberAs(admin.accessToken);
+
+    await expect(
+      createSale(
+        admin.user.tenantId,
+        { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 1 }], paymentMethod: "MEMBER_CREDIT", memberId: member.id },
+        admin.user.id
+      )
+    ).rejects.toMatchObject({ code: "MEMBER_HAS_NO_ACTIVE_SAVING" });
+
+    const unchanged = await db.product.findUniqueOrThrow({ where: { id: product.id } });
+    expect(unchanged.stockQty).toBe(10);
+  });
+
+  it("throws MEMBER_CREDIT_LIMIT_EXCEEDED when the sale total exceeds available credit", async () => {
+    const admin = await setupTenant();
+    // createMemberWithPokokSaving deposits 500_000 -> limit = 250_000 (50%).
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
+    const product = await createProduct(admin.user.tenantId, {
+      unitId: tokoUnit.id,
+      sku: "SKU-MAHAL",
+      name: "Produk Mahal",
+      sellPrice: 300_000,
+      costPrice: 200_000
+    });
+    await recordStockMovement(admin.user.tenantId, product.id, { type: "IN", quantity: 5, reason: "Restok" }, admin.user.id);
+
+    await expect(
+      createSale(
+        admin.user.tenantId,
+        { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 1 }], paymentMethod: "MEMBER_CREDIT", memberId: member.id },
+        admin.user.id
+      )
+    ).rejects.toMatchObject({ code: "MEMBER_CREDIT_LIMIT_EXCEEDED" });
+  });
+
+  it("succeeds within the available limit and posts SALE_RECEIVABLE (not SALE_REVENUE) as the debit side", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken); // limit 250_000
+    const { piutang } = await setupReceivableMapping(admin.accessToken);
+    const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
+    const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT });
+    await recordStockMovement(admin.user.tenantId, product.id, { type: "IN", quantity: 10, reason: "Restok" }, admin.user.id);
+
+    const sale = await createSale(
+      admin.user.tenantId,
+      { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 2 }], paymentMethod: "MEMBER_CREDIT", memberId: member.id },
+      admin.user.id
+    );
+
+    const lines = await db.journalLine.findMany({
+      where: { tenantId: admin.user.tenantId, journalEntry: { sourceType: "POS_SALE", sourceId: sale.id } }
+    });
+    const receivableLine = lines.find((l) => l.accountId === piutang.id);
+    expect(receivableLine).toBeTruthy();
+    expect(Number(receivableLine!.debit)).toBe(30_000); // 15000 * 2
   });
 });
 

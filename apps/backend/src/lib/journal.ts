@@ -31,7 +31,9 @@ async function buildComponentLines(
     | "PAYMENT_INTEREST"
     | "PAYMENT_PENALTY"
     | "SALE_REVENUE"
-    | "SALE_COGS",
+    | "SALE_COGS"
+    | "SALE_RECEIVABLE"
+    | "MEMBER_CREDIT_REPAYMENT",
   amount: number
 ): Promise<JournalLineInput[]> {
   if (amount <= 0) return [];
@@ -61,7 +63,7 @@ async function createJournalEntry(
   params: {
     tenantId: string;
     entryDate: Date;
-    sourceType: "SAVING_TRANSACTION" | "LOAN_PAYMENT" | "LOAN_DISBURSEMENT" | "POS_SALE";
+    sourceType: "SAVING_TRANSACTION" | "LOAN_PAYMENT" | "LOAN_DISBURSEMENT" | "POS_SALE" | "MEMBER_CREDIT_REPAYMENT";
     sourceId: string;
     description: string;
     lines: JournalLineInput[];
@@ -210,18 +212,33 @@ export function splitPrincipalAndInterest(
 
 /**
  * Posts a POS sale's revenue and COGS as one balanced journal entry (up to
- * 4 lines: a Kas/Penjualan pair plus an HPP/Persediaan pair). Unlike the
- * SAVING_CONFIG/LOAN_CONFIG mappings above (one per config row), a POS sale
- * mapping is tenant-wide: `sourceType: "SYSTEM"` with `sourceId: null` — see
- * `AccountMapping.sourceId` (nullable) and config/service.ts's own
- * `sourceId ?? null` handling for the same SYSTEM scope.
+ * 4 lines: a Kas-or-Piutang/Penjualan pair plus an HPP/Persediaan pair).
+ * Unlike the SAVING_CONFIG/LOAN_CONFIG mappings above (one per config row), a
+ * POS sale mapping is tenant-wide: `sourceType: "SYSTEM"` with `sourceId:
+ * null` — see `AccountMapping.sourceId` (nullable) and config/service.ts's
+ * own `sourceId ?? null` handling for the same SYSTEM scope.
+ *
+ * The revenue-side pair uses SALE_RECEIVABLE instead of SALE_REVENUE for a
+ * MEMBER_CREDIT sale — the coop hasn't received cash, so the debit side must
+ * land on a receivable (Piutang Anggota), not Kas. COGS/inventory is
+ * unaffected either way: the goods left the shelf regardless of how the
+ * customer paid.
  */
 export async function postPosSale(
   tx: TxClient,
-  params: { tenantId: string; saleId: string; totalPrice: number; totalCost: number; entryDate: Date; description: string }
+  params: {
+    tenantId: string;
+    saleId: string;
+    paymentMethod: "CASH" | "TRANSFER" | "MEMBER_CREDIT";
+    totalPrice: number;
+    totalCost: number;
+    entryDate: Date;
+    description: string;
+  }
 ): Promise<void> {
+  const revenueKind = params.paymentMethod === "MEMBER_CREDIT" ? "SALE_RECEIVABLE" : "SALE_REVENUE";
   const [revenueLines, cogsLines] = await Promise.all([
-    buildComponentLines(tx, params.tenantId, "SYSTEM", null, "SALE_REVENUE", params.totalPrice),
+    buildComponentLines(tx, params.tenantId, "SYSTEM", null, revenueKind, params.totalPrice),
     buildComponentLines(tx, params.tenantId, "SYSTEM", null, "SALE_COGS", params.totalCost)
   ]);
   await createJournalEntry(tx, {
@@ -231,5 +248,26 @@ export async function postPosSale(
     sourceId: params.saleId,
     description: params.description,
     lines: [...revenueLines, ...cogsLines]
+  });
+}
+
+/**
+ * Reverses a member's store-credit receivable as they pay it down: debits
+ * Kas, credits Piutang Anggota — the mirror image of postPosSale's
+ * SALE_RECEIVABLE line above. Tenant-wide SYSTEM mapping, same shape as
+ * every other POS mapping in this file.
+ */
+export async function postMemberCreditRepayment(
+  tx: TxClient,
+  params: { tenantId: string; repaymentId: string; amount: number; entryDate: Date; description: string }
+): Promise<void> {
+  const lines = await buildComponentLines(tx, params.tenantId, "SYSTEM", null, "MEMBER_CREDIT_REPAYMENT", params.amount);
+  await createJournalEntry(tx, {
+    tenantId: params.tenantId,
+    entryDate: params.entryDate,
+    sourceType: "MEMBER_CREDIT_REPAYMENT",
+    sourceId: params.repaymentId,
+    description: params.description,
+    lines
   });
 }

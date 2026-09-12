@@ -21,6 +21,9 @@ export const ErrorCode = {
   // Phase-2 SaaS packaging — a tenant's SubscriptionPackage gates these.
   FEATURE_NOT_ENTITLED: "FEATURE_NOT_ENTITLED",
   PACKAGE_LIMIT_EXCEEDED: "PACKAGE_LIMIT_EXCEEDED",
+  // Konsumen/Toko POS — "Kredit Anggota" (member store credit) eligibility.
+  MEMBER_HAS_NO_ACTIVE_SAVING: "MEMBER_HAS_NO_ACTIVE_SAVING",
+  MEMBER_CREDIT_LIMIT_EXCEEDED: "MEMBER_CREDIT_LIMIT_EXCEEDED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

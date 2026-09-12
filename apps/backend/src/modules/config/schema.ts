@@ -86,7 +86,12 @@ export const upsertAccountMappingSchema = z.object({
     // Phase 2 (KSU Konsumen/Toko) — posted by lib/journal.ts#postPosSale
     // under a tenant-wide SYSTEM mapping (sourceId: null), not a per-config one.
     "SALE_REVENUE",
-    "SALE_COGS"
+    "SALE_COGS",
+    // Kredit Anggota (member store credit) — SALE_RECEIVABLE replaces
+    // SALE_REVENUE's debit side (Piutang instead of Kas) for a MEMBER_CREDIT
+    // sale; MEMBER_CREDIT_REPAYMENT reverses it as the member pays down.
+    "SALE_RECEIVABLE",
+    "MEMBER_CREDIT_REPAYMENT"
   ]),
   debitAccountId: z.string().cuid("Akun debit tidak valid"),
   creditAccountId: z.string().cuid("Akun kredit tidak valid")
