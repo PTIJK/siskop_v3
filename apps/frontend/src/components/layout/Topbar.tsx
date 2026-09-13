@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/stores/auth";
 import { apiPost } from "@/api/client";
+import { formatTanggalIndonesia } from "@/lib/format";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import {
   DropdownMenu,
@@ -37,6 +39,14 @@ export function Topbar() {
   const clear = useAuth((s) => s.clear);
   const navigate = useNavigate();
   const location = useLocation();
+  const [systemDate, setSystemDate] = useState(() => new Date());
+
+  useEffect(() => {
+    // The calendar day rarely changes mid-session, but a minute tick keeps it
+    // correct for a tab left open across midnight without a full re-render.
+    const id = setInterval(() => setSystemDate(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const pageTitle =
     Object.entries(ROUTE_LABELS).find(
@@ -73,6 +83,7 @@ export function Topbar() {
               <span className="text-xs text-muted-foreground">
                 {user?.isPlatformAdmin ? "Platform Admin" : (user?.roleName ?? "")}
               </span>
+              <span className="text-xs text-muted-foreground">{formatTanggalIndonesia(systemDate)}</span>
             </div>
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </DropdownMenuTrigger>
