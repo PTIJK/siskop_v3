@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { CreateLoanResponse, LoanConfig, Member } from "@siskop/types";
+import type { CreateLoanResponse, Loan, LoanConfig, Member } from "@siskop/types";
 import { apiFetch, apiFetchPage, apiPost, ApiRequestError } from "@/api/client";
 import { formatRupiah } from "@/lib/format";
 import { addMonths, differenceInCalendarDays } from "date-fns";
@@ -50,6 +50,7 @@ export function NewLoanPage() {
   const [memberResults, setMemberResults] = useState<MemberResult[]>([]);
   const [selectedMember, setSelectedMember] = useState<MemberResult | null>(null);
   const [hasPokokSaving, setHasPokokSaving] = useState<boolean | null>(null);
+  const [relatedPartyExposure, setRelatedPartyExposure] = useState<{ current: number; cap: number } | null>(null);
   const [selectedConfig, setSelectedConfig] = useState<LoanConfig | null>(null);
   const [calc, setCalc] = useState<LoanCalculation | null>(null);
   const [apiError, setApiError] = useState("");
@@ -72,6 +73,25 @@ export function NewLoanPage() {
   const termMonths = watch("termMonths");
   const disbursedAt = watch("disbursedAt");
 
+  /** Pengurus/pengawas only — the 10% modalDisetor concentration cap (Permenkop UKM 8/2023). */
+  const loadRelatedPartyExposure = async (member: MemberWithSavings) => {
+    if (!member.isPengurus && !member.isPengawas) {
+      setRelatedPartyExposure(null);
+      return;
+    }
+    try {
+      const [{ modalDisetor }, activeLoans] = await Promise.all([
+        apiFetch<{ modalDisetor: string | null }>("/config/modal-disetor"),
+        apiFetchPage<Loan[]>(`/loans?memberId=${member.id}&status=ACTIVE&limit=100`)
+      ]);
+      const cap = Number(modalDisetor ?? 0) * 0.1;
+      const current = activeLoans.items.reduce((sum, l) => sum + Number(l.principalAmount), 0);
+      setRelatedPartyExposure({ current, cap });
+    } catch {
+      setRelatedPartyExposure(null);
+    }
+  };
+
   useEffect(() => {
     apiFetch<LoanConfig[]>("/loans/configs")
       .then((data) => setConfigs(data.filter((c) => c.isActive)))
@@ -87,6 +107,7 @@ export function NewLoanPage() {
           setSelectedMember({ id: m.id, memberId: m.memberId, fullName: m.fullName, accountNumber: m.accountNumber });
           const hasPokok = m.savings?.some((s) => s.savingConfig.type === "POKOK" && s.isActive);
           setHasPokokSaving(hasPokok ?? false);
+          void loadRelatedPartyExposure(m);
         })
         .catch((err) => {
           const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
@@ -144,6 +165,7 @@ export function NewLoanPage() {
       const member = await apiFetch<MemberWithSavings>(`/members/${m.id}`);
       const hasPokok = member.savings?.some((s) => s.savingConfig.type === "POKOK" && s.isActive);
       setHasPokokSaving(hasPokok ?? false);
+      void loadRelatedPartyExposure(member);
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
       toast({ title: "Gagal memuat data anggota", description: message, variant: "destructive" });
@@ -215,6 +237,7 @@ export function NewLoanPage() {
                     onClick={() => {
                       setSelectedMember(null);
                       setHasPokokSaving(null);
+                      setRelatedPartyExposure(null);
                     }}
                   >
                     Ganti
@@ -280,6 +303,16 @@ export function NewLoanPage() {
             <CardContent>
               <form onSubmit={handleSubmit(onStep2Submit)} className="space-y-5">
                 {apiError && <FormError error={apiError} />}
+
+                {relatedPartyExposure && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                    <p className="font-medium">Anggota ini pengurus/pengawas — batas pinjaman pihak terkait berlaku</p>
+                    <p className="text-xs">
+                      Eksposur aktif saat ini: {formatRupiah(relatedPartyExposure.current)} dari batas{" "}
+                      {formatRupiah(relatedPartyExposure.cap)} (10% modal disetor, Permenkop UKM 8/2023)
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <Label>Jenis Pembiayaan *</Label>

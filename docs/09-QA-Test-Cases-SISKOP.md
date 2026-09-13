@@ -97,6 +97,8 @@ Conventions used below:
 | TC-SAV-007b | FR-SAV-07 | P | Deposit into a saving whose config has a valid `AccountMapping` | A balanced `JournalEntry` (`POSTED`) is created for the deposit | P1 |
 | TC-SAV-014 | FR-SAV-07/FR-ACC-04 | P | Deposit into a saving whose config has **no** `AccountMapping` configured yet | Deposit still succeeds; `JournalEntry.status = UNPOSTED_MISSING_MAPPING`, not a failure | P1 |
 | TC-SAV-015 | NFR-TENANT-01/02 | N | Tenant B attempts a deposit/withdrawal against a saving ID belonging to Tenant A | `NOT_FOUND`, no balance change on Tenant A's record | P0 |
+| TC-SAV-016 | Permenkop UKM 8/2023 Pasal 26 | N | Create/update a `SavingConfig` with `rate > 9` (annual %) | `RATE_EXCEEDS_REGULATORY_CAP`, `422` | P1 |
+| TC-SAV-017 | Permenkop UKM 8/2023 Pasal 26 | P | Create a `SavingConfig` with `rate` exactly `9` or below | Allowed | P2 |
 
 ---
 
@@ -126,6 +128,12 @@ Conventions used below:
 | TC-LOAN-020 | FR-LOAN-05 | P | Loan fully current (all due installments paid on time) | `kolCategory` stays `LANCAR`, `daysOverdue = 0` | P1 |
 | TC-LOAN-021 | FR-LOAN-07 | P | Multiple overdue loans across categories exist | Overdue-members view (`OverduePage`) lists exactly the members with overdue installments, with correct KOL category shown per member | P1 |
 | TC-LOAN-022 | NFR-TENANT-01/02 | N | Tenant B requests a loan detail/payment using a loan ID belonging to Tenant A | `NOT_FOUND` | P0 |
+| TC-LOAN-023 | Permenkop UKM 8/2023 Pasal 27 | N | Create/update a `LoanConfig` with `rate > 24` (annual %) | `RATE_EXCEEDS_REGULATORY_CAP`, `422` | P1 |
+| TC-LOAN-024 | Permenkop UKM 8/2023 Pasal 27 | P | Create a `LoanConfig` with `rate` exactly `24` or below | Allowed | P2 |
+| TC-LOAN-025 | Permenkop UKM 8/2023 Pasal 27 (related-party) | N | A member with `isPengurus`/`isPengawas = true` requests a loan where `principalAmount > 10% of tenant.modalDisetor` | `RELATED_PARTY_LIMIT_EXCEEDED`, `422` | P1 |
+| TC-LOAN-026 | Permenkop UKM 8/2023 Pasal 27 (related-party) | N | A pengurus/pengawas member with an existing ACTIVE loan requests a second loan whose **combined** principal exceeds 10% of `modalDisetor` | `RELATED_PARTY_LIMIT_EXCEEDED`, `422` (cumulative, not per-loan) | P1 |
+| TC-LOAN-027 | Permenkop UKM 8/2023 Pasal 27 (related-party) | P | A non-pengurus/non-pengawas member requests the same principal that would exceed the cap for a related party | Allowed — the limit is scoped to pengurus/pengawas only | P2 |
+| TC-LOAN-028 | FR-LOAN-03/06 | P | Identical `principal`/`rate`/`termMonths` run through `KONVENSIONAL+BUNGA` (anuitas) vs `KONVENSIONAL+MARGIN` (flat) | Different `monthlyPayment` — regression lock against the two calculation paths aliasing | P2 |
 
 ---
 
@@ -466,6 +474,8 @@ for a single manual sample.
 | TC-SAV-007b | Automated PASS | `config.test.ts` mapped-deposit-posts flow; corroborated live by TC-RPT-005's `balanced: true` Neraca |
 | TC-SAV-014 | Automated PASS | `config.test.ts` "flips a deposit's journal entry from UNPOSTED_MISSING_MAPPING to POSTED once mapped" |
 | TC-SAV-015 | **Live PASS** | Tenant B saving id via Tenant A token → `404`, no mutation |
+| TC-SAV-016 | Automated PASS | `savings.test.ts` "rejects a rate above the 9%/year saving cap" / "rejects an update that raises the rate above the cap" |
+| TC-SAV-017 | Automated PASS | `savings.test.ts` "allows a rate exactly at the 9%/year cap" / "allows a rate below the cap" |
 
 #### 5. Loans
 
@@ -488,6 +498,12 @@ for a single manual sample.
 | TC-LOAN-015..019 | Automated PASS | `kol.test.ts` (9 tests); note `kol.ts` line coverage is 74.24%, not 100% — some `recalculateKOL` branches (lines 38-46, 59-66) are less exercised than the pure `getKOLCategory` boundary function |
 | TC-LOAN-020 | **Live PASS** | freshly disbursed on-time loan stays `LANCAR` |
 | TC-LOAN-021 | Automated PASS | `loans.test.ts` "returns ACTIVE loans with a non-LANCAR KOL category, sorted by severity" |
+| TC-LOAN-023 | Automated PASS | `loans.test.ts` "rejects a rate above the 24%/year loan cap" / "rejects an update that raises the rate above the cap" |
+| TC-LOAN-024 | Automated PASS | `loans.test.ts` "allows a rate exactly at the 24%/year cap" / "allows a rate below the cap" |
+| TC-LOAN-025 | Automated PASS | `loans.test.ts` "rejects a pengurus member's loan exceeding 10% of modalDisetor" |
+| TC-LOAN-026 | Automated PASS | `loans.test.ts` "rejects a second loan whose combined principal with an existing active loan exceeds the threshold" |
+| TC-LOAN-027 | Automated PASS | `loans.test.ts` "allows a non-pengurus/pengawas member to borrow the same amount that would exceed the cap for a pengurus member" / "allows a pengurus member's loan under the 10% threshold" |
+| TC-LOAN-028 | Automated PASS | `loan-calc.test.ts` "produces different monthlyPayment for BUNGA (anuitas) vs MARGIN (flat) given identical inputs" |
 | TC-LOAN-022 | **Live PASS** | Tenant B loan id via Tenant A token, pay attempt → `404` |
 
 #### 6. Accounting / Ledger

@@ -24,6 +24,8 @@ const memberSelect = {
   occupation: true,
   ktpPhotoUrl: true,
   isActive: true,
+  isPengurus: true,
+  isPengawas: true,
   mustChangePassword: true,
   lastLoginAt: true,
   createdAt: true,
@@ -101,7 +103,9 @@ export async function createMember(tenantId: string, data: CreateMemberInput) {
         birthPlace: data.birthPlace,
         birthDate: new Date(data.birthDate),
         occupation: data.occupation,
-        isActive: true
+        isActive: true,
+        isPengurus: data.isPengurus,
+        isPengawas: data.isPengawas
       },
       select: memberSelect
     });
@@ -131,7 +135,9 @@ export async function updateMember(tenantId: string, id: string, data: UpdateMem
       ...(data.address && { address: data.address }),
       ...(data.birthPlace && { birthPlace: data.birthPlace }),
       ...(data.birthDate && { birthDate: new Date(data.birthDate) }),
-      ...(data.occupation && { occupation: data.occupation })
+      ...(data.occupation && { occupation: data.occupation }),
+      ...(data.isPengurus !== undefined && { isPengurus: data.isPengurus }),
+      ...(data.isPengawas !== undefined && { isPengawas: data.isPengawas })
     },
     select: memberSelect
   });

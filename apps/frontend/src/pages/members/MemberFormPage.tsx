@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, X } from "lucide-react";
 
@@ -36,6 +37,8 @@ export function MemberFormPage() {
   const [ktpFile, setKtpFile] = useState<File | null>(null);
   const [ktpPreview, setKtpPreview] = useState<string | null>(null);
   const [memberInfo, setMemberInfo] = useState<{ memberId: string; accountNumber: string } | null>(null);
+  const [isPengurus, setIsPengurus] = useState(false);
+  const [isPengawas, setIsPengawas] = useState(false);
 
   const {
     register,
@@ -56,6 +59,8 @@ export function MemberFormPage() {
           birthDate: m.birthDate ? m.birthDate.split("T")[0] : "",
           occupation: m.occupation
         });
+        setIsPengurus(m.isPengurus);
+        setIsPengawas(m.isPengawas);
         setMemberInfo({ memberId: m.memberId, accountNumber: m.accountNumber });
         if (m.ktpPhotoUrl) setKtpPreview(m.ktpPhotoUrl);
       })
@@ -77,11 +82,12 @@ export function MemberFormPage() {
     setApiError("");
     try {
       let memberId = id;
+      const payload = { ...data, isPengurus, isPengawas };
       if (isEdit) {
-        await apiPut(`/members/${id}`, data);
+        await apiPut(`/members/${id}`, payload);
         toast({ title: "Data anggota berhasil diperbarui" });
       } else {
-        const created = await apiPost<Member>("/members", data);
+        const created = await apiPost<Member>("/members", payload);
         memberId = created.id;
         toast({ title: "Anggota berhasil ditambahkan" });
       }
@@ -185,6 +191,33 @@ export function MemberFormPage() {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-xs text-muted-foreground">
+                Pengurus/pengawas dikenai batas pinjaman pihak terkait maksimal 10% dari modal disetor koperasi
+                (Permenkop UKM 8/2023).
+              </p>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="isPengurus"
+                  checked={isPengurus}
+                  onCheckedChange={(checked) => setIsPengurus(checked === true)}
+                />
+                <Label htmlFor="isPengurus" className="font-normal">
+                  Anggota adalah Pengurus
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="isPengawas"
+                  checked={isPengawas}
+                  onCheckedChange={(checked) => setIsPengawas(checked === true)}
+                />
+                <Label htmlFor="isPengawas" className="font-normal">
+                  Anggota adalah Pengawas
+                </Label>
               </div>
             </div>
 

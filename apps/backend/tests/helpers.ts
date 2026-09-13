@@ -15,8 +15,10 @@ export const DEFAULT_MEMBER = {
   occupation: "Pedagang"
 };
 
+type MemberOverrides = Partial<typeof DEFAULT_MEMBER> & { isPengurus?: boolean; isPengawas?: boolean };
+
 /** Creates a member via the real API (not a direct DB insert) using the given access token. */
-export async function createMemberAs(accessToken: string, overrides: Partial<typeof DEFAULT_MEMBER> = {}) {
+export async function createMemberAs(accessToken: string, overrides: MemberOverrides = {}) {
   const res = await request(app())
     .post("/api/members")
     .set("Authorization", `Bearer ${accessToken}`)
@@ -25,10 +27,7 @@ export async function createMemberAs(accessToken: string, overrides: Partial<typ
 }
 
 /** A member with an active simpanan pokok — the precondition Loans requires before issuing any loan. */
-export async function createMemberWithPokokSaving(
-  accessToken: string,
-  overrides: Partial<typeof DEFAULT_MEMBER> = {}
-) {
+export async function createMemberWithPokokSaving(accessToken: string, overrides: MemberOverrides = {}) {
   const member = await createMemberAs(accessToken, overrides);
   const config = await request(app())
     .post("/api/savings/configs")

@@ -369,6 +369,11 @@ model Member {
   occupation         String
   ktpPhotoUrl        String?
   isActive           Boolean   @default(true)
+  // Related-party concentration limit (Permenkop UKM 8/2023) — a pengurus/
+  // pengawas member's cumulative active-loan principal is capped at 10% of
+  // the tenant's modalDisetor. See lib/regulatory-config.ts.
+  isPengurus         Boolean   @default(false)
+  isPengawas         Boolean   @default(false)
   // Portal (mobile self-service) credentials. Null passwordHash means staff
   // has never activated portal access for this member — see
   // modules/member-auth/service.ts#activatePortalAccess.

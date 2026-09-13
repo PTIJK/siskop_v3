@@ -68,6 +68,55 @@ describe("POST /api/savings/configs", () => {
   });
 });
 
+describe("POST /api/savings/configs — regulatory rate cap (Permenkop UKM 8/2023)", () => {
+  it("rejects a rate above the 9%/year saving cap", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .post("/api/savings/configs")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ ...POKOK_CONFIG, type: "SUKARELA", rate: 9.5 });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RATE_EXCEEDS_REGULATORY_CAP");
+  });
+
+  it("allows a rate exactly at the 9%/year cap", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .post("/api/savings/configs")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ ...POKOK_CONFIG, type: "SUKARELA", rate: 9 });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("allows a rate below the cap", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .post("/api/savings/configs")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ ...POKOK_CONFIG, type: "SUKARELA", rate: 3 });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects an update that raises the rate above the cap", async () => {
+    const admin = await setupTenant();
+    const config = await createConfigAs(admin.accessToken, { type: "SUKARELA", rate: 3 });
+
+    const res = await request(app())
+      .put(`/api/savings/configs/${config.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ rate: 9.1 });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RATE_EXCEEDS_REGULATORY_CAP");
+  });
+});
+
 describe("POST /api/savings", () => {
   it("creates a saving account with an initial deposit", async () => {
     const admin = await setupTenant();

@@ -50,4 +50,17 @@ describe("calculateLoan", () => {
     expect(result.totalInterest).toBe(0);
     expect(result.monthlyPayment).toBe(100_000);
   });
+
+  // Regression lock for the two KONVENSIONAL calculation paths a real koperasi
+  // chooses between when setting up a LoanConfig: BUNGA (anuitas, declining
+  // balance) vs MARGIN (flat, jasa computed off the original principal
+  // throughout). Guards against the two branches accidentally aliasing to
+  // the same formula.
+  it("produces different monthlyPayment for BUNGA (anuitas) vs MARGIN (flat) given identical inputs", () => {
+    const anuitas = calculateLoan(5_000_000, 15, 12, "KONVENSIONAL", "BUNGA");
+    const flat = calculateLoan(5_000_000, 15, 12, "KONVENSIONAL", "MARGIN");
+
+    expect(anuitas.monthlyPayment).not.toBeCloseTo(flat.monthlyPayment, 0);
+    expect(flat.totalInterest).toBeCloseTo(5_000_000 * 0.15 * (12 / 12), 2);
+  });
 });

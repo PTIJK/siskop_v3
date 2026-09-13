@@ -4,6 +4,7 @@ import { db } from "../../lib/db.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { postSavingTransaction } from "../../lib/journal.js";
 import { getDefaultUnitId } from "../../lib/units.js";
+import { validateRegulatoryRate } from "../../lib/regulatory-config.js";
 import type {
   CreateSavingConfigInput,
   CreateSavingInput,
@@ -25,6 +26,7 @@ export async function listSavingConfigs(tenantId: string) {
 }
 
 export async function createSavingConfig(tenantId: string, data: CreateSavingConfigInput) {
+  validateRegulatoryRate("SAVING", data.rate);
   return db.savingConfig.create({
     data: {
       tenantId,
@@ -42,6 +44,7 @@ export async function createSavingConfig(tenantId: string, data: CreateSavingCon
 export async function updateSavingConfig(tenantId: string, id: string, data: UpdateSavingConfigInput) {
   const config = await db.savingConfig.findFirst({ where: { id, tenantId } });
   if (!config) throw notFound("Konfigurasi simpanan tidak ditemukan");
+  if (data.rate !== undefined) validateRegulatoryRate("SAVING", data.rate);
   return db.savingConfig.update({ where: { id, tenantId }, data });
 }
 

@@ -161,18 +161,27 @@ export function LoanConfigsTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="BUNGA">Bunga</SelectItem>
+                    <SelectItem value="BUNGA">Bunga (Anuitas/Menurun)</SelectItem>
                     <SelectItem value="BAGI_HASIL">Bagi Hasil</SelectItem>
-                    <SelectItem value="MARGIN">Margin</SelectItem>
-                    <SelectItem value="HARIAN">Bunga Harian</SelectItem>
+                    <SelectItem value="MARGIN">Margin (Flat)</SelectItem>
+                    <SelectItem value="HARIAN">Bunga Harian (Flat)</SelectItem>
                   </SelectContent>
                 </Select>
+                {values.rateType && values.rateType !== "BUNGA" && (
+                  <p className="text-xs text-muted-foreground">
+                    Angsuran pokok tetap, jasa dihitung dari pokok awal sepanjang tenor (flat) — cocok untuk
+                    Konvensional maupun Syariah.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
                 <Label>Rate (%) *</Label>
                 <Input type="number" step="0.01" {...register("rate")} />
                 {errors.rate && <p className="text-xs text-destructive">{errors.rate.message}</p>}
+                <p className="text-xs text-muted-foreground">
+                  Maks. 24%/tahun sesuai Permenkop UKM 8/2023
+                </p>
               </div>
 
               <div className="space-y-1.5">

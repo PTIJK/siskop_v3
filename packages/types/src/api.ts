@@ -24,6 +24,9 @@ export const ErrorCode = {
   // Konsumen/Toko POS — "Kredit Anggota" (member store credit) eligibility.
   MEMBER_HAS_NO_ACTIVE_SAVING: "MEMBER_HAS_NO_ACTIVE_SAVING",
   MEMBER_CREDIT_LIMIT_EXCEEDED: "MEMBER_CREDIT_LIMIT_EXCEEDED",
+  // Regulatory guardrails (Permenkop UKM 8/2023) — see lib/regulatory-config.ts.
+  RATE_EXCEEDS_REGULATORY_CAP: "RATE_EXCEEDS_REGULATORY_CAP",
+  RELATED_PARTY_LIMIT_EXCEEDED: "RELATED_PARTY_LIMIT_EXCEEDED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

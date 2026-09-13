@@ -173,6 +173,9 @@ export function SavingConfigsTab() {
                 <Label>Rate (%) *</Label>
                 <Input type="number" step="0.01" {...register("rate")} />
                 {errors.rate && <p className="text-xs text-destructive">{errors.rate.message}</p>}
+                <p className="text-xs text-muted-foreground">
+                  Maks. 9%/tahun sesuai Permenkop UKM 8/2023
+                </p>
               </div>
 
               <div className="space-y-1.5">

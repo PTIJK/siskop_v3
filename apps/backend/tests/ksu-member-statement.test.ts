@@ -74,26 +74,47 @@ async function postIncome(tenantId: string, amount: number) {
 
 /**
  * A flat-margin loan config (type KONVENSIONAL + rateType MARGIN triggers
- * lib/loan-calc.ts's flat-margin branch even without loanType SYARIAH) with
- * rate=100 over a 12-month term makes totalInterest == principalAmount, so
- * splitPrincipalAndInterest's interestRatio is exactly 0.5 — a clean,
- * hand-verifiable 50/50 principal/interest split on every payment. No
+ * lib/loan-calc.ts's flat-margin branch even without loanType SYARIAH).
+ * `totalInterest = principal * (rate/100) * (term/12)`, so any rate/term
+ * pair with `rate * term == 1200` makes totalInterest == principalAmount —
+ * splitPrincipalAndInterest's interestRatio is exactly 0.5, a clean,
+ * hand-verifiable 50/50 principal/interest split on every payment. Defaults
+ * to 20%/12bln (well under the regulatory cap) for callers that don't care
+ * about the ratio; the SHU-statement test below overrides to 24%/50bln (the
+ * highest rate*term==1200 pair that stays within the 24%/year loan cap, see
+ * lib/regulatory-config.ts) to keep the ratio while staying compliant. No
  * AccountMapping is set up for this config: getShuDistribution's jasaPinjaman
  * re-derives interest straight from LoanPayment rows (see its own comment),
  * never from JournalLine, so an unmapped (UNPOSTED_MISSING_MAPPING) loan
  * still contributes correctly.
  */
-async function createFlatMarginLoanConfig(accessToken: string) {
+async function createFlatMarginLoanConfig(
+  accessToken: string,
+  overrides: { rate?: number; maxTermMonths?: number } = {}
+) {
   const res = await request(app())
     .post("/api/loans/configs")
     .set("Authorization", `Bearer ${accessToken}`)
-    .send({ name: "Flat 100%/12bln", type: "KONVENSIONAL", rateType: "MARGIN", rate: 100, maxTermMonths: 12 });
+    .send({
+      name: "Flat Margin",
+      type: "KONVENSIONAL",
+      rateType: "MARGIN",
+      rate: overrides.rate ?? 20,
+      maxTermMonths: overrides.maxTermMonths ?? 12
+    });
   return res.body.data as { id: string };
 }
 
 async function disburseLoan(
   accessToken: string,
-  data: { memberId: string; loanConfigId: string; principalAmount: number; unitId?: string; force?: boolean }
+  data: {
+    memberId: string;
+    loanConfigId: string;
+    principalAmount: number;
+    unitId?: string;
+    force?: boolean;
+    termMonths?: number;
+  }
 ) {
   return request(app())
     .post("/api/loans")
@@ -131,14 +152,17 @@ describe("getMemberUnitStatement", () => {
     // unit-picker) always lands in the tenant's default unit — unitA here.
     const member = await createMemberWithPokokSaving(admin.accessToken);
 
-    const loanConfig = await createFlatMarginLoanConfig(admin.accessToken);
+    // rate=24%/term=50bln: rate*term==1200, the highest-rate compliant pair
+    // (24%/year cap) that still makes totalInterest == principalAmount.
+    const loanConfig = await createFlatMarginLoanConfig(admin.accessToken, { rate: 24, maxTermMonths: 50 });
 
     // Loan 1: unitA (default, no unitId override), principal 10,000,000 ->
     // totalAmount 20,000,000 -> interestRatio 0.5.
     const loanA = await disburseLoan(admin.accessToken, {
       memberId: member.id,
       loanConfigId: loanConfig.id,
-      principalAmount: 10_000_000
+      principalAmount: 10_000_000,
+      termMonths: 50
     });
     expect(loanA.status).toBe(201);
 
@@ -150,7 +174,8 @@ describe("getMemberUnitStatement", () => {
       loanConfigId: loanConfig.id,
       principalAmount: 5_000_000,
       unitId: unitB.id,
-      force: true
+      force: true,
+      termMonths: 50
     });
     expect(loanB.status).toBe(201);
 

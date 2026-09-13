@@ -17,6 +17,13 @@ export interface Member {
   occupation: string;
   ktpPhotoUrl?: string | null;
   isActive: boolean;
+  /**
+   * Related-party concentration limit (Permenkop UKM 8/2023): a pengurus/
+   * pengawas member's cumulative active-loan principal is capped at 10% of
+   * the tenant's modalDisetor. See lib/regulatory-config.ts (backend).
+   */
+  isPengurus: boolean;
+  isPengawas: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -29,6 +36,8 @@ export interface CreateMemberRequest {
   /** `YYYY-MM-DD` */
   birthDate: string;
   occupation: string;
+  isPengurus?: boolean;
+  isPengawas?: boolean;
 }
 
 export type UpdateMemberRequest = Partial<CreateMemberRequest>;
