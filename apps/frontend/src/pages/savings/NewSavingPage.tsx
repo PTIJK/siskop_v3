@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { SAVING_PERIOD_LABELS } from "@/lib/saving-calc";
 import { Search } from "lucide-react";
 
 interface MemberResult {
@@ -195,7 +196,10 @@ export function NewSavingPage() {
                     <Badge variant="outline">
                       {selectedConfig.rateType} {selectedConfig.rate}%
                     </Badge>
-                    <Badge variant="outline">{selectedConfig.periodUnit}</Badge>
+                    <Badge variant="outline">
+                      {SAVING_PERIOD_LABELS[selectedConfig.periodUnit as keyof typeof SAVING_PERIOD_LABELS] ??
+                        selectedConfig.periodUnit}
+                    </Badge>
                   </div>
                 </div>
               )}

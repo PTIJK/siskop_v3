@@ -1,6 +1,7 @@
 import { differenceInDays } from "date-fns";
 import type { KOLCategory } from "@siskop/types";
 import { db } from "./db.js";
+import { withoutTenantScope } from "./tenant-scope.js";
 
 export function getKOLCategory(daysOverdue: number): KOLCategory {
   if (daysOverdue <= 30) return "LANCAR";
@@ -56,11 +57,19 @@ export async function recalculateKOL(loanId: string): Promise<KOLCategory> {
   return newCategory;
 }
 
-export async function recalculateAllKOL(tenantId?: string): Promise<void> {
-  const loans = await db.loan.findMany({
-    where: { status: "ACTIVE", ...(tenantId ? { tenantId } : {}) },
-    select: { id: true }
-  });
+/**
+ * Omitting `tenantId` sweeps every tenant's active loans — the scheduler's
+ * daily use — which needs `withoutTenantScope` to pass lib/tenant-scope.ts's
+ * guard (that findMany would otherwise have no tenantId filter at all). The
+ * tenantId-provided path leaves the guard on, same as every other caller.
+ */
+export async function recalculateAllKOL(tenantId?: string): Promise<{ checked: number; failed: number }> {
+  const where = { status: "ACTIVE" as const, ...(tenantId ? { tenantId } : {}) };
+  const loans = tenantId
+    ? await db.loan.findMany({ where, select: { id: true } })
+    : await withoutTenantScope(() => db.loan.findMany({ where, select: { id: true } }));
 
-  await Promise.allSettled(loans.map((l) => recalculateKOL(l.id)));
+  const results = await Promise.allSettled(loans.map((l) => recalculateKOL(l.id)));
+  const failed = results.filter((r) => r.status === "rejected").length;
+  return { checked: loans.length, failed };
 }

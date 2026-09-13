@@ -1,7 +1,7 @@
 export type SavingType = "POKOK" | "WAJIB" | "SUKARELA";
 export type RateType = "BUNGA" | "BAGI_HASIL" | "MARGIN" | "HARIAN";
-export type SavingPeriodUnit = "MONTHLY" | "YEARLY";
-export type SavingTransactionType = "DEPOSIT" | "WITHDRAWAL";
+export type SavingPeriodUnit = "DAILY" | "MONTHLY" | "YEARLY";
+export type SavingTransactionType = "DEPOSIT" | "WITHDRAWAL" | "INTEREST";
 
 export interface SavingConfig {
   id: string;
@@ -59,7 +59,8 @@ export interface SavingTransaction {
   type: SavingTransactionType;
   amount: string;
   note?: string | null;
-  createdBy: string;
+  /** Null for a scheduler-posted INTEREST row — there's no acting staff user. */
+  createdBy: string | null;
   createdAt: string;
 }
 

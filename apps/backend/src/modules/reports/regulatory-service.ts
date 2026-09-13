@@ -82,7 +82,11 @@ export async function memberSavingsBreakdownAsOf(
   });
   const adjustmentBySaving = new Map<string, number>();
   for (const t of futureTxns) {
-    const delta = t.type === "DEPOSIT" ? -Number(t.amount) : Number(t.amount);
+    // WITHDRAWAL is the only balance-decreasing type; undoing it means adding
+    // it back. Everything else (DEPOSIT, and the scheduler's INTEREST credit)
+    // increased the balance, so undoing it subtracts — an explicit WITHDRAWAL
+    // check, not a DEPOSIT one, so a future transaction type defaults safely.
+    const delta = t.type === "WITHDRAWAL" ? Number(t.amount) : -Number(t.amount);
     adjustmentBySaving.set(t.savingId, (adjustmentBySaving.get(t.savingId) ?? 0) + delta);
   }
 

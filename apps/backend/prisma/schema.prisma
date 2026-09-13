@@ -31,6 +31,9 @@ enum RateType {
 enum TransactionType {
   DEPOSIT
   WITHDRAWAL
+  // System-generated credit from the daily interest scheduler — never
+  // client-initiated, see modules/savings/service.ts#runDailySavingInterestAccrual.
+  INTEREST
 }
 
 enum LoanType {
@@ -100,6 +103,9 @@ enum MappingTransactionKind {
   // SALE_REVENUE/SALE_COGS above — see lib/journal.ts#postPosSale.
   SALE_RECEIVABLE
   MEMBER_CREDIT_REPAYMENT
+  // Daily interest credited to a DAILY-period SavingConfig by the scheduler —
+  // a per-SavingConfig mapping like DEPOSIT/WITHDRAWAL, not a SYSTEM one.
+  SAVING_INTEREST
 }
 
 enum JournalSourceType {
@@ -471,6 +477,10 @@ model Saving {
   savingConfig   SavingConfig    @relation(fields: [savingConfigId], references: [id])
   balance        Decimal         @default(0) @db.Decimal(15, 2)
   isActive       Boolean         @default(true)
+  // Anchors the daily interest scheduler's idempotency: null means "never
+  // accrued yet" (first run credits exactly one day, not a lump sum back to
+  // createdAt) — see modules/savings/service.ts#runDailySavingInterestAccrual.
+  lastInterestAt DateTime?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -490,8 +500,9 @@ model SavingTransaction {
   type          TransactionType
   amount        Decimal         @db.Decimal(15, 2)
   note          String?
-  createdBy     String
-  createdByUser User            @relation(fields: [createdBy], references: [id])
+  // Null for a scheduler-posted INTEREST row — there's no acting staff user.
+  createdBy     String?
+  createdByUser User?           @relation(fields: [createdBy], references: [id])
   createdAt     DateTime        @default(now())
 
   @@index([savingId])

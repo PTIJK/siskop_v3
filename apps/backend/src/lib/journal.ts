@@ -26,6 +26,7 @@ async function buildComponentLines(
   transactionKind:
     | "DEPOSIT"
     | "WITHDRAWAL"
+    | "SAVING_INTEREST"
     | "DISBURSEMENT"
     | "PAYMENT_PRINCIPAL"
     | "PAYMENT_INTEREST"
@@ -110,7 +111,7 @@ export async function postSavingTransaction(
     tenantId: string;
     savingTransactionId: string;
     savingConfigId: string;
-    kind: "DEPOSIT" | "WITHDRAWAL";
+    kind: "DEPOSIT" | "WITHDRAWAL" | "SAVING_INTEREST";
     amount: number;
     entryDate: Date;
     description: string;
