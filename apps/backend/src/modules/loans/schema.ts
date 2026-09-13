@@ -3,7 +3,7 @@ import { z } from "zod";
 export const createLoanConfigSchema = z.object({
   name: z.string().min(2, "Nama minimal 2 karakter"),
   type: z.enum(["SYARIAH", "KONVENSIONAL"]),
-  rateType: z.enum(["BUNGA", "BAGI_HASIL", "MARGIN"]),
+  rateType: z.enum(["BUNGA", "BAGI_HASIL", "MARGIN", "HARIAN"]),
   rate: z.coerce.number().min(0).max(100),
   maxTermMonths: z.coerce.number().int().min(1).max(360)
 });

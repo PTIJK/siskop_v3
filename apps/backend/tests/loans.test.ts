@@ -20,7 +20,10 @@ const KUR_MIKRO = {
   maxTermMonths: 36
 };
 
-async function createLoanConfigAs(accessToken: string, overrides: Partial<typeof KUR_MIKRO> = {}) {
+async function createLoanConfigAs(
+  accessToken: string,
+  overrides: Partial<Omit<typeof KUR_MIKRO, "rateType">> & { rateType?: string } = {}
+) {
   const res = await request(app())
     .post("/api/loans/configs")
     .set("Authorization", `Bearer ${accessToken}`)
@@ -72,6 +75,29 @@ describe("POST /api/loans", () => {
     expect(res.body.data.kolCategory).toBe("LANCAR");
     expect(Number(res.body.data.monthlyPayment)).toBeGreaterThan(0);
     expect(Number(res.body.data.totalAmount)).toBeGreaterThan(3_000_000);
+  });
+
+  it("computes HARIAN interest from actual calendar days, not termMonths*30", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    // 2026-01-01 -> 2027-01-01 is exactly 365 calendar days (2026 is not a leap year).
+    const config = await createLoanConfigAs(admin.accessToken, { rateType: "HARIAN", rate: 12 });
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({
+        memberId: member.id,
+        loanConfigId: config.id,
+        principalAmount: 3_000_000,
+        termMonths: 12,
+        disbursedAt: "2026-01-01"
+      });
+
+    expect(res.status).toBe(201);
+    // dailyRate = 12/360/100; totalInterest = 3_000_000 * dailyRate * 365 = 365_000
+    expect(Number(res.body.data.totalAmount)).toBeCloseTo(3_365_000, 2);
+    expect(Number(res.body.data.monthlyPayment)).toBeCloseTo(3_365_000 / 12, 2);
   });
 
   it("resolves unitId to the tenant's sole unit without any client input", async () => {

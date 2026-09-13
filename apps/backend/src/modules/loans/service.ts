@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { addMonths, differenceInCalendarDays } from "date-fns";
 import { ErrorCode } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { AppError, notFound } from "../../lib/errors.js";
@@ -141,15 +142,24 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
     );
   }
 
+  const disbursedAt = data.disbursedAt ? new Date(data.disbursedAt) : new Date();
+
+  // HARIAN uses the actual calendar days to maturity, not the termMonths*30
+  // fallback calculateLoan uses when no disbursement date is known yet.
+  const termDays =
+    loanConfig.rateType === "HARIAN"
+      ? differenceInCalendarDays(addMonths(disbursedAt, data.termMonths), disbursedAt)
+      : undefined;
+
   const calc = calculateLoan(
     data.principalAmount,
     Number(loanConfig.rate),
     data.termMonths,
     loanConfig.type,
-    loanConfig.rateType
+    loanConfig.rateType,
+    { termDays }
   );
 
-  const disbursedAt = data.disbursedAt ? new Date(data.disbursedAt) : new Date();
   const unitId = await resolveUnitId(tenantId, data.unitId);
 
   return db.$transaction(async (tx) => {

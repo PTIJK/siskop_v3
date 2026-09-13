@@ -61,7 +61,7 @@ export function SavingConfigsTab() {
     reset({
       name: config.name,
       type: config.type,
-      rateType: config.rateType,
+      rateType: config.rateType as FormValues["rateType"],
       rate: Number(config.rate),
       periodUnit: config.periodUnit as "MONTHLY" | "YEARLY"
     });

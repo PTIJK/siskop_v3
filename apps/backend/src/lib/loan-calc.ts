@@ -11,8 +11,28 @@ export function calculateLoan(
   annualRate: number,
   termMonths: number,
   loanType: LoanType,
-  rateType: RateType
+  rateType: RateType,
+  options?: { termDays?: number }
 ): LoanCalculation {
+  if (rateType === "HARIAN") {
+    // Bunga harian (flat): pokok awal x rate harian x jumlah hari tenor
+    // sebenarnya, konvensi 1 tahun = 360 hari. Beda dari MARGIN, yang
+    // mengasumsikan bulan penuh (termMonths/12) — HARIAN dihitung dari
+    // hari kalender riil antara pencairan dan jatuh tempo, jatuh ke
+    // asumsi 30 hari/bulan hanya bila termDays tidak diberikan (mis.
+    // saat memvalidasi konfigurasi tanpa tanggal pencairan).
+    const termDays = options?.termDays ?? termMonths * 30;
+    const dailyRate = annualRate / 360 / 100;
+    const totalInterest = principal * dailyRate * termDays;
+    const totalAmount = principal + totalInterest;
+    const monthlyPayment = totalAmount / termMonths;
+    return {
+      monthlyPayment: round2(monthlyPayment),
+      totalAmount: round2(totalAmount),
+      totalInterest: round2(totalInterest)
+    };
+  }
+
   if (loanType === "SYARIAH" || rateType === "MARGIN") {
     // Syariah: flat margin (murabahah).
     const totalInterest = principal * (annualRate / 100) * (termMonths / 12);

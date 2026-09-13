@@ -6,7 +6,8 @@ import { z } from "zod";
 import type { CreateLoanResponse, LoanConfig, Member } from "@siskop/types";
 import { apiFetch, apiFetchPage, apiPost, ApiRequestError } from "@/api/client";
 import { formatRupiah } from "@/lib/format";
-import { hitungAngsuranKonvensional, hitungAngsuranSyariah, type LoanCalculation } from "@/lib/loan-calc";
+import { addMonths, differenceInCalendarDays } from "date-fns";
+import { hitungAngsuranHarian, hitungAngsuranKonvensional, hitungAngsuranSyariah, type LoanCalculation } from "@/lib/loan-calc";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { FormError } from "@/components/shared/FormError";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,6 +70,7 @@ export function NewLoanPage() {
 
   const principal = watch("principalAmount");
   const termMonths = watch("termMonths");
+  const disbursedAt = watch("disbursedAt");
 
   useEffect(() => {
     apiFetch<LoanConfig[]>("/loans/configs")
@@ -105,9 +107,20 @@ export function NewLoanPage() {
       return;
     }
     const rate = parseFloat(selectedConfig.rate);
-    const result = selectedConfig.type === "SYARIAH" ? hitungAngsuranSyariah(p, rate, t) : hitungAngsuranKonvensional(p, rate, t);
+
+    if (selectedConfig.rateType === "HARIAN") {
+      const disbursed = disbursedAt ? new Date(disbursedAt) : new Date();
+      const termDays = differenceInCalendarDays(addMonths(disbursed, t), disbursed);
+      setCalc(hitungAngsuranHarian(p, rate, t, termDays));
+      return;
+    }
+
+    const result =
+      selectedConfig.type === "SYARIAH" || selectedConfig.rateType === "MARGIN"
+        ? hitungAngsuranSyariah(p, rate, t)
+        : hitungAngsuranKonvensional(p, rate, t);
     setCalc(result);
-  }, [selectedConfig, principal, termMonths]);
+  }, [selectedConfig, principal, termMonths, disbursedAt]);
 
   const searchMembers = async (q: string) => {
     if (q.length < 2) {
@@ -334,7 +347,15 @@ export function NewLoanPage() {
                 <dl className="space-y-3 text-sm">
                   {[
                     { label: "Pokok Pinjaman", value: formatRupiah(parseFloat(principal)) },
-                    { label: selectedConfig?.type === "SYARIAH" ? "Margin" : "Bunga", value: formatRupiah(calc.totalInterest) },
+                    {
+                      label:
+                        selectedConfig?.rateType === "HARIAN"
+                          ? "Bunga Harian"
+                          : selectedConfig?.type === "SYARIAH"
+                            ? "Margin"
+                            : "Bunga",
+                      value: formatRupiah(calc.totalInterest)
+                    },
                     { label: "Total Kewajiban", value: formatRupiah(calc.totalAmount), bold: true },
                     { label: "Angsuran per Bulan", value: formatRupiah(calc.monthlyPayment), highlight: true },
                     { label: "Tenor", value: `${termMonths} bulan` }
