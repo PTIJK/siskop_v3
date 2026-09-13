@@ -4,6 +4,7 @@ import { ErrorCode } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { calculateLoan } from "../../lib/loan-calc.js";
+import { validateRegulatoryRate, validateRelatedPartyLoanLimit } from "../../lib/regulatory-config.js";
 import { recalculateKOL } from "../../lib/kol.js";
 import { postLoanDisbursement, postLoanPayment, splitPrincipalAndInterest } from "../../lib/journal.js";
 import { resolveUnitId } from "../../lib/units.js";
@@ -23,6 +24,7 @@ export async function listLoanConfigs(tenantId: string) {
 }
 
 export async function createLoanConfig(tenantId: string, data: CreateLoanConfigInput) {
+  validateRegulatoryRate("LOAN", data.rate);
   return db.loanConfig.create({
     data: {
       tenantId,
@@ -39,6 +41,7 @@ export async function createLoanConfig(tenantId: string, data: CreateLoanConfigI
 export async function updateLoanConfig(tenantId: string, id: string, data: UpdateLoanConfigInput) {
   const config = await db.loanConfig.findFirst({ where: { id, tenantId } });
   if (!config) throw notFound("Konfigurasi pinjaman tidak ditemukan");
+  if (data.rate !== undefined) validateRegulatoryRate("LOAN", data.rate);
   return db.loanConfig.update({ where: { id, tenantId }, data });
 }
 
@@ -109,6 +112,23 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
       ErrorCode.MEMBER_HAS_NO_POKOK_SAVING,
       "Anggota belum memiliki simpanan pokok aktif"
     );
+  }
+
+  if (member.isPengurus || member.isPengawas) {
+    const [tenant, activeLoans] = await Promise.all([
+      db.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { modalDisetor: true } }),
+      db.loan.findMany({
+        where: { tenantId, memberId: data.memberId, status: "ACTIVE" },
+        select: { principalAmount: true }
+      })
+    ]);
+    const existingActivePrincipal = activeLoans.reduce((sum, l) => sum + Number(l.principalAmount), 0);
+    validateRelatedPartyLoanLimit({
+      isRelatedParty: true,
+      existingActivePrincipal,
+      newPrincipal: data.principalAmount,
+      modalDisetor: Number(tenant.modalDisetor ?? 0)
+    });
   }
 
   // Rather than throwing, a member with an existing active/pending loan gets

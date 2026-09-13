@@ -45,6 +45,55 @@ describe("GET /api/loans/configs", () => {
   });
 });
 
+describe("POST /api/loans/configs — regulatory rate cap (Permenkop UKM 8/2023)", () => {
+  it("rejects a rate above the 24%/year loan cap", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .post("/api/loans/configs")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ ...KUR_MIKRO, rate: 24.01 });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RATE_EXCEEDS_REGULATORY_CAP");
+  });
+
+  it("allows a rate exactly at the 24%/year cap", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .post("/api/loans/configs")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ ...KUR_MIKRO, rate: 24 });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("allows a rate below the cap", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .post("/api/loans/configs")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ ...KUR_MIKRO, rate: 12 });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects an update that raises the rate above the cap", async () => {
+    const admin = await setupTenant();
+    const config = await createLoanConfigAs(admin.accessToken, { rate: 12 });
+
+    const res = await request(app())
+      .put(`/api/loans/configs/${config.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ rate: 25 });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RATE_EXCEEDS_REGULATORY_CAP");
+  });
+});
+
 describe("POST /api/loans", () => {
   it("rejects a loan for a member with no simpanan pokok", async () => {
     const admin = await setupTenant();
@@ -171,6 +220,79 @@ describe("POST /api/loans", () => {
 
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe("TERM_EXCEEDS_MAX");
+  });
+});
+
+describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8/2023)", () => {
+  async function setModalDisetor(accessToken: string, amount: number) {
+    await request(app())
+      .put("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ modalDisetor: amount });
+  }
+
+  it("rejects a pengurus member's loan exceeding 10% of modalDisetor", async () => {
+    const admin = await setupTenant();
+    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_001, termMonths: 12 });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
+  });
+
+  it("allows a pengurus member's loan under the 10% threshold", async () => {
+    const admin = await setupTenant();
+    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 900_000, termMonths: 12 });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects a second loan whose combined principal with an existing active loan exceeds the threshold", async () => {
+    const admin = await setupTenant();
+    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    const member = await createMemberWithPokokSaving(admin.accessToken, { isPengawas: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const first = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 700_000, termMonths: 12 });
+    expect(first.status).toBe(201);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 400_000, termMonths: 12, force: true });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
+  });
+
+  it("allows a non-pengurus/pengawas member to borrow the same amount that would exceed the cap for a pengurus member", async () => {
+    const admin = await setupTenant();
+    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_001, termMonths: 12 });
+
+    expect(res.status).toBe(201);
   });
 });
 

@@ -6,7 +6,9 @@ export const createMemberSchema = z.object({
   address: z.string().min(10, "Alamat harus lengkap"),
   birthPlace: z.string().min(2, "Tempat lahir wajib diisi"),
   birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD"),
-  occupation: z.string().min(2, "Pekerjaan wajib diisi")
+  occupation: z.string().min(2, "Pekerjaan wajib diisi"),
+  isPengurus: z.boolean().default(false),
+  isPengawas: z.boolean().default(false)
 });
 
 export const updateMemberSchema = createMemberSchema.partial();
