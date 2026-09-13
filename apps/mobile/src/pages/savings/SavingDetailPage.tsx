@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownCircle, ArrowUpCircle } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, TrendingUp } from "lucide-react";
 import type { SavingTransaction } from "@siskop/types";
 import { apiFetch, apiFetchPage } from "@/api/client";
 import { formatRupiah, formatTanggalPendek } from "@/lib/format";
@@ -18,10 +18,16 @@ interface SavingDetail {
 }
 
 interface TransactionRow extends SavingTransaction {
-  createdByUser: { name: string };
+  createdByUser: { name: string } | null;
 }
 
 const LIMIT = 20;
+
+const TRANSACTION_TYPE_META: Record<TransactionRow["type"], { label: string; icon: typeof ArrowDownCircle; colorClass: string; sign: "+" | "-" }> = {
+  DEPOSIT: { label: "Setoran", icon: ArrowDownCircle, colorClass: "text-green-600", sign: "+" },
+  INTEREST: { label: "Bunga", icon: TrendingUp, colorClass: "text-blue-600", sign: "+" },
+  WITHDRAWAL: { label: "Penarikan", icon: ArrowUpCircle, colorClass: "text-orange-600", sign: "-" }
+};
 
 // FR-MOB-SAV-02 (docs/06-PRD-SISKOP-Mobile-Version.md §7): same data as
 // desktop's SavingDetailPage — Setor/Tarik buttons dropped (write action,
@@ -79,24 +85,24 @@ export function SavingDetailPage() {
         ) : (
           <div className="space-y-2">
             {transactions.map((t) => {
-              const isDeposit = t.type === "DEPOSIT";
-              const Icon = isDeposit ? ArrowDownCircle : ArrowUpCircle;
+              const meta = TRANSACTION_TYPE_META[t.type];
+              const Icon = meta.icon;
               return (
                 <div key={t.id} className="rounded-lg border bg-card p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-2">
-                      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${isDeposit ? "text-green-600" : "text-orange-600"}`} />
+                      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${meta.colorClass}`} />
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium">{isDeposit ? "Setoran" : "Penarikan"}</span>
+                          <span className="text-xs font-medium">{meta.label}</span>
                           <span className="text-xs text-muted-foreground">{formatTanggalPendek(t.createdAt)}</span>
                         </div>
                         {t.note && <p className="mt-0.5 truncate text-xs text-muted-foreground">{t.note}</p>}
-                        <p className="mt-0.5 text-xs text-muted-foreground">{t.createdByUser?.name ?? "-"}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{t.createdByUser?.name ?? "Sistem"}</p>
                       </div>
                     </div>
-                    <p className={`shrink-0 text-sm font-semibold ${isDeposit ? "text-green-700" : "text-orange-700"}`}>
-                      {isDeposit ? "+" : "-"}
+                    <p className={`shrink-0 text-sm font-semibold ${meta.sign === "+" ? "text-green-700" : "text-orange-700"}`}>
+                      {meta.sign}
                       {formatRupiah(t.amount)}
                     </p>
                   </div>

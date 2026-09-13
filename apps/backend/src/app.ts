@@ -21,6 +21,7 @@ import { reportsRoutes } from "./modules/reports/routes.js";
 import { platformRoutes } from "./modules/platform/routes.js";
 import { ksuRoutes } from "./modules/ksu/routes.js";
 import { konsumenRoutes } from "./modules/konsumen/product.routes.js";
+import { schedulerRoutes } from "./modules/scheduler/routes.js";
 
 function meta() {
   return { timestamp: new Date().toISOString(), requestId: randomUUID() };
@@ -83,6 +84,7 @@ export function createApp(): Express {
   app.use("/api/platform", platformRoutes());
   app.use("/api/ksu", ksuRoutes());
   app.use("/api/konsumen", konsumenRoutes());
+  app.use("/api/scheduler", schedulerRoutes());
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({

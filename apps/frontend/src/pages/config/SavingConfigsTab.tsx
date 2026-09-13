@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { SavingConfig } from "@siskop/types";
 import { apiFetch, apiPost, apiPut, ApiRequestError } from "@/api/client";
+import { calculateSavingInterest, calculateDailySavingInterest, SAVING_PERIOD_LABELS } from "@/lib/saving-calc";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, type ColumnDef } from "@/components/shared/DataTable";
@@ -22,9 +23,11 @@ const schema = z.object({
   type: z.enum(["POKOK", "WAJIB", "SUKARELA"]),
   rateType: z.enum(["BUNGA", "BAGI_HASIL", "MARGIN"]),
   rate: z.coerce.number().min(0).max(100),
-  periodUnit: z.enum(["MONTHLY", "YEARLY"])
+  periodUnit: z.enum(["DAILY", "MONTHLY", "YEARLY"])
 });
 type FormValues = z.infer<typeof schema>;
+
+const SIMULATION_BALANCE = 1_000_000;
 
 export function SavingConfigsTab() {
   const { can } = usePermissions();
@@ -63,7 +66,7 @@ export function SavingConfigsTab() {
       type: config.type,
       rateType: config.rateType as FormValues["rateType"],
       rate: Number(config.rate),
-      periodUnit: config.periodUnit as "MONTHLY" | "YEARLY"
+      periodUnit: config.periodUnit as FormValues["periodUnit"]
     });
     setDialogOpen(true);
   };
@@ -90,7 +93,10 @@ export function SavingConfigsTab() {
     { header: "Jenis", cell: ({ row }) => <Badge variant="outline">{row.original.type}</Badge> },
     { header: "Tipe Imbal Hasil", accessorKey: "rateType" },
     { header: "Rate (%)", cell: ({ row }) => Number(row.original.rate).toString() },
-    { header: "Periode", accessorKey: "periodUnit" },
+    {
+      header: "Periode",
+      cell: ({ row }) => SAVING_PERIOD_LABELS[row.original.periodUnit as keyof typeof SAVING_PERIOD_LABELS] ?? row.original.periodUnit
+    },
     {
       header: "Status",
       cell: ({ row }) => <Badge variant={row.original.isActive ? "default" : "secondary"}>{row.original.isActive ? "Aktif" : "Nonaktif"}</Badge>
@@ -185,11 +191,39 @@ export function SavingConfigsTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="DAILY">Harian</SelectItem>
                     <SelectItem value="MONTHLY">Bulanan</SelectItem>
                     <SelectItem value="YEARLY">Tahunan</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              {values.periodUnit && (
+                <div className="col-span-2 space-y-1 rounded-md bg-muted p-3 text-xs">
+                  <p className="font-medium text-foreground">
+                    Simulasi: saldo Rp {SIMULATION_BALANCE.toLocaleString("id-ID")} × {values.rate || 0}%/tahun (
+                    {SAVING_PERIOD_LABELS[values.periodUnit]}) ≈{" "}
+                    <span className="font-semibold">
+                      Rp{" "}
+                      {calculateSavingInterest(
+                        SIMULATION_BALANCE,
+                        Number(values.rate) || 0,
+                        values.periodUnit
+                      ).toLocaleString("id-ID")}
+                    </span>
+                    {values.periodUnit === "DAILY" ? "/hari" : values.periodUnit === "MONTHLY" ? "/bulan" : "/tahun"}
+                  </p>
+                  {values.periodUnit !== "DAILY" && (
+                    <p className="text-muted-foreground">
+                      Setara ≈ Rp{" "}
+                      {calculateDailySavingInterest(SIMULATION_BALANCE, Number(values.rate) || 0).toLocaleString(
+                        "id-ID"
+                      )}
+                      /hari — bisa dicek per hari
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 pt-2">

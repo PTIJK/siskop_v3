@@ -4,6 +4,7 @@ export type MappingSourceType = "SAVING_CONFIG" | "LOAN_CONFIG" | "SYSTEM";
 export type MappingTransactionKind =
   | "DEPOSIT"
   | "WITHDRAWAL"
+  | "SAVING_INTEREST"
   | "DISBURSEMENT"
   | "PAYMENT_PRINCIPAL"
   | "PAYMENT_INTEREST"

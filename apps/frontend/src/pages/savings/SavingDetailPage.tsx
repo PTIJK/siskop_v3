@@ -28,10 +28,16 @@ interface SavingDetail {
 }
 
 interface TransactionRow extends SavingTransaction {
-  createdByUser: { name: string };
+  createdByUser: { name: string } | null;
 }
 
 type ActionType = "deposit" | "withdraw" | null;
+
+const TRANSACTION_TYPE_META: Record<TransactionRow["type"], { label: string; badgeClass: string; sign: "+" | "-" }> = {
+  DEPOSIT: { label: "Setoran", badgeClass: "bg-green-100 text-green-800 hover:bg-green-100", sign: "+" },
+  INTEREST: { label: "Bunga", badgeClass: "bg-blue-100 text-blue-800 hover:bg-blue-100", sign: "+" },
+  WITHDRAWAL: { label: "Penarikan", badgeClass: "bg-orange-100 text-orange-800 hover:bg-orange-100", sign: "-" }
+};
 
 export function SavingDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -138,29 +144,27 @@ export function SavingDetailPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                transactions.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell className="text-sm">{formatTanggalPendek(t.createdAt)}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={t.type === "DEPOSIT" ? "default" : "secondary"}
-                        className={
-                          t.type === "DEPOSIT" ? "bg-green-100 text-green-800 hover:bg-green-100" : "bg-orange-100 text-orange-800 hover:bg-orange-100"
-                        }
-                      >
-                        {t.type === "DEPOSIT" ? "Setoran" : "Penarikan"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      <span className={t.type === "DEPOSIT" ? "text-green-700" : "text-orange-700"}>
-                        {t.type === "DEPOSIT" ? "+" : "-"}
-                        {formatRupiah(t.amount)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{t.note ?? "-"}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{t.createdByUser?.name ?? "-"}</TableCell>
-                  </TableRow>
-                ))
+                transactions.map((t) => {
+                  const meta = TRANSACTION_TYPE_META[t.type];
+                  return (
+                    <TableRow key={t.id}>
+                      <TableCell className="text-sm">{formatTanggalPendek(t.createdAt)}</TableCell>
+                      <TableCell>
+                        <Badge variant={t.type === "DEPOSIT" ? "default" : "secondary"} className={meta.badgeClass}>
+                          {meta.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        <span className={meta.sign === "+" ? "text-green-700" : "text-orange-700"}>
+                          {meta.sign}
+                          {formatRupiah(t.amount)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{t.note ?? "-"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{t.createdByUser?.name ?? "Sistem"}</TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

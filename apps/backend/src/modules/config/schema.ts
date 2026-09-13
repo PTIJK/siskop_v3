@@ -79,6 +79,10 @@ export const upsertAccountMappingSchema = z.object({
   transactionKind: z.enum([
     "DEPOSIT",
     "WITHDRAWAL",
+    // Daily interest credited to a DAILY-period SavingConfig by the
+    // scheduler — see lib/kol.ts's sibling job and
+    // modules/savings/service.ts#runDailySavingInterestAccrual.
+    "SAVING_INTEREST",
     "DISBURSEMENT",
     "PAYMENT_PRINCIPAL",
     "PAYMENT_INTEREST",

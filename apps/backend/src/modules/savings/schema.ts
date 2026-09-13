@@ -5,7 +5,7 @@ export const createSavingConfigSchema = z.object({
   type: z.enum(["POKOK", "WAJIB", "SUKARELA"]),
   rateType: z.enum(["BUNGA", "BAGI_HASIL", "MARGIN"]),
   rate: z.coerce.number().min(0).max(100),
-  periodUnit: z.enum(["MONTHLY", "YEARLY"])
+  periodUnit: z.enum(["DAILY", "MONTHLY", "YEARLY"])
 });
 
 export const updateSavingConfigSchema = createSavingConfigSchema.partial();

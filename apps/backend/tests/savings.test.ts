@@ -55,6 +55,17 @@ describe("POST /api/savings/configs", () => {
     expect(res.body.data.type).toBe("POKOK");
   });
 
+  it("creates a config with a DAILY period unit", async () => {
+    const admin = await setupTenant();
+    const res = await request(app())
+      .post("/api/savings/configs")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ ...POKOK_CONFIG, type: "SUKARELA", periodUnit: "DAILY" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.periodUnit).toBe("DAILY");
+  });
+
   it("rejects a teller — config.update is not granted to that role", async () => {
     const admin = await setupTenant();
     const teller = await createStaffSession(admin.user.tenantId, "demo", "Teller", "teller@demo.test");

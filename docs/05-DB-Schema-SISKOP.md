@@ -218,7 +218,7 @@ No `tenantId` column — tenant is always reachable through `memberId`/`unitId`.
 | `type` | `SavingType` | | `POKOK` (mandatory initial) \| `WAJIB` (mandatory recurring) \| `SUKARELA` (voluntary) |
 | `rateType` | `RateType` | | `BUNGA` (interest, konvensional) \| `BAGI_HASIL` (profit-sharing, syariah) \| `MARGIN` |
 | `rate` | Decimal(8,4) | | |
-| `periodUnit` | String | | `MONTHLY` \| `YEARLY` (Zod-validated, not a DB enum) |
+| `periodUnit` | String | | `DAILY` \| `MONTHLY` \| `YEARLY` (Zod-validated, not a DB enum) |
 | `isDefault` | Boolean | default `false` | Distinguishes the seeded Pokok/Wajib/Sukarela trio from tenant-added custom configs — `maxSavingConfigs` (§3.1) is meant to cap the latter, not implemented yet |
 | `isActive` | Boolean | default `true` | |
 | `createdAt` | DateTime | default `now()` | |
