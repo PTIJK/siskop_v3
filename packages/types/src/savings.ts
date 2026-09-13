@@ -1,5 +1,5 @@
 export type SavingType = "POKOK" | "WAJIB" | "SUKARELA";
-export type RateType = "BUNGA" | "BAGI_HASIL" | "MARGIN";
+export type RateType = "BUNGA" | "BAGI_HASIL" | "MARGIN" | "HARIAN";
 export type SavingPeriodUnit = "MONTHLY" | "YEARLY";
 export type SavingTransactionType = "DEPOSIT" | "WITHDRAWAL";
 

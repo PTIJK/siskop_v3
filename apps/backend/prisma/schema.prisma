@@ -25,6 +25,7 @@ enum RateType {
   BUNGA
   BAGI_HASIL
   MARGIN
+  HARIAN
 }
 
 enum TransactionType {

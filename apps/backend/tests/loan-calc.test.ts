@@ -28,4 +28,26 @@ describe("calculateLoan", () => {
     expect(result.monthlyPayment).toBe(100_000);
     expect(result.totalInterest).toBe(0);
   });
+
+  it("computes bunga harian (flat, /360 day-count) using the actual term days", () => {
+    const result = calculateLoan(3_000_000, 12, 12, "KONVENSIONAL", "HARIAN", { termDays: 365 });
+
+    // dailyRate = 12/360/100; totalInterest = 3_000_000 * dailyRate * 365
+    expect(result.totalInterest).toBeCloseTo(365_000, 2);
+    expect(result.totalAmount).toBeCloseTo(3_365_000, 2);
+    expect(result.monthlyPayment).toBeCloseTo(3_365_000 / 12, 2);
+  });
+
+  it("falls back to a 30-day month when termDays is not supplied", () => {
+    const result = calculateLoan(1_000_000, 10, 10, "KONVENSIONAL", "HARIAN");
+
+    // 10 months * 30 days = 300 days, matching the flat-margin annual formula exactly.
+    expect(result.totalInterest).toBeCloseTo(1_000_000 * 0.1 * (10 / 12), 2);
+  });
+
+  it("treats a zero rate as zero interest for HARIAN too", () => {
+    const result = calculateLoan(1_200_000, 0, 12, "KONVENSIONAL", "HARIAN", { termDays: 365 });
+    expect(result.totalInterest).toBe(0);
+    expect(result.monthlyPayment).toBe(100_000);
+  });
 });
