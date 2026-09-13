@@ -4,7 +4,12 @@ import { db } from "../src/lib/db.js";
 import { app, createMemberAs, createMemberWithPokokSaving, setupTenant } from "./helpers.js";
 import { createProduct, recordStockMovement } from "../src/modules/konsumen/product.service.js";
 import { createSale } from "../src/modules/konsumen/sale.service.js";
-import { getMemberCreditStatus, recordCreditRepayment, searchMembersForCredit } from "../src/modules/konsumen/credit.service.js";
+import {
+  getMemberCreditStatus,
+  listOutstandingMemberCredit,
+  recordCreditRepayment,
+  searchMembersForCredit
+} from "../src/modules/konsumen/credit.service.js";
 
 /**
  * Phase — Konsumen/Toko "Kredit Anggota" (member store credit): service-level.
@@ -226,5 +231,122 @@ describe("recordCreditRepayment", () => {
     await expect(
       recordCreditRepayment(tenantA.user.tenantId, { memberId: memberB.id, amount: 1 }, tenantA.user.id)
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+/**
+ * Tenant-wide "Piutang Anggota" list — powers the dedicated monitoring/
+ * repayment screen (not the single-member status above). Outstanding
+ * balance is derived the same way as getMemberCreditStatus, just batched
+ * across every member with a MEMBER_CREDIT sale or repayment.
+ */
+describe("listOutstandingMemberCredit", () => {
+  it("lists only members with outstanding balance greater than 0, sorted by outstanding balance descending", async () => {
+    const admin = await setupTenant();
+    const memberA = await createMemberWithPokokSaving(admin.accessToken, { fullName: "Andi Wijaya", nik: "1111111111111111" });
+    const memberB = await createMemberWithPokokSaving(admin.accessToken, { fullName: "Budi Santoso", nik: "2222222222222222" });
+    const { tokoUnit, product } = await seedTokoWithStock(admin, 20);
+
+    await createSale(
+      admin.user.tenantId,
+      { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 1 }], paymentMethod: "MEMBER_CREDIT", memberId: memberA.id },
+      admin.user.id
+    ); // 50_000
+    await createSale(
+      admin.user.tenantId,
+      { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 3 }], paymentMethod: "MEMBER_CREDIT", memberId: memberB.id },
+      admin.user.id
+    ); // 150_000
+
+    const result = await listOutstandingMemberCredit(admin.user.tenantId, { page: 1, limit: 20 });
+
+    expect(result.items.map((i) => i.memberId)).toEqual([memberB.id, memberA.id]);
+    expect(result.items[0].outstandingBalance.toString()).toBe("150000");
+    expect(result.items[1].outstandingBalance.toString()).toBe("50000");
+    expect(result.meta.total).toBe(2);
+  });
+
+  it("excludes a member whose credit has been fully repaid", async () => {
+    const admin = await setupTenant();
+    const memberA = await createMemberWithPokokSaving(admin.accessToken, { fullName: "Andi Wijaya", nik: "1111111111111111" });
+    const memberB = await createMemberWithPokokSaving(admin.accessToken, { fullName: "Budi Santoso", nik: "2222222222222222" });
+    const { tokoUnit, product } = await seedTokoWithStock(admin, 20);
+
+    await createSale(
+      admin.user.tenantId,
+      { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 1 }], paymentMethod: "MEMBER_CREDIT", memberId: memberA.id },
+      admin.user.id
+    ); // 50_000
+    await recordCreditRepayment(admin.user.tenantId, { memberId: memberA.id, amount: 50_000 }, admin.user.id);
+    await createSale(
+      admin.user.tenantId,
+      { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 1 }], paymentMethod: "MEMBER_CREDIT", memberId: memberB.id },
+      admin.user.id
+    ); // 50_000
+
+    const result = await listOutstandingMemberCredit(admin.user.tenantId, { page: 1, limit: 20 });
+
+    expect(result.items.map((i) => i.memberId)).toEqual([memberB.id]);
+  });
+
+  it("computes totalOutstanding as the tenant-wide sum, independent of pagination", async () => {
+    const admin = await setupTenant();
+    const memberA = await createMemberWithPokokSaving(admin.accessToken, { fullName: "Andi Wijaya", nik: "1111111111111111" });
+    const memberB = await createMemberWithPokokSaving(admin.accessToken, { fullName: "Budi Santoso", nik: "2222222222222222" });
+    const { tokoUnit, product } = await seedTokoWithStock(admin, 20);
+    await createSale(
+      admin.user.tenantId,
+      { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 1 }], paymentMethod: "MEMBER_CREDIT", memberId: memberA.id },
+      admin.user.id
+    ); // 50_000
+    await createSale(
+      admin.user.tenantId,
+      { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 3 }], paymentMethod: "MEMBER_CREDIT", memberId: memberB.id },
+      admin.user.id
+    ); // 150_000
+
+    const result = await listOutstandingMemberCredit(admin.user.tenantId, { page: 1, limit: 1 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.meta.total).toBe(2);
+    expect(result.meta.totalOutstanding.toString()).toBe("200000");
+  });
+
+  it("filters by search matching the member's full name", async () => {
+    const admin = await setupTenant();
+    const memberA = await createMemberWithPokokSaving(admin.accessToken, { fullName: "Andi Wijaya", nik: "1111111111111111" });
+    const memberB = await createMemberWithPokokSaving(admin.accessToken, { fullName: "Budi Santoso", nik: "2222222222222222" });
+    const { tokoUnit, product } = await seedTokoWithStock(admin, 20);
+    await createSale(
+      admin.user.tenantId,
+      { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 1 }], paymentMethod: "MEMBER_CREDIT", memberId: memberA.id },
+      admin.user.id
+    );
+    await createSale(
+      admin.user.tenantId,
+      { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 1 }], paymentMethod: "MEMBER_CREDIT", memberId: memberB.id },
+      admin.user.id
+    );
+
+    const result = await listOutstandingMemberCredit(admin.user.tenantId, { page: 1, limit: 20, search: "andi" });
+
+    expect(result.items.map((i) => i.memberId)).toEqual([memberA.id]);
+  });
+
+  it("does not leak another tenant's outstanding credit", async () => {
+    const tenantA = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
+    const tenantB = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
+    const memberB = await createMemberWithPokokSaving(tenantB.accessToken);
+    const { tokoUnit, product } = await seedTokoWithStock(tenantB);
+    await createSale(
+      tenantB.user.tenantId,
+      { unitId: tokoUnit.id, items: [{ productId: product.id, quantity: 1 }], paymentMethod: "MEMBER_CREDIT", memberId: memberB.id },
+      tenantB.user.id
+    );
+
+    const result = await listOutstandingMemberCredit(tenantA.user.tenantId, { page: 1, limit: 20 });
+
+    expect(result.items).toEqual([]);
+    expect(result.meta.totalOutstanding.toString()).toBe("0");
   });
 });

@@ -6,6 +6,7 @@ import type {
   CreateSaleResponse,
   CreditMemberSearchResult,
   MemberCreditStatus,
+  MemberCreditSummary,
   PayPPOBBillRequest,
   PayPPOBBillResponse,
   Product,
@@ -14,7 +15,7 @@ import type {
   RecordStockMovementRequest,
   StockMovement
 } from "@siskop/types";
-import { apiFetch, apiPost } from "./client";
+import { apiFetch, apiFetchPage, apiPost } from "./client";
 
 // Typed wrappers over apiFetch/apiPost for the Phase 2 Konsumen/Toko API
 // (apps/backend/src/modules/konsumen/product.routes.ts, mounted at
@@ -84,4 +85,16 @@ export function getMemberCreditStatus(memberId: string) {
 
 export function recordCreditRepayment(input: RecordCreditRepaymentRequest) {
   return apiPost<RecordCreditRepaymentResponse>("/konsumen/pos/credit/repayments", input);
+}
+
+/**
+ * Tenant-wide "Piutang Anggota" list (credit.routes.ts's `GET /pos/credit`,
+ * one row per member, not per sale) — powers PiutangAnggotaPage. meta comes
+ * back as `ApiResponse["meta"]` (page/limit/total/totalOutstanding); the
+ * last one is specific to this endpoint, see packages/types/src/api.ts.
+ */
+export function listOutstandingCredit(params: { page: number; limit: number; search?: string }) {
+  const query = new URLSearchParams({ page: String(params.page), limit: String(params.limit) });
+  if (params.search) query.set("search", params.search);
+  return apiFetchPage<MemberCreditSummary[]>(`/konsumen/pos/credit?${query.toString()}`);
 }

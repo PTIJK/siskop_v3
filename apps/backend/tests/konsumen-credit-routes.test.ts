@@ -47,6 +47,56 @@ async function createCreditDebt(accessToken: string, memberId: string, amount: n
     .send({ unitId: unit.id, items: [{ productId: product.id, quantity: 1 }], paymentMethod: "MEMBER_CREDIT", memberId });
 }
 
+describe("GET /api/konsumen/pos/credit", () => {
+  it("lists members with outstanding credit and a tenant-wide total", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    await createCreditDebt(admin.accessToken, member.id, 50_000);
+
+    const res = await request(app())
+      .get("/api/konsumen/pos/credit")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([expect.objectContaining({ memberId: member.id, outstandingBalance: "50000" })]);
+    expect(res.body.meta.total).toBe(1);
+    expect(res.body.meta.totalOutstanding).toBe("50000");
+  });
+
+  it("requires authentication", async () => {
+    const res = await request(app()).get("/api/konsumen/pos/credit");
+    expect(res.status).toBe(401);
+  });
+
+  it("allows a Kasir to view the list", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    await createCreditDebt(admin.accessToken, member.id, 50_000);
+    const kasir = await createStaffSession(admin.user.tenantId, "demo", "Kasir", "kasir@demo.test");
+
+    const res = await request(app())
+      .get("/api/konsumen/pos/credit")
+      .set("Authorization", `Bearer ${kasir.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+  });
+
+  it("does not leak another tenant's outstanding credit", async () => {
+    const tenantA = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
+    const tenantB = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
+    const memberB = await createMemberWithPokokSaving(tenantB.accessToken);
+    await createCreditDebt(tenantB.accessToken, memberB.id, 50_000);
+
+    const res = await request(app())
+      .get("/api/konsumen/pos/credit")
+      .set("Authorization", `Bearer ${tenantA.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
+});
+
 describe("GET /api/konsumen/pos/credit/members", () => {
   it("finds a member by search term", async () => {
     const admin = await setupTenant();

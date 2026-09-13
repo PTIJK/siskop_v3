@@ -3,18 +3,17 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Member, PortalAccessResponse } from "@siskop/types";
 import { apiFetch, apiPost, ApiRequestError } from "@/api/client";
-import { getMemberCreditStatus, recordCreditRepayment } from "@/api/konsumen";
+import { getMemberCreditStatus } from "@/api/konsumen";
 import { formatRupiah, formatTanggalIndonesia } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { KOLBadge } from "@/components/shared/KOLBadge";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
+import { CreditRepaymentDialog } from "@/components/konsumen/CreditRepaymentDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Edit, PiggyBank, CreditCard, ArrowDownCircle, ArrowUpCircle, Smartphone, Store } from "lucide-react";
@@ -45,9 +44,6 @@ export function MemberDetailPage() {
   const [portalResult, setPortalResult] = useState<PortalAccessResponse | null>(null);
   const [isActivatingPortal, setIsActivatingPortal] = useState(false);
   const [repayDialog, setRepayDialog] = useState(false);
-  const [repayAmount, setRepayAmount] = useState("");
-  const [repayError, setRepayError] = useState("");
-  const [isRepaying, setIsRepaying] = useState(false);
 
   const { data: member, isPending } = useQuery({
     queryKey: ["members", id],
@@ -64,27 +60,6 @@ export function MemberDetailPage() {
     queryFn: () => getMemberCreditStatus(id as string),
     enabled: Boolean(id) && canReadCredit
   });
-
-  async function handleRepay() {
-    setRepayError("");
-    const amount = parseFloat(repayAmount);
-    if (!amount || amount <= 0) {
-      setRepayError("Jumlah harus lebih dari 0");
-      return;
-    }
-    setIsRepaying(true);
-    try {
-      await recordCreditRepayment({ memberId: id as string, amount });
-      toast({ title: "Pembayaran kredit dicatat" });
-      setRepayDialog(false);
-      setRepayAmount("");
-      await queryClient.invalidateQueries({ queryKey: ["konsumen", "credit", id] });
-    } catch (err) {
-      setRepayError(err instanceof ApiRequestError ? err.message : "Terjadi kesalahan");
-    } finally {
-      setIsRepaying(false);
-    }
-  }
 
   async function handleActivatePortal() {
     setIsActivatingPortal(true);
@@ -346,33 +321,15 @@ export function MemberDetailPage() {
         )}
       </Tabs>
 
-      <Dialog open={repayDialog} onOpenChange={(o) => { setRepayDialog(o); if (!o) setRepayError(""); }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Bayar Kredit Toko</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            {creditStatus && (
-              <p className="text-sm text-muted-foreground">
-                Sisa kredit saat ini: <span className="font-medium text-foreground">{formatRupiah(creditStatus.outstandingBalance)}</span>
-              </p>
-            )}
-            <div className="space-y-1.5">
-              <Label>Jumlah Pembayaran (Rp)</Label>
-              <Input type="number" min="1" value={repayAmount} onChange={(e) => setRepayAmount(e.target.value)} />
-              {repayError && <p className="text-xs text-destructive">{repayError}</p>}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRepayDialog(false)}>
-              Batal
-            </Button>
-            <Button onClick={handleRepay} disabled={isRepaying}>
-              {isRepaying ? "Memproses..." : "Bayar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {creditStatus && (
+        <CreditRepaymentDialog
+          memberId={id as string}
+          outstandingBalance={creditStatus.outstandingBalance}
+          open={repayDialog}
+          onOpenChange={setRepayDialog}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: ["konsumen", "credit", id] })}
+        />
+      )}
 
       {ktpLightbox && member.ktpPhotoUrl && (
         <div

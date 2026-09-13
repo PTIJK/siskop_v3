@@ -40,6 +40,9 @@ const LoanDetailPage = lazy(() =>
 const OverduePage = lazy(() =>
   import("@/pages/loans/OverduePage").then((module) => ({ default: module.OverduePage }))
 );
+const PiutangAnggotaPage = lazy(() =>
+  import("@/pages/piutang/PiutangAnggotaPage").then((module) => ({ default: module.PiutangAnggotaPage }))
+);
 const ConfigPage = lazy(() =>
   import("@/pages/config/ConfigPage").then((module) => ({ default: module.ConfigPage }))
 );
@@ -122,6 +125,12 @@ export default function App() {
               <Route path='/loans/overdue' element={<OverduePage />} />
               <Route path='/loans/new' element={<NewLoanPage />} />
               <Route path='/loans/:id' element={<LoanDetailPage />} />
+
+              {/* Tenant-wide, not unit-scoped — see MemberCreditRepayment's
+                  schema comment; same tier as /loans, not nested under
+                  /ksu/units/:unitId even though the credit originates at the
+                  Konsumen/Toko unit's POS. */}
+              <Route path='/piutang' element={<PiutangAnggotaPage />} />
 
               <Route path='/reports' element={<ReportsPage />} />
               <Route path='/reports/regulatory' element={<RegulatoryReportsPage />} />
