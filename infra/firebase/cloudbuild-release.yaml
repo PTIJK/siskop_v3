@@ -67,7 +67,7 @@ steps:
     args:
       - -ceu
       - |
-        if [ ! -f .release/state.json ] || [ "$RELEASE_TENANT_HOSTING" != true ]; then exit 0; fi
+        if [ ! -f .release/state.json ] || [ "$${RELEASE_TENANT_HOSTING}" != true ]; then exit 0; fi
         firebase deploy --only apphosting:siskop-tenants --project siskop-d0f8c --non-interactive
 
   - id: verify-and-finish-release

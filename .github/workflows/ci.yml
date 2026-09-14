@@ -55,6 +55,8 @@ jobs:
 
       - run: python3 -m unittest discover -s infra/firebase/tests -v
 
+      - run: node --test infra/tenant-web/server.test.mjs
+
       # Explicit, independent of pnpm's postinstall/build-script cache: when
       # the pnpm store cache is warm, pnpm treats puppeteer as already built
       # and skips its postinstall, but the downloaded browser lives in
