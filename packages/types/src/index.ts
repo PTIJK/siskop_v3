@@ -13,4 +13,4 @@ export * from "./platform.js";
 export * from "./konsumen.js";
 export * from "./ksu.js";
 export * from "./onboarding.js";
-export * from "./tenant-domain";
+export * from "./tenant-domain.js";
