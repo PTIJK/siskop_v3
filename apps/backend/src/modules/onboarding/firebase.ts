@@ -3,7 +3,7 @@ import { getAuth } from "firebase-admin/auth";
 import { z } from "zod";
 import { unauthorized } from "../../lib/errors.js";
 
-function auth() {
+export function firebaseAuth() {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   if (!projectId) throw new Error("FIREBASE_PROJECT_ID is required");
   // Emulator tokens are unsigned. Never accept them in a deployed runtime.
@@ -16,7 +16,7 @@ function auth() {
 
 export async function verifyFirebaseIdentity(idToken: string) {
   try {
-    const token = await auth().verifyIdToken(idToken, true);
+    const token = await firebaseAuth().verifyIdToken(idToken, true);
     const provider = z.enum(["google.com", "password"]).parse(token.firebase.sign_in_provider);
     const email = z.string().email().max(254).parse(token.email).toLowerCase();
     // Registration/session exchange requires a deliberate recent sign-in.
@@ -32,7 +32,7 @@ export async function verifyFirebaseIdentity(idToken: string) {
 export async function assertFirebaseSession(uid: string, authTime: number | undefined) {
   try {
     if (!authTime) throw new Error("Missing authentication time");
-    const user = await auth().getUser(uid);
+    const user = await firebaseAuth().getUser(uid);
     if (user.disabled || (user.tokensValidAfterTime && authTime * 1000 < Date.parse(user.tokensValidAfterTime)))
       throw new Error("Revoked session");
   } catch {

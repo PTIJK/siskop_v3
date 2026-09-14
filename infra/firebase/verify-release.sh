@@ -9,6 +9,7 @@ apt-get install -y --no-install-recommends chromium python3 >/dev/null
 npm install --global pnpm@11.19.0
 pnpm install --frozen-lockfile
 python3 -m unittest discover -s infra/firebase/tests -v
+node --test infra/tenant-web/server.test.mjs
 pnpm --filter @siskop/backend db:generate
 pnpm run lint
 pnpm run typecheck

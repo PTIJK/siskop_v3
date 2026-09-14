@@ -142,10 +142,20 @@ model SubscriptionPackage {
   maxMembers        Int
   maxSavingConfigs  Int?
   whitelabelEnabled Boolean  @default(false)
+  customSubdomainEnabled Boolean @default(false)
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
 
   tenants Tenant[]
+}
+
+// Platform recovery ledger for Firebase creates; contains no passwords or tokens.
+model IdentityProvisioning {
+  uid       String @id
+  status    String @default("PENDING")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, createdAt])
 }
 
 // Platform onboarding records, accessed only through a signed order cookie or
@@ -204,6 +214,7 @@ model Tenant {
   // Login subdomain: `demo` serves demo.localhost:3000. Resolved from the
   // request's Host header (slugFromHost) — never from the request body.
   slug                     String               @unique
+  slugLastChangedAt        DateTime?
   address                  String
   registrationNo           String               @unique
   type                     TenantType
@@ -243,6 +254,29 @@ model Tenant {
   ppobTransactions       PPOBTransaction[]
   memberCreditRepayments MemberCreditRepayment[]
   onboardingOrder        OnboardingOrder?
+  slugReservations       TenantSlugReservation[]
+  slugChanges            TenantSlugChange[]
+}
+
+// Both current addresses and historical aliases share one global namespace.
+model TenantSlugReservation {
+  slug      String @id
+  tenantId  String
+  createdAt DateTime @default(now())
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId])
+}
+
+model TenantSlugChange {
+  id          String @id @default(cuid())
+  tenantId    String
+  oldSlug     String
+  newSlug     String
+  actorUserId String
+  reason      String?
+  createdAt   DateTime @default(now())
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, createdAt])
 }
 
 // Every tenant has at least one unit: a single-purpose KSP is a tenant with one,

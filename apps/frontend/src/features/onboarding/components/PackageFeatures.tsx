@@ -10,6 +10,7 @@ export function PackageFeatures({ pkg }: { pkg: PublicPackage }) {
         "Simpanan & pinjaman",
         ...(pkg.modules.includes("accounting") ? ["Akuntansi & laporan"] : []),
         ...(pkg.whitelabelEnabled ? ["Identitas koperasi Anda"] : []),
+        ...(pkg.customSubdomainEnabled ? ["Ubah subdomain setiap 365 hari"] : []),
         ...(pkg.maxSavingConfigs !== null ? [`${pkg.maxSavingConfigs} jenis simpanan`] : [])
       ].map((item) => (
         <li key={item}>

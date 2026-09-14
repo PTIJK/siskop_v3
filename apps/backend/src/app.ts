@@ -22,6 +22,8 @@ import { platformRoutes } from "./modules/platform/routes.js";
 import { ksuRoutes } from "./modules/ksu/routes.js";
 import { konsumenRoutes } from "./modules/konsumen/product.routes.js";
 import { schedulerRoutes } from "./modules/scheduler/routes.js";
+import { workspaceRequest } from "./modules/tenant-domains/middleware.js";
+import { tenantDomainRoutes } from "./modules/tenant-domains/routes.js";
 
 function meta() {
   return { timestamp: new Date().toISOString(), requestId: randomUUID() };
@@ -40,6 +42,7 @@ export function createApp(): Express {
   app.use(express.json({ limit: "1mb" }));
   // Authentication refresh and onboarding recovery use httpOnly cookies.
   app.use(cookieParser());
+  app.use(workspaceRequest);
 
   // Serves KTP uploads (members/routes.ts) at the same URL path they're stored
   // under (/uploads/ktp/{tenantId}/{file}). Helmet's default CORP header would
@@ -71,6 +74,11 @@ export function createApp(): Express {
   });
 
   app.use("/api/onboarding", onboardingRoutes());
+  app.get("/api/workspace", (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, data: req.workspace ?? null, meta: res.locals.meta });
+  });
+  app.use("/api/tenant-domain", tenantDomainRoutes());
   app.use("/api/auth", authRoutes());
   app.use("/api/member-auth", memberAuthRoutes());
   app.use("/api/member", memberPortalRoutes());

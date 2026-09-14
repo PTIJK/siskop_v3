@@ -8,6 +8,7 @@
 !turbo.json
 !.dockerignore
 !firebase.json
+!apphosting.yaml
 !.firebaserc
 !apps/
 !apps/**
@@ -16,6 +17,8 @@
 !infra/
 !infra/firebase/
 !infra/firebase/**
+!infra/tenant-web/
+!infra/tenant-web/**
 **/.env*
 !apps/frontend/.env.staging
 **/node_modules/**
@@ -27,3 +30,6 @@
 **/*.log
 **/*.local
 **/*.tsbuildinfo
+apps/backend/scripts/data/**
+**/*firebase-adminsdk*.json
+**/*service-account*.json

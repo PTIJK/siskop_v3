@@ -1,0 +1,33 @@
+# Tenant web gateway only. The existing API and central Firebase Hosting stay separate.
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 40
+  cpu: 1
+  memoryMiB: 512
+scripts:
+  buildCommand: bash infra/tenant-web/build.sh
+  runCommand: node infra/tenant-web/server.mjs
+env:
+  - variable: NODE_ENV
+    value: production
+    availability: [RUNTIME]
+  - variable: TENANT_BASE_DOMAIN
+    value: koperasi.inovasijayakarsa.id
+    availability: [RUNTIME]
+  - variable: VITE_TENANT_BASE_DOMAIN
+    value: koperasi.inovasijayakarsa.id
+    availability: [BUILD]
+  - variable: TENANT_API_ORIGIN
+    # Replaced with the verified candidate URL by the coordinated release.
+    value: https://api-not-configured.invalid
+    availability: [RUNTIME]
+  - variable: TENANT_GATEWAY_SECRET
+    secret: TENANT_GATEWAY_SECRET
+    availability: [RUNTIME]
+  - variable: PUPPETEER_SKIP_DOWNLOAD
+    value: 'true'
+    availability: [BUILD]
+outputFiles:
+  serverApp:
+    include: [apps/frontend/dist/**, infra/tenant-web/server.mjs, infra/tenant-web/release.json]

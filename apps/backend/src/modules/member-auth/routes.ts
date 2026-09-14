@@ -37,7 +37,7 @@ export function memberAuthRoutes(): Router {
     "/login",
     handle(async (req, res) => {
       const { nik, password } = loginBody.parse(req.body);
-      const { refreshToken, ...session } = await loginMember(req.headers.host, nik, password);
+      const { refreshToken, ...session } = await loginMember(req.headers.host, nik, password, req.workspace?.tenantId);
       setRefreshCookie(res, refreshToken, { name: MEMBER_REFRESH_COOKIE_NAME, path: MEMBER_REFRESH_COOKIE_PATH });
       res.json({ success: true, data: session, meta: res.locals.meta });
     })
@@ -49,7 +49,7 @@ export function memberAuthRoutes(): Router {
       const token = req.cookies?.[MEMBER_REFRESH_COOKIE_NAME];
       if (typeof token !== "string" || !token) throw unauthorized("Missing refresh token");
 
-      const { refreshToken, ...rest } = await refreshMemberSession(token);
+      const { refreshToken, ...rest } = await refreshMemberSession(token, req.workspace?.tenantId);
       setRefreshCookie(res, refreshToken, { name: MEMBER_REFRESH_COOKIE_NAME, path: MEMBER_REFRESH_COOKIE_PATH });
       res.json({ success: true, data: rest, meta: res.locals.meta });
     })

@@ -8,6 +8,7 @@ import { setRefreshCookie, clearRefreshCookie } from "../auth/refresh-cookie.js"
 import { catalog, register, resume, status, checkout, reconcile, complete, handleSessionWebhook, firebaseSignIn } from "./service.js";
 import { paymentSessionWebhookDataSchema } from "./schema.js";
 import { verifyCallbackToken } from "./xendit.js";
+import { trustedRequestOrigin } from "../tenant-domains/middleware.js";
 
 const COOKIE = "siskop_onboarding";
 const COOKIE_PATH = "/api/onboarding";
@@ -93,7 +94,7 @@ export function onboardingRoutes(): Router {
         return;
       }
       const origin = req.get("origin");
-      const allowed = [process.env.PUBLIC_APP_URL, ...(process.env.CORS_ORIGIN ?? "").split(",")]
+      const allowed = [trustedRequestOrigin(req), process.env.PUBLIC_APP_URL, ...(process.env.CORS_ORIGIN ?? "").split(",")]
         .filter(Boolean)
         .map((url) => {
           try {
@@ -120,7 +121,7 @@ export function onboardingRoutes(): Router {
   );
   for (const path of ["/login", "/firebase-resume"]) {
     router.post(path, limiter(10, 15 * 60_000), handle(async (req, res) => {
-      const result = await firebaseSignIn(req.body, path === "/firebase-resume");
+      const result = await firebaseSignIn(req.body, path === "/firebase-resume", req.workspace?.tenantId);
       if (result.next === "checkout") {
         clearRefreshCookie(res);
         setOrderCookie(res, result.order.id);

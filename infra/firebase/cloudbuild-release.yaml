@@ -56,6 +56,20 @@ steps:
         firebase deploy --only hosting --project siskop-d0f8c --non-interactive \
           --message "main@$COMMIT_SHA (Cloud Build $BUILD_ID)"
 
+  - id: prepare-tenant-hosting
+    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: bash
+    args: ['infra/firebase/run-release.sh', 'prepare-tenant']
+
+  - id: publish-tenant-hosting
+    name: us-docker.pkg.dev/firebase-cli/us/firebase:15.12.0
+    entrypoint: sh
+    args:
+      - -ceu
+      - |
+        if [ ! -f .release/state.json ] || [ "$RELEASE_TENANT_HOSTING" != true ]; then exit 0; fi
+        firebase deploy --only apphosting:siskop-tenants --project siskop-d0f8c --non-interactive
+
   - id: verify-and-finish-release
     name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
     entrypoint: bash
@@ -65,6 +79,10 @@ images: ['${_IMAGE}:$BUILD_ID']
 timeout: 2400s
 substitutions:
   _DEPLOY: 'true'
+  # Enable after wildcard DNS/HTTPS and the two-tenant smoke test pass.
+  _TENANT_HOSTING: 'false'
+  _TENANT_RENAME_ENABLED: 'false'
+  _TENANT_SMOKE_SLUG: 'uji-firebase-0910'
   _IMAGE: asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -74,4 +92,7 @@ options:
     - RELEASE_COMMIT=$COMMIT_SHA
     - RELEASE_BRANCH=$BRANCH_NAME
     - RELEASE_IMAGE=${_IMAGE}:$BUILD_ID
+    - RELEASE_TENANT_HOSTING=${_TENANT_HOSTING}
+    - RELEASE_TENANT_RENAME_ENABLED=${_TENANT_RENAME_ENABLED}
+    - RELEASE_TENANT_SMOKE_SLUG=${_TENANT_SMOKE_SLUG}
 serviceAccount: projects/siskop-d0f8c/serviceAccounts/siskop-cloud-build@siskop-d0f8c.iam.gserviceaccount.com

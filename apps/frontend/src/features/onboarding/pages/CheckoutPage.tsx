@@ -82,9 +82,10 @@ export default function CheckoutPage() {
     setPending(true);
     setError("");
     try {
-      await onboardingApi<OnboardingCompletion>("/complete", {});
+      const result = await onboardingApi<OnboardingCompletion>("/complete", {});
       clear();
-      navigate("/login?registered=1", { replace: true });
+      if (result.loginUrl) window.location.replace(`${result.loginUrl}?registered=1`);
+      else navigate("/login?registered=1", { replace: true });
     } catch (err) {
       setError(errorMessage(err));
     } finally {

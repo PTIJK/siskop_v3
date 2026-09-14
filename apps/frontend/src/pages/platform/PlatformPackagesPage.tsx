@@ -27,7 +27,8 @@ const schema = z.object({
   maxUsers: z.coerce.number().int().min(1, "Minimal 1 pengguna"),
   maxMembers: z.coerce.number().int().min(1, "Minimal 1 anggota"),
   maxSavingConfigs: z.string(),
-  whitelabelEnabled: z.boolean()
+  whitelabelEnabled: z.boolean(),
+  customSubdomainEnabled: z.boolean()
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -38,7 +39,8 @@ const DEFAULTS: FormValues = {
   maxUsers: 5,
   maxMembers: 100,
   maxSavingConfigs: "",
-  whitelabelEnabled: false
+  whitelabelEnabled: false,
+  customSubdomainEnabled: false
 };
 
 export function PlatformPackagesPage() {
@@ -85,7 +87,8 @@ export function PlatformPackagesPage() {
       maxUsers: pkg.maxUsers,
       maxMembers: pkg.maxMembers,
       maxSavingConfigs: pkg.maxSavingConfigs === null ? "" : String(pkg.maxSavingConfigs),
-      whitelabelEnabled: pkg.whitelabelEnabled
+      whitelabelEnabled: pkg.whitelabelEnabled,
+      customSubdomainEnabled: pkg.customSubdomainEnabled
     });
     setDialogOpen(true);
   };
@@ -99,7 +102,8 @@ export function PlatformPackagesPage() {
       maxUsers: v.maxUsers,
       maxMembers: v.maxMembers,
       maxSavingConfigs: v.maxSavingConfigs === "" ? null : Number(v.maxSavingConfigs),
-      whitelabelEnabled: v.whitelabelEnabled
+      whitelabelEnabled: v.whitelabelEnabled,
+      customSubdomainEnabled: v.customSubdomainEnabled
     };
     try {
       if (editing) {
@@ -242,6 +246,13 @@ export function PlatformPackagesPage() {
                 />
                 <Label htmlFor="accounting" className="cursor-pointer font-normal">
                   Modul Akuntansi (Konfigurasi Akun, Laporan Regulasi)
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="customSubdomainEnabled" checked={values.customSubdomainEnabled}
+                  onCheckedChange={(checked) => setValue("customSubdomainEnabled", checked === true)} />
+                <Label htmlFor="customSubdomainEnabled" className="cursor-pointer font-normal">
+                  Ubah subdomain workspace sekali setiap 365 hari
                 </Label>
               </div>
               <div className="flex items-center gap-2">

@@ -11,6 +11,7 @@ import { AccountMappingsTab } from "./AccountMappingsTab";
 import { ShuConfigTab } from "./ShuConfigTab";
 import { WhitelabelConfigTab } from "./WhitelabelConfigTab";
 import { ModalDisetorConfigTab } from "./ModalDisetorConfigTab";
+import { WorkspaceDomainSettings } from "@/features/workspace-domain/WorkspaceDomainSettings";
 
 export function ConfigPage() {
   const { can } = usePermissions();
@@ -25,6 +26,7 @@ export function ConfigPage() {
     { value: "mappings", label: "Pemetaan Akun", show: can("accounting", "read"), content: <AccountMappingsTab /> },
     { value: "shu", label: "Konfigurasi SHU", show: can("accounting", "read"), content: <ShuConfigTab /> },
     { value: "whitelabel", label: "Whitelabel", show: can("config", "read"), content: <WhitelabelConfigTab /> },
+    { value: "workspace-domain", label: "Alamat Workspace", show: can("config", "read"), content: <WorkspaceDomainSettings /> },
     { value: "modal-disetor", label: "Modal Disetor", show: can("config", "read"), content: <ModalDisetorConfigTab /> }
   ].filter((t) => t.show);
 
@@ -36,7 +38,7 @@ export function ConfigPage() {
         <p className="text-sm text-muted-foreground">Anda tidak memiliki akses ke pengaturan apa pun.</p>
       ) : (
         <Tabs defaultValue={tabs[0]?.value ?? ""}>
-          <TabsList className="flex-wrap">
+          <TabsList className="h-auto flex-wrap justify-start">
             {tabs.map((t) => (
               <TabsTrigger key={t.value} value={t.value}>
                 {t.label}

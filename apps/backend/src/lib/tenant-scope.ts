@@ -9,6 +9,8 @@ import { Prisma } from "@prisma/client";
  */
 const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   "CooperativeUnit",
+  "TenantSlugReservation",
+  "TenantSlugChange",
   "Role",
   "User",
   "Member",

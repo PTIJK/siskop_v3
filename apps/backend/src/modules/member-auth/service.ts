@@ -70,13 +70,13 @@ export async function activatePortalAccess(
   return { defaultPassword };
 }
 
-export async function loginMember(host: string | undefined, nik: string, password: string): Promise<Session> {
+export async function loginMember(host: string | undefined, nik: string, password: string, expectedTenantId?: string): Promise<Session> {
   const slug = slugFromHost(host);
-  if (!slug) {
+  if (!slug && !expectedTenantId) {
     throw validationError("Cooperative not identified — use your cooperative's subdomain");
   }
 
-  const tenant = await db.tenant.findUnique({ where: { slug } });
+  const tenant = await db.tenant.findUnique({ where: expectedTenantId ? { id: expectedTenantId } : { slug: slug! } });
   if (!tenant || !tenant.isActive) throw unauthorized("Cooperative not found or inactive");
 
   const member = await db.member.findUnique({ where: { tenantId_nik: { tenantId: tenant.id, nik } } });
@@ -94,7 +94,7 @@ export async function loginMember(host: string | undefined, nik: string, passwor
   return { ...issue(claims), member: toProfile(member) };
 }
 
-export async function refreshMemberSession(token: string): Promise<RefreshedSession> {
+export async function refreshMemberSession(token: string, expectedTenantId?: string): Promise<RefreshedSession> {
   let payload: unknown;
   try {
     payload = jwt.verify(token, secret("JWT_REFRESH_SECRET"));
@@ -103,11 +103,12 @@ export async function refreshMemberSession(token: string): Promise<RefreshedSess
   }
 
   const parsed = z
-    .object({ memberId: z.string().min(1), typ: z.literal("member_refresh") })
+    .object({ memberId: z.string().min(1), tenantId: z.string().min(1), typ: z.literal("member_refresh") })
     .safeParse(payload);
   if (!parsed.success) throw unauthorized("Invalid or expired refresh token");
+  if (expectedTenantId && expectedTenantId !== parsed.data.tenantId) throw unauthorized("Refresh token belongs to another workspace");
 
-  const member = await db.member.findUnique({ where: { id: parsed.data.memberId } });
+  const member = await db.member.findUnique({ where: { id: parsed.data.memberId, tenantId: parsed.data.tenantId } });
   if (!member || !member.isActive || !member.passwordHash) throw unauthorized("Invalid or expired refresh token");
 
   const tenant = await db.tenant.findUnique({ where: { id: member.tenantId } });

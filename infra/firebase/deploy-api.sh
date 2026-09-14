@@ -7,13 +7,20 @@ if [[ "$image_ref" != asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging
   exit 1
 fi
 shift
+env_file=infra/firebase/staging-env.yaml
+if [[ "${RELEASE_TENANT_HOSTING:-false}" == true ]]; then
+  mkdir -p .release
+  env_file=.release/tenant-api-env.yaml
+  cp infra/firebase/staging-env.yaml "$env_file"
+  printf '\nTENANT_DOMAINS_ENABLED: "true"\nTENANT_DOMAIN_RENAME_ENABLED: "%s"\n' "${RELEASE_TENANT_RENAME_ENABLED:-false}" >> "$env_file"
+fi
 gcloud run deploy siskop-staging-api \
   --project=siskop-d0f8c --region=asia-southeast2 \
   --image="$image_ref" \
   --service-account=siskop-staging-api@siskop-d0f8c.iam.gserviceaccount.com \
   --add-cloudsql-instances=siskop-d0f8c:asia-southeast2:siskop-staging \
-  --update-secrets=DATABASE_URL=DATABASE_URL:2,JWT_SECRET=JWT_SECRET:1,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:1,XENDIT_SECRET_KEY=XENDIT_SECRET_KEY:1,XENDIT_WEBHOOK_TOKEN=XENDIT_WEBHOOK_TOKEN:1 \
-  --env-vars-file=infra/firebase/staging-env.yaml \
+  --update-secrets=DATABASE_URL=DATABASE_URL:2,JWT_SECRET=JWT_SECRET:1,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:1,XENDIT_SECRET_KEY=XENDIT_SECRET_KEY:1,XENDIT_WEBHOOK_TOKEN=XENDIT_WEBHOOK_TOKEN:1,TENANT_GATEWAY_SECRET=TENANT_GATEWAY_SECRET:1 \
+  --env-vars-file="$env_file" \
   --execution-environment=gen2 --cpu=1 --memory=1Gi --concurrency=20 \
   --min-instances=0 --max-instances=1 --timeout=60 --cpu-throttling \
   --add-volume='name=uploads,type=cloud-storage,bucket=siskop-d0f8c-staging-uploads,mount-options=uid=1000;gid=1000' \

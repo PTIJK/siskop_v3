@@ -1,4 +1,5 @@
 import type { CookieOptions, RequestHandler } from "express";
+import { gatewayHost } from "../modules/tenant-domains/gateway.js";
 
 const sessions = [
   { name: "siskop_onboarding", path: "/api/onboarding" },
@@ -9,6 +10,9 @@ const sessions = [
 /** Firebase forwards only __session. Keep existing auth modules and cookie paths intact. */
 export function firebaseHosting(): RequestHandler {
   return (req, res, next) => {
+    // App Hosting's same-origin gateway forwards ordinary host-only cookies.
+    // Keep the __session translation exclusively for original Firebase Hosting.
+    if (gatewayHost(req)) { res.set("Cache-Control", "private, no-store"); next(); return; }
     const scope = sessions.find(({ path }) => req.path === path || req.path.startsWith(`${path}/`));
     const incoming = (req.headers.cookie ?? "")
       .split(";")
