@@ -1,3 +1,4 @@
+import { PasswordInput } from "@/components/shared/PasswordInput";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { memberApiPut, ApiRequestError } from "@/api/memberClient";
@@ -13,12 +14,18 @@ export function MemberChangePasswordPage() {
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (pending) return;
     setError(null);
+    if (newPassword !== confirmPassword) {
+      setError("Konfirmasi kata sandi belum cocok.");
+      return;
+    }
     setPending(true);
 
     try {
@@ -43,12 +50,13 @@ export function MemberChangePasswordPage() {
         </div>
 
         <form onSubmit={onSubmit} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="mb-4 text-sm text-slate-600">Kata sandi saat ini adalah kata sandi yang baru Anda gunakan untuk masuk. Jika ini login pertama, gunakan kata sandi awal dari petugas.</p>
           <label className="block text-sm font-medium text-slate-700" htmlFor="currentPassword">
             Kata sandi saat ini
           </label>
-          <input
+          <PasswordInput
             id="currentPassword"
-            type="password"
+            disabled={pending}
             required
             autoComplete="current-password"
             value={currentPassword}
@@ -59,9 +67,9 @@ export function MemberChangePasswordPage() {
           <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="newPassword">
             Kata sandi baru
           </label>
-          <input
+          <PasswordInput
             id="newPassword"
-            type="password"
+            disabled={pending}
             required
             minLength={8}
             autoComplete="new-password"
@@ -70,6 +78,18 @@ export function MemberChangePasswordPage() {
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-500"
           />
           <p className="mt-1 text-xs text-slate-500">Minimal 8 karakter.</p>
+
+          <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="confirmPassword">Konfirmasi kata sandi baru</label>
+          <PasswordInput
+            id="confirmPassword"
+            disabled={pending}
+            required
+            autoComplete="new-password"
+            minLength={8}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-500"
+          />
 
           {error && (
             <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
