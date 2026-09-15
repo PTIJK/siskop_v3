@@ -27,25 +27,15 @@ SOURCE_BUCKET = "firebaseapphosting-sources-866351101735-asia-southeast1"
 TIMEOUT_SECONDS = 25 * 60
 POLL_SECONDS = 10
 
-# Only build inputs, with the other workspace manifests retained for pnpm's lockfile.
+# Publish the exact frontend artifact already verified by Cloud Build. The
+# gateway uses only Node built-ins, so App Hosting needs no monorepo install.
 FILES = {
-    "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.base.json",
-    "apphosting.yaml", "apps/backend/package.json", "apps/mobile/package.json",
-    "apps/frontend/package.json", "apps/frontend/index.html", "apps/frontend/tsconfig.json",
-    "apps/frontend/vite.config.ts", "apps/frontend/tailwind.config.js",
-    "apps/frontend/postcss.config.js", "apps/frontend/.env.staging",
-    "packages/types/package.json", "packages/types/tsconfig.json",
-    "packages/eslint-config/package.json", "packages/eslint-config/index.js",
-    "infra/tenant-web/build.sh", "infra/tenant-web/server.mjs", "infra/tenant-web/release.json",
+    "apphosting.yaml", "infra/tenant-web/package.json",
+    "infra/tenant-web/server.mjs", "infra/tenant-web/release.json",
 }
-TREES = ("apps/frontend/src", "apps/frontend/public", "packages/types/src")
-EXCLUDED_PARTS = {"node_modules", "dist", "coverage", "uploads", "data", "__pycache__"}
+TREES = ("apps/frontend/dist",)
+EXCLUDED_PARTS = {"node_modules", "coverage", "uploads", "data", "__pycache__"}
 PRIVATE_NAME = re.compile(r"secret|credential|service[-_]?account|firebase-adminsdk", re.I)
-PUBLIC_ENV_KEYS = {
-    "VITE_PUBLIC_APP_HOST", "VITE_ONBOARDING_STAGING", "VITE_FIREBASE_API_KEY",
-    "VITE_FIREBASE_AUTH_DOMAIN", "VITE_FIREBASE_PROJECT_ID", "VITE_FIREBASE_APP_ID",
-    "VITE_TENANT_BASE_DOMAIN", "VITE_PUBLIC_APP_URL",
-}
 
 
 def _regular_file(root, relative):
@@ -74,9 +64,14 @@ def create_archive(root, destination, state):
     marker = json.loads(_regular_file(root, "infra/tenant-web/release.json").read_text())
     if marker != {"commit": state["commit"], "buildId": build_id}:
         raise ValueError("Tenant release marker does not match this release")
-    for line in _regular_file(root, "apps/frontend/.env.staging").read_text().splitlines():
-        if line.strip() and not line.lstrip().startswith("#") and line.split("=", 1)[0] not in PUBLIC_ENV_KEYS:
-            raise ValueError("Unexpected variable in public frontend configuration")
+    frontend_marker = json.loads(_regular_file(root, "apps/frontend/dist/release.json").read_text())
+    if frontend_marker != marker:
+        raise ValueError("Built frontend does not match this release")
+    if 'id="root"' not in _regular_file(root, "apps/frontend/dist/index.html").read_text():
+        raise ValueError("Compiled frontend entrypoint is missing")
+    package = json.loads(_regular_file(root, "infra/tenant-web/package.json").read_text())
+    if package.get("dependencies") or package.get("devDependencies") or package.get("packageManager"):
+        raise ValueError("Tenant gateway must not install workspace dependencies")
     selected = set(FILES)
     for tree in TREES:
         directory = root / tree
@@ -94,7 +89,8 @@ def create_archive(root, destination, state):
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for relative in sorted(selected):
             path = _regular_file(root, relative)
-            entry = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
+            archive_path = "package.json" if relative == "infra/tenant-web/package.json" else relative
+            entry = zipfile.ZipInfo(archive_path, date_time=(1980, 1, 1, 0, 0, 0))
             entry.compress_type = zipfile.ZIP_DEFLATED
             entry.create_system = 3
             entry.external_attr = (stat.S_IFREG | (0o755 if relative.endswith(".sh") else 0o644)) << 16

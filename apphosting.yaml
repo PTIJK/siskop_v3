@@ -6,7 +6,8 @@ runConfig:
   cpu: 1
   memoryMiB: 512
 scripts:
-  buildCommand: bash infra/tenant-web/build.sh
+  # Cloud Build already compiled and tested the frontend before publication.
+  buildCommand: node --check infra/tenant-web/server.mjs
   runCommand: node infra/tenant-web/server.mjs
 env:
   - variable: NODE_ENV

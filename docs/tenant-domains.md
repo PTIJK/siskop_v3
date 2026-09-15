@@ -191,8 +191,11 @@ URL. After the App Hosting rollout succeeds, it publishes the central frontend
 so registration redirects have a ready destination. It then verifies both
 release markers and a real tenant lookup, then promotes the API default traffic.
 There is no independent App Hosting push-to-main trigger. Publication uploads an
-allowlisted source archive to the prepared bucket, then creates and waits for the
-App Hosting build and rollout through its API. Routine releases never create
+allowlisted archive containing the already-built frontend, Node gateway and
+dependency-free runtime manifest to the prepared bucket. It then creates and
+waits for the App Hosting build and rollout through its API. This reuses the
+exact frontend artifact from CI and avoids a second monorepo dependency install.
+Routine releases never create
 service accounts or change project IAM. Firebase CLI 15.12.0 performs that setup
 on every `firebase deploy --only apphosting` invocation, so it is not used by CI.
 

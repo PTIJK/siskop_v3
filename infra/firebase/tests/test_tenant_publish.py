@@ -98,8 +98,9 @@ class TenantPublisherTests(unittest.TestCase):
             self.write(relative, "{}\n")
         self.write("apphosting.yaml", "env:\n  - variable: TENANT_API_ORIGIN\n    value: " + STATE["candidateUrl"] + "\n")
         self.write("infra/tenant-web/release.json", json.dumps({key: STATE[key] for key in ["commit", "buildId"]}))
-        self.write("apps/frontend/.env.staging", "VITE_FIREBASE_PROJECT_ID=siskop-d0f8c\n")
-        self.write("apps/frontend/src/main.ts", "export const app = 'fixture';\n")
+        self.write("apps/frontend/dist/release.json", json.dumps({key: STATE[key] for key in ["commit", "buildId"]}))
+        self.write("apps/frontend/dist/index.html", '<div id="root"></div>')
+        self.write("apps/frontend/dist/assets/main.js", "export const app = 'fixture';\n")
         self.write("packages/types/src/index.ts", "export {};\n")
         self.previous = pathlib.Path.cwd()
         os.chdir(self.root)
@@ -120,38 +121,41 @@ class TenantPublisherTests(unittest.TestCase):
     def test_archive_excludes_private_generated_and_unlisted_inputs(self):
         excluded = [".env", ".release/state.json", "github-release.mjs", "node_modules/private.json",
                     "apps/backend/src/main.ts", "apps/backend/scripts/data/export.json",
-                    "apps/frontend/.env.local", "apps/frontend/.env.production", "apps/frontend/dist/index.html",
+                    "apps/frontend/.env.local", "apps/frontend/.env.production", "apps/frontend/src/main.ts",
                     "apps/frontend/src/.env", "apps/frontend/src/node_modules/leak.js",
                     "apps/frontend/public/service-account.json", "apps/frontend/public/key.pem",
                     "apps/frontend/public/credentials/export.json",
-                    "apps/frontend/src/.turbo/cache.json"]
+                    "apps/frontend/src/.turbo/cache.json", "apps/frontend/dist/.env",
+                    "apps/frontend/dist/node_modules/leak.js", "apps/frontend/dist/key.pem"]
         for relative in excluded:
             self.write(relative, "PRIVATE_SENTINEL")
-        self.write("apps/frontend/public/logo.svg", "<svg />")
+        self.write("apps/frontend/dist/logo.svg", "<svg />")
         destination = self.root / "source.zip"
         digest = publisher.create_archive(self.root, destination, STATE)
         first = destination.read_bytes()
-        os.utime(self.root / "apps/frontend/src/main.ts", (1_000_000, 1_000_000))
+        os.utime(self.root / "apps/frontend/dist/assets/main.js", (1_000_000, 1_000_000))
         self.assertEqual(digest, publisher.create_archive(self.root, destination, STATE))
         self.assertEqual(first, destination.read_bytes())
         with zipfile.ZipFile(destination) as archive:
-            self.assertTrue(publisher.FILES.issubset(archive.namelist()))
-            self.assertIn("apps/frontend/public/logo.svg", archive.namelist())
+            self.assertTrue((publisher.FILES - {"infra/tenant-web/package.json"}).issubset(archive.namelist()))
+            self.assertIn("package.json", archive.namelist())
+            self.assertNotIn("pnpm-lock.yaml", archive.namelist())
+            self.assertIn("apps/frontend/dist/logo.svg", archive.namelist())
             self.assertTrue(set(excluded).isdisjoint(archive.namelist()))
             self.assertNotIn(b"PRIVATE_SENTINEL", b"".join(archive.read(name) for name in archive.namelist()))
 
-    def test_symlink_source_and_unexpected_public_env_fail_before_upload(self):
+    def test_symlink_artifact_and_workspace_dependencies_fail_before_upload(self):
         cloud = FakeCloud()
-        path = self.root / "apps/frontend/src/main.ts"
+        path = self.root / "apps/frontend/dist/assets/main.js"
         path.unlink()
         path.symlink_to(self.root / "package.json")
         with self.assertRaisesRegex(ValueError, "symlinks"):
             publisher.publish_tenant(cloud, STATE)
         self.assertEqual(cloud.commands, [])
         path.unlink()
-        self.write("apps/frontend/src/main.ts", "export {}")
-        self.write("apps/frontend/.env.staging", "DATABASE_URL=PRIVATE_SENTINEL")
-        with self.assertRaisesRegex(ValueError, "public frontend"):
+        self.write("apps/frontend/dist/assets/main.js", "export {}")
+        self.write("infra/tenant-web/package.json", '{"dependencies":{"unexpected":"1.0.0"}}')
+        with self.assertRaisesRegex(ValueError, "workspace dependencies"):
             publisher.publish_tenant(cloud, STATE)
         self.assertEqual(cloud.commands, [])
 
@@ -159,6 +163,13 @@ class TenantPublisherTests(unittest.TestCase):
         cloud = FakeCloud()
         self.write("infra/tenant-web/release.json", "{}")
         with self.assertRaisesRegex(ValueError, "marker"):
+            publisher.publish_tenant(cloud, STATE)
+        self.assertEqual(cloud.calls, [])
+
+    def test_stale_compiled_frontend_is_rejected_before_upload(self):
+        cloud = FakeCloud()
+        self.write("apps/frontend/dist/release.json", json.dumps({"commit": "b" * 40, "buildId": STATE["buildId"]}))
+        with self.assertRaisesRegex(ValueError, "Built frontend"):
             publisher.publish_tenant(cloud, STATE)
         self.assertEqual(cloud.calls, [])
 
@@ -201,7 +212,7 @@ class TenantPublisherTests(unittest.TestCase):
         self.assertEqual(result, publisher.publish_tenant(cloud, STATE))
         self.assertTrue(all(method == "GET" for method, _, _ in cloud.calls[before:]))
         self.assertEqual(len(cloud.commands), 1)
-        self.write("apps/frontend/src/main.ts", "export const changed = true;")
+        self.write("apps/frontend/dist/assets/main.js", "export const changed = true;")
         with self.assertRaisesRegex(RuntimeError, "different source"):
             publisher.publish_tenant(cloud, STATE)
         self.assertEqual(len(cloud.commands), 1)
