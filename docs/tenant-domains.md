@@ -185,18 +185,25 @@ See [the verification record](tenant-domain-verification.md) for completed check
 and the outstanding hosted checks.
 
 The release lock serializes publishing. Cloud Build tests the source, builds an
-immutable API image, runs migrations, deploys a candidate API, and publishes the
-central frontend. Tenant publishing uses the exact same workspace and pins its
-gateway to the candidate URL. It waits for the App Hosting rollout, verifies both
+immutable API image, runs migrations, and deploys a candidate API. Tenant
+publishing uses the exact same workspace and pins its gateway to the candidate
+URL. After the App Hosting rollout succeeds, it publishes the central frontend
+so registration redirects have a ready destination. It then verifies both
 release markers and a real tenant lookup, then promotes the API default traffic.
-There is no independent App Hosting push-to-main trigger.
+There is no independent App Hosting push-to-main trigger. Publication uploads an
+allowlisted source archive to the prepared bucket, then creates and waits for the
+App Hosting build and rollout through its API. Routine releases never create
+service accounts or change project IAM. Firebase CLI 15.12.0 performs that setup
+on every `firebase deploy --only apphosting` invocation, so it is not used by CI.
 
-Publishing across two hosting products is not atomic. If a tenant rollout fails
-after central Hosting publishes, the build fails and does not promote default
-API traffic or release its lock. Central Hosting may already serve the new
-candidate; existing tenant hosting continues serving its previous candidate.
+Publishing across two hosting products is not atomic. If a tenant rollout fails,
+the build stops before central Hosting publishes and does not promote default
+API traffic or release its lock. If central publication or final verification
+then fails, tenant hosting may already serve the new candidate while the central
+site still serves its previous version.
 Inspect both release markers and retry from current main. A later build can
-reclaim the lock only once Cloud Build reports the earlier build terminal.
+reclaim the lock only once Cloud Build reports the earlier build terminal and
+its tenant rollout has settled (or no tenant rollout was created).
 
 Do not deploy `apphosting.yaml` directly: its API placeholder is deliberately
 replaced only by the release coordinator. Keep generated release state out of

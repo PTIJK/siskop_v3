@@ -46,6 +46,17 @@ steps:
     entrypoint: bash
     args: ['infra/firebase/run-release.sh', 'backend']
 
+  - id: prepare-tenant-hosting
+    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: bash
+    args: ['infra/firebase/run-release.sh', 'prepare-tenant']
+
+  - id: publish-tenant-hosting
+    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: bash
+    args: ['infra/firebase/run-release.sh', 'publish-tenant']
+
+  # Registration redirects need a ready tenant gateway before central publish.
   - id: publish-frontend
     name: us-docker.pkg.dev/firebase-cli/us/firebase:15.12.0
     entrypoint: sh
@@ -55,20 +66,6 @@ steps:
         if [ ! -f .release/state.json ]; then exit 0; fi
         firebase deploy --only hosting --project siskop-d0f8c --non-interactive \
           --message "main@$COMMIT_SHA (Cloud Build $BUILD_ID)"
-
-  - id: prepare-tenant-hosting
-    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
-    entrypoint: bash
-    args: ['infra/firebase/run-release.sh', 'prepare-tenant']
-
-  - id: publish-tenant-hosting
-    name: us-docker.pkg.dev/firebase-cli/us/firebase:15.12.0
-    entrypoint: sh
-    args:
-      - -ceu
-      - |
-        if [ ! -f .release/state.json ] || [ "$${RELEASE_TENANT_HOSTING}" != true ]; then exit 0; fi
-        firebase deploy --only apphosting:siskop-tenants --project siskop-d0f8c --non-interactive
 
   - id: verify-and-finish-release
     name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
