@@ -40,7 +40,9 @@ hostname does not provide arbitrary cooperative subdomains.
 - Runtime account: `siskop-staging-api@siskop-d0f8c.iam.gserviceaccount.com`.
 - Image repository: `asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api`.
 - Private uploads bucket: `gs://siskop-d0f8c-staging-uploads`, mounted at `/mnt/uploads`.
-- Secret Manager versions: `DATABASE_URL:2`; JWT keys and Xendit secrets at version 1.
+- Secret Manager versions: `DATABASE_URL:2`; JWT keys, Xendit secrets, `TENANT_GATEWAY_SECRET`, and `SCHEDULER_SECRET` at version 1.
+- Cloud Scheduler: daily interest/KOL at 07:05 WIB and Firebase recovery every 15 minutes;
+  OIDC invoker `siskop-scheduler-invoker@siskop-d0f8c.iam.gserviceaccount.com` plus the app token.
 
 Cloud Run reads secrets at runtime; they are never bundled into the frontend/image.
 `.gcloudignore` permits only backend build inputs. The private local copy is
@@ -100,6 +102,90 @@ firebase deploy --only hosting --project=siskop-d0f8c
 Hosting pins the backend revision so a Hosting release rollback restores its
 associated API revision. Database migrations are separate and must remain
 compatible with the revision being restored.
+
+## Scheduled jobs
+
+Cloud Scheduler cold-starts the API when needed. The Cloud Run entrypoint has no
+in-process cron timer. Both jobs use the direct Cloud Run URL, OIDC from
+`siskop-scheduler-invoker`, and an application-verified `x-scheduler-token`.
+The shared token is required because this API also serves public Firebase routes.
+Tenant subdomains cannot invoke these system endpoints.
+
+| Job | Endpoint | Schedule |
+| --- | --- | --- |
+| `siskop-daily-scheduler` | `POST /api/scheduler/run-daily` | 00:05 UTC / 07:05 WIB daily |
+| `siskop-identity-recovery` | `POST /api/scheduler/reconcile-identities` | Every 15 minutes |
+
+The definitions live in `scheduler-jobs.json`. Daily calculations lock each
+savings account before re-reading its balance and `lastInterestAt`; the credit,
+timestamp, transaction and journal commit together. Overlapping deliveries cannot
+credit the same UTC day twice. Existing accounts with an accrual timestamp catch
+up missed days; an account's first accrual credits exactly one day. Partial daily
+failures return HTTP 503 so a retry skips successful credits and retries failures.
+Interest preserves the annual-rate /360 convention and daily rounding, using Decimal.
+
+Identity recovery processes at most 100 unfinished provisioning records per run,
+with the existing 15-minute grace period. It preserves accounts linked to a User
+and removes only abandoned Firebase UIDs recorded by the provisioning service.
+It does not import arbitrary database users, reset passwords, or send emails.
+It requires `FIREBASE_ACCOUNT_PROVISIONING_ENABLED=true` and the runtime's existing
+Firebase user read/delete permissions. Provider failures return non-2xx and the
+ledger allows later recovery attempts.
+
+### Prepare before merging
+
+Authenticate gcloud as the project administrator, then run from the repo root:
+
+```sh
+node infra/firebase/setup-scheduler.mjs
+```
+
+This enables the Scheduler API, creates `SCHEDULER_SECRET:1` if absent, grants
+runtime secret access, creates the invoker identity, and configures **both jobs
+paused**. It preserves an existing version 1 and refuses a disabled/destroyed pin.
+No Cloud Run revision or traffic is changed. New jobs initially target a read-only
+GET, then are paused before their real POST targets are installed. Re-running the
+script updates the same jobs and leaves them paused again.
+
+The script also grants the Cloud Build identity a custom role containing only
+`cloudscheduler.jobs.get` and `cloudscheduler.jobs.enable`. The release reads the
+job header in memory for its authenticated readiness check; it does not read
+Secret Manager. Do not print full job resources: their headers contain the token.
+
+### Activation and operation
+
+Merge the tested PR into main. The coordinated Cloud Build release deploys the
+API with the pinned secret, verifies Hosting and promotes the direct API URL.
+It then checks `GET /api/scheduler/status` using each job's token. Both jobs must
+target the expected service and report the exact new revision and both features
+ready before either is resumed. This check does not perform financial work or
+remove accounts. Verification-only builds never configure or activate jobs.
+
+Each job retries failures up to three times with 60–300 second backoff, bounded
+by its next scheduled execution. The API timeout is 300 seconds; the Scheduler
+attempt deadline is 330 seconds to allow startup/transit overhead. Requests that
+outlive the deadline can overlap a retry; per-account locks and the recovery
+ledger protect against duplicate effects. Review timeouts/backlogs as data grows.
+
+Inspect only non-sensitive fields:
+
+```sh
+gcloud scheduler jobs list --project=siskop-d0f8c --location=asia-southeast2 \
+  --account=yudith.octo@gmail.com \
+  --format='table(name.basename(),state,schedule,timeZone,lastAttemptTime,status.code)'
+```
+
+Check execution results in Cloud Scheduler and Cloud Run logs. Do not use
+"Force run" on the financial job just to test deployment: it performs real
+accruals. Local integration tests use a disposable database and mocked Firebase.
+
+A failed activation marks the release failed and retains its lock. The API may
+already be serving the new revision; fix the reported configuration and retry
+the main build. Resume calls are idempotent at the workflow level: enabled jobs
+are left alone. If one resume fails after the other succeeded, retrying finishes
+the remaining activation. For rollback to an API without these routes, pause
+both jobs first, then restore Hosting and direct API traffic. A future successful
+release resumes prepared jobs, including jobs manually paused for maintenance.
 
 ## Xendit test setup
 

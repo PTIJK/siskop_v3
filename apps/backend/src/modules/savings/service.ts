@@ -1,11 +1,8 @@
 import type { Prisma } from "@prisma/client";
-import { differenceInCalendarDays, startOfDay } from "date-fns";
 import { ErrorCode } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { postSavingTransaction } from "../../lib/journal.js";
-import { calculateDailySavingInterest } from "../../lib/saving-calc.js";
-import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import { getDefaultUnitId } from "../../lib/units.js";
 import { validateRegulatoryRate } from "../../lib/regulatory-config.js";
 import type {
@@ -269,89 +266,4 @@ export async function hasPokokSaving(tenantId: string, memberId: string): Promis
   return count > 0;
 }
 
-export interface SavingInterestAccrualResult {
-  checked: number;
-  posted: number;
-  skipped: number;
-  failed: number;
-}
-
-/**
- * Daily interest accrual for every active Saving under a DAILY-period,
- * active SavingConfig, across every tenant — the scheduler's one authorized
- * cross-tenant sweep (see lib/tenant-scope.ts and lib/kol.ts#recalculateAllKOL
- * for the same exception).
- *
- * Idempotent via `lastInterestAt`: it anchors how many calendar days have
- * elapsed since a Saving was last credited, so re-running the same day is a
- * no-op and a missed day (server downtime) is caught up on the next run —
- * but a Saving's very first run ever (`lastInterestAt` still null) credits
- * exactly one day, never a lump sum back to account creation.
- */
-export async function runDailySavingInterestAccrual(asOf: Date = new Date()): Promise<SavingInterestAccrualResult> {
-  const savings = await withoutTenantScope(() =>
-    db.saving.findMany({
-      where: { isActive: true, savingConfig: { periodUnit: "DAILY", isActive: true } },
-      include: { savingConfig: true }
-    })
-  );
-
-  const result: SavingInterestAccrualResult = { checked: savings.length, posted: 0, skipped: 0, failed: 0 };
-  const today = startOfDay(asOf);
-
-  for (const saving of savings) {
-    try {
-      const days = saving.lastInterestAt ? differenceInCalendarDays(today, startOfDay(saving.lastInterestAt)) : 1;
-      if (days <= 0) {
-        result.skipped++;
-        continue;
-      }
-
-      const balance = Number(saving.balance);
-      const amount = round2(calculateDailySavingInterest(balance, Number(saving.savingConfig.rate)) * days);
-
-      if (amount <= 0) {
-        await db.saving.update({ where: { id: saving.id, tenantId: saving.tenantId }, data: { lastInterestAt: asOf } });
-        result.skipped++;
-        continue;
-      }
-
-      await db.$transaction(async (tx) => {
-        await tx.saving.update({
-          where: { id: saving.id, tenantId: saving.tenantId },
-          data: { balance: { increment: amount }, lastInterestAt: asOf }
-        });
-
-        const transaction = await tx.savingTransaction.create({
-          data: {
-            savingId: saving.id,
-            tenantId: saving.tenantId,
-            type: "INTEREST",
-            amount,
-            note: `Bunga harian otomatis (${days} hari)`
-          }
-        });
-
-        await postSavingTransaction(tx, {
-          tenantId: saving.tenantId,
-          savingTransactionId: transaction.id,
-          savingConfigId: saving.savingConfigId,
-          kind: "SAVING_INTEREST",
-          amount,
-          entryDate: asOf,
-          description: "Bunga simpanan harian"
-        });
-      });
-      result.posted++;
-    } catch (err) {
-      console.error(`Daily interest accrual failed for saving ${saving.id}`, err);
-      result.failed++;
-    }
-  }
-
-  return result;
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
+export { runDailySavingInterestAccrual } from "./daily-interest.js";
