@@ -42,6 +42,11 @@ pipeline. Repository branch protection controls who can merge or push main.
 
 ## Release sequence
 
+The optional tenant frontend is coordinated by the same release lock. See the
+[tenant-domain rollout](../../docs/tenant-domains.md#deployment-and-activation)
+for activation flags, DNS requirements, candidate pinning and recovery across
+both hosting products. Its default flags remain disabled during preparation.
+
 1. Start a disposable PostgreSQL 18 container, install dependencies with Node 22
    and pnpm 11.19.0, run release safety tests, lint, typecheck, database migrations,
    application tests with coverage, compiled Node ESM imports, and workspace builds. No staging database

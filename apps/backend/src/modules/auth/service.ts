@@ -164,7 +164,7 @@ export async function login(
   return session;
 }
 
-export async function refreshSession(token: string): Promise<RefreshedSession> {
+export async function refreshSession(token: string, expectedTenantId?: string): Promise<RefreshedSession> {
   let payload: unknown;
   try {
     payload = jwt.verify(token, secret("JWT_REFRESH_SECRET"));
@@ -176,12 +176,14 @@ export async function refreshSession(token: string): Promise<RefreshedSession> {
   // An access token verified with the refresh secret would already have failed
   // above; the `typ` check also rejects any future token minted with it.
   if (!parsed.success) throw unauthorized("Invalid or expired refresh token");
+  if (expectedTenantId && expectedTenantId !== parsed.data.tenantId) throw unauthorized("Refresh token belongs to another workspace");
 
   const user = await db.user.findUnique({
     where: { id: parsed.data.userId, tenantId: parsed.data.tenantId },
     include: { role: true, unitAssignments: true }
   });
   if (!user || !user.isActive) throw unauthorized("Invalid or expired refresh token");
+  if (expectedTenantId && user.isPlatformAdmin) throw unauthorized("Gunakan situs pusat untuk akun admin platform.");
 
   const tenant = await db.tenant.findUnique({ where: { id: user.tenantId } });
   if (!tenant?.isActive) throw unauthorized("Invalid or expired refresh token");

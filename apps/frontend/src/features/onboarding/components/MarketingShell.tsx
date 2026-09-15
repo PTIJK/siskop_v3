@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useOnboardingMetadata } from "../metadata";
+import { useWorkspace } from "../../workspace-domain/WorkspaceBoundary";
 import "@fontsource/manrope/latin-400.css";
 import "@fontsource/manrope/latin-500.css";
 import "@fontsource/manrope/latin-600.css";
@@ -23,6 +24,8 @@ export function Brand() {
   );
 }
 export function MarketingShell({ children, landing = false }: { children: ReactNode; landing?: boolean }) {
+  const workspace = useWorkspace();
+  const central = import.meta.env.VITE_PUBLIC_APP_URL ?? "https://siskop-d0f8c.web.app";
   const [menu, setMenu] = useState(false);
   const location = useLocation();
   useOnboardingMetadata(location.pathname);
@@ -78,7 +81,7 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
             ) : null}
           </>
         ) : (
-          <Link className='back-link' to='/#paket'>
+          workspace ? <a className='back-link' href={`${central}/#paket`}><ArrowLeft size={16} /> Kembali ke paket</a> : <Link className='back-link' to='/#paket'>
             <ArrowLeft size={16} /> Kembali ke paket
           </Link>
         )}
@@ -87,7 +90,7 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
       <footer className='marketing-footer content-width'>
         <Brand />
         <p>Tumbuh bersama, dikelola lebih baik.</p>
-        <Link to='/checkout/resume'>Lanjutkan pendaftaran</Link>
+        {workspace ? <a href={`${central}/checkout/resume`}>Lanjutkan pendaftaran</a> : <Link to='/checkout/resume'>Lanjutkan pendaftaran</Link>}
       </footer>
     </div>
   );

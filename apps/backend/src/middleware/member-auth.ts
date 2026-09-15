@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { ErrorCode, type MemberAuthClaims } from "@siskop/types";
 import { unauthorized as unauthorizedError } from "../lib/errors.js";
+import { assertWorkspaceTenant } from "../modules/tenant-domains/middleware.js";
 
 const memberClaimsSchema = z.object({
   memberId: z.string().min(1),
@@ -58,8 +59,9 @@ export function requireMemberAuth(req: Request, res: Response, next: NextFunctio
 
   try {
     req.memberAuth = verifyMemberAccessToken(token, process.env.JWT_SECRET ?? "");
-    next();
   } catch {
     unauthorized(res, "Invalid or expired token");
+    return;
   }
+  try { assertWorkspaceTenant(req, req.memberAuth.tenantId); next(); } catch (error) { next(error); }
 }

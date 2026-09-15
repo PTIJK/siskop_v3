@@ -4,6 +4,7 @@ export const ErrorCode = {
   NOT_FOUND: "NOT_FOUND",
   VALIDATION_ERROR: "VALIDATION_ERROR",
   CONFLICT: "CONFLICT",
+  WORKSPACE_MOVED: "WORKSPACE_MOVED",
   RATE_LIMIT: "RATE_LIMIT",
   INTERNAL_ERROR: "INTERNAL_ERROR",
   // Ported KSP business-rule codes (Members/Savings/Loans) — each maps to the

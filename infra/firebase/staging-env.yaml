@@ -3,3 +3,5 @@ PUBLIC_APP_URL: https://siskop-d0f8c.web.app
 CORS_ORIGIN: https://siskop-d0f8c.web.app
 STORAGE_PATH: /mnt/uploads
 FIREBASE_PROJECT_ID: siskop-d0f8c
+TENANT_BASE_DOMAIN: koperasi.inovasijayakarsa.id
+FIREBASE_ACCOUNT_PROVISIONING_ENABLED: "true"

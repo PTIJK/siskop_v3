@@ -1,11 +1,10 @@
-import bcrypt from "bcryptjs";
 import type { User } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { conflict, notFound, validationError } from "../../lib/errors.js";
 import { toPublicUser } from "../../lib/user-mapper.js";
 import type { CreateUserInput, UpdateUserInput } from "./schema.js";
+import { withManagedIdentity } from "../identity-provisioning/service.js";
 
-const BCRYPT_ROUNDS = 10;
 const USER_INCLUDE = { role: true, unitAssignments: true } as const;
 
 /** Every id in `unitIds` must be an active CooperativeUnit owned by `tenantId` — never trusted at face value (CLAUDE.md rule 1). */
@@ -32,10 +31,9 @@ export async function createUser(tenantId: string, data: CreateUserInput): Promi
 
   await assertUnitsBelongToTenant(tenantId, data.unitIds);
 
-  const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
-  const created = await db.$transaction(async (tx) => {
+  const created = await withManagedIdentity(data, async (identity, tx) => {
     const user = await tx.user.create({
-      data: { tenantId, roleId: data.roleId, name: data.name, email: data.email, passwordHash }
+      data: { tenantId, roleId: data.roleId, name: data.name, ...identity }
     });
     await tx.userUnit.createMany({ data: data.unitIds.map((unitId) => ({ userId: user.id, unitId })) });
     return tx.user.findUniqueOrThrow({ where: { id: user.id }, include: USER_INCLUDE });

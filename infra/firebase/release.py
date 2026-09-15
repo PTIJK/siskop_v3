@@ -23,6 +23,9 @@ SERVICE = "siskop-staging-api"
 IMAGE = f"{REGION}-docker.pkg.dev/{PROJECT}/siskop-staging/api"
 BUCKET = f"{PROJECT}-deployments"
 ORIGIN = f"https://{PROJECT}.web.app"
+TENANT_BACKEND = f"projects/{PROJECT}/locations/asia-southeast1/backends/siskop-tenants"
+TENANT_ORIGIN = f"https://siskop-tenants--{PROJECT}.asia-southeast1.hosted.app"
+TENANT_BASE = "koperasi.inovasijayakarsa.id"
 LOCK_URL = f"https://storage.googleapis.com/storage/v1/b/{BUCKET}/o/main-lock.json"
 STATE = pathlib.Path(".release/state.json")
 TERMINAL = {"SUCCESS", "FAILURE", "INTERNAL_ERROR", "TIMEOUT", "CANCELLED", "EXPIRED"}
@@ -162,6 +165,13 @@ def backend(cloud, state, image):
         return
     tag = traffic_tag(state["buildId"])
     assert_owner(cloud, state)
+    if tenant_hosting_enabled():
+        domain = cloud.request("GET", f"https://firebaseapphosting.googleapis.com/v1/{TENANT_BACKEND}/domains/*." + TENANT_BASE)
+        status = domain.get("customDomainStatus", {})
+        if any(status.get(key) != value for key, value in {
+            "hostState": "HOST_ACTIVE", "ownershipState": "OWNERSHIP_ACTIVE", "certState": "CERT_ACTIVE"
+        }.items()):
+            raise RuntimeError("Tenant DNS and HTTPS must be ready before enabling tenant hosting")
     if not image.startswith(IMAGE + ":"):
         raise ValueError("Unexpected image repository")
     digest = cloud.command(gcloud("artifacts", "docker", "images", "describe", image, "--format=value(image_summary.digest)"))
@@ -187,9 +197,32 @@ def backend(cloud, state, image):
     if target.get("revisionName") != revision:
         raise RuntimeError("Candidate tag does not point to the new ready revision")
     check_api(cloud, target["url"])
-    state.update({"revision": revision, "image": image_ref})
+    state.update({"revision": revision, "image": image_ref, "candidateUrl": target["url"]})
     STATE.write_text(json.dumps(state))
     print("Migration and candidate API checks passed; ready to publish Firebase Hosting.")
+
+
+def tenant_hosting_enabled():
+    value = os.environ.get("RELEASE_TENANT_HOSTING", "false")
+    if value not in {"true", "false"}:
+        raise ValueError("RELEASE_TENANT_HOSTING must be true or false")
+    return value == "true"
+
+
+def prepare_tenant(cloud, state):
+    if state is None or not tenant_hosting_enabled():
+        return
+    assert_owner(cloud, state)
+    candidate = urllib.parse.urlsplit(state["candidateUrl"])
+    if candidate.scheme != "https" or not candidate.hostname or not candidate.hostname.endswith(".run.app") or candidate.username or candidate.password or candidate.path or candidate.query or candidate.fragment:
+        raise ValueError("Tenant gateway requires the verified Cloud Run candidate URL")
+    config = pathlib.Path("apphosting.yaml")
+    text = config.read_text()
+    placeholder = "value: https://api-not-configured.invalid"
+    if text.count(placeholder) != 1:
+        raise ValueError("Unexpected tenant deployment configuration")
+    config.write_text(text.replace(placeholder, "value: " + state["candidateUrl"]))
+    pathlib.Path("infra/tenant-web/release.json").write_text(json.dumps({"commit": state["commit"], "buildId": state["buildId"]}) + "\n")
 
 
 def finish(cloud, state):
@@ -200,6 +233,21 @@ def finish(cloud, state):
     if deployed.get("buildId") != state["buildId"] or deployed.get("commit") != state["commit"]:
         raise RuntimeError("Firebase Hosting is not serving this release")
     check_api(cloud, ORIGIN)
+    if tenant_hosting_enabled():
+        tenant_release = cloud.public_json(TENANT_ORIGIN + "/release.json?build=" + state["buildId"])
+        if tenant_release.get("buildId") != state["buildId"] or tenant_release.get("commit") != state["commit"]:
+            raise RuntimeError("Tenant App Hosting is not serving this release")
+        slug = os.environ.get("RELEASE_TENANT_SMOKE_SLUG", "")
+        if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", slug):
+            raise ValueError("An existing active tenant slug is required for release verification")
+        tenant_origin = f"https://{slug}.{TENANT_BASE}"
+        wildcard_release = cloud.public_json(tenant_origin + "/release.json?build=" + state["buildId"])
+        if wildcard_release.get("buildId") != state["buildId"] or wildcard_release.get("commit") != state["commit"]:
+            raise RuntimeError("Tenant wildcard is not serving this release")
+        workspace = cloud.public_json(tenant_origin + "/api/workspace")
+        context = workspace.get("data") or {}
+        if workspace.get("success") is not True or not context.get("tenantId") or context.get("slug") != slug or context.get("isAlias") is not False:
+            raise RuntimeError("Tenant gateway/database readiness check failed")
     cloud.command(gcloud("run", "services", "update-traffic", SERVICE, f"--region={REGION}", f"--to-revisions={state['revision']}=100"))
     cloud.delete_lock(state["generation"])
     print(f"Published {state['commit']} to {ORIGIN}; backend {state['revision']}.")
@@ -222,6 +270,8 @@ def main():
             raise RuntimeError("Release state does not belong to this build")
         if action == "backend":
             backend(cloud, state, os.environ["RELEASE_IMAGE"])
+        elif action == "prepare-tenant":
+            prepare_tenant(cloud, state)
         elif action == "finish":
             finish(cloud, state)
         else:
