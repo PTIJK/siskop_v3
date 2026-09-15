@@ -6,6 +6,7 @@ import io
 import json
 import os
 import pathlib
+import sys
 import tempfile
 import unittest
 import urllib.parse
@@ -14,9 +15,11 @@ from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("tenant_publish", pathlib.Path(__file__).parents[1] / "tenant_publish.py")
 publisher = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(publisher)
+with patch.object(sys, "path", [str(pathlib.Path(__file__).parents[1]), *sys.path]):
+    SPEC.loader.exec_module(publisher)
 STATE = {"buildId": "12345678-1234-1234-1234-123456789abc", "commit": "a" * 40,
          "candidateUrl": "https://candidate-api.a.run.app"}
+RESOURCE_ID = "cb-ci2fm6asgqjdieruci2fm6e2xq"
 
 
 class FakeCloud:
@@ -65,6 +68,8 @@ class FakeCloud:
         expected = json.loads(body)
         identifier = next(value[0] for key, value in urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).items()
                           if key in {"buildId", "rolloutId"})
+        if not 3 <= len(identifier) <= 30:
+            raise AssertionError("App Hosting resource IDs must contain 3 to 30 characters")
         resource_name = name + "/" + identifier
         resource = {"name": resource_name, **expected,
                     "state": "BUILDING" if "source" in expected else "PROGRESSING"}
@@ -160,17 +165,18 @@ class TenantPublisherTests(unittest.TestCase):
     def test_success_uploads_then_builds_before_rollout_without_iam_mutation(self):
         cloud = FakeCloud()
         result = publisher.publish_tenant(cloud, STATE)
-        self.assertEqual(result["build"], publisher.BACKEND + "/builds/cb-" + STATE["buildId"])
-        self.assertEqual(result["rollout"], publisher.BACKEND + "/rollouts/cb-" + STATE["buildId"])
+        self.assertEqual(result["build"], publisher.BACKEND + "/builds/" + RESOURCE_ID)
+        self.assertEqual(result["rollout"], publisher.BACKEND + "/rollouts/" + RESOURCE_ID)
         self.assertEqual(cloud.resources[result["build"]]["state"], "READY")
         self.assertEqual(cloud.resources[result["rollout"]]["state"], "SUCCEEDED")
         self.assertEqual(len(cloud.commands), 1)
         self.assertEqual(cloud.commands[0][:3], ["gcloud", "storage", "cp"])
         self.assertIn("--no-clobber", cloud.commands[0])
+        self.assertIn("/releases/" + RESOURCE_ID + "/", cloud.commands[0][4])
         posts = [(url, json.loads(body)) for method, url, body in cloud.calls if method == "POST"]
         self.assertEqual(len(posts), 2)
-        self.assertIn("/builds?buildId=cb-", posts[0][0])
-        self.assertIn("/rollouts?rolloutId=cb-", posts[1][0])
+        self.assertIn("/builds?buildId=" + RESOURCE_ID + "&", posts[0][0])
+        self.assertIn("/rollouts?rolloutId=" + RESOURCE_ID + "&", posts[1][0])
         self.assertTrue(all(method in {"GET", "POST"} and (method == "GET" or "/backends/siskop-tenants/" in url)
                             for method, url, _ in cloud.calls))
 

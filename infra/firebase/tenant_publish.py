@@ -17,6 +17,8 @@ import urllib.parse
 import uuid
 import zipfile
 
+from release_id import tenant_resource_id
+
 PROJECT = "siskop-d0f8c"
 LOCATION = "asia-southeast1"
 BACKEND = f"projects/{PROJECT}/locations/{LOCATION}/backends/siskop-tenants"
@@ -199,7 +201,7 @@ def publish_tenant(cloud, state):
     with tempfile.TemporaryDirectory(prefix="siskop-tenant-source-") as directory:
         archive = pathlib.Path(directory) / "source.zip"
         digest = create_archive(pathlib.Path.cwd(), archive, state)
-        identifier = "cb-" + state["buildId"]
+        identifier = tenant_resource_id(state["buildId"])
         object_name = f"releases/{identifier}/{digest}.zip"
         source_uri = f"gs://{SOURCE_BUCKET}/{object_name}"
         source = {"source": {"archive": {"userStorageUri": source_uri, "rootDirectory": "."}}}
