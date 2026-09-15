@@ -22,6 +22,12 @@ SaaS cooperative management system (Sistem Informasi Koperasi) for Indonesian ko
    caller must not be able to name which tenant it authenticates against. This is why
    the Vite dev proxy's `changeOrigin` must stay `false`: `true` rewrites `Host` to the
    proxy target and erases the subdomain before the backend ever sees it.
+   The central staff/member selection flows are explicit exceptions for discovery:
+   `/api/member-access/login` searches an exact NIK and verifies each membership's
+   own password before exposing any tenant options. Selection accepts only a
+   membership in that browser's short-lived verified grant. A one-use handoff
+   bound to the destination browser and canonical tenant host issues the portal
+   session; the client never supplies the tenant for direct authentication.
 2. **Money is `Decimal`.** Never `Float`/`number` for balances, principal, or amounts.
 2b. **Every tenant has ≥1 `CooperativeUnit`.** Financial rows carry a non-null `unitId`.
    `KSU` is not a type — it's `units.length > 1`. Never write `if (type === 'KSU')`.

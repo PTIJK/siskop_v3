@@ -33,5 +33,11 @@ try {
     create: { tenantId: alpha.id, nik: "1234556787654321", memberId: "PREVIEW-MEMBER-001", accountNumber: "PREVIEW-ACCOUNT-001",
       fullName: "Anggota Preview", address: "Synthetic preview", birthPlace: "Jakarta", birthDate: new Date("1990-01-01"), occupation: "Preview",
       passwordHash: await bcrypt.hash("Member-preview-123", 10), mustChangePassword: false } });
+  for (const tenant of [alpha, beta]) {
+    await db.member.upsert({ where: { tenantId_nik: { tenantId: tenant.id, nik: "9876543210987654" } }, update: {},
+      create: { tenantId: tenant.id, nik: "9876543210987654", memberId: `PREVIEW-MULTI-${tenant.slug}`, accountNumber: `PREVIEW-MULTI-ACC-${tenant.slug}`,
+        fullName: "Anggota Multi Preview", address: "Synthetic preview", birthPlace: "Jakarta", birthDate: new Date("1990-01-01"), occupation: "Preview",
+        passwordHash: await bcrypt.hash("Member-multi-preview-123", 10), mustChangePassword: false } });
+  }
   console.info("Isolated single/multi-tenant staff and synthetic member accounts are ready.");
 } finally { await db.$disconnect(); }

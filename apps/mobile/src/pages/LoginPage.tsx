@@ -1,3 +1,4 @@
+import { PasswordInput } from "@/components/shared/PasswordInput";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import type { LoginResponse } from "@siskop/types";
@@ -76,9 +77,8 @@ export default function LoginPage() {
           <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="password">
             Kata sandi
           </label>
-          <input
+          <PasswordInput
             id="password"
-            type="password"
             required
             autoComplete="current-password"
             value={password}

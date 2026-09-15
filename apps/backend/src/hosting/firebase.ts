@@ -2,6 +2,7 @@ import type { CookieOptions, RequestHandler } from "express";
 import { gatewayHost } from "../modules/tenant-domains/gateway.js";
 
 const sessions = [
+  { name: "siskop_member_selection", path: "/api/member-access" },
   { name: "siskop_identity", path: "/api/tenant-access" },
   { name: "siskop_onboarding", path: "/api/onboarding" },
   { name: "siskop_refresh_token", path: "/api/auth" },

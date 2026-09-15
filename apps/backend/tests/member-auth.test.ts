@@ -159,6 +159,31 @@ async function activateAndLogin(adminAccessToken: string, memberId: string, host
 }
 
 describe("PUT /api/member-auth/me/password", () => {
+  it("keeps a wrong current password as a form error without expiring the member session", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    const accessToken = await activateAndLogin(admin.accessToken, member.id);
+    const rejected = await request(app())
+      .put("/api/member-auth/me/password")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ currentPassword: "incorrect-current-password", newPassword: "New-member-password-123" });
+    expect(rejected.status).toBe(422);
+    expect(rejected.body.error.code).toBe("VALIDATION_ERROR");
+    expect(rejected.body.error.message).toContain("Kata sandi saat ini");
+    const profile = await request(app()).get("/api/member-auth/me").set("Authorization", `Bearer ${accessToken}`);
+    expect(profile.status).toBe(200);
+    expect(profile.body.data.mustChangePassword).toBe(true);
+    const saved = await request(app()).put("/api/member-auth/me/password")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ currentPassword: DEFAULT_MEMBER_PASSWORD, newPassword: "New-member-password-123" });
+    expect(saved.status).toBe(200);
+    await request(app()).post("/api/member-auth/logout").send({}).expect(200);
+    const nextLogin = await request(app()).post("/api/member-auth/login").set("Host", "demo.localhost")
+      .send({ nik: DEFAULT_MEMBER.nik, password: "New-member-password-123" });
+    expect(nextLogin.status).toBe(200);
+    expect(nextLogin.body.data.member.mustChangePassword).toBe(false);
+  });
+
   it("changes the password and clears mustChangePassword", async () => {
     const admin = await setupTenant();
     const member = await createMemberAs(admin.accessToken);

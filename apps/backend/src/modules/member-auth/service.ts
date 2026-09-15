@@ -47,6 +47,11 @@ function issue(claims: MemberAuthClaims): { accessToken: string; refreshToken: s
   };
 }
 
+/** Called only after credential verification and host-bound handoff redemption. */
+export function memberSessionFor(member: MemberProfile & { tenantId: string }): Session {
+  return { ...issue({ memberId: member.id, tenantId: member.tenantId, role: "member" }), member: toProfile(member) };
+}
+
 /**
  * Staff-invoked, not member-invoked: there is no member self-registration.
  * Idempotent, so the same action serves as both first activation and a
@@ -134,7 +139,8 @@ export async function changeMemberPassword(
   if (!member || !member.passwordHash) throw unauthorized();
 
   const ok = await bcrypt.compare(currentPassword, member.passwordHash);
-  if (!ok) throw unauthorized("Password saat ini salah");
+  // A wrong form value must not trigger the client's 401 refresh/logout flow.
+  if (!ok) throw validationError("Kata sandi saat ini salah. Masukkan kata sandi yang digunakan untuk masuk.");
 
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
   await db.member.update({

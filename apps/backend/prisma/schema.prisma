@@ -488,10 +488,49 @@ model Member {
   memberships      UnitMembership[]
   posSales         POSSale[]
   creditRepayments MemberCreditRepayment[]
+  loginGrants      MemberLoginGrant[]
 
   @@unique([tenantId, nik])
   @@index([tenantId])
   @@index([fullName])
+  @@index([nik])
+}
+
+// Short-lived proof of credentials verified centrally; never a portal session.
+model MemberLoginSession {
+  id        String @id @default(cuid())
+  tokenHash String @unique
+  expiresAt DateTime
+  grants    MemberLoginGrant[]
+  @@index([expiresAt])
+}
+
+model MemberLoginGrant {
+  id                String @id @default(cuid())
+  sessionId         String
+  session           MemberLoginSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  memberId          String
+  member            Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  credentialVersion String
+  attempts          MemberLoginAttempt[]
+  @@unique([sessionId, memberId])
+  @@index([memberId])
+}
+
+model MemberLoginAttempt {
+  id            String @id @default(cuid())
+  grantId       String
+  grant         MemberLoginGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  origin        String
+  expiresAt     DateTime
+  bindingHash   String?
+  stateHash     String?
+  challenge     String?
+  codeHash      String? @unique
+  codeExpiresAt DateTime?
+  consumedAt    DateTime?
+  @@index([grantId])
+  @@index([expiresAt])
 }
 
 // ── SAVINGS ───────────────────────────────────────────────────────────────────
