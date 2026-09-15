@@ -1,11 +1,13 @@
 import importlib.util
 import pathlib
+import sys
 import unittest
 from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("release", pathlib.Path(__file__).parents[1] / "release.py")
 release = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(release)
+with patch.object(sys, "path", [str(pathlib.Path(__file__).parents[1]), *sys.path]):
+    SPEC.loader.exec_module(release)
 ORIGIN = "https://siskop-staging-api-example.a.run.app"
 REVISION = "api-revision"
 

@@ -2,6 +2,7 @@ import base64
 import importlib.util
 import json
 import pathlib
+import sys
 import tempfile
 import unittest
 import uuid
@@ -9,7 +10,8 @@ from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("release", pathlib.Path(__file__).parents[1] / "release.py")
 release = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(release)
+with patch.object(sys, "path", [str(pathlib.Path(__file__).parents[1]), *sys.path]):
+    SPEC.loader.exec_module(release)
 
 BUILD = "12345678-1234-1234-1234-123456789abc"
 OTHER = "abcdefab-1234-1234-1234-123456789abc"
@@ -32,7 +34,7 @@ class CloudBuildStatusTests(unittest.TestCase):
         for rollout in unsettled:
             with self.subTest(rollout=rollout), patch.object(cloud, "request", side_effect=[{"status": "TIMEOUT"}, rollout]) as request:
                 self.assertNotIn(cloud.build_status(BUILD), release.TERMINAL)
-                self.assertEqual(request.call_args.args, ("GET", f"https://firebaseapphosting.googleapis.com/v1beta/{release.TENANT_BACKEND}/rollouts/cb-{BUILD}"))
+                self.assertEqual(request.call_args.args, ("GET", f"https://firebaseapphosting.googleapis.com/v1beta/{release.TENANT_BACKEND}/rollouts/cb-ci2fm6asgqjdieruci2fm6e2xq"))
 
     def test_settled_rollout_preserves_terminal_outer_result(self):
         cloud = release.Cloud()

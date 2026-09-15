@@ -25,6 +25,10 @@ if (!versions.versions?.some(version => version.state === 'ENABLED')) {
   await cloudRequest('POST', secretUrl + ':addVersion', { payload: { data: Buffer.from(key).toString('base64') } });
 }
 for (const account of [runtime, apphosting]) await policyBinding(secretUrl, 'roles/secretmanager.secretAccessor', `serviceAccount:${account}`);
+// App Hosting resolves version metadata during builds and protects versions in
+// use. Match firebase apphosting:secrets:grantaccess, scoped to this secret.
+await policyBinding(secretUrl, 'roles/secretmanager.viewer', `serviceAccount:${apphosting}`);
+await policyBinding(secretUrl, 'roles/secretmanager.secretVersionManager', 'serviceAccount:service-866351101735@gcp-sa-firebaseapphosting.iam.gserviceaccount.com');
 
 // Minimal Firebase user-management permissions; no auth-provider configuration access.
 const roleId = 'siskopIdentityProvisioner';

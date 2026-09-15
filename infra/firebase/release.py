@@ -18,6 +18,8 @@ import urllib.parse
 import urllib.request
 import uuid
 
+from release_id import tenant_resource_id
+
 PROJECT = "siskop-d0f8c"
 REGION = "asia-southeast2"
 SERVICE = "siskop-staging-api"
@@ -106,7 +108,7 @@ class Cloud:
             return status
         # A timed-out Cloud Build does not cancel the provider's traffic rollout.
         # Check even when this new release has tenant hosting disabled.
-        rollout_url = f"https://firebaseapphosting.googleapis.com/v1beta/{TENANT_BACKEND}/rollouts/cb-{build_id}"
+        rollout_url = f"https://firebaseapphosting.googleapis.com/v1beta/{TENANT_BACKEND}/rollouts/{tenant_resource_id(build_id)}"
         try:
             rollout = self.request("GET", rollout_url)
         except Missing:

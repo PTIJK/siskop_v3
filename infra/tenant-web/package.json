@@ -1,0 +1,11 @@
+{
+  "name": "siskop-tenant-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "22.x" },
+  "scripts": {
+    "build": "node --check infra/tenant-web/server.mjs",
+    "start": "node infra/tenant-web/server.mjs"
+  }
+}
