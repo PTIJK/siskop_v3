@@ -143,7 +143,7 @@ export function PlatformTenantsPage() {
         adminPassword: v.adminPassword,
         firstUnit: { type: v.firstUnitType, name: v.firstUnitName }
       });
-      toast({ title: "Koperasi ditambahkan", description: `${v.tenantName} siap login di ${v.slug}.localhost` });
+      toast({ title: "Koperasi ditambahkan", description: `${v.tenantName} ditambahkan dengan slug ${v.slug}` });
       setDialogOpen(false);
       void refetch();
     } catch (err) {
@@ -153,7 +153,7 @@ export function PlatformTenantsPage() {
 
   const columns: ColumnDef<PlatformTenantSummary>[] = [
     { header: "Nama Koperasi", accessorKey: "name" },
-    { header: "Subdomain", cell: ({ row }) => <span className="text-muted-foreground">{row.original.slug}.localhost</span> },
+    { header: "Subdomain", cell: ({ row }) => <span className="text-muted-foreground">{row.original.slug}</span> },
     { header: "Jenis", cell: ({ row }) => <Badge variant="outline">{row.original.type}</Badge> },
     { header: "Unit", cell: ({ row }) => row.original.unitCount },
     { header: "Pengguna", cell: ({ row }) => row.original.userCount },
@@ -220,7 +220,7 @@ export function PlatformTenantsPage() {
                 {errors.slug ? (
                   <p className="text-xs text-destructive">{errors.slug.message}</p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Login di {values.slug || "slug"}.localhost:3000</p>
+                  <p className="text-xs text-muted-foreground">Slug: {values.slug || "slug"}</p>
                 )}
               </div>
 
