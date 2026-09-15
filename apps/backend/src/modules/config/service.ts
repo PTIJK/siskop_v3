@@ -1,7 +1,8 @@
 import type { Prisma } from "@prisma/client";
-import { db } from "../../lib/db.js";
+import { db, type TxClient } from "../../lib/db.js";
 import { conflict, notFound, validationError } from "../../lib/errors.js";
 import { withoutTenantScope } from "../../lib/tenant-scope.js";
+import { COA_TEMPLATE } from "../../lib/coaTemplate.js";
 import type {
   CreateAccountInput,
   CreateRoleInput,
@@ -151,6 +152,114 @@ export async function updateAccount(tenantId: string, id: string, data: UpdateAc
       ...(data.isCashEquivalent !== undefined ? { isCashEquivalent: data.isCashEquivalent } : {}),
       ...(data.isActive !== undefined ? { isActive: data.isActive } : {})
     }
+  });
+}
+
+export interface GenerateStandardCoaResult {
+  accountsCreated: number;
+  accountsSkipped: number;
+  mappingsCreated: number;
+  mappingsSkipped: number;
+}
+
+/**
+ * Creates any COA_TEMPLATE account the tenant doesn't already have (matched by
+ * `code`), then wires default AccountMappings for every existing SavingConfig
+ * (Pokok/Wajib -> Ekuitas, Sukarela -> Kewajiban, both vs. Kas — same pairing
+ * as prisma/seed.ts#seedAccounting) and LoanConfig (Disbursement/Principal
+ * vs. Piutang, Interest/Penalty vs. Pendapatan, all vs. Kas). Additive and
+ * idempotent: existing accounts/mappings are left untouched and simply
+ * counted as skipped, so this is safe to call more than once — including
+ * after a new saving/loan config is added later, to pick up just its mapping.
+ */
+export async function generateStandardCoa(tenantId: string): Promise<GenerateStandardCoaResult> {
+  return db.$transaction(async (tx: TxClient) => {
+    const idByCode = new Map((await tx.account.findMany({ where: { tenantId } })).map((a) => [a.code, a.id]));
+
+    let accountsCreated = 0;
+    let accountsSkipped = 0;
+
+    for (const acc of COA_TEMPLATE) {
+      if (idByCode.has(acc.code)) {
+        accountsSkipped += 1;
+        continue;
+      }
+      const parentCode = acc.parentKey ? COA_TEMPLATE.find((t) => t.key === acc.parentKey)?.code : undefined;
+      const parentId = parentCode ? idByCode.get(parentCode) : undefined;
+      const created = await tx.account.create({
+        data: {
+          tenantId,
+          code: acc.code,
+          name: acc.name,
+          category: acc.category,
+          normalBalance: acc.normalBalance,
+          isHeader: acc.isHeader ?? false,
+          isCashEquivalent: acc.isCashEquivalent ?? false,
+          isDefault: true,
+          isActive: true,
+          ...(parentId ? { parentId } : {})
+        }
+      });
+      idByCode.set(acc.code, created.id);
+      accountsCreated += 1;
+    }
+
+    const accountIdFor = (key: string): string => {
+      const code = COA_TEMPLATE.find((t) => t.key === key)?.code;
+      const id = code && idByCode.get(code);
+      if (!id) throw new Error(`Standard COA template is missing required account "${key}"`);
+      return id;
+    };
+
+    const kas = accountIdFor("kas");
+    const piutang = accountIdFor("piutang_pinjaman");
+    const pendapatanBunga = accountIdFor("pendapatan_bunga");
+    const pendapatanLain = accountIdFor("pendapatan_lain");
+    const equityOrLiabilityBySavingType: Record<string, string> = {
+      POKOK: accountIdFor("simpanan_pokok"),
+      WAJIB: accountIdFor("simpanan_wajib"),
+      SUKARELA: accountIdFor("simpanan_sukarela")
+    };
+
+    const [savingConfigs, loanConfigs] = await Promise.all([
+      tx.savingConfig.findMany({ where: { tenantId }, select: { id: true, type: true } }),
+      tx.loanConfig.findMany({ where: { tenantId }, select: { id: true } })
+    ]);
+
+    let mappingsCreated = 0;
+    let mappingsSkipped = 0;
+
+    async function ensureMapping(
+      sourceType: "SAVING_CONFIG" | "LOAN_CONFIG",
+      sourceId: string,
+      transactionKind: "DEPOSIT" | "WITHDRAWAL" | "DISBURSEMENT" | "PAYMENT_PRINCIPAL" | "PAYMENT_INTEREST" | "PAYMENT_PENALTY",
+      debitAccountId: string,
+      creditAccountId: string
+    ) {
+      const existing = await tx.accountMapping.findFirst({ where: { tenantId, sourceType, sourceId, transactionKind } });
+      if (existing) {
+        mappingsSkipped += 1;
+        return;
+      }
+      await tx.accountMapping.create({ data: { tenantId, sourceType, sourceId, transactionKind, debitAccountId, creditAccountId } });
+      mappingsCreated += 1;
+    }
+
+    for (const config of savingConfigs) {
+      const equityOrLiability = equityOrLiabilityBySavingType[config.type];
+      if (!equityOrLiability) continue;
+      await ensureMapping("SAVING_CONFIG", config.id, "DEPOSIT", kas, equityOrLiability);
+      await ensureMapping("SAVING_CONFIG", config.id, "WITHDRAWAL", equityOrLiability, kas);
+    }
+
+    for (const config of loanConfigs) {
+      await ensureMapping("LOAN_CONFIG", config.id, "DISBURSEMENT", piutang, kas);
+      await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PRINCIPAL", kas, piutang);
+      await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_INTEREST", kas, pendapatanBunga);
+      await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PENALTY", kas, pendapatanLain);
+    }
+
+    return { accountsCreated, accountsSkipped, mappingsCreated, mappingsSkipped };
   });
 }
 

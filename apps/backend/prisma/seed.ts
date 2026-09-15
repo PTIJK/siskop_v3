@@ -5,61 +5,14 @@ import {
   RateType,
   LoanType,
   NotificationType,
-  AccountCategory,
-  NormalBalance,
   MappingSourceType,
   MappingTransactionKind,
   CalkSection
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { COA_TEMPLATE } from "../src/lib/coaTemplate.js";
 
 const prisma = new PrismaClient();
-
-interface AccountSeed {
-  key: string;
-  code: string;
-  name: string;
-  category: AccountCategory;
-  normalBalance: NormalBalance;
-  isHeader?: boolean;
-  isCashEquivalent?: boolean;
-  parentKey?: string;
-}
-
-// Standard COA template — Docs/specs/2026-07-21-konfigurasi-akun-coa-design.md §4.
-// Seeded here (rather than left for the tenant to configure by hand) so the
-// demo/Barokah tenants have a real ledger before seed-demo-transactions.mjs
-// posts through the API; without accounts + mappings existing first, every
-// transaction's JournalEntry would post as UNPOSTED_MISSING_MAPPING and the
-// regulatory reports (Neraca/Arus Kas/Laporan Hasil Usaha/SHU) would be empty.
-const COA_TEMPLATE: AccountSeed[] = [
-  { key: "kas", code: "1-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT", isCashEquivalent: true },
-  { key: "bank", code: "1-1010", name: "Bank", category: "ASET", normalBalance: "DEBIT", isCashEquivalent: true },
-  { key: "piutang_pinjaman", code: "1-1100", name: "Piutang Pinjaman Anggota", category: "ASET", normalBalance: "DEBIT" },
-  {
-    key: "penyisihan_piutang",
-    code: "1-1190",
-    name: "Penyisihan Kerugian Piutang",
-    category: "ASET",
-    normalBalance: "KREDIT" // contra-asset — credit-normal, reduces Piutang Pinjaman Anggota
-  },
-  { key: "aset_tetap", code: "1-2000", name: "Aset Tetap", category: "ASET", normalBalance: "DEBIT", isHeader: true },
-  { key: "simpanan_sukarela", code: "2-1000", name: "Simpanan Sukarela — Anggota", category: "KEWAJIBAN", normalBalance: "KREDIT" },
-  { key: "utang_usaha", code: "2-1100", name: "Utang Usaha", category: "KEWAJIBAN", normalBalance: "KREDIT" },
-  { key: "simpanan_pokok", code: "3-1000", name: "Simpanan Pokok", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "simpanan_wajib", code: "3-1100", name: "Simpanan Wajib", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "cadangan", code: "3-2000", name: "Cadangan / Modal Penyertaan", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "shu_berjalan", code: "3-3000", name: "SHU Tahun Berjalan", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "shu_lalu", code: "3-3100", name: "SHU Tahun Lalu Belum Dibagi", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "pendapatan_bunga", code: "4-1000", name: "Pendapatan Bunga/Margin Pinjaman", category: "PENDAPATAN", normalBalance: "KREDIT" },
-  { key: "pendapatan_admin", code: "4-2000", name: "Pendapatan Jasa Administrasi", category: "PENDAPATAN", normalBalance: "KREDIT" },
-  { key: "pendapatan_lain", code: "4-9000", name: "Pendapatan Lain-lain", category: "PENDAPATAN", normalBalance: "KREDIT" },
-  { key: "beban_bunga_simpanan", code: "5-1000", name: "Beban Bunga/Bagi Hasil Simpanan", category: "BEBAN", normalBalance: "DEBIT" },
-  { key: "beban_gaji", code: "5-2000", name: "Beban Operasional — Gaji", category: "BEBAN", normalBalance: "DEBIT" },
-  { key: "beban_sewa", code: "5-2100", name: "Beban Sewa", category: "BEBAN", normalBalance: "DEBIT" },
-  { key: "beban_penyisihan", code: "5-3000", name: "Beban Penyisihan Kerugian Piutang", category: "BEBAN", normalBalance: "DEBIT" },
-  { key: "beban_lain", code: "5-9000", name: "Beban Lain-lain", category: "BEBAN", normalBalance: "DEBIT" }
-];
 
 const CALK_NARRATIVE: Record<CalkSection, string> = {
   UMUM:
