@@ -76,6 +76,12 @@ class Cloud:
     def main_commit(self):
         return self.public_json("https://api.github.com/repos/PTIJK/siskop_v3/git/ref/heads/main")["object"]["sha"]
 
+    def check_login_page(self, url):
+        request = urllib.request.Request(url, headers={"Cache-Control": "no-cache", "User-Agent": "siskop-cloud-build"})
+        with urllib.request.urlopen(request, timeout=60) as response:
+            if response.status != 200 or b'id="root"' not in response.read(1024 * 1024):
+                raise RuntimeError("Tenant login HTML is unavailable; refusing central publication")
+
     def scheduler_status(self, origin, token):
         # Job metadata contains the app token. Keep it in memory and never pass
         # it to gcloud arguments or logs. This GET does not execute either job.
@@ -261,6 +267,15 @@ def publish_tenant_hosting(cloud, state):
     assert_owner(cloud, state)
     from tenant_publish import publish_tenant
     publish_tenant(cloud, state)
+    # Markers and API routing can work even if App Hosting pruned the SPA files.
+    cloud.check_login_page(tenant_smoke_origin() + "/login?build=" + state["buildId"])
+
+
+def tenant_smoke_origin():
+    slug = os.environ.get("RELEASE_TENANT_SMOKE_SLUG", "")
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", slug):
+        raise ValueError("An existing active tenant slug is required for release verification")
+    return f"https://{slug}.{TENANT_BASE}"
 
 
 def finish(cloud, state):
@@ -276,9 +291,7 @@ def finish(cloud, state):
         if tenant_release.get("buildId") != state["buildId"] or tenant_release.get("commit") != state["commit"]:
             raise RuntimeError("Tenant App Hosting is not serving this release")
         slug = os.environ.get("RELEASE_TENANT_SMOKE_SLUG", "")
-        if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", slug):
-            raise ValueError("An existing active tenant slug is required for release verification")
-        tenant_origin = f"https://{slug}.{TENANT_BASE}"
+        tenant_origin = tenant_smoke_origin()
         wildcard_release = cloud.public_json(tenant_origin + "/release.json?build=" + state["buildId"])
         if wildcard_release.get("buildId") != state["buildId"] or wildcard_release.get("commit") != state["commit"]:
             raise RuntimeError("Tenant wildcard is not serving this release")

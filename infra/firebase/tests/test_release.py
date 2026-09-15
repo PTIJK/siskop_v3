@@ -19,6 +19,24 @@ COMMIT = "a" * 40
 
 
 class CloudBuildStatusTests(unittest.TestCase):
+    def test_login_readiness_requires_actual_frontend_html(self):
+        cloud = release.Cloud()
+        with patch.object(release.urllib.request, "urlopen") as open_url:
+            response = open_url.return_value.__enter__.return_value
+            response.status = 200
+            response.read.return_value = b'<html><div id="root"></div></html>'
+            cloud.check_login_page("https://alpha.example/login")
+            response.read.assert_called_once_with(1024 * 1024)
+
+    def test_marker_or_error_body_does_not_prove_login_readiness(self):
+        cloud = release.Cloud()
+        for status, body in [(200, b'{"commit":"abc"}'), (200, b'Not found'), (404, b'<div id="root"></div>')]:
+            with self.subTest(status=status, body=body), patch.object(release.urllib.request, "urlopen") as open_url:
+                response = open_url.return_value.__enter__.return_value
+                response.status, response.read.return_value = status, body
+                with self.assertRaisesRegex(RuntimeError, "Tenant login HTML"):
+                    cloud.check_login_page("https://alpha.example/login")
+
     def test_active_outer_build_does_not_read_tenant_rollout(self):
         cloud = release.Cloud()
         for status in ["QUEUED", "WORKING", "STATUS_UNKNOWN"]:
@@ -303,6 +321,19 @@ class ReleaseSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "tenant build failed"):
                 release.publish_tenant_hosting(cloud, state)
         publisher.publish_tenant.assert_called_once_with(cloud, state)
+        cloud.delete_lock.assert_not_called()
+
+    def test_missing_tenant_html_fails_publication_and_keeps_lock(self):
+        cloud = Mock()
+        state = {"buildId": BUILD, "generation": "8"}
+        cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
+        cloud.check_login_page.side_effect = RuntimeError("Tenant login HTML is unavailable")
+        publisher = Mock()
+        with patch.dict(release.sys.modules, {"tenant_publish": publisher}), patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true", "RELEASE_TENANT_SMOKE_SLUG": "alpha"}):
+            with self.assertRaisesRegex(RuntimeError, "Tenant login HTML"):
+                release.publish_tenant_hosting(cloud, state)
+        publisher.publish_tenant.assert_called_once_with(cloud, state)
+        cloud.check_login_page.assert_called_once_with("https://alpha." + release.TENANT_BASE + "/login?build=" + BUILD)
         cloud.delete_lock.assert_not_called()
 
     def test_failed_migration_prevents_backend_deployment(self):
