@@ -3,7 +3,7 @@ import type { RegisterTenantRequest } from "./user";
 
 export type PublicPackage = Pick<
   SubscriptionPackage,
-  "id" | "name" | "price" | "modules" | "maxUsers" | "maxMembers" | "maxSavingConfigs" | "whitelabelEnabled"
+  "id" | "name" | "price" | "modules" | "maxUsers" | "maxMembers" | "maxSavingConfigs" | "whitelabelEnabled" | "customSubdomainEnabled"
 >;
 export interface PackageCatalog {
   packages: PublicPackage[];
@@ -27,7 +27,7 @@ export interface FirebaseSignInRequest { idToken: string }
 export type OnboardingSignInResponse =
   | { next: "checkout"; order: OnboardingStatus }
   | { next: "dashboard"; session: import("./user").LoginResponse };
-export interface OnboardingCompletion { next: "login" }
+export interface OnboardingCompletion { next: "login"; loginUrl?: string }
 export interface OnboardingStatus {
   id: string;
   status: "PENDING" | "PAID";

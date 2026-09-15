@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { db } from "../../lib/db.js";
 import { buildRegistrationEmail, emailPayloadSchema, resendConfiguration, sendRegistrationEmail } from "./resend.js";
+import { tenantDomainsEnabled, tenantLoginUrl } from "../tenant-domains/config.js";
 
 const detailsSchema = z.object({
   orderId: z.string(), email: z.string().email(), adminName: z.string(), tenantName: z.string(),
@@ -14,7 +15,7 @@ export async function deliverRegistrationEmail(orderId: string): Promise<void> {
   if (!config) return; // Keep the queued record until Resend has been configured.
   const reservation = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "orderId" FROM "RegistrationEmail" WHERE "orderId" = ${orderId} FOR UPDATE`;
-    const email = await tx.registrationEmail.findUnique({ where: { orderId }, include: { order: true } });
+    const email = await tx.registrationEmail.findUnique({ where: { orderId }, include: { order: { include: { tenant: true } } } });
     if (!email || email.order.status !== "PAID" || ["SENT", "REVIEW"].includes(email.status)) return null;
     const now = new Date();
     if (email.leaseUntil && email.leaseUntil > now) throw new Error("REGISTRATION_EMAIL_BUSY");
@@ -26,7 +27,8 @@ export async function deliverRegistrationEmail(orderId: string): Promise<void> {
       return null;
     }
     const payload = email.payload ? emailPayloadSchema.parse(email.payload)
-      : buildRegistrationEmail(detailsSchema.parse(email.details), config.from, config.loginUrl);
+      : buildRegistrationEmail(detailsSchema.parse(email.details), config.from,
+        tenantDomainsEnabled() ? tenantLoginUrl(email.order.tenant.slug) : config.loginUrl);
     const leaseToken = randomUUID();
     await tx.registrationEmail.update({ where: { orderId }, data: {
       status: "SENDING", payload, firstAttemptAt: email.firstAttemptAt ?? now,

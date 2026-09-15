@@ -1,4 +1,3 @@
-import bcrypt from "bcryptjs";
 import type { Prisma, Tenant as DbTenant, SubscriptionPackage as DbPackage } from "@prisma/client";
 import type {
   CreatePlatformAdminRequest,
@@ -9,7 +8,8 @@ import type {
   UpdatePlatformAdminRequest
 } from "@siskop/types";
 import { db } from "../../lib/db.js";
-import { conflict, notFound } from "../../lib/errors.js";
+import { conflict, notFound, validationError } from "../../lib/errors.js";
+import { withManagedIdentity } from "../identity-provisioning/service.js";
 import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import { toPublicUser } from "../../lib/user-mapper.js";
 import { provisionTenantInTx } from "../tenants/provision.js";
@@ -21,7 +21,6 @@ import {
   type UpdateTenantStatusInput
 } from "./schema.js";
 
-const BCRYPT_ROUNDS = 10;
 
 function toPublicTenant(tenant: DbTenant): Tenant {
   return {
@@ -65,10 +64,7 @@ function isUniqueViolation(err: unknown): boolean {
 /** Provisions a new koperasi and its first admin login, on behalf of a platform admin. */
 export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
   const data = createTenantSchema.parse(input);
-  const passwordHash = await bcrypt.hash(data.adminPassword, BCRYPT_ROUNDS);
-
-  const tenant = await db
-    .$transaction(async (tx) => {
+  const tenant = await withManagedIdentity({ email: data.adminEmail, name: data.adminName, password: data.adminPassword }, async (identity, tx) => {
       const { tenant, roles } = await provisionTenantInTx(tx, {
         name: data.tenantName,
         slug: data.slug,
@@ -86,15 +82,13 @@ export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
         data: {
           tenantId: tenant.id,
           roleId: superAdminRole.id,
-          email: data.adminEmail,
           name: data.adminName,
-          passwordHash
+          ...identity
         }
       });
 
       return tenant;
-    })
-    .catch((err: unknown) => {
+    }).catch((err: unknown) => {
       if (isUniqueViolation(err)) {
         throw conflict("A cooperative with that slug, registration number, or admin email already exists");
       }
@@ -137,6 +131,7 @@ function toPublicPackage(pkg: DbPackage): SubscriptionPackage {
     maxMembers: pkg.maxMembers,
     maxSavingConfigs: pkg.maxSavingConfigs,
     whitelabelEnabled: pkg.whitelabelEnabled,
+    customSubdomainEnabled: pkg.customSubdomainEnabled,
     isActive: pkg.isActive,
     createdAt: pkg.createdAt.toISOString()
   };
@@ -202,18 +197,16 @@ export async function createPlatformAdmin(
   );
   if (existing) throw conflict(`Email ${data.email} sudah terdaftar sebagai platform admin`);
 
-  const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
-  const created = await db.user.create({
+  const created = await withManagedIdentity(data, (identity, tx) => tx.user.create({
     data: {
       tenantId: creator.tenantId,
       roleId: creator.roleId,
-      email: data.email,
       name: data.name,
-      passwordHash,
+      ...identity,
       isPlatformAdmin: true
     },
     include: { role: true, unitAssignments: true }
-  });
+  }));
   return toPublicUser(created);
 }
 
@@ -222,6 +215,7 @@ export async function updatePlatformAdmin(id: string, data: UpdatePlatformAdminR
   if (!user) throw notFound("Platform admin tidak ditemukan");
 
   if (data.email && data.email !== user.email) {
+    if (user.firebaseUid) throw validationError("Email masuk dikelola melalui Firebase.");
     const duplicate = await withoutTenantScope(() =>
       db.user.findFirst({ where: { email: data.email, isPlatformAdmin: true } })
     );

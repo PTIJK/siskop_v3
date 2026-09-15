@@ -3,6 +3,7 @@ import { z } from "zod";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { forbidden, unauthorized } from "../../lib/errors.js";
 import { slugFromHost } from "./tenant-host.js";
+import { assertWorkspaceTenant } from "../tenant-domains/middleware.js";
 import { clearRefreshCookie, REFRESH_COOKIE_NAME, setRefreshCookie } from "./refresh-cookie.js";
 import { changePassword, getMe, login, refreshSession, registerTenant, updateProfile } from "./service.js";
 
@@ -49,7 +50,8 @@ export function authRoutes(): Router {
       const { email, password } = loginBody.parse(req.body);
       // The tenant comes from the Host header, never the body — a caller must
       // not be able to name the tenant it wants to authenticate against.
-      const { refreshToken, ...session } = await login(slugFromHost(req.headers.host), email, password);
+      const { refreshToken, ...session } = await login(req.workspace?.slug ?? slugFromHost(req.headers.host), email, password);
+      assertWorkspaceTenant(req, session.user.tenantId, session.user.isPlatformAdmin);
       setRefreshCookie(res, refreshToken);
       res.json({ success: true, data: session, meta: res.locals.meta });
     })
@@ -63,7 +65,7 @@ export function authRoutes(): Router {
       const token = req.cookies?.[REFRESH_COOKIE_NAME];
       if (typeof token !== "string" || !token) throw unauthorized("Missing refresh token");
 
-      const { refreshToken, ...rest } = await refreshSession(token);
+      const { refreshToken, ...rest } = await refreshSession(token, req.workspace?.tenantId);
       setRefreshCookie(res, refreshToken);
       res.json({ success: true, data: rest, meta: res.locals.meta });
     })

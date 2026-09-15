@@ -8,6 +8,7 @@ import { conflict, notFound, unauthorized } from "../../lib/errors.js";
 import { provisionTenantInTx } from "../tenants/provision.js";
 import { verifyFirebaseIdentity } from "./firebase.js";
 import { sessionFor } from "../auth/service.js";
+import { tenantDomainsEnabled, tenantLoginUrl } from "../tenant-domains/config.js";
 import { registrationSchema, resumeSchema, firebaseSignInSchema } from "./schema.js";
 import { deliverRegistrationEmail, tryRegistrationEmail } from "./email.js";
 import {
@@ -35,7 +36,8 @@ export async function catalog(): Promise<PackageCatalog> {
         maxUsers: p.maxUsers,
         maxMembers: p.maxMembers,
         maxSavingConfigs: p.maxSavingConfigs,
-        whitelabelEnabled: p.whitelabelEnabled
+        whitelabelEnabled: p.whitelabelEnabled,
+        customSubdomainEnabled: p.customSubdomainEnabled
       }))
   };
 }
@@ -47,7 +49,8 @@ export async function register(input: unknown): Promise<string> {
   const identity = await verifyFirebaseIdentity(data.idToken);
   const nameSlug = data.tenantName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50).replace(/-+$/g, "") || "koperasi";
-  const slug = data.slug ?? `${nameSlug}-${randomBytes(6).toString("hex")}`;
+  const generatedSlug = `${nameSlug}-${randomBytes(6).toString("hex")}`;
+  const slug = tenantDomainsEnabled() ? generatedSlug : data.slug ?? generatedSlug;
   const firstUnit = data.firstUnit ?? { type: "KSP" as const, name: "Simpan pinjam" };
   try {
     return await db.$transaction(async (tx) => {
@@ -262,12 +265,12 @@ export async function complete(orderId: string) {
   });
   if (!user) throw unauthorized();
   await tryRegistrationEmail(orderId);
-  return { next: "login" as const };
+  return { next: "login" as const, ...(tenantDomainsEnabled() ? { loginUrl: tenantLoginUrl(order.tenant.slug) } : {}) };
 }
 
 // Firebase UID is globally unique. Tenant scope comes from this verified binding,
 // never an email address, workspace supplied by the client, or token custom claims.
-export async function firebaseSignIn(input: unknown, resumeOnly = false) {
+export async function firebaseSignIn(input: unknown, resumeOnly = false, expectedTenantId?: string) {
   const { idToken } = firebaseSignInSchema.parse(input);
   const identity = await verifyFirebaseIdentity(idToken);
   const user = await db.user.findUnique({
@@ -275,6 +278,8 @@ export async function firebaseSignIn(input: unknown, resumeOnly = false) {
     include: { role: true, unitAssignments: true }
   });
   if (!user?.isActive) throw unauthorized("Akun belum terdaftar di SISKOP atau tidak aktif.");
+  if (expectedTenantId && user.tenantId !== expectedTenantId) throw unauthorized("Akun ini tidak memiliki akses ke workspace ini.");
+  if (expectedTenantId && user.isPlatformAdmin) throw unauthorized("Gunakan situs pusat untuk akun admin platform.");
   const tenant = await db.tenant.findUnique({ where: { id: user.tenantId }, include: { onboardingOrder: true } });
   if (!tenant) throw unauthorized();
   const order = tenant.onboardingOrder;

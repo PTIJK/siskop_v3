@@ -26,13 +26,16 @@ The final container build executes the compiled API imports before publishing.
 registration administrator to sign in at `/login` with Firebase. Only a verified
 Firebase UID can select its bound SISKOP user; email alone never links accounts.
 Payment completion clears the onboarding/staff cookies and returns to `/login`;
-only an explicit login after payment creates a dashboard session. Other staff/member subdomain logins
-still require a suitable custom-domain deployment. Firebase's default `web.app`
+only an explicit login after payment creates a dashboard session. Tenant subdomains
+use the separate App Hosting gateway described in the
+[tenant-domain guide](../../docs/tenant-domains.md). Routing and rename flags stay
+off until DNS/HTTPS and hosted validation are complete. Once routing is enabled,
+payment completion returns the canonical tenant login URL. The default `web.app`
 hostname does not provide arbitrary cooperative subdomains.
 
 ## Resources
 
-- Cloud SQL: `siskop-staging`, existing database `postgres`; five migrations.
+- Cloud SQL: `siskop-staging`, existing database `postgres`; migrations are versioned under `apps/backend/prisma/migrations`.
 - Cloud Run: `siskop-staging-api`, 1 CPU, 1 GiB, min 0/max 1 instance, concurrency 20.
 - Runtime account: `siskop-staging-api@siskop-d0f8c.iam.gserviceaccount.com`.
 - Image repository: `asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api`.

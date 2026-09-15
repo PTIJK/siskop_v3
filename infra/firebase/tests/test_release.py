@@ -17,6 +17,73 @@ COMMIT = "a" * 40
 
 
 class ReleaseSafetyTests(unittest.TestCase):
+    def test_successful_tenant_release_checks_wildcard_before_promoting_api(self):
+        cloud = Mock()
+        cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
+        marker = {"buildId": BUILD, "commit": COMMIT}
+        cloud.public_json.side_effect = [
+            marker, {"success": True}, {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+            marker, marker, {"success": True, "data": {"tenantId": "tenant-alpha", "slug": "alpha", "isAlias": False}}
+        ]
+        with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true", "RELEASE_TENANT_SMOKE_SLUG": "alpha"}):
+            release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
+        cloud.public_json.assert_any_call("https://alpha." + release.TENANT_BASE + "/release.json?build=" + BUILD)
+        self.assertIn("--to-revisions=api-revision=100", cloud.command.call_args.args[0])
+        cloud.delete_lock.assert_called_once_with("8")
+
+    def test_incorrect_wildcard_release_stops_promotion(self):
+        cloud = Mock()
+        cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
+        marker = {"buildId": BUILD, "commit": COMMIT}
+        cloud.public_json.side_effect = [
+            marker, {"success": True}, {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+            marker, {"buildId": OTHER, "commit": COMMIT}
+        ]
+        with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true", "RELEASE_TENANT_SMOKE_SLUG": "alpha"}):
+            with self.assertRaisesRegex(RuntimeError, "wildcard"):
+                release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
+        cloud.command.assert_not_called()
+        cloud.delete_lock.assert_not_called()
+
+    def test_pending_tenant_dns_stops_before_database_migration(self):
+        cloud = Mock()
+        cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
+        cloud.request.return_value = {"customDomainStatus": {"hostState": "HOST_NON_FAH"}}
+        with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true"}):
+            with self.assertRaisesRegex(RuntimeError, "DNS and HTTPS"):
+                release.backend(cloud, {"buildId": BUILD, "generation": "8"}, release.IMAGE + ":test")
+        cloud.command.assert_not_called()
+
+    def test_tenant_gateway_is_pinned_to_candidate_and_same_release(self):
+        cloud = Mock()
+        cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
+        state = {"buildId": BUILD, "generation": "8", "commit": COMMIT, "candidateUrl": "https://candidate-api.a.run.app"}
+        with tempfile.TemporaryDirectory() as directory, patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true"}):
+            previous = pathlib.Path.cwd()
+            try:
+                release.os.chdir(directory)
+                pathlib.Path("apphosting.yaml").write_text("value: https://api-not-configured.invalid\n")
+                pathlib.Path("infra/tenant-web").mkdir(parents=True)
+                release.prepare_tenant(cloud, state)
+                self.assertIn(state["candidateUrl"], pathlib.Path("apphosting.yaml").read_text())
+                self.assertEqual(json.loads(pathlib.Path("infra/tenant-web/release.json").read_text()), {"commit": COMMIT, "buildId": BUILD})
+            finally:
+                release.os.chdir(previous)
+
+    def test_failed_tenant_rollout_keeps_lock_and_stops_traffic_promotion(self):
+        cloud = Mock()
+        cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
+        cloud.public_json.side_effect = [
+            {"buildId": BUILD, "commit": COMMIT}, {"success": True},
+            {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+            {"buildId": OTHER, "commit": COMMIT}
+        ]
+        with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true"}):
+            with self.assertRaisesRegex(RuntimeError, "App Hosting"):
+                release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
+        cloud.command.assert_not_called()
+        cloud.delete_lock.assert_not_called()
+
     def test_backend_uses_a_valid_unique_tag_for_the_failed_release(self):
         build_id = "c4fd419b-fdb3-4d75-a0b2-2fd5c2942d61"
         cloud = Mock()

@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import type { Permissions } from "@siskop/types";
 import { db, type TxClient } from "../../lib/db.js";
 import { CooperativeType } from "@siskop/types";
+import { parseSlug } from "../tenant-domains/policy.js";
 
 const unitInput = z.object({
   type: z.nativeEnum(CooperativeType),
@@ -128,6 +129,7 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
 /** Creates tenant + units + the 4 seed roles inside a caller-supplied transaction. */
 export async function provisionTenantInTx(tx: Tx, input: ProvisionTenantInput) {
   const data = provisionInput.parse(input);
+  parseSlug(data.slug);
   const units = [data.firstUnit, ...data.additionalUnits];
 
   const tenant = await tx.tenant.create({
@@ -140,6 +142,8 @@ export async function provisionTenantInTx(tx: Tx, input: ProvisionTenantInput) {
       cooperativeType: data.cooperativeType
     }
   });
+
+  await tx.tenantSlugReservation.createMany({ data: [{ slug: tenant.slug, tenantId: tenant.id }], skipDuplicates: true });
 
   await tx.cooperativeUnit.createMany({
     data: units.map((u) => ({ tenantId: tenant.id, type: u.type, name: u.name }))

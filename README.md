@@ -55,6 +55,9 @@ local provisioning path, open `http://demo.localhost:3000/login/legacy` afterwar
 
 ## Layout
 
+Tenant subdomains, annual address changes, isolated local previews, and deployment
+activation are documented in [the tenant-domain guide](docs/tenant-domains.md).
+
 | Path | What |
 |------|------|
 | `apps/backend` | Express API, Prisma, PostgreSQL |

@@ -6,6 +6,7 @@ const STATUS: Record<ErrorCode, number> = {
   [ErrorCode.NOT_FOUND]: 404,
   [ErrorCode.VALIDATION_ERROR]: 422,
   [ErrorCode.CONFLICT]: 409,
+  [ErrorCode.WORKSPACE_MOVED]: 409,
   [ErrorCode.RATE_LIMIT]: 429,
   [ErrorCode.INTERNAL_ERROR]: 500,
   // Ported KSP business-rule codes — see packages/types/src/api.ts.

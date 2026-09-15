@@ -33,7 +33,8 @@ export const createPackageSchema = z.object({
   maxUsers: z.coerce.number().int().min(1),
   maxMembers: z.coerce.number().int().min(1),
   maxSavingConfigs: z.coerce.number().int().min(0).nullable().optional(),
-  whitelabelEnabled: z.boolean().optional()
+  whitelabelEnabled: z.boolean().optional(),
+  customSubdomainEnabled: z.boolean().optional()
 });
 export type CreatePackageInput = z.infer<typeof createPackageSchema>;
 

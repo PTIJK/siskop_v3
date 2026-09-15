@@ -10,9 +10,11 @@ import { MarketingShell } from "../components/MarketingShell";
 import { AuthMethodSwitch } from "../components/AuthMethodSwitch";
 import { identityToken, clearFirebaseIdentity, firebaseError, resetPassword, type AuthMethod } from "../firebase";
 import { workspaceSlug } from "../workspace";
+import { useWorkspace } from "../../workspace-domain/WorkspaceBoundary";
 import { errorMessage, onboardingApi } from "../api";
 
 export default function AuthPage({ resume = false }: { resume?: boolean }) {
+  const workspace = useWorkspace();
   const [method, setMethod] = useState<AuthMethod>("password");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -59,6 +61,7 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
       <main id='main-content' className='resume-main content-width'>
         <section className='checkout-panel'>
           <h1>{resume ? "Lanjutkan pendaftaran." : "Selamat datang kembali."}</h1>
+          {workspace ? <p className="checkout-description">Masuk ke {workspace.name}</p> : null}
           <p className='checkout-description'>
             {search.get("registered") === "1" ? "Pembayaran berhasil. Koperasi Anda sudah aktif. Silakan masuk untuk membuka dashboard." :
               resume ? "Masuk dengan akun pendaftaran untuk melanjutkan pembayaran." : "Masuk dengan metode yang Anda pilih saat mendaftar."}
@@ -82,7 +85,9 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
             <Button type='submit' size='lg' disabled={pending}>
               {pending ? <><Loader2 className='animate-spin' /> Memeriksa…</> : <>{method === "google" ? "Lanjutkan dengan Google" : "Masuk"} <ArrowUpRight /></>}
             </Button>
-            <p className='form-note'>Belum punya akun? <Link to='/#paket'>Pilih paket & daftar</Link></p>
+            <p className='form-note'>Belum punya akun? {workspace
+              ? <a href={`${import.meta.env.VITE_PUBLIC_APP_URL ?? "https://siskop-d0f8c.web.app"}/#paket`}>Pilih paket & daftar</a>
+              : <Link to='/#paket'>Pilih paket & daftar</Link>}</p>
             {workspaceSlug() !== null || import.meta.env.VITE_ONBOARDING_STAGING !== "true" ? <p className='form-note'><Link to='/login/legacy'>Masuk dengan akun workspace lama</Link></p> : null}
           </form>
         </section>

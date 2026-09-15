@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import {
   initializeAuth, inMemoryPersistence, browserPopupRedirectResolver,
   GoogleAuthProvider, signInWithPopup, createUserWithEmailAndPassword,
-  signInWithEmailAndPassword, sendPasswordResetEmail, signOut
+  signInWithEmailAndPassword, sendPasswordResetEmail, signOut, connectAuthEmulator
 } from "firebase/auth";
 
 // This module is loaded only by the lazy registration/login pages. Credentials
@@ -14,6 +14,11 @@ const app = initializeApp({
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 }, "siskop-onboarding");
 const auth = initializeAuth(app, { persistence: inMemoryPersistence, popupRedirectResolver: browserPopupRedirectResolver });
+if (import.meta.env.DEV && import.meta.env.VITE_FIREBASE_PROJECT_ID?.startsWith("demo-") && import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_URL) {
+  const emulator = new URL(import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_URL);
+  if (emulator.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(emulator.hostname)) throw new Error("Use a local Firebase Auth emulator");
+  connectAuthEmulator(auth, emulator.toString(), { disableWarnings: true });
+}
 auth.languageCode = "id";
 const google = new GoogleAuthProvider();
 google.setCustomParameters({ prompt: "select_account" });

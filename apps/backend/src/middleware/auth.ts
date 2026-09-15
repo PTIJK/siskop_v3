@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { ErrorCode, type AuthClaims } from "@siskop/types";
 import { unauthorized as unauthorizedError } from "../lib/errors.js";
+import { assertWorkspaceTenant } from "../modules/tenant-domains/middleware.js";
 
 // Every action is optional: a role's permissions blob only sets the actions it
 // actually grants (see the SEED_ROLES default permission sets in
@@ -104,8 +105,9 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
   try {
     req.auth = verifyAccessToken(token, process.env.JWT_SECRET ?? "");
-    next();
   } catch {
     unauthorized(res, "Invalid or expired token");
+    return;
   }
+  try { assertWorkspaceTenant(req, req.auth.tenantId, req.auth.role === "super_admin"); next(); } catch (error) { next(error); }
 }

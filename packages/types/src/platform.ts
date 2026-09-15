@@ -50,6 +50,7 @@ export interface SubscriptionPackage {
   maxMembers: number;
   maxSavingConfigs: number | null;
   whitelabelEnabled: boolean;
+  customSubdomainEnabled: boolean;
   isActive: boolean;
   createdAt: string;
 }
@@ -62,6 +63,7 @@ export interface CreatePackageRequest {
   maxMembers: number;
   maxSavingConfigs?: number | null;
   whitelabelEnabled?: boolean;
+  customSubdomainEnabled?: boolean;
 }
 
 export type UpdatePackageRequest = Partial<CreatePackageRequest> & { isActive?: boolean };
