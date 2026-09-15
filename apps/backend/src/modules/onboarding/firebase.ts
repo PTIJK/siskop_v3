@@ -22,7 +22,7 @@ export async function verifyFirebaseIdentity(idToken: string) {
     // Registration/session exchange requires a deliberate recent sign-in.
     const age = Date.now() / 1000 - token.auth_time;
     if (age > 600 || age < -60) throw new Error("Recent sign-in required");
-    return { uid: token.uid, email, provider, authTime: token.auth_time };
+    return { uid: token.uid, email, provider, authTime: token.auth_time, emailVerified: token.email_verified === true };
   } catch {
     throw unauthorized("Sesi masuk tidak valid atau kedaluwarsa. Silakan masuk kembali.");
   }

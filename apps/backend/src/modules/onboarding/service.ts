@@ -1,3 +1,4 @@
+import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import { addMonths } from "date-fns";
@@ -273,10 +274,16 @@ export async function complete(orderId: string) {
 export async function firebaseSignIn(input: unknown, resumeOnly = false, expectedTenantId?: string) {
   const { idToken } = firebaseSignInSchema.parse(input);
   const identity = await verifyFirebaseIdentity(idToken);
-  const user = await db.user.findUnique({
-    where: { firebaseUid: identity.uid },
-    include: { role: true, unitAssignments: true }
-  });
+  const where = { identity: { firebaseUid: identity.uid, isActive: true }, ...(expectedTenantId ? { tenantId: expectedTenantId } : {}), isActive: true };
+  const user = resumeOnly
+    ? await withoutTenantScope(async () => {
+      // Recovery resolves the order administrator, even when this identity also
+      // has active memberships elsewhere. A regular membership grants no order access.
+      const candidates = await db.user.findMany({ where: { ...where, tenant: { onboardingOrder: { isNot: null } } },
+        include: { role: true, unitAssignments: true, tenant: { include: { onboardingOrder: true } } } });
+      return candidates.find(member => member.tenant.onboardingOrder?.adminId === member.id) ?? null;
+    })
+    : await withoutTenantScope(() => db.user.findFirst({ where, include: { role: true, unitAssignments: true } }));
   if (!user?.isActive) throw unauthorized("Akun belum terdaftar di SISKOP atau tidak aktif.");
   if (expectedTenantId && user.tenantId !== expectedTenantId) throw unauthorized("Akun ini tidak memiliki akses ke workspace ini.");
   if (expectedTenantId && user.isPlatformAdmin) throw unauthorized("Gunakan situs pusat untuk akun admin platform.");

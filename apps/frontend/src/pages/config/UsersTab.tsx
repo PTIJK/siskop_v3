@@ -1,3 +1,5 @@
+import { useTenantAccessConfig } from "@/features/tenant-access/api";
+import type { MembershipInvitationResponse } from "@siskop/types";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -22,7 +24,7 @@ import { Plus } from "lucide-react";
 const createSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
   email: z.string().email("Email tidak valid"),
-  password: z.string().min(8, "Password minimal 8 karakter"),
+  password: z.string(),
   roleId: z.string().min(1, "Role wajib dipilih"),
   unitIds: z.array(z.string()).min(1, "Pilih minimal 1 unit")
 });
@@ -38,6 +40,9 @@ type CreateValues = z.infer<typeof createSchema>;
 type EditValues = z.infer<typeof editSchema>;
 
 export function UsersTab() {
+  const accessConfig = useTenantAccessConfig();
+  const [inviteMode, setInviteMode] = useState(false);
+  const [invitation, setInvitation] = useState<MembershipInvitationResponse | null>(null);
   const { can } = usePermissions();
   const currentUser = useAuth((s) => s.user);
   const { toast } = useToast();
@@ -66,6 +71,7 @@ export function UsersTab() {
 
   const openCreate = () => {
     setEditing(null);
+    setInviteMode(false);
     setApiError("");
     createForm.reset({ name: "", email: "", password: "", roleId: "", unitIds: [] });
     setDialogOpen(true);
@@ -97,7 +103,12 @@ export function UsersTab() {
   const onCreate = async (values: CreateValues) => {
     setApiError("");
     try {
-      await apiPost("/users", values);
+      if (inviteMode) {
+        setInvitation(await apiPost<MembershipInvitationResponse>("/users/invitations", values));
+      } else {
+        if (values.password.length < 8) { setApiError("Password minimal 8 karakter"); return; }
+        await apiPost("/users", values);
+      }
       toast({ title: "Pengguna ditambahkan" });
       setDialogOpen(false);
       void refetch();
@@ -152,6 +163,9 @@ export function UsersTab() {
         return (
           can("users", "update") && (
             <div className="flex gap-2">
+              {accessConfig.data?.enabled && !row.original.authProvider ? <Button size="sm" variant="outline" onClick={() => {
+                void apiPost<MembershipInvitationResponse>(`/users/${row.original.id}/invitation`, {}).then(setInvitation).catch(e => toast({ title: e.message, variant: "destructive" }));
+              }}>Undang / tautkan akun</Button> : null}
               <Button size="sm" variant="outline" onClick={() => openEdit(row.original)}>
                 Edit
               </Button>
@@ -191,6 +205,12 @@ export function UsersTab() {
         }
       />
 
+      <Dialog open={!!invitation} onOpenChange={open => { if (!open) setInvitation(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>Undangan pengguna</DialogTitle></DialogHeader>
+          <p>Bagikan tautan ini kepada penerima. Undangan berlaku 48 jam dan hanya dapat diterima oleh akun dengan email terverifikasi yang sesuai.</p>
+          <Input aria-label="Tautan undangan" readOnly value={invitation?.invitationUrl ?? ""} onFocus={e => e.target.select()} />
+        </DialogContent>
+      </Dialog>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -284,8 +304,9 @@ export function UsersTab() {
               </div>
 
               <div className="space-y-1.5">
-                <Label>Password *</Label>
-                <Input type="password" {...createForm.register("password")} />
+                {accessConfig.data?.enabled ? <label className="flex items-center gap-2"><Checkbox checked={inviteMode} onCheckedChange={v => setInviteMode(v === true)} />Undang akun Google / email yang sudah ada</label> : null}
+                <Label>{inviteMode ? "Tidak perlu kata sandi untuk undangan" : "Password *"}</Label>
+                {!inviteMode ? <Input type="password" {...createForm.register("password")} /> : null}
                 {createForm.formState.errors.password && (
                   <p className="text-xs text-destructive">{createForm.formState.errors.password.message}</p>
                 )}

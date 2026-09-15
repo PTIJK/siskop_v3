@@ -1,3 +1,5 @@
+import { useTenantAccessConfig } from "@/features/tenant-access/api";
+import { tenantSlug } from "@/features/workspace-domain/host";
 import { Outlet, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/stores/auth";
 import { Sidebar } from "./Sidebar";
@@ -5,6 +7,7 @@ import { Topbar } from "./Topbar";
 import { Toaster } from "../ui/toaster";
 
 export function AppLayout() {
+  const accessConfig = useTenantAccessConfig();
   const user = useAuth((s) => s.user);
   const isPlatformAdmin = useAuth((s) => s.user?.role === "super_admin");
   const location = useLocation();
@@ -19,6 +22,11 @@ export function AppLayout() {
   // deduped refresh call as a token expiring mid-session. If that refresh
   // genuinely fails (dead session), those queries clear() the auth store,
   // `user` becomes null, and this redirects to /login on the next render.
+  if (tenantSlug() === null && !isPlatformAdmin) {
+    if (accessConfig.isPending) return <p role="status" className="p-8">Memeriksa alamat koperasi…</p>;
+    if (accessConfig.isError) return <p role="alert" className="p-8">Belum dapat memeriksa akses. <button onClick={() => void accessConfig.refetch()}>Coba lagi</button></p>;
+    if (accessConfig.data?.enabled) return <Navigate to="/login?select=1" replace />;
+  }
   if (!user) return <Navigate to="/login" replace />;
 
   // Platform admins are attached to a real tenant's role purely to satisfy a

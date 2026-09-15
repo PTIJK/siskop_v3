@@ -1,3 +1,5 @@
+import { selectionEnabled } from "../tenant-access/config.js";
+import { forbidden as accessForbidden } from "../../lib/errors.js";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
@@ -121,6 +123,7 @@ export function onboardingRoutes(): Router {
   );
   for (const path of ["/login", "/firebase-resume"]) {
     router.post(path, limiter(10, 15 * 60_000), handle(async (req, res) => {
+      if (selectionEnabled() && !req.workspace && path === "/login") throw accessForbidden("Gunakan halaman masuk terbaru untuk memilih koperasi.");
       const result = await firebaseSignIn(req.body, path === "/firebase-resume", req.workspace?.tenantId);
       if (result.next === "checkout") {
         clearRefreshCookie(res);

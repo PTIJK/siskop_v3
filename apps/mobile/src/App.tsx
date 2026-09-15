@@ -30,9 +30,10 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
 
+          <Route path="/anggota" element={<Navigate to="/anggota/dashboard" replace />} />
           <Route path="/anggota/login" element={<MemberLoginPage />} />
-          <Route path="/anggota/ganti-password" element={<MemberChangePasswordPage />} />
           <Route element={<MemberAppLayout />}>
+            <Route path="/anggota/ganti-password" element={<MemberChangePasswordPage />} />
             <Route path="/anggota/dashboard" element={<MemberDashboardPage />} />
             <Route path="/anggota/simpanan" element={<MemberSavingsPage />} />
             <Route path="/anggota/simpanan/:id" element={<MemberSavingDetailPage />} />

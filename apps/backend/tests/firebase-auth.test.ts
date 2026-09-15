@@ -17,7 +17,7 @@ afterEach(() => vi.unstubAllEnvs());
 describe("Firebase trust boundary", () => {
   it.each(["password", "google.com"])("verifies %s tokens with revocation checks and the configured project", async (provider) => {
     verifyIdToken.mockResolvedValue({ ...token, firebase: { sign_in_provider: provider } });
-    expect(await verifyFirebaseIdentity("proof")).toEqual({ uid: token.uid, email: "admin@example.test", provider, authTime: now });
+    expect(await verifyFirebaseIdentity("proof")).toEqual({ uid: token.uid, email: "admin@example.test", provider, authTime: now, emailVerified: false });
     expect(verifyIdToken).toHaveBeenCalledWith("proof", true);
     expect(initializeApp).toHaveBeenCalledWith({ projectId: "demo-siskop" }, "siskop-auth");
   });

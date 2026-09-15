@@ -61,9 +61,10 @@ export class IdentityProvisioner {
         await tx.$queryRaw`SELECT uid FROM "IdentityProvisioning" WHERE uid = ${operation.uid} FOR UPDATE`;
         const current = await tx.identityProvisioning.findUniqueOrThrow({ where: { uid: operation.uid } });
         if (!recoverable.includes(current.status) || current.updatedAt >= cutoff) return "skip";
-        const user = await tx.user.findUnique({ where: { firebaseUid: operation.uid } });
-        await tx.identityProvisioning.update({ where: { uid: operation.uid }, data: { status: user ? "LINKED" : "REMOVING" } });
-        return user ? "linked" : "remove";
+        const user = await tx.accountIdentity.findUnique({ where: { firebaseUid: operation.uid }, include: { _count: { select: { users: true } } } });
+        const linked = user && user._count.users > 0;
+        await tx.identityProvisioning.update({ where: { uid: operation.uid }, data: { status: linked ? "LINKED" : "REMOVING" } });
+        return linked ? "linked" : "remove";
       });
       if (disposition === "linked") linked++;
       if (disposition === "remove") {

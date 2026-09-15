@@ -5,10 +5,8 @@ import path from "node:path";
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
-  // Production base path is a separate, still-open decision
-  // (docs/07-System-Architecture-SISKOP-Mobile-Version.md §7 recommends
-  // path-based serving at `/m/*` on the same tenant subdomain as desktop) —
-  // not set here since it only matters for `vite build`, not `vite dev`.
+  // Asset namespace is separate; BrowserRouter keeps /anggota/* URLs.
+  base: process.env.NODE_ENV === "production" ? "/member-app/" : "/",
   server: {
     port: 3002,
     // Same reasoning as apps/frontend/vite.config.ts: "localhost" is an

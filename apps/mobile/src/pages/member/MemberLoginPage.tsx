@@ -1,15 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import type { MemberLoginResponse } from "@siskop/types";
+import type { ApiResponse, MemberLoginResponse, WorkspaceContext } from "@siskop/types";
 import { memberApiPost, ApiRequestError } from "@/api/memberClient";
 import { useMemberAuth } from "@/stores/memberAuth";
-
-// Mirrors pages/LoginPage.tsx, but the member types their NIK — Member has
-// no email field (see packages/types/src/user.ts#MemberLoginRequest).
-function currentSlug(): string | null {
-  const [first, ...rest] = window.location.hostname.split(".");
-  return rest.length > 0 && first ? first : null;
-}
 
 export default function MemberLoginPage() {
   const navigate = useNavigate();
@@ -20,10 +13,40 @@ export default function MemberLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const slug = currentSlug();
+  const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
+  const [loadingWorkspace, setLoadingWorkspace] = useState(true);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const [koperasi, setKoperasi] = useState("");
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/workspace", { cache: "no-store" }).then(async res => {
+      const body = await res.json() as ApiResponse<WorkspaceContext | null>;
+      if (!res.ok || !body.success) throw new Error(body.error?.message ?? "Koperasi tidak tersedia.");
+      if (body.data?.isAlias) {
+        const target = new URL(body.data.canonicalLoginUrl);
+        const base = import.meta.env.VITE_TENANT_BASE_DOMAIN || "koperasi.inovasijayakarsa.id";
+        if (!target.hostname.endsWith(`.${base}`) || !["https:", ...(import.meta.env.DEV ? ["http:"] : [])].includes(target.protocol)) throw new Error("Alamat koperasi tidak valid.");
+        target.pathname = "/anggota/login"; target.search = ""; target.hash = "";
+        window.location.replace(target.toString()); return;
+      }
+      if (active) setWorkspace(body.data ?? null);
+    }).catch(err => { if (active) setWorkspaceError(err instanceof Error ? err.message : "Koneksi gagal."); })
+      .finally(() => { if (active) setLoadingWorkspace(false); });
+    return () => { active = false; };
+  }, []);
+
+  function openKoperasi(event: FormEvent) {
+    event.preventDefault();
+    const slug = koperasi.trim().toLowerCase();
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(slug)) return;
+    const base = import.meta.env.VITE_TENANT_BASE_DOMAIN || "koperasi.inovasijayakarsa.id";
+    const local = base.endsWith(".localhost");
+    window.location.assign(`${local ? "http" : "https"}://${slug}.${base}${local && window.location.port ? `:${window.location.port}` : ""}/anggota/login`);
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (!workspace || loadingWorkspace) return;
     setError(null);
     setPending(true);
 
@@ -48,17 +71,14 @@ export default function MemberLoginPage() {
           <p className="mt-1 text-sm text-slate-600">Portal Anggota</p>
         </div>
 
-        <form onSubmit={onSubmit} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        {loadingWorkspace ? <p role="status">Memuat koperasi…</p> : workspaceError ? <div role="alert"><p>{workspaceError}</p><button onClick={() => window.location.reload()}>Coba lagi</button></div> : !workspace ? <form onSubmit={openKoperasi} className="rounded-lg border bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-medium">Pilih alamat koperasi</h2><p className="mt-2 text-sm text-slate-600">Masukkan alamat singkat koperasi Anda, lalu masuk menggunakan NIK dan kata sandi.</p>
+          <label htmlFor="koperasi" className="mt-4 block text-sm font-medium">Alamat koperasi</label>
+          <input id="koperasi" value={koperasi} onChange={e => setKoperasi(e.target.value)} required pattern="[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*" placeholder="Contoh: ptap" className="mt-1 w-full rounded-md border px-3 py-2" />
+          <button type="submit" className="mt-4 w-full rounded-md bg-slate-900 px-4 py-2 text-white">Buka portal anggota</button>
+        </form> : <form onSubmit={onSubmit} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-medium text-slate-900">Masuk Anggota</h2>
-          {slug ? (
-            <p className="mt-1 text-sm text-slate-500">
-              Koperasi: <span className="font-medium text-slate-700">{slug}</span>
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-amber-700">
-              Gunakan alamat koperasi Anda, misalnya <span className="font-mono">demo.localhost:3002</span>
-            </p>
-          )}
+          <p className="mt-1 text-sm text-slate-500">Koperasi: <span className="font-medium text-slate-700">{workspace.name}</span></p>
 
           <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="nik">
             NIK
@@ -103,7 +123,7 @@ export default function MemberLoginPage() {
           >
             {pending ? "Memproses…" : "Masuk"}
           </button>
-        </form>
+        </form>}
 
         <p className="mt-4 text-center text-sm text-slate-600">
           Petugas koperasi?{" "}
