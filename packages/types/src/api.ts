@@ -28,6 +28,11 @@ export const ErrorCode = {
   // Regulatory guardrails (Permenkop UKM 8/2023) — see lib/regulatory-config.ts.
   RATE_EXCEEDS_REGULATORY_CAP: "RATE_EXCEEDS_REGULATORY_CAP",
   RELATED_PARTY_LIMIT_EXCEEDED: "RELATED_PARTY_LIMIT_EXCEEDED",
+  // Self-Service Registration (public, unauthenticated) — a missing or
+  // invalid CAPTCHA token on POST /api/public/register/:tenantSlug. Kept as
+  // its own 400, distinct from the 422 VALIDATION_ERROR the rest of the
+  // codebase uses for field-level Zod failures, per that endpoint's spec.
+  CAPTCHA_FAILED: "CAPTCHA_FAILED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -46,7 +51,16 @@ export interface ApiResponse<T> {
   // Savings/Loans), merged alongside timestamp/requestId in the same object.
   // totalOutstanding is specific to GET /konsumen/pos/credit (the tenant-wide
   // Piutang Anggota total, independent of the current page/search filter).
-  meta: { timestamp: string; requestId: string; page?: number; limit?: number; total?: number; totalOutstanding?: string };
+  // unreadCount is specific to GET /api/notifications.
+  meta: {
+    timestamp: string;
+    requestId: string;
+    page?: number;
+    limit?: number;
+    total?: number;
+    totalOutstanding?: string;
+    unreadCount?: number;
+  };
 }
 
 export interface Paginated<T> {

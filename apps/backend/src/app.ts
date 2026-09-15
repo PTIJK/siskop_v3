@@ -24,6 +24,7 @@ import { platformRoutes } from "./modules/platform/routes.js";
 import { ksuRoutes } from "./modules/ksu/routes.js";
 import { konsumenRoutes } from "./modules/konsumen/product.routes.js";
 import { schedulerRoutes } from "./modules/scheduler/routes.js";
+import { notificationsRoutes } from "./modules/notifications/routes.js";
 import { workspaceRequest } from "./modules/tenant-domains/middleware.js";
 import { tenantDomainRoutes } from "./modules/tenant-domains/routes.js";
 
@@ -97,6 +98,7 @@ export function createApp(): Express {
   app.use("/api/ksu", ksuRoutes());
   app.use("/api/konsumen", konsumenRoutes());
   app.use("/api/scheduler", schedulerRoutes());
+  app.use("/api/notifications", notificationsRoutes());
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({

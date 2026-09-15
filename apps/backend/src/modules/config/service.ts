@@ -10,6 +10,7 @@ import type {
   UpdateAccountInput,
   UpdateModalDisetorInput,
   UpdateRoleInput,
+  UpdateSelfRegistrationInput,
   UpdateUnitInput,
   UpsertAccountMappingInput,
   UpsertShuDistributionConfigInput,
@@ -417,4 +418,23 @@ export async function updateModalDisetor(tenantId: string, data: UpdateModalDise
     select: { modalDisetor: true, auditThresholdNotifiedAt: true }
   });
   return serializeModalDisetor(tenant);
+}
+
+// ── Self Registration ────────────────────────────────────────────────────────
+// Gates the public QR self-registration form (modules/members/public-registration.*).
+
+export async function getSelfRegistrationConfig(tenantId: string) {
+  const tenant = await db.tenant.findUniqueOrThrow({
+    where: { id: tenantId },
+    select: { selfRegistrationEnabled: true }
+  });
+  return tenant;
+}
+
+export async function updateSelfRegistrationConfig(tenantId: string, data: UpdateSelfRegistrationInput) {
+  return db.tenant.update({
+    where: { id: tenantId },
+    data: { selfRegistrationEnabled: data.selfRegistrationEnabled },
+    select: { selfRegistrationEnabled: true }
+  });
 }

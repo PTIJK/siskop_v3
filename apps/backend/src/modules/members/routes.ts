@@ -9,6 +9,7 @@ import { AppError } from "../../lib/errors.js";
 import { requireParam } from "../../lib/http.js";
 import { activatePortalAccess } from "../member-auth/service.js";
 import { createMemberSchema, listMembersQuerySchema, updateMemberSchema } from "./schema.js";
+import { registrationRoutes } from "./registration.routes.js";
 import {
   createMember,
   deactivateMember,
@@ -76,6 +77,11 @@ export function membersRoutes(): Router {
       res.status(201).json({ success: true, data: member, meta: res.locals.meta });
     })
   );
+
+  // Registered before /:id so "/self-registration-link" and
+  // "/registration-requests" aren't shadowed by the single-segment :id route
+  // below — same ordering discipline loans.routes.ts uses for /overdue.
+  router.use(registrationRoutes());
 
   router.get(
     "/:id",

@@ -10,6 +10,7 @@ import {
   updateAccountSchema,
   updateModalDisetorSchema,
   updateRoleSchema,
+  updateSelfRegistrationSchema,
   updateUnitSchema,
   upsertAccountMappingSchema,
   upsertShuDistributionConfigSchema,
@@ -23,6 +24,7 @@ import {
   deleteRole,
   generateStandardCoa,
   getModalDisetor,
+  getSelfRegistrationConfig,
   getShuDistributionConfig,
   getWhitelabelConfig,
   listAccountMappings,
@@ -32,6 +34,7 @@ import {
   updateAccount,
   updateModalDisetor,
   updateRole,
+  updateSelfRegistrationConfig,
   updateUnit,
   upsertAccountMapping,
   upsertShuDistributionConfig,
@@ -261,6 +264,30 @@ export function configRoutes(): Router {
     handle(async (req, res) => {
       const data = updateModalDisetorSchema.parse(req.body);
       const result = await updateModalDisetor(authClaims(req).tenantId, data);
+      res.json({ success: true, data: result, meta: res.locals.meta });
+    })
+  );
+
+  // ── Self Registration ────────────────────────────────────────────────────────
+  // PUT, not PATCH — every "update a tenant setting" endpoint in this module
+  // (modal-disetor, whitelabel, units) uses PUT, so this matches rather than
+  // introducing the only PATCH route in the codebase.
+
+  router.get(
+    "/self-registration",
+    requirePermission("config", "read"),
+    handle(async (req, res) => {
+      const data = await getSelfRegistrationConfig(authClaims(req).tenantId);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.put(
+    "/self-registration",
+    requirePermission("config", "update"),
+    handle(async (req, res) => {
+      const data = updateSelfRegistrationSchema.parse(req.body);
+      const result = await updateSelfRegistrationConfig(authClaims(req).tenantId, data);
       res.json({ success: true, data: result, meta: res.locals.meta });
     })
   );
