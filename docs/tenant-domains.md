@@ -187,7 +187,8 @@ and the outstanding hosted checks.
 The release lock serializes publishing. Cloud Build tests the source, builds an
 immutable API image, runs migrations, and deploys a candidate API. Tenant
 publishing uses the exact same workspace and pins its gateway to the candidate
-URL. After the App Hosting rollout succeeds, it publishes the central frontend
+URL. After the App Hosting rollout succeeds and the tenant login HTML responds
+successfully, it publishes the central frontend
 so registration redirects have a ready destination. It then verifies both
 release markers and a real tenant lookup, then promotes the API default traffic.
 There is no independent App Hosting push-to-main trigger. Publication uploads an

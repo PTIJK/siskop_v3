@@ -31,4 +31,5 @@ env:
     availability: [BUILD]
 outputFiles:
   serverApp:
-    include: [apps/frontend/dist/**, infra/tenant-web/server.mjs, infra/tenant-web/release.json]
+    # App Hosting accepts literal files/directories here, not glob patterns.
+    include: [apps/frontend/dist, infra/tenant-web/server.mjs, infra/tenant-web/release.json]
