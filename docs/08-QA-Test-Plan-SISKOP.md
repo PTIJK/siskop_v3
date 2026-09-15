@@ -42,6 +42,7 @@ exist in the repo before this plan. This is that document — going forward, kee
 | Config | Units, Roles, Users, Whitelabel, Modal Disetor |
 | Platform Admin | Cross-tenant tenant/package/admin-user management |
 | Dashboard | Tenant-scoped summary |
+| Self-Service Registration | `modules/members/registration.*` (internal review queue), `modules/members/public-registration.*` (unauthenticated QR submission endpoint), `modules/notifications` (review-queue bell), `apps/frontend/src/features/self-registration` |
 | Mobile (Fase 1) | Read-only Dashboard/Members/Savings/Loans/Reports + Profil, permanent Anggota Menunggak |
 | Cross-cutting | Multi-tenant isolation, RBAC (4 seed roles + platform admin), SaaS entitlements, API envelope/error contract |
 
@@ -178,6 +179,12 @@ of severity elsewhere, per the risk-based prioritization in §3.3.
     reports/whitelabel-write are blocked with `FEATURE_NOT_ENTITLED`, not silently empty.
 11. Mobile: log in on `apps/mobile`, confirm Dashboard/Members/Savings/Loans/Reports render
     read-only and Anggota Menunggak is reachable without an accounting entitlement.
+12. Generate the self-registration QR link from Anggota → submit the public `/daftar/:slug` form
+    as an unauthenticated prospect (no session, no bearer token) → confirm a `members.create`
+    holder sees a bell notification and the new row in the Pendaftaran Mandiri queue → approve it →
+    confirm a Member is created with the standard `KOP-{SLUG}-{YYYYMM}-####` / `ACC-##########`
+    format, identical to a manually-entered member. Then confirm a second submission missing/with
+    an invalid CAPTCHA token is rejected with zero database writes.
 
 ## 7. Known risk acceptances (carried forward each cycle until closed)
 

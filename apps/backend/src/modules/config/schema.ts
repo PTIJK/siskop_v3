@@ -135,6 +135,12 @@ export const updateModalDisetorSchema = z.object({
   modalDisetor: z.coerce.number().nonnegative("Modal disetor tidak boleh negatif").nullable()
 });
 
+// ── Self Registration ───────────────────────────────────────────────────────
+
+export const updateSelfRegistrationSchema = z.object({
+  selfRegistrationEnabled: z.boolean()
+});
+
 export type CreateUnitInput = z.infer<typeof createUnitSchema>;
 export type UpdateUnitInput = z.infer<typeof updateUnitSchema>;
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
@@ -145,3 +151,4 @@ export type UpsertAccountMappingInput = z.infer<typeof upsertAccountMappingSchem
 export type UpsertShuDistributionConfigInput = z.infer<typeof upsertShuDistributionConfigSchema>;
 export type UpsertWhitelabelConfigInput = z.infer<typeof upsertWhitelabelConfigSchema>;
 export type UpdateModalDisetorInput = z.infer<typeof updateModalDisetorSchema>;
+export type UpdateSelfRegistrationInput = z.infer<typeof updateSelfRegistrationSchema>;

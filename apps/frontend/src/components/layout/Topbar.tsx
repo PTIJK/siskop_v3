@@ -15,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "../ui/dropdown-menu";
+import { NotificationBell } from "./NotificationBell";
 import { LogOut, User, ChevronDown } from "lucide-react";
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -80,6 +81,7 @@ export function Topbar() {
         {logoutError ? <p role="alert" className="text-sm text-destructive">{logoutError}</p> : null}
         {(options.data?.total ?? 0) > 1 ? <button className="rounded-md border px-3 py-2 text-sm" onClick={() => setSwitchOpen(true)}>{options.data?.currentTenantName} · Ganti Koperasi</button> : null}
         {switchOpen && user ? <TenantPickerDialog currentTenantId={user.tenantId} onCancel={() => setSwitchOpen(false)} beforeSwitch={() => window.location.pathname === "/dashboard" || window.confirm("Pindah koperasi? Perubahan yang belum disimpan akan ditinggalkan.")} /> : null}
+        <NotificationBell />
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent">
             <Avatar className="h-7 w-7">

@@ -50,3 +50,74 @@ export interface ListMembersQuery {
   sortOrder?: "asc" | "desc";
   isActive?: boolean;
 }
+
+// ── Self-Service Registration ───────────────────────────────────────────────
+// A prospective member's own submission via the public QR form — never
+// creates a Member directly. A teller/admin reviews the queue and approves
+// (which does create the Member, via the same ID-generation path as manual
+// entry) or rejects it. See modules/members/registration.* (backend).
+
+export type MemberRegistrationStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface MemberRegistrationRequest {
+  id: string;
+  tenantId: string;
+  fullName: string;
+  nik: string;
+  address: string;
+  birthPlace: string;
+  /** ISO date, e.g. `1985-03-15`. */
+  birthDate: string;
+  occupation: string;
+  phone?: string | null;
+  ktpPhotoUrl?: string | null;
+  status: MemberRegistrationStatus;
+  rejectionReason?: string | null;
+  submittedAt: string;
+  reviewedAt?: string | null;
+  reviewedByUserId?: string | null;
+  createdMemberId?: string | null;
+}
+
+export interface ListRegistrationRequestsQuery {
+  page?: number;
+  limit?: number;
+  status?: MemberRegistrationStatus;
+}
+
+export interface RejectRegistrationRequestInput {
+  rejectionReason: string;
+}
+
+export interface SelfRegistrationLink {
+  url: string;
+}
+
+/** The shared field set — same validation rules as CreateMemberRequest,
+ * minus isPengurus/isPengawas (staff-only concepts a prospect doesn't set),
+ * plus the two things only the public form needs. */
+export interface PublicMemberRegistrationInput {
+  fullName: string;
+  nik: string;
+  address: string;
+  birthPlace: string;
+  /** `YYYY-MM-DD` */
+  birthDate: string;
+  occupation: string;
+  phone?: string;
+  captchaToken: string;
+}
+
+export interface PublicMemberRegistrationResult {
+  message: string;
+  /** Last 4 digits only, e.g. `************0001` — the NIK is never echoed back in full. */
+  nikMasked: string;
+  /** True if this NIK already belongs to a Member or another PENDING request in the tenant — informational only, never blocks submission. */
+  nikWarning: boolean;
+}
+
+export interface PublicTenantBranding {
+  tenantName: string;
+  tenantLogoUrl: string | null;
+  selfRegistrationEnabled: boolean;
+}

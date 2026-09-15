@@ -16,3 +16,4 @@ export * from "./onboarding.js";
 export * from "./tenant-domain.js";
 export * from "./scheduler.js";
 export * from "./tenant-access.js";
+export * from "./notification.js";

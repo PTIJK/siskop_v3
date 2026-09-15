@@ -38,7 +38,13 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   "POSSale",
   // Phase 2, Task 4 — ppob.service.ts now queries/creates PPOBTransaction by
   // tenantId (a stub check-and-pay skeleton, no journal posting involved).
-  "PPOBTransaction"
+  "PPOBTransaction",
+  // Self-Service Registration — the first unauthenticated write path in the
+  // system, so this guard matters more than usual here. TenantNotificationRead
+  // is deliberately NOT added: like POSSaleLine above, it carries no tenantId
+  // column of its own (only notificationId/userId).
+  "MemberRegistrationRequest",
+  "TenantNotification"
 ]);
 
 const WHERE_REQUIRED_ACTIONS = new Set([

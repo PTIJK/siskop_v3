@@ -1,12 +1,20 @@
 import { z } from "zod";
 
-export const createMemberSchema = z.object({
+// The fields a member's identity is made of, shared verbatim between staff
+// entry (createMemberSchema below) and the public self-registration form
+// (modules/members/public-registration.schema.ts) — one set of validation
+// rules for both, per CLAUDE.md/ENGINEER-INSTRUCTIONS' "don't duplicate
+// validation" guidance.
+export const memberFieldsSchema = z.object({
   fullName: z.string().min(2, "Nama minimal 2 karakter"),
   nik: z.string().length(16, "NIK harus 16 digit").regex(/^\d+$/, "NIK harus berupa angka"),
   address: z.string().min(10, "Alamat harus lengkap"),
   birthPlace: z.string().min(2, "Tempat lahir wajib diisi"),
   birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD"),
-  occupation: z.string().min(2, "Pekerjaan wajib diisi"),
+  occupation: z.string().min(2, "Pekerjaan wajib diisi")
+});
+
+export const createMemberSchema = memberFieldsSchema.extend({
   isPengurus: z.boolean().default(false),
   isPengawas: z.boolean().default(false)
 });

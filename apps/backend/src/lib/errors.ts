@@ -23,7 +23,8 @@ const STATUS: Record<ErrorCode, number> = {
   [ErrorCode.MEMBER_HAS_NO_ACTIVE_SAVING]: 422,
   [ErrorCode.MEMBER_CREDIT_LIMIT_EXCEEDED]: 422,
   [ErrorCode.RATE_EXCEEDS_REGULATORY_CAP]: 422,
-  [ErrorCode.RELATED_PARTY_LIMIT_EXCEEDED]: 422
+  [ErrorCode.RELATED_PARTY_LIMIT_EXCEEDED]: 422,
+  [ErrorCode.CAPTCHA_FAILED]: 400
 };
 
 /**
@@ -80,4 +81,8 @@ export function featureNotEntitled(message: string): AppError {
 
 export function packageLimitExceeded(message: string): AppError {
   return new AppError(ErrorCode.PACKAGE_LIMIT_EXCEEDED, message);
+}
+
+export function captchaFailed(message = "Verifikasi captcha gagal"): AppError {
+  return new AppError(ErrorCode.CAPTCHA_FAILED, message);
 }

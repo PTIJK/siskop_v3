@@ -134,27 +134,28 @@ enum CalkSection {
 // downstream models aren't blocked by a second migration later.
 
 model SubscriptionPackage {
-  id                String   @id @default(cuid())
-  name              String
-  price             Decimal  @db.Decimal(15, 2)
-  modules           String[]
-  maxUsers          Int
-  maxMembers        Int
-  maxSavingConfigs  Int?
-  whitelabelEnabled Boolean  @default(false)
-  customSubdomainEnabled Boolean @default(false)
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
+  id                     String   @id @default(cuid())
+  name                   String
+  price                  Decimal  @db.Decimal(15, 2)
+  modules                String[]
+  maxUsers               Int
+  maxMembers             Int
+  maxSavingConfigs       Int?
+  whitelabelEnabled      Boolean  @default(false)
+  customSubdomainEnabled Boolean  @default(false)
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
 
   tenants Tenant[]
 }
 
 // Platform recovery ledger for Firebase creates; contains no passwords or tokens.
 model IdentityProvisioning {
-  uid       String @id
-  status    String @default("PENDING")
+  uid       String   @id
+  status    String   @default("PENDING")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
   @@index([status, createdAt])
 }
 
@@ -228,12 +229,17 @@ model Tenant {
   billingReminder7SentAt   DateTime?
   modalDisetor             Decimal?             @db.Decimal(15, 2)
   auditThresholdNotifiedAt DateTime?
+  // Gates POST /api/public/register/:tenantSlug — the QR self-registration
+  // form. Defaults on so existing tenants don't need an opt-in step.
+  selfRegistrationEnabled  Boolean              @default(true)
   createdAt                DateTime             @default(now())
 
   units                  CooperativeUnit[]
   users                  User[]
   roles                  Role[]
   members                Member[]
+  registrationRequests   MemberRegistrationRequest[]
+  tenantNotifications    TenantNotification[]
   savingConfigs          SavingConfig[]
   loanConfigs            LoanConfig[]
   savings                Saving[]
@@ -260,22 +266,24 @@ model Tenant {
 
 // Both current addresses and historical aliases share one global namespace.
 model TenantSlugReservation {
-  slug      String @id
+  slug      String   @id
   tenantId  String
   createdAt DateTime @default(now())
-  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([tenantId])
 }
 
 model TenantSlugChange {
-  id          String @id @default(cuid())
+  id          String   @id @default(cuid())
   tenantId    String
   oldSlug     String
   newSlug     String
   actorUserId String
   reason      String?
   createdAt   DateTime @default(now())
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([tenantId, createdAt])
 }
 
@@ -368,6 +376,8 @@ model User {
   unitAssignments               UserUnit[]
   loginAttempts                 TenantLoginAttempt[]
   invitations                   MembershipInvitation[]
+  reviewedRegistrationRequests  MemberRegistrationRequest[]
+  tenantNotificationReads       TenantNotificationRead[]
 
   @@unique([tenantId, email])
   @@unique([identityId, tenantId])
@@ -483,12 +493,13 @@ model Member {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  savings          Saving[]
-  loans            Loan[]
-  memberships      UnitMembership[]
-  posSales         POSSale[]
-  creditRepayments MemberCreditRepayment[]
-  loginGrants      MemberLoginGrant[]
+  savings             Saving[]
+  loans               Loan[]
+  memberships         UnitMembership[]
+  posSales            POSSale[]
+  creditRepayments    MemberCreditRepayment[]
+  loginGrants         MemberLoginGrant[]
+  registrationRequest MemberRegistrationRequest?
 
   @@unique([tenantId, nik])
   @@index([tenantId])
@@ -531,6 +542,45 @@ model MemberLoginAttempt {
   consumedAt    DateTime?
   @@index([grantId])
   @@index([expiresAt])
+}
+
+// ── MEMBER REGISTRATION (self-service, QR-triggered) ───────────────────────────
+
+enum MemberRegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Created by the unauthenticated POST /api/public/register/:tenantSlug
+// endpoint — never writes to Member directly. A teller/admin reviews the
+// queue (GET /api/members/registration-requests) and approves or rejects;
+// approval is what actually creates the Member row, via the same
+// generateMemberId()/generateAccountNumber() path a manually-entered member
+// uses (see modules/members/registration.service.ts#approveRegistrationRequest).
+model MemberRegistrationRequest {
+  id               String                   @id @default(cuid())
+  tenantId         String
+  tenant           Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  fullName         String
+  nik              String
+  address          String
+  birthPlace       String
+  birthDate        DateTime
+  occupation       String
+  phone            String?
+  ktpPhotoUrl      String?
+  status           MemberRegistrationStatus @default(PENDING)
+  rejectionReason  String?
+  submittedAt      DateTime                 @default(now())
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  reviewedByUser   User?                    @relation(fields: [reviewedByUserId], references: [id])
+  createdMemberId  String?                  @unique
+  createdMember    Member?                  @relation(fields: [createdMemberId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([tenantId, nik])
 }
 
 // ── SAVINGS ───────────────────────────────────────────────────────────────────
@@ -590,6 +640,43 @@ model NotificationRead {
   userId         String
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   readAt         DateTime     @default(now())
+
+  @@unique([notificationId, userId])
+  @@index([userId])
+}
+
+// ── TENANT NOTIFICATIONS (in-app, permission-scoped) ────────────────────────────
+// Distinct from Notification/NotificationRead above, which is global/platform-
+// admin-only. This is tenant-scoped and visible only to users whose
+// Permissions blob grants permissionModule.permissionAction (checked in
+// modules/notifications/service.ts, the same shape requirePermission checks).
+// `type` is a plain string (see TenantNotificationType in @siskop/types) so a
+// new notification-producing feature never needs a schema migration.
+model TenantNotification {
+  id               String   @id @default(cuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type             String
+  title            String
+  message          String
+  permissionModule String
+  permissionAction String
+  relatedId        String?
+  createdAt        DateTime @default(now())
+
+  reads TenantNotificationRead[]
+
+  @@index([tenantId, createdAt])
+}
+
+// Per-user read state. A row's absence means unread for that user.
+model TenantNotificationRead {
+  id             String             @id @default(cuid())
+  notificationId String
+  notification   TenantNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime           @default(now())
 
   @@unique([notificationId, userId])
   @@index([userId])

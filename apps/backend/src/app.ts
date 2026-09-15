@@ -14,6 +14,7 @@ import { memberAuthRoutes } from "./modules/member-auth/routes.js";
 import { memberAccessRoutes } from "./modules/member-access/routes.js";
 import { memberPortalRoutes } from "./modules/member-portal/routes.js";
 import { membersRoutes } from "./modules/members/routes.js";
+import { publicMemberRegistrationRoutes } from "./modules/members/public-registration.routes.js";
 import { savingsRoutes } from "./modules/savings/routes.js";
 import { loansRoutes } from "./modules/loans/routes.js";
 import { dashboardRoutes } from "./modules/dashboard/routes.js";
@@ -24,6 +25,7 @@ import { platformRoutes } from "./modules/platform/routes.js";
 import { ksuRoutes } from "./modules/ksu/routes.js";
 import { konsumenRoutes } from "./modules/konsumen/product.routes.js";
 import { schedulerRoutes } from "./modules/scheduler/routes.js";
+import { notificationsRoutes } from "./modules/notifications/routes.js";
 import { workspaceRequest } from "./modules/tenant-domains/middleware.js";
 import { tenantDomainRoutes } from "./modules/tenant-domains/routes.js";
 
@@ -87,6 +89,7 @@ export function createApp(): Express {
   app.use("/api/member-access", memberAccessRoutes());
   app.use("/api/member", memberPortalRoutes());
   app.use("/api/members", membersRoutes());
+  app.use("/api/public/register", publicMemberRegistrationRoutes());
   app.use("/api/savings", savingsRoutes());
   app.use("/api/loans", loansRoutes());
   app.use("/api/dashboard", dashboardRoutes());
@@ -97,6 +100,7 @@ export function createApp(): Express {
   app.use("/api/ksu", ksuRoutes());
   app.use("/api/konsumen", konsumenRoutes());
   app.use("/api/scheduler", schedulerRoutes());
+  app.use("/api/notifications", notificationsRoutes());
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({

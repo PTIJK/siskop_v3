@@ -307,6 +307,48 @@ known other-tenant ID, since the UI alone can mask a backend leak.
 
 ---
 
+## 16. Self-Service Registration (FR-SREG)
+
+New in this cycle — no FR-SREG-* entries exist yet in `docs/02-System-Requirements-SISKOP.md`
+(this feature predates that doc's last update), so cases without a natural FR mapping cite the
+source file instead, matching the convention already used for TC-MEM-002/003/006/007. The public
+submission endpoint (`POST /api/public/register/:tenantSlug`) is the first unauthenticated write
+path in the system — TC-SREG-006/007/008/013/014/016/019/020 are treated as release-blocking, the
+same tier as the Multi-Tenant Isolation module (§12).
+
+| ID | Req | Type | Scenario & Steps | Expected Result | Priority |
+|---|---|---|---|---|---|
+| TC-SREG-001 | registration.routes.ts | P | Manager or Super Admin calls `GET /api/members/self-registration-link` | `{ url }` built from `PUBLIC_APP_URL` + tenant slug, e.g. `https://app.example/daftar/demo` — path-based, not the tenant's subdomain | P2 |
+| TC-SREG-002 | registration.routes.ts | N | Viewer calls the same endpoint | `403 FORBIDDEN` — `members.create` not granted to Viewer (or Teller — see `tenants/provision.ts` SEED_ROLES) | P2 |
+| TC-SREG-003 | public-registration.routes.ts | P | `GET /api/public/register/:tenantSlug` for an active, enabled tenant, no auth header | `200`, `{ tenantName, tenantLogoUrl, selfRegistrationEnabled: true }` | P2 |
+| TC-SREG-004 | public-registration.routes.ts | N | `GET /api/public/register/:tenantSlug` for an unknown slug | `404`, generic message, reveals nothing about whether the slug ever existed | P2 |
+| TC-SREG-005 | public-registration.schema.ts | N | `POST` with a 15-digit NIK, a non-numeric NIK, or a missing required field (fullName/address/birthPlace/birthDate/occupation) | `422 VALIDATION_ERROR` — identical field rules to the internal `CreateMemberSchema` (shared `memberFieldsSchema`) | P1 |
+| TC-SREG-006 | public-registration.routes.ts | N | `POST` with a missing or empty `captchaToken` | `400 CAPTCHA_FAILED`; verify directly against the DB that zero rows were written | P0 |
+| TC-SREG-007 | lib/captcha.ts | N | `POST` with a `captchaToken` that Turnstile's `siteverify` rejects (or the provider call fails/errors) | `400 CAPTCHA_FAILED`, fails closed; zero DB writes | P0 |
+| TC-SREG-008 | public-registration.routes.ts | N | Send 6 valid submissions from the same IP inside the default 5-requests/hour window | First 5 succeed (`201`), the 6th returns `429 RATE_LIMIT` | P0 |
+| TC-SREG-009 | Tenant.selfRegistrationEnabled | N | `POST` to a tenant with `selfRegistrationEnabled: false` | `404` — byte-for-byte identical to TC-SREG-004's unknown-slug response, so scanning a disabled tenant's QR reveals nothing | P1 |
+| TC-SREG-010 | public-registration.service.ts | P | Submit a NIK that already belongs to an active Member in the same tenant | `201`; response includes `nikWarning: true`; the request is still created as PENDING — soft check only, never blocks submission | P1 |
+| TC-SREG-011 | public-registration.service.ts | P | Submit a NIK matching another already-PENDING request in the same tenant | `201`, `nikWarning: true` | P2 |
+| TC-SREG-012 | public-registration.service.ts | P | Submit a NIK nobody in the tenant has used | `201`, `nikWarning: false` | P2 |
+| TC-SREG-013 | public-registration.service.ts | N | Inspect the full response body of a successful submission | NIK is masked to the last 4 digits only (`nikMasked`); the full NIK appears nowhere in the payload; no internal `id`/`tenantId` is returned | P0 |
+| TC-SREG-014 | lib/file-sniff.ts | N | Attach a non-image file (e.g. an HTML/script payload) renamed `ktp.jpg` with a declared `image/jpeg` Content-Type | `422 INVALID_FILE_TYPE` — magic-byte sniffing catches the mismatch; the client-declared MIME type alone is never trusted on this unauthenticated endpoint | P0 |
+| TC-SREG-015 | public-registration.routes.ts | P | Attach a genuine JPEG, PNG, or PDF ≤ 2MB as the `ktp` field | `201`, `ktpPhotoUrl` stored under `/uploads/ktp/{tenantId}/...`, same URL scheme as the internal upload | P2 |
+| TC-SREG-016 | NFR-TENANT-01 (public endpoint) | N | `POST` to Tenant A's slug with a crafted extra `tenantId` field in the body set to Tenant B's id | The request is created under Tenant A (the URL's tenant) only; Tenant B gains zero rows — release-blocking, no PM override, same category as §12 | P0 |
+| TC-SREG-017 | registration.routes.ts | P | Manager/Super Admin calls `GET /members/registration-requests?status=PENDING` with a second tenant's requests also in the DB | Paginated list scoped to the caller's own tenant only, same pagination shape as `GET /members` | P2 |
+| TC-SREG-018 | registration.routes.ts | N | Viewer calls list/approve/reject on `registration-requests` | `403 FORBIDDEN` on all three | P1 |
+| TC-SREG-019 | registration.service.ts | P | Approve a PENDING request whose NIK is free | `200`; Member created via the same `generateMemberId()`/`generateAccountNumber()` path as manual entry (`KOP-{SLUG}-{YYYYMM}-####` / `ACC-##########`); request marked APPROVED with `reviewedByUserId`, `reviewedAt`, `createdMemberId` set, both writes in one transaction | P0 |
+| TC-SREG-020 | registration.service.ts | N | Approve a PENDING request whose NIK now belongs to an existing Member (the hard check, distinct from TC-SREG-010's soft check at submission time) | `409 NIK_EXISTS`; no Member created; the request stays PENDING (never silently left in a half-approved state) | P0 |
+| TC-SREG-021 | registration.service.ts | N | Approve or reject a request that was already APPROVED or REJECTED | `409 CONFLICT` | P2 |
+| TC-SREG-022 | registration.schema.ts | N | Reject with an empty or whitespace-only `rejectionReason` | `422 VALIDATION_ERROR`, "Alasan penolakan wajib diisi" | P1 |
+| TC-SREG-023 | registration.service.ts | P | Reject a PENDING request with a reason | `200`, status REJECTED, `rejectionReason` stored, no Member created | P2 |
+| TC-SREG-024 | config self-registration | P | Super Admin `PUT /config/self-registration { selfRegistrationEnabled: false }` | `200`, `Tenant.selfRegistrationEnabled` updated; a subsequent public `GET`/`POST` for that slug reflects the closed state (TC-SREG-009) | P1 |
+| TC-SREG-025 | config self-registration | N | Manager (`config.update: false`) attempts the same `PUT` | `403 FORBIDDEN` — Super-Admin-only, same as `modal-disetor`/`whitelabel` | P2 |
+| TC-SREG-026 | notifications | P | A public submission raises a `TenantNotification` | Manager/Super Admin (holds `members.create`) sees "N pendaftaran mandiri menunggu persetujuan" via `GET /notifications`; Viewer (lacks `members.create`) does not see it — permission-filtered, not tenant-only | P2 |
+| TC-SREG-027 | Anggota page (manual, frontend) | P | Click "Generate QR Pendaftaran" on the Anggota list | Modal renders a scannable QR encoding the exact self-registration-link URL; copy/download/print actions all work | P2 |
+| TC-SREG-028 | Pendaftaran Mandiri tab (manual, frontend) | N | Open a pending row that has a KTP photo; attempt to click Setujui before opening "Lihat Foto" | Setujui stays disabled until the photo has been opened at least once this session (deliberate anti-rubber-stamp friction); a row with no photo attached is never gated | P1 |
+
+---
+
 ## Summary
 
 | Module | # Cases | P0 | P1 |
@@ -326,15 +368,21 @@ known other-tenant ID, since the UI alone can mask a backend leak.
 | API Contract & Security | 10 | 1 | 4 |
 | Mobile | 8 | 1 | 4 |
 | Non-Functional | 5 | 0 | 0 |
-| **Total** | **172** | **49** | **63** |
+| Self-Service Registration | 28 | 8 | 7 |
+| **Total** | **200** | **57** | **70** |
 
 The P0 concentration in Savings, Loans, and Multi-Tenant Isolation is intentional — it mirrors the
 four highest-risk areas named in `QA-INSTRUCTIONS.md` and test-plan §3.3, and none of those cases
-are eligible for a PM override on failure.
+are eligible for a PM override on failure. Self-Service Registration's own P0 concentration (8 of
+28, the highest ratio outside §12) reflects the same standard applied to its cross-tenant-isolation
+case (TC-SREG-016) plus everything guarding the system's first unauthenticated write path — CAPTCHA
+(TC-SREG-006/007), rate limiting (TC-SREG-008), response data exposure (TC-SREG-013), file-type
+spoofing (TC-SREG-014), and the hard NIK uniqueness check at approval (TC-SREG-020) — none of
+which are eligible for a PM override either.
 
 ---
 
-## 16. Execution Log — Cycle 1 (2026-08-27)
+## 17. Execution Log — Cycle 1 (2026-08-27)
 
 Executed against `main` @ `61cc34f`, backend dev server (`localhost:3001`) + frontend dev server
 (`localhost:3000`) on the local Docker Postgres (port 5433), using the existing `demo` (accounting
@@ -345,7 +393,7 @@ by test-plan §4. Methods used: (1) the automated Vitest suite, (2) a live API-e
 live result's root cause, (4) one headless-browser screenshot (no Puppeteer/Playwright is installed
 in this environment, so scripted authenticated UI walkthroughs were out of reach this cycle).
 
-### 16.1 Entry criteria (test-plan §5.1)
+### 17.1 Entry criteria (test-plan §5.1)
 
 | Check | Result |
 |---|---|
@@ -362,7 +410,7 @@ active — not a test failure (every file that ran passed). Re-run with
 `NODE_OPTIONS=--max-old-space-size=4096` completed cleanly. Worth carrying into CI/local docs as an
 environment note; not a product defect.
 
-### 16.2 Defect log — new findings this cycle
+### 17.2 Defect log — new findings this cycle
 
 | # | Severity | TC ID(s) | FR/NFR | Summary |
 |---|---|---|---|---|
@@ -382,7 +430,7 @@ per `CLAUDE.md` decision authority.
 Per test-plan §3.3, a failed money-arithmetic case is release-blocking regardless of severity
 elsewhere — D1-D3 sit squarely in "Savings balance arithmetic," the plan's #2 highest-risk category.
 
-### 16.3 Results by section
+### 17.3 Results by section
 
 Legend: **Live** = executed against the running dev backend this cycle (script:
 `qa-live.mjs`/`qa-live-3.mjs`, 88 checks total, 84 pass / 4 fail). **Automated** = already exercised
@@ -650,7 +698,7 @@ corroborating TC-AUTH-007 at the UI layer, not just the API layer.
 | TC-PERF-004 | Confirmed | matches documented gap, test-plan §2.2 |
 | TC-PERF-005 | Confirmed | matches documented gap, test-plan §2.2 |
 
-### 16.4 What this cycle did not cover
+### 17.4 What this cycle did not cover
 
 Grouped by reason, so the gap is legible rather than buried in 172 rows:
 
@@ -668,7 +716,7 @@ Grouped by reason, so the gap is legible rather than buried in 172 rows:
   regression), TC-RPT-010 (4 of 6 report types have no PDF-export test at all — `pdf.ts` is the
   lowest-covered file in the repo).
 
-### 16.5 Exit criteria assessment (test-plan §5.2)
+### 17.5 Exit criteria assessment (test-plan §5.2)
 
 | Gate | Threshold | Actual | Met? |
 |---|---|---|---|
@@ -679,7 +727,7 @@ Grouped by reason, so the gap is legible rather than buried in 172 rows:
 | NFR-PERF-01 | p99 <500ms | 3/4 spot-checked endpoints pass; login at ~900ms | ⚠️ (informational, see D5) |
 | NFR-PERF-02/03 | <3s / <10s | Not measured this cycle | — |
 
-### 16.6 Go/No-Go recommendation
+### 17.6 Go/No-Go recommendation
 
 **No-Go**, per test-plan §3.3's own rule: *"A single failed cross-tenant-isolation or
 money-arithmetic test case is release-blocking regardless of severity elsewhere."* D1-D3 are exactly
