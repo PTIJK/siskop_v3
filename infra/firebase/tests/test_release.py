@@ -17,6 +17,12 @@ COMMIT = "a" * 40
 
 
 class ReleaseSafetyTests(unittest.TestCase):
+    def setUp(self):
+        # Keep the build's activation flag out of tests that use default mocks.
+        environment = patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "false"})
+        environment.start()
+        self.addCleanup(environment.stop)
+
     @patch.object(release, "activate_schedulers")
     def test_successful_tenant_release_checks_wildcard_before_promoting_api(self, activate):
         cloud = Mock()
