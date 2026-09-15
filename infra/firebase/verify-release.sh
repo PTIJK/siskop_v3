@@ -22,6 +22,7 @@ pnpm run test
 pnpm --filter @siskop/mobile exec vite build
 # Explicit staging mode includes the committed public Firebase web configuration.
 pnpm --filter @siskop/frontend exec vite build --mode staging
+node infra/tenant-web/package-member-app.mjs
 node --input-type=module -e '
   import fs from "node:fs";
   fs.writeFileSync("apps/frontend/dist/release.json", JSON.stringify({

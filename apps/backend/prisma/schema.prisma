@@ -348,6 +348,8 @@ model User {
   email           String
   passwordHash    String?
   firebaseUid     String?   @unique
+  identityId      String?
+  identity        AccountIdentity? @relation(fields: [identityId], references: [id])
   authProvider    String?
   name            String
   isActive        Boolean   @default(true)
@@ -364,9 +366,67 @@ model User {
   ppobTransactionsCreated       PPOBTransaction[]
   memberCreditRepaymentsCreated MemberCreditRepayment[]
   unitAssignments               UserUnit[]
+  loginAttempts                 TenantLoginAttempt[]
+  invitations                   MembershipInvitation[]
 
   @@unique([tenantId, email])
+  @@unique([identityId, tenantId])
   @@index([tenantId])
+}
+
+// Global identity is distinct from the tenant-specific User (membership).
+model AccountIdentity {
+  id          String @id @default(cuid())
+  firebaseUid String @unique
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  users       User[]
+  sessions    IdentitySession[]
+}
+
+model IdentitySession {
+  id           String @id @default(cuid())
+  tokenHash    String @unique
+  identityId   String
+  identity     AccountIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  authTime     Int
+  expiresAt    DateTime
+  lastSeenAt   DateTime @default(now())
+  attempts     TenantLoginAttempt[]
+  @@index([identityId])
+  @@index([expiresAt])
+  @@index([lastSeenAt])
+}
+
+model TenantLoginAttempt {
+  id                String @id @default(cuid())
+  identitySessionId String
+  identitySession   IdentitySession @relation(fields: [identitySessionId], references: [id], onDelete: Cascade)
+  membershipId      String
+  membership        User @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  origin            String
+  expiresAt         DateTime
+  bindingHash       String?
+  stateHash         String?
+  challenge         String?
+  codeHash          String? @unique
+  codeExpiresAt     DateTime?
+  consumedAt        DateTime?
+  @@index([expiresAt])
+  @@index([identitySessionId])
+  @@index([membershipId])
+}
+
+model MembershipInvitation {
+  id           String @id @default(cuid())
+  tokenHash    String @unique
+  membershipId String
+  membership   User @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  email        String
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  createdAt    DateTime @default(now())
+  @@index([membershipId])
 }
 
 // Explicit per-user unit scoping (e.g. a Kasir restricted to one Toko unit).

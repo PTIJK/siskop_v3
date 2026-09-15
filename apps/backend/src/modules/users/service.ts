@@ -62,7 +62,7 @@ export async function updateUser(
     if (!role) throw notFound("Role tidak ditemukan");
   }
 
-  if (user.firebaseUid && data.email && data.email !== user.email) throw validationError("Email masuk dikelola melalui Firebase.");
+  if ((user.firebaseUid || user.identityId) && data.email && data.email !== user.email) throw validationError("Email masuk dikelola melalui Firebase.");
   if (data.email && data.email !== user.email) {
     const duplicate = await db.user.findUnique({ where: { tenantId_email: { tenantId, email: data.email } } });
     if (duplicate) throw conflict(`Email ${data.email} sudah digunakan`);
@@ -90,4 +90,13 @@ export async function updateUser(
     });
   });
   return toPublicUser(updated);
+}
+
+export async function createInvitedUser(tenantId: string, data: Omit<CreateUserInput, "password">) {
+  const role = await db.role.findFirst({ where: { id: data.roleId, tenantId } });
+  if (!role) throw notFound("Role tidak ditemukan");
+  if (await db.user.findUnique({ where: { tenantId_email: { tenantId, email: data.email } } })) throw conflict("Email sudah terdaftar di koperasi ini.");
+  await assertUnitsBelongToTenant(tenantId, data.unitIds);
+  return db.user.create({ data: { tenantId, name: data.name, email: data.email, roleId: data.roleId, isActive: false,
+    unitAssignments: { create: data.unitIds.map(unitId => ({ unitId })) } } });
 }

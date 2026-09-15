@@ -8,6 +8,7 @@ export FIREBASE_ACCOUNT_PROVISIONING_ENABLED=true
 export JWT_SECRET=local-preview-access-secret JWT_REFRESH_SECRET=local-preview-refresh-secret
 export TENANT_BASE_DOMAIN=koperasi.localhost TENANT_DEV_PORT=3050 TENANT_DOMAINS_ENABLED=true TENANT_DOMAIN_RENAME_ENABLED=true
 export TENANT_GATEWAY_SECRET=local-tenant-preview-key-32-characters-only
+export TENANT_LOGIN_SELECTION_ENABLED=true TENANT_SWITCHING_ENABLED=true
 export PUBLIC_APP_URL=http://localhost:3050 CORS_ORIGIN=http://localhost:3050
 export XENDIT_SECRET_KEY='' XENDIT_WEBHOOK_TOKEN='' RESEND_API_KEY=''
 ./node_modules/.bin/prisma migrate deploy

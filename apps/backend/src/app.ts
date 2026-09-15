@@ -1,3 +1,4 @@
+import { tenantAccessRoutes } from "./modules/tenant-access/routes.js";
 import { onboardingRoutes } from "./modules/onboarding/routes.js";
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import helmet from "helmet";
@@ -79,6 +80,7 @@ export function createApp(): Express {
     res.json({ success: true, data: req.workspace ?? null, meta: res.locals.meta });
   });
   app.use("/api/tenant-domain", tenantDomainRoutes());
+  app.use("/api/tenant-access", tenantAccessRoutes());
   app.use("/api/auth", authRoutes());
   app.use("/api/member-auth", memberAuthRoutes());
   app.use("/api/member", memberPortalRoutes());

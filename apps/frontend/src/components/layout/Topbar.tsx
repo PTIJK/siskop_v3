@@ -1,3 +1,7 @@
+import { TenantPickerDialog } from "@/features/tenant-access/TenantPickerDialog";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/api/client";
+import { useTenantAccessConfig, centralLocation } from "@/features/tenant-access/api";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/stores/auth";
@@ -35,6 +39,10 @@ function getInitials(name: string): string {
 }
 
 export function Topbar() {
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const config = useTenantAccessConfig();
+  const options = useQuery({ queryKey: ["switch-options", window.location.hostname], queryFn: () => apiFetch<{ total: number; currentTenantName?: string; switchUrl?: string }>("/tenant-access/switch-options"), enabled: config.data?.switching === true, staleTime: 60_000, retry: false });
   const user = useAuth((s) => s.user);
   const clear = useAuth((s) => s.clear);
   const navigate = useNavigate();
@@ -54,13 +62,12 @@ export function Topbar() {
     )?.[1] ?? "SISKOP";
 
   function logout() {
-    // The refresh token is an httpOnly cookie this page can't see, let alone
-    // delete — clearing local state alone would leave it valid server-side.
-    // Best-effort: navigate away regardless of whether the request succeeds.
-    void apiPost("/auth/logout", {}).finally(() => {
+    setLogoutError("");
+    void apiPost("/auth/logout", {}).then(() => {
       clear();
-      navigate("/login", { replace: true });
-    });
+      if (config.data?.enabled) window.location.assign(centralLocation("/auth/logout"));
+      else navigate("/login", { replace: true });
+    }).catch(() => setLogoutError("Belum berhasil keluar. Coba lagi."));
   }
 
   return (
@@ -70,6 +77,9 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-3">
+        {logoutError ? <p role="alert" className="text-sm text-destructive">{logoutError}</p> : null}
+        {(options.data?.total ?? 0) > 1 ? <button className="rounded-md border px-3 py-2 text-sm" onClick={() => setSwitchOpen(true)}>{options.data?.currentTenantName} · Ganti Koperasi</button> : null}
+        {switchOpen && user ? <TenantPickerDialog currentTenantId={user.tenantId} onCancel={() => setSwitchOpen(false)} beforeSwitch={() => window.location.pathname === "/dashboard" || window.confirm("Pindah koperasi? Perubahan yang belum disimpan akan ditinggalkan.")} /> : null}
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent">
             <Avatar className="h-7 w-7">

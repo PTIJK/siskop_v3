@@ -127,6 +127,8 @@ python3.11 -m unittest discover -s infra/firebase/tests
 For a browser preview, run these in separate terminals:
 
 ```sh
+pnpm --filter @siskop/mobile exec vite build
+node infra/tenant-web/package-member-app.mjs
 firebase emulators:start --only auth --project demo-siskop-tenants --config infra/tenant-web/emulators.json
 bash infra/tenant-web/preview-api.sh
 node infra/tenant-web/preview.mjs

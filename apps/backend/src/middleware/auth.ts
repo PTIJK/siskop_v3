@@ -1,3 +1,5 @@
+import { selectionEnabled } from "../modules/tenant-access/config.js";
+import { forbidden } from "../lib/errors.js";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
@@ -109,5 +111,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     unauthorized(res, "Invalid or expired token");
     return;
   }
-  try { assertWorkspaceTenant(req, req.auth.tenantId, req.auth.role === "super_admin"); next(); } catch (error) { next(error); }
+  try {
+    if (selectionEnabled() && !req.workspace && req.auth.role !== "super_admin") throw forbidden("Buka dashboard melalui alamat koperasi Anda.");
+    assertWorkspaceTenant(req, req.auth.tenantId, req.auth.role === "super_admin"); next(); } catch (error) { next(error); }
 }

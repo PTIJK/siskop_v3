@@ -10,7 +10,7 @@ const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 const excluded = new Set(['host', 'connection', 'keep-alive', 'proxy-authorization', 'proxy-authenticate', 'transfer-encoding', 'trailer', 'upgrade', 'te', 'forwarded']);
 
 /** The upstream is fixed configuration, never a URL provided by the browser. */
-export function createTenantWeb({ baseDomain, apiOrigin, secret, staticDir, production = true, release = {}, developmentHandler }) {
+export function createTenantWeb({ baseDomain, apiOrigin, secret, staticDir, production = true, release = {}, developmentHandler, developmentCentralHost }) {
   if (!baseDomain || !secret || secret.length < 32) throw new Error('Tenant web configuration is incomplete');
   const upstream = new URL(apiOrigin);
   if (upstream.pathname !== '/' || upstream.search || upstream.hash || upstream.username || upstream.password ||
@@ -21,6 +21,7 @@ export function createTenantWeb({ baseDomain, apiOrigin, secret, staticDir, prod
   return http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
     if (req.url === '/health') { res.writeHead(200); res.end('ok'); return; }
     if (req.url?.split('?')[0] === '/release.json') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(release)); return; }
     // App Hosting's trusted edge sets X-Forwarded-Host. The API still requires
@@ -29,7 +30,8 @@ export function createTenantWeb({ baseDomain, apiOrigin, secret, staticDir, prod
     const host = String(forwarded ?? req.headers.host ?? '').toLowerCase();
     const hostname = host.split(':')[0];
     const slug = hostname?.endsWith(`.${baseDomain}`) ? hostname.slice(0, -(baseDomain.length + 1)) : '';
-    if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(slug) || !/^[a-z0-9.-]+(?::\d{1,5})?$/.test(host)) {
+    const isDevelopmentCentral = !production && hostname === developmentCentralHost;
+    if ((!isDevelopmentCentral && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(slug)) || !/^[a-z0-9.-]+(?::\d{1,5})?$/.test(host)) {
       res.writeHead(404); res.end('Workspace not found'); return;
     }
     const url = req.url ?? '/';
@@ -41,7 +43,8 @@ export function createTenantWeb({ baseDomain, apiOrigin, secret, staticDir, prod
         if (!excluded.has(name) && !hopHeaders.has(name) && !name.startsWith('x-forwarded-') && !name.startsWith('x-siskop-') && value !== undefined) headers[name] = value;
       }
       const time = String(Date.now());
-      Object.assign(headers, { host: upstream.host, 'x-siskop-host': host, 'x-siskop-time': time,
+      headers.host = upstream.host;
+      if (!isDevelopmentCentral) Object.assign(headers, { 'x-siskop-host': host, 'x-siskop-time': time,
         'x-siskop-signature': createHmac('sha256', secret).update([time, req.method, url, host].join('\n')).digest('base64url') });
       const proxy = transport.request({ protocol: upstream.protocol, hostname: upstream.hostname, port: upstream.port,
         path: url, method: req.method, headers, timeout: 30_000 }, (response) => {
@@ -61,7 +64,7 @@ export function createTenantWeb({ baseDomain, apiOrigin, secret, staticDir, prod
       return;
     }
     if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }
-    if (!production && developmentHandler) { developmentHandler(req, res, () => { res.writeHead(404); res.end(); }); return; }
+    if (!production && developmentHandler && !/^\/(anggota(?:[/?]|$)|member-app\/)/.test(url)) { developmentHandler(req, res, () => { res.writeHead(404); res.end(); }); return; }
     try {
       const pathname = decodeURIComponent(url.split('?')[0]);
       const root = path.resolve(staticDir);
@@ -73,11 +76,11 @@ export function createTenantWeb({ baseDomain, apiOrigin, secret, staticDir, prod
       let metadata = await stat(file).catch(() => null);
       if (!metadata?.isFile()) {
         if (path.extname(pathname)) { res.writeHead(404); res.end(); return; }
-        file = path.join(root, 'index.html'); metadata = await stat(file);
+        file = path.join(root, pathname === '/anggota' || pathname.startsWith('/anggota/') ? 'member-app/index.html' : 'index.html'); metadata = await stat(file);
       }
       res.setHeader('Content-Type', types[path.extname(file)] ?? 'application/octet-stream');
       res.setHeader('Content-Length', metadata.size);
-      if (pathname.startsWith('/assets/')) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      if (pathname.startsWith('/assets/') || pathname.startsWith('/member-app/assets/')) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       if (req.method === 'HEAD') { res.end(); return; }
       const stream = createReadStream(file); stream.on('error', () => res.destroy()); stream.pipe(res);
     } catch { res.writeHead(404); res.end('Not found'); }

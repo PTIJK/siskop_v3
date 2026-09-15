@@ -3,6 +3,8 @@ import { Navigate, Route, BrowserRouter, Routes } from "react-router-dom";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { RequireMultiUnit } from "@/components/shared/RequireMultiUnit";
 import { onboardingRoutes } from "@/features/onboarding/routes";
+const HandoffPage = lazy(() => import("@/features/tenant-access/HandoffPage"));
+const InvitePage = lazy(() => import("@/features/tenant-access/InvitePage"));
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const AppLayout = lazy(() =>
   import("@/components/layout/AppLayout").then((module) => ({ default: module.AppLayout }))
@@ -107,6 +109,11 @@ export default function App() {
         >
           <Routes>
             {onboardingRoutes(<LoginPage />)}
+            <Route path="/auth/start" element={<HandoffPage mode="start" />} />
+            <Route path="/auth/authorize" element={<HandoffPage mode="authorize" />} />
+            <Route path="/auth/callback" element={<HandoffPage mode="callback" />} />
+            <Route path="/auth/logout" element={<HandoffPage mode="logout" />} />
+            <Route path="/invite" element={<InvitePage />} />
 
             <Route element={<AppLayout />}>
               <Route path='/dashboard' element={<DashboardPage />} />

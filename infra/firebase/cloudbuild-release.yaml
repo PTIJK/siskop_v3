@@ -84,6 +84,8 @@ substitutions:
   # Enable after wildcard DNS/HTTPS and the two-tenant smoke test pass.
   _TENANT_HOSTING: 'false'
   _TENANT_RENAME_ENABLED: 'false'
+  _TENANT_LOGIN_SELECTION_ENABLED: 'false'
+  _TENANT_SWITCHING_ENABLED: 'false'
   _TENANT_SMOKE_SLUG: 'uji-firebase-0910'
   _IMAGE: asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api
 options:
@@ -96,5 +98,7 @@ options:
     - RELEASE_IMAGE=${_IMAGE}:$BUILD_ID
     - RELEASE_TENANT_HOSTING=${_TENANT_HOSTING}
     - RELEASE_TENANT_RENAME_ENABLED=${_TENANT_RENAME_ENABLED}
+    - RELEASE_TENANT_LOGIN_SELECTION_ENABLED=${_TENANT_LOGIN_SELECTION_ENABLED}
+    - RELEASE_TENANT_SWITCHING_ENABLED=${_TENANT_SWITCHING_ENABLED}
     - RELEASE_TENANT_SMOKE_SLUG=${_TENANT_SMOKE_SLUG}
 serviceAccount: projects/siskop-d0f8c/serviceAccounts/siskop-cloud-build@siskop-d0f8c.iam.gserviceaccount.com

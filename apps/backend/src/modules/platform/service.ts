@@ -215,7 +215,7 @@ export async function updatePlatformAdmin(id: string, data: UpdatePlatformAdminR
   if (!user) throw notFound("Platform admin tidak ditemukan");
 
   if (data.email && data.email !== user.email) {
-    if (user.firebaseUid) throw validationError("Email masuk dikelola melalui Firebase.");
+    if (user.firebaseUid || user.identityId) throw validationError("Email masuk dikelola melalui Firebase.");
     const duplicate = await withoutTenantScope(() =>
       db.user.findFirst({ where: { email: data.email, isPlatformAdmin: true } })
     );

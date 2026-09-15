@@ -1,3 +1,5 @@
+import { selectionEnabled } from "../tenant-access/config.js";
+import { firebaseUidFor } from "../tenant-access/identity.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
@@ -183,12 +185,14 @@ export async function refreshSession(token: string, expectedTenantId?: string): 
     include: { role: true, unitAssignments: true }
   });
   if (!user || !user.isActive) throw unauthorized("Invalid or expired refresh token");
+  if (selectionEnabled() && !expectedTenantId && !user.isPlatformAdmin) throw unauthorized("Gunakan alamat koperasi untuk masuk kembali.");
   if (expectedTenantId && user.isPlatformAdmin) throw unauthorized("Gunakan situs pusat untuk akun admin platform.");
 
   const tenant = await db.tenant.findUnique({ where: { id: user.tenantId } });
   if (!tenant?.isActive) throw unauthorized("Invalid or expired refresh token");
 
-  if (user.firebaseUid) await assertFirebaseSession(user.firebaseUid, parsed.data.firebaseAuthTime);
+  const uid = await firebaseUidFor(user);
+  if (uid) await assertFirebaseSession(uid, parsed.data.firebaseAuthTime);
   const { accessToken, refreshToken } = await sessionFor(user, parsed.data.firebaseAuthTime);
   return { accessToken, refreshToken };
 }
@@ -210,7 +214,7 @@ export async function updateProfile(
   const user = await db.user.findFirst({ where: { id: userId, tenantId } });
   if (!user) throw unauthorized();
 
-  if (user.firebaseUid && data.email !== user.email) throw validationError("Email masuk dikelola melalui Firebase.");
+  if ((user.firebaseUid || user.identityId) && data.email !== user.email) throw validationError("Email masuk dikelola melalui Firebase.");
   if (data.email !== user.email) {
     const duplicate = await db.user.findUnique({ where: { tenantId_email: { tenantId, email: data.email } } });
     if (duplicate) throw conflict(`Email ${data.email} sudah digunakan`);
@@ -233,7 +237,7 @@ export async function changePassword(
   const user = await db.user.findFirst({ where: { id: userId, tenantId } });
   if (!user) throw unauthorized();
 
-  if (user.firebaseUid || !user.passwordHash) throw validationError("Gunakan Lupa kata sandi pada halaman masuk untuk akun Firebase.");
+  if (user.firebaseUid || user.identityId || !user.passwordHash) throw validationError("Gunakan Lupa kata sandi pada halaman masuk untuk akun Firebase.");
   const ok = await bcrypt.compare(currentPassword, user.passwordHash);
   if (!ok) throw unauthorized("Password saat ini salah");
 

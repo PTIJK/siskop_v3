@@ -29,8 +29,8 @@ function canUpdate(permissions: unknown): boolean {
   return p?.config?.update === true;
 }
 async function actor(tenantId: string, userId: string, client = db) {
-  const user = await client.user.findFirst({ where: { id: userId, tenantId }, include: { role: true } });
-  return user ? { firebaseUid: user.firebaseUid, isActive: user.isActive, canUpdate: canUpdate(user.role.permissions) } : null;
+  const user = await client.user.findFirst({ where: { id: userId, tenantId }, include: { role: true, identity: true } });
+  return user ? { firebaseUid: user.identity?.firebaseUid ?? user.firebaseUid, isActive: user.isActive && (user.identity?.isActive ?? true), canUpdate: canUpdate(user.role.permissions) } : null;
 }
 
 export const tenantDomainRepository: TenantDomainRepository = {
@@ -50,8 +50,8 @@ export const tenantDomainRepository: TenantDomainRepository = {
         return work({
           tenant,
           async actor(userId) {
-            const user = await tx.user.findFirst({ where: { id: userId, tenantId }, include: { role: true } });
-            return user ? { firebaseUid: user.firebaseUid, isActive: user.isActive, canUpdate: canUpdate(user.role.permissions) } : null;
+            const user = await tx.user.findFirst({ where: { id: userId, tenantId }, include: { role: true, identity: true } });
+            return user ? { firebaseUid: user.identity?.firebaseUid ?? user.firebaseUid, isActive: user.isActive && (user.identity?.isActive ?? true), canUpdate: canUpdate(user.role.permissions) } : null;
           },
           async save(slug, actorUserId, at) {
             if (!tenant) throw new Error("Missing locked tenant");

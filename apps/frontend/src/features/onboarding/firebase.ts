@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import {
   initializeAuth, inMemoryPersistence, browserPopupRedirectResolver,
   GoogleAuthProvider, signInWithPopup, createUserWithEmailAndPassword,
-  signInWithEmailAndPassword, sendPasswordResetEmail, signOut, connectAuthEmulator
+  signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification, signOut, connectAuthEmulator
 } from "firebase/auth";
 
 // This module is loaded only by the lazy registration/login pages. Credentials
@@ -66,4 +66,10 @@ export function firebaseError(error: unknown): string | null {
     "auth/unauthorized-domain": "Alamat situs ini belum diizinkan untuk Google. Hubungi pengelola."
   };
   return messages[code(error)] ?? (code(error).startsWith("auth/") ? "Belum dapat masuk. Silakan coba kembali." : null);
+}
+
+/** Explicit invitation action: register/sign in, then send a verification email if needed. */
+export async function verifyInvitationEmail(email: string, password: string, register: boolean) {
+  const credential = await passwordCredential(email, password, register);
+  if (!credential.user.emailVerified) await sendEmailVerification(credential.user);
 }

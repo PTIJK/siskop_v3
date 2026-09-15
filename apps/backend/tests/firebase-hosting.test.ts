@@ -34,6 +34,7 @@ function app() {
 describe("Firebase Hosting session transport", () => {
   it.each([
     ["/api/onboarding/status", "siskop_onboarding"],
+    ["/api/tenant-access/memberships", "siskop_identity"],
     ["/api/auth/refresh", "siskop_refresh_token"],
     ["/api/member-auth/refresh", "siskop_member_refresh_token"]
   ])("restores the session only for the matching route: %s", async (path, name) => {

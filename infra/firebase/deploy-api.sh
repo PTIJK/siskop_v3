@@ -14,6 +14,13 @@ if [[ "${RELEASE_TENANT_HOSTING:-false}" == true ]]; then
   cp infra/firebase/staging-env.yaml "$env_file"
   printf '\nTENANT_DOMAINS_ENABLED: "true"\nTENANT_DOMAIN_RENAME_ENABLED: "%s"\n' "${RELEASE_TENANT_RENAME_ENABLED:-false}" >> "$env_file"
 fi
+if [[ "${RELEASE_TENANT_LOGIN_SELECTION_ENABLED:-false}" == true && "${RELEASE_TENANT_HOSTING:-false}" != true ]]; then
+  echo "Tenant login selection requires coordinated tenant hosting." >&2
+  exit 1
+fi
+if [[ "${RELEASE_TENANT_HOSTING:-false}" == true ]]; then
+  printf '\nTENANT_LOGIN_SELECTION_ENABLED: "%s"\nTENANT_SWITCHING_ENABLED: "%s"\n' "${RELEASE_TENANT_LOGIN_SELECTION_ENABLED:-false}" "${RELEASE_TENANT_SWITCHING_ENABLED:-false}" >> "$env_file"
+fi
 gcloud run deploy siskop-staging-api \
   --project=siskop-d0f8c --region=asia-southeast2 \
   --image="$image_ref" \

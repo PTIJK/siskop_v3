@@ -37,6 +37,17 @@ class CloudBuildStatusTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "Tenant login HTML"):
                     cloud.check_login_page("https://alpha.example/login")
 
+    def test_member_readiness_rejects_the_staff_spa_fallback(self):
+        cloud = release.Cloud()
+        with patch.object(release.urllib.request, "urlopen") as open_url:
+            response = open_url.return_value.__enter__.return_value
+            response.status = 200
+            response.read.return_value = b'<div id="root"></div><script src="/assets/staff.js"></script>'
+            with self.assertRaisesRegex(RuntimeError, "Member login HTML"):
+                cloud.check_login_page("https://alpha.example/anggota/login", member=True)
+            response.read.return_value = b'<div id="root"></div><script src="/member-app/assets/member.js"></script>'
+            cloud.check_login_page("https://alpha.example/anggota/login", member=True)
+
     def test_active_outer_build_does_not_read_tenant_rollout(self):
         cloud = release.Cloud()
         for status in ["QUEUED", "WORKING", "STATUS_UNKNOWN"]:

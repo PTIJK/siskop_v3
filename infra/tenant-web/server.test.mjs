@@ -36,9 +36,14 @@ test('tenant gateway streams requests, authenticates its host, preserves cookies
   const port = await listen(server);
   try {
     await writeFile(path.join(directory, 'index.html'), '<html>SISKOP tenant app</html>');
+    await mkdir(path.join(directory, 'member-app'));
+    await writeFile(path.join(directory, 'member-app', 'index.html'), '<html>Portal Anggota</html>');
     await mkdir(path.join(directory, 'assets')); await writeFile(path.join(directory, 'assets', 'app.js'), '/* asset */');
     assert.equal((await send(port, '/')).status, 200);
     assert.match((await send(port, '/dashboard')).text, /SISKOP tenant app/);
+    assert.match((await send(port, '/anggota/login')).text, /Portal Anggota/);
+    assert.match((await send(port, '/anggota/simpanan/fixture')).text, /Portal Anggota/);
+    assert.match((await send(port, '/anggota')).text, /Portal Anggota/);
     assert.match((await send(port, '/assets/app.js')).headers['cache-control'], /immutable/);
     assert.equal((await send(port, '/.env')).status, 404);
     assert.equal((await send(port, '/%2e%2e/package.json')).status, 404);
