@@ -17,7 +17,9 @@ pnpm run typecheck
 node --input-type=module -e "await import('./packages/types/dist/index.js')"
 pnpm --filter @siskop/backend exec prisma migrate deploy
 pnpm run test
-pnpm run build
+# Typechecks already passed above. The backend is compiled and smoke-tested
+# inside its container build. Build each browser bundle exactly once here.
+pnpm --filter @siskop/mobile exec vite build
 # Explicit staging mode includes the committed public Firebase web configuration.
 pnpm --filter @siskop/frontend exec vite build --mode staging
 node --input-type=module -e '

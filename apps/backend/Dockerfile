@@ -1,22 +1,29 @@
-FROM node:22-bookworm-slim AS build
+FROM node:22-bookworm-slim AS dependencies
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 WORKDIR /app
+ARG OS_CACHE_EPOCH=manual
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN npm install --global pnpm@11.19.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/types/package.json packages/types/
+COPY packages/eslint-config/package.json packages/eslint-config/
+COPY apps/backend/package.json apps/backend/tsconfig.json apps/backend/
+COPY apps/backend/prisma/schema.prisma apps/backend/prisma/
+RUN pnpm --filter @siskop/backend... install --frozen-lockfile && pnpm --filter @siskop/backend db:generate
+
+FROM dependencies AS build
 COPY packages/types/ packages/types/
 COPY packages/eslint-config/ packages/eslint-config/
-COPY apps/backend/package.json apps/backend/tsconfig.json apps/backend/
-COPY apps/backend/prisma/ apps/backend/prisma/
-RUN pnpm --filter @siskop/backend... install --frozen-lockfile
 COPY apps/backend/src/ apps/backend/src/
-RUN pnpm --filter @siskop/backend db:generate && pnpm --filter @siskop/types build && pnpm --filter @siskop/backend build
+RUN pnpm --filter @siskop/types build && pnpm --filter @siskop/backend build
+COPY apps/backend/prisma/ apps/backend/prisma/
 
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production PUPPETEER_SKIP_DOWNLOAD=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium PORT=8080
+ARG OS_CACHE_EPOCH=manual
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates chromium fonts-liberation tini && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=build /app/node_modules/ node_modules/
+COPY --from=dependencies /app/node_modules/ node_modules/
 COPY --from=build /app/packages/types/ packages/types/
 COPY --from=build /app/apps/backend/node_modules/ apps/backend/node_modules/
 COPY --from=build /app/apps/backend/dist/ apps/backend/dist/

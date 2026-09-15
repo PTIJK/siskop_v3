@@ -17,6 +17,7 @@ steps:
         exit 1
 
   - id: verify-and-build-frontend
+    waitFor: ['test-database']
     name: node:22-bookworm
     entrypoint: bash
     env:
@@ -29,12 +30,16 @@ steps:
     args: ['infra/firebase/verify-release.sh']
 
   - id: build-backend
+    waitFor: ['-']
     name: gcr.io/cloud-builders/docker
-    args: ['build', '-f', 'apps/backend/Dockerfile', '-t', '${_IMAGE}:$BUILD_ID', '.']
+    entrypoint: bash
+    args: ['infra/firebase/build-backend.sh', 'build']
 
   - id: push-backend
+    waitFor: ['verify-and-build-frontend', 'build-backend']
     name: gcr.io/cloud-builders/docker
-    args: ['push', '${_IMAGE}:$BUILD_ID']
+    entrypoint: bash
+    args: ['infra/firebase/build-backend.sh', 'push']
 
   - id: acquire-release
     name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
