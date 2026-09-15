@@ -59,3 +59,10 @@ export interface UpsertAccountMappingRequest {
   debitAccountId: string;
   creditAccountId: string;
 }
+
+export interface GenerateStandardCoaResult {
+  accountsCreated: number;
+  accountsSkipped: number;
+  mappingsCreated: number;
+  mappingsSkipped: number;
+}

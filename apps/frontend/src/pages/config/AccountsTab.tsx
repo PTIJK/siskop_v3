@@ -3,13 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { Account } from "@siskop/types";
+import type { Account, GenerateStandardCoaResult } from "@siskop/types";
 import { apiFetch, apiPost, apiPut, ApiRequestError } from "@/api/client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, type ColumnDef } from "@/components/shared/DataTable";
 import { FormError } from "@/components/shared/FormError";
 import { EntitlementNotice } from "@/components/shared/EntitlementNotice";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 
 const CATEGORIES = ["ASET", "KEWAJIBAN", "EKUITAS", "PENDAPATAN", "BEBAN"] as const;
 const NO_PARENT = "__none__";
@@ -52,6 +53,7 @@ export function AccountsTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
   const [apiError, setApiError] = useState("");
+  const [generateOpen, setGenerateOpen] = useState(false);
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["config", "accounts"],
@@ -108,6 +110,26 @@ export function AccountsTab() {
       void refetch();
     } catch (err) {
       setApiError(err instanceof ApiRequestError ? err.message : "Terjadi kesalahan");
+    }
+  };
+
+  const generateStandardCoa = async () => {
+    try {
+      const result = await apiPost<GenerateStandardCoaResult>("/config/accounts/generate-standard", {});
+      toast({
+        title:
+          result.accountsCreated + result.mappingsCreated > 0
+            ? `${result.accountsCreated} akun & ${result.mappingsCreated} pemetaan ditambahkan`
+            : "Semua akun standar sudah tersedia"
+      });
+      setGenerateOpen(false);
+      void refetch();
+    } catch (err) {
+      toast({
+        title: "Gagal membuat COA standar",
+        description: err instanceof ApiRequestError ? err.message : "Terjadi kesalahan",
+        variant: "destructive"
+      });
     }
   };
 
@@ -175,12 +197,27 @@ export function AccountsTab() {
         emptyMessage="Belum ada akun — mulai dengan menambahkan Chart of Accounts"
         headerActions={
           can("accounting", "create") && (
-            <Button onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Tambah Akun
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setGenerateOpen(true)}>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Buat COA Standar
+              </Button>
+              <Button onClick={openCreate}>
+                <Plus className="mr-2 h-4 w-4" />
+                Tambah Akun
+              </Button>
+            </div>
           )
         }
+      />
+
+      <ConfirmDialog
+        open={generateOpen}
+        onOpenChange={setGenerateOpen}
+        title="Buat COA Standar"
+        description="Menambahkan akun standar koperasi yang belum ada (± 20 akun) dan memetakan akun default untuk konfigurasi simpanan/pinjaman yang sudah ada. Akun dan pemetaan yang sudah ada tidak akan diubah — aman dijalankan lebih dari sekali."
+        confirmLabel="Buat COA Standar"
+        onConfirm={generateStandardCoa}
       />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

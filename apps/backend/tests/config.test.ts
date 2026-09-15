@@ -304,6 +304,138 @@ describe("GET/POST/PUT /api/config/accounts", () => {
   });
 });
 
+// ── Generate Standard COA ─────────────────────────────────────────────────────
+
+const KUR_MIKRO = {
+  name: "KUR Mikro",
+  type: "KONVENSIONAL" as const,
+  rateType: "BUNGA" as const,
+  rate: 12,
+  maxTermMonths: 36
+};
+
+describe("POST /api/config/accounts/generate-standard", () => {
+  it("creates the full standard COA template for a fresh tenant with no configs", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .post("/api/config/accounts/generate-standard")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.accountsCreated).toBeGreaterThan(0);
+    expect(res.body.data.accountsSkipped).toBe(0);
+    expect(res.body.data.mappingsCreated).toBe(0);
+
+    const accounts = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(accounts.body.data.length).toBe(res.body.data.accountsCreated);
+    expect(accounts.body.data.some((a: { code: string }) => a.code === "1-1000")).toBe(true);
+  });
+
+  it("is idempotent — calling it again creates nothing new", async () => {
+    const admin = await setupTenant();
+    const first = await request(app())
+      .post("/api/config/accounts/generate-standard")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    const second = await request(app())
+      .post("/api/config/accounts/generate-standard")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(second.status).toBe(200);
+    expect(second.body.data.accountsCreated).toBe(0);
+    expect(second.body.data.accountsSkipped).toBe(first.body.data.accountsCreated);
+    expect(second.body.data.mappingsCreated).toBe(0);
+  });
+
+  it("wires default mappings for existing saving and loan configs", async () => {
+    const admin = await setupTenant();
+    await request(app())
+      .post("/api/savings/configs")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ name: "Simpanan Sukarela", type: "SUKARELA", rateType: "BUNGA", rate: 3, periodUnit: "YEARLY" });
+    await request(app())
+      .post("/api/loans/configs")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send(KUR_MIKRO);
+
+    const res = await request(app())
+      .post("/api/config/accounts/generate-standard")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(201);
+    // 2 mappings per saving config (deposit/withdrawal) + 4 per loan config
+    // (disbursement/principal/interest/penalty).
+    expect(res.body.data.mappingsCreated).toBe(2 + 4);
+
+    const mappings = await request(app())
+      .get("/api/config/account-mappings")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(mappings.body.data).toHaveLength(6);
+    const kinds = mappings.body.data.map((m: { transactionKind: string }) => m.transactionKind).sort();
+    expect(kinds).toEqual(
+      ["DEPOSIT", "DISBURSEMENT", "PAYMENT_INTEREST", "PAYMENT_PENALTY", "PAYMENT_PRINCIPAL", "WITHDRAWAL"].sort()
+    );
+  });
+
+  it("skips an account that was already created manually, without conflicting", async () => {
+    const admin = await setupTenant();
+    await createAccountAs(admin.accessToken, { code: "1-1000", name: "Kas Lama" });
+
+    const res = await request(app())
+      .post("/api/config/accounts/generate-standard")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.accountsSkipped).toBe(1);
+
+    const accounts = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    const kasAccounts = accounts.body.data.filter((a: { code: string }) => a.code === "1-1000");
+    expect(kasAccounts).toHaveLength(1);
+    expect(kasAccounts[0].name).toBe("Kas Lama");
+  });
+
+  it("blocks a tenant with no accounting entitlement", async () => {
+    const admin = await setupTenant({}, { entitled: false });
+
+    const res = await request(app())
+      .post("/api/config/accounts/generate-standard")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("FEATURE_NOT_ENTITLED");
+  });
+
+  it("rejects a Viewer — accounting.create is not granted to that role", async () => {
+    const admin = await setupTenant();
+    const viewer = await createStaffSession(admin.user.tenantId, "demo", "Viewer", "viewer@demo.test");
+
+    const res = await request(app())
+      .post("/api/config/accounts/generate-standard")
+      .set("Authorization", `Bearer ${viewer.accessToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it("does not touch another tenant's accounts", async () => {
+    const tenantA = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
+    const tenantB = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
+
+    await request(app())
+      .post("/api/config/accounts/generate-standard")
+      .set("Authorization", `Bearer ${tenantA.accessToken}`);
+
+    const accountsB = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${tenantB.accessToken}`);
+    expect(accountsB.body.data).toHaveLength(0);
+  });
+});
+
 // ── Account Mappings ───────────────────────────────────────────────────────────
 
 describe("GET/POST/DELETE /api/config/account-mappings", () => {

@@ -21,6 +21,7 @@ import {
   createUnit,
   deleteAccountMapping,
   deleteRole,
+  generateStandardCoa,
   getModalDisetor,
   getShuDistributionConfig,
   getWhitelabelConfig,
@@ -150,6 +151,17 @@ export function configRoutes(): Router {
       const data = updateAccountSchema.parse(req.body);
       const account = await updateAccount(authClaims(req).tenantId, requireParam(req, "id"), data);
       res.json({ success: true, data: account, meta: res.locals.meta });
+    })
+  );
+
+  router.post(
+    "/accounts/generate-standard",
+    requireAccountingEntitlement,
+    requirePermission("accounting", "create"),
+    handle(async (req, res) => {
+      const result = await generateStandardCoa(authClaims(req).tenantId);
+      const status = result.accountsCreated + result.mappingsCreated > 0 ? 201 : 200;
+      res.status(status).json({ success: true, data: result, meta: res.locals.meta });
     })
   );
 
