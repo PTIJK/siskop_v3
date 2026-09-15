@@ -68,7 +68,10 @@ both hosting products. Its default flags remain disabled during preparation.
    27 characters, leaving room for the service name within the 46-character
    hostname budget. It preserves every UUID bit to avoid reusing a pinned tag.
 6. Verify the hosted release marker and API catalog, move the direct Cloud Run
-   URL to that revision, and release the lock.
+   URL to that revision, validate the authenticated scheduler readiness probe against
+   the new revision, resume both prepared jobs, and release the lock. See
+   [scheduler setup](README.md#scheduled-jobs); preparation must run before the
+   first scheduler release is merged.
 
 If a release fails after acquiring the lock, the next build can recover the
 lock after confirming that failure. A failed verification build does not acquire
@@ -84,7 +87,9 @@ the lock, migrate Cloud SQL, or publish Hosting. It still produces a test image.
 | `siskop-staging-migrate` | Cloud SQL client and read access to `DATABASE_URL` only |
 | `siskop-staging-api` | Existing API runtime permissions and application secrets |
 
-The release account does not directly read application secrets. Its permission
+The release account has no Secret Manager read access. Scheduler activation reads
+the shared token from job metadata in memory; the custom activation role permits
+only reading and enabling jobs. Its permission
 to deploy as the runtime accounts is privileged: treat main and changes to this
 pipeline as deployment authority. Never configure a PR trigger with this account.
 

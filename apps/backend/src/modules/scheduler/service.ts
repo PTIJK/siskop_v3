@@ -1,11 +1,6 @@
+import type { DailySchedulerResult, SavingInterestAccrualResult } from "@siskop/types";
 import { recalculateAllKOL } from "../../lib/kol.js";
-import { runDailySavingInterestAccrual, type SavingInterestAccrualResult } from "../savings/service.js";
-
-export interface DailySchedulerResult {
-  date: string;
-  savingsInterest: SavingInterestAccrualResult;
-  loanKol: { checked: number; failed: number };
-}
+import { runDailySavingInterestAccrual } from "../savings/daily-interest.js";
 
 /**
  * The one daily "system date tick" for every date-driven calculation that
@@ -13,8 +8,8 @@ export interface DailySchedulerResult {
  * KOL/overdue reclassification today, with room for more jobs later. Each
  * job is isolated so one failing doesn't block the other — a thrown error
  * here is reported as `failed` on that job's result, never surfaced as an
- * uncaught rejection to the caller (see routes.ts, which is hit by both an
- * external scheduler and an in-process node-cron timer in main.ts).
+ * uncaught rejection to the caller. The HTTP adapter returns 503 for partial
+ * failures so Cloud Scheduler can retry the unfinished work.
  */
 export async function runDailyScheduler(asOf: Date = new Date()): Promise<DailySchedulerResult> {
   const [savingsInterest, loanKol] = await Promise.all([

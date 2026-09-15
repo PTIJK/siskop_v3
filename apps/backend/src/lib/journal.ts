@@ -1,11 +1,12 @@
 import { ErrorCode } from "@siskop/types";
+import { Prisma } from "@prisma/client";
 import { AppError } from "./errors.js";
 import type { TxClient } from "./db.js";
 
 interface JournalLineInput {
   accountId: string;
-  debit?: number;
-  credit?: number;
+  debit?: number | Prisma.Decimal;
+  credit?: number | Prisma.Decimal;
 }
 
 function round2(n: number): number {
@@ -35,9 +36,9 @@ async function buildComponentLines(
     | "SALE_COGS"
     | "SALE_RECEIVABLE"
     | "MEMBER_CREDIT_REPAYMENT",
-  amount: number
+  amount: number | Prisma.Decimal
 ): Promise<JournalLineInput[]> {
-  if (amount <= 0) return [];
+  if (new Prisma.Decimal(amount).lte(0)) return [];
 
   const mapping = await tx.accountMapping.findFirst({
     where: { tenantId, sourceType, sourceId, transactionKind }
@@ -72,9 +73,9 @@ async function createJournalEntry(
 ): Promise<void> {
   const { tenantId, entryDate, sourceType, sourceId, description, lines } = params;
 
-  const totalDebit = round2(lines.reduce((sum, l) => sum + (l.debit ?? 0), 0));
-  const totalCredit = round2(lines.reduce((sum, l) => sum + (l.credit ?? 0), 0));
-  if (totalDebit !== totalCredit) {
+  const totalDebit = lines.reduce((sum, l) => sum.plus(l.debit ?? 0), new Prisma.Decimal(0)).toDecimalPlaces(2);
+  const totalCredit = lines.reduce((sum, l) => sum.plus(l.credit ?? 0), new Prisma.Decimal(0)).toDecimalPlaces(2);
+  if (!totalDebit.equals(totalCredit)) {
     throw new AppError(
       ErrorCode.JOURNAL_ENTRY_UNBALANCED,
       `Journal entry for ${sourceType}:${sourceId} is unbalanced (debit ${totalDebit} != credit ${totalCredit})`
@@ -112,7 +113,7 @@ export async function postSavingTransaction(
     savingTransactionId: string;
     savingConfigId: string;
     kind: "DEPOSIT" | "WITHDRAWAL" | "SAVING_INTEREST";
-    amount: number;
+    amount: number | Prisma.Decimal;
     entryDate: Date;
     description: string;
   }

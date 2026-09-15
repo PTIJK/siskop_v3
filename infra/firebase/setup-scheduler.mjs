@@ -1,121 +1,54 @@
 #!/usr/bin/env node
-// Run once as a project administrator. Uses the caller's gcloud account/ADC.
-//
-// Root cause this fixes: main.ts's in-process node-cron only fires while a
-// container instance happens to be alive at 00:05 server time. siskop-staging-api
-// runs with --min-instances=0 (deploy-api.sh), so Cloud Run scales it to zero
-// overnight and the daily savings-interest/loan-KOL job silently never runs.
-// This script points a real Cloud Scheduler job at the existing
-// POST /api/scheduler/run-daily endpoint (routes.ts) instead, which cold-starts
-// the service on demand. The endpoint's own accrual logic already self-heals a
-// missed day via `lastInterestAt` (see modules/savings/service.ts), so this is
-// the deployment-side half of the fix, not a change to that logic.
-//
-// Idempotent: safe to re-run. It never rotates SCHEDULER_SECRET once created,
-// so re-running after the secret is already attached to a live revision won't
-// invalidate it. Secret values never pass through a printed log line, matching
-// resend-setup.mjs's convention for the app's other secrets.
-import { spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+// Run once BEFORE merging the scheduler PR. Leaves both jobs paused. The
+// coordinated main release activates them after checking the serving revision.
+import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { project, region, service, invoker, optionalResource, prepareJobs } from './scheduler.mjs';
 
-const project = "siskop-d0f8c";
-const region = "asia-southeast2";
-const account = "yudith.octo@gmail.com";
-const service = "siskop-staging-api";
-const runtimeSa = `${service}@${project}.iam.gserviceaccount.com`;
-const invokerAccountId = "siskop-scheduler-invoker";
-const invokerSa = `${invokerAccountId}@${project}.iam.gserviceaccount.com`;
-const jobName = "siskop-daily-scheduler";
-
-function cloud(args, input) {
-  const result = spawnSync(
-    process.env.GCLOUD_BIN || "gcloud",
-    [...args, `--project=${project}`, `--account=${account}`, "--quiet"],
-    { input, encoding: "utf8" }
-  );
-  if (result.error || result.status !== 0) {
-    throw new Error(`gcloud ${args.slice(0, 3).join(" ")} failed: ${(result.stderr || String(result.error)).trim()}`);
-  }
+const runtime = `${service}@${project}.iam.gserviceaccount.com`;
+const builder = `siskop-cloud-build@${project}.iam.gserviceaccount.com`;
+function command(args, input) {
+  const result = spawnSync(process.env.GCLOUD_BIN || 'gcloud', [...args, `--project=${project}`, '--account=yudith.octo@gmail.com', '--quiet'], { input, encoding: 'utf8' });
+  // Never include arguments, stderr, request bodies or provider responses that
+  // might echo credentials. Secret values only travel over stdin/HTTPS.
+  if (result.error || result.status !== 0) throw new Error(`gcloud ${args.slice(0, 3).join(' ')} failed (exit ${result.status})`);
   return result.stdout.trim();
 }
+const cloud = { async request(method, url, body) {
+  const response = await fetch(url, { method, signal: AbortSignal.timeout(60_000), headers: {
+    Authorization: `Bearer ${command(['auth', 'print-access-token'])}`,
+    'Content-Type': 'application/json', 'x-goog-user-project': project
+  }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  if (!response.ok) throw Object.assign(new Error(`Cloud API HTTP ${response.status} for ${method} ${new URL(url).pathname}`), { status: response.status });
+  return response.status === 204 ? null : response.json();
+} };
 
-function exists(args) {
-  const result = spawnSync(
-    process.env.GCLOUD_BIN || "gcloud",
-    [...args, `--project=${project}`, `--account=${account}`, "--quiet"],
-    { encoding: "utf8" }
-  );
-  return result.status === 0;
+async function main() {
+  command(['services', 'enable', 'cloudscheduler.googleapis.com']);
+  const secretUrl = `https://secretmanager.googleapis.com/v1/projects/${project}/secrets/SCHEDULER_SECRET`;
+  if (!await optionalResource(cloud, secretUrl)) command(['secrets', 'create', 'SCHEDULER_SECRET', '--replication-policy=automatic']);
+  const versions = await cloud.request('GET', secretUrl + '/versions?pageSize=1');
+  if (!versions.versions?.length) command(['secrets', 'versions', 'add', 'SCHEDULER_SECRET', '--data-file=-'], randomBytes(32).toString('hex'));
+  // deploy-api.sh pins version 1. Never pick "latest" or silently rotate an
+  // existing secret and leave the API/jobs using different credentials.
+  const version = await cloud.request('GET', secretUrl + '/versions/1');
+  if (version.state !== 'ENABLED') throw new Error('SCHEDULER_SECRET version 1 must be enabled; reconcile the deployment binding before retrying');
+  command(['secrets', 'add-iam-policy-binding', 'SCHEDULER_SECRET', `--member=serviceAccount:${runtime}`, '--role=roles/secretmanager.secretAccessor']);
+
+  if (!await optionalResource(cloud, `https://iam.googleapis.com/v1/projects/${project}/serviceAccounts/${invoker}`)) {
+    command(['iam', 'service-accounts', 'create', 'siskop-scheduler-invoker', '--display-name=SISKOP scheduled API invoker']);
+  }
+  command(['run', 'services', 'add-iam-policy-binding', service, `--region=${region}`, `--member=serviceAccount:${invoker}`, '--role=roles/run.invoker']);
+
+  const role = 'siskopSchedulerActivator';
+  const roleExists = await optionalResource(cloud, `https://iam.googleapis.com/v1/projects/${project}/roles/${role}`);
+  command(['iam', 'roles', roleExists ? 'update' : 'create', role, '--title=SISKOP scheduler release activation', '--permissions=cloudscheduler.jobs.get,cloudscheduler.jobs.enable', '--stage=GA']);
+  command(['projects', 'add-iam-policy-binding', project, `--member=serviceAccount:${builder}`, `--role=projects/${project}/roles/${role}`, '--condition=None']);
+
+  const origin = command(['run', 'services', 'describe', service, `--region=${region}`, '--format=value(status.url)']);
+  const token = command(['secrets', 'versions', 'access', '1', '--secret=SCHEDULER_SECRET']);
+  await prepareJobs(cloud, origin, token);
+  console.log('Both scheduled jobs are configured and PAUSED. No API revision or traffic was changed. Merge the tested PR into main; its successful release will activate both jobs.');
 }
 
-function main() {
-  const existingSecrets = new Set(
-    JSON.parse(cloud(["secrets", "list", "--format=json(name)"])).map((item) => item.name.split("/").pop())
-  );
-
-  let secretVersion;
-  if (!existingSecrets.has("SCHEDULER_SECRET")) {
-    cloud(["secrets", "create", "SCHEDULER_SECRET", "--replication-policy=automatic"]);
-    const value = randomBytes(32).toString("hex");
-    secretVersion = cloud(
-      ["secrets", "versions", "add", "SCHEDULER_SECRET", "--data-file=-", "--format=value(name)"],
-      value
-    ).split("/").pop();
-    console.log(`Created SCHEDULER_SECRET version ${secretVersion}. Set it in deploy-api.sh's --update-secrets (currently pinned to :1) if this isn't version 1.`);
-  } else {
-    secretVersion = cloud([
-      "secrets", "versions", "list", "SCHEDULER_SECRET",
-      "--filter=state=ENABLED", "--sort-by=~createTime", "--limit=1", "--format=value(name)"
-    ]);
-    console.log(`SCHEDULER_SECRET already exists at version ${secretVersion}; leaving its value unchanged.`);
-  }
-  cloud([
-    "secrets", "add-iam-policy-binding", "SCHEDULER_SECRET",
-    `--member=serviceAccount:${runtimeSa}`, "--role=roles/secretmanager.secretAccessor"
-  ]);
-
-  // Attach to a no-traffic candidate revision now so the endpoint can validate
-  // the header immediately; the next Cloud Build release (once deploy-api.sh
-  // carries this binding) is what actually ships it to live traffic.
-  cloud([
-    "run", "services", "update", service, `--region=${region}`,
-    `--update-secrets=SCHEDULER_SECRET=SCHEDULER_SECRET:${secretVersion}`, "--no-traffic"
-  ]);
-
-  if (exists(["iam", "service-accounts", "describe", invokerSa])) {
-    console.log(`${invokerAccountId} already exists.`);
-  } else {
-    cloud([
-      "iam", "service-accounts", "create", invokerAccountId,
-      "--display-name=Cloud Scheduler -> siskop-staging-api invoker"
-    ]);
-  }
-  // Least privilege: this identity can only invoke this one Cloud Run service.
-  cloud([
-    "run", "services", "add-iam-policy-binding", service, `--region=${region}`,
-    `--member=serviceAccount:${invokerSa}`, "--role=roles/run.invoker"
-  ]);
-
-  const runUrl = cloud(["run", "services", "describe", service, `--region=${region}`, "--format=value(status.url)"]);
-  const token = cloud(["secrets", "versions", "access", secretVersion, "--secret=SCHEDULER_SECRET"]);
-
-  const jobArgs = [
-    "scheduler", "jobs", exists(["scheduler", "jobs", "describe", jobName, `--location=${region}`]) ? "update" : "create",
-    "http", jobName,
-    `--location=${region}`,
-    "--schedule=5 0 * * *",
-    "--time-zone=UTC",
-    `--uri=${runUrl}/api/scheduler/run-daily`,
-    "--http-method=POST",
-    `--oidc-service-account-email=${invokerSa}`,
-    `--oidc-token-audience=${runUrl}`,
-    `--headers=x-scheduler-token=${token}`,
-    // Matches Cloud Run's own --timeout=60 in deploy-api.sh; the job should
-    // not out-wait the service it's calling.
-    "--attempt-deadline=60s"
-  ];
-  cloud(jobArgs);
-  console.log(`"${jobName}" is configured: POST ${runUrl}/api/scheduler/run-daily at 00:05 UTC daily, authenticated via OIDC as ${invokerAccountId}.`);
-}
-
-main();
+main().catch(error => { console.error(error.message); process.exitCode = 1; });

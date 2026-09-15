@@ -17,7 +17,8 @@ COMMIT = "a" * 40
 
 
 class ReleaseSafetyTests(unittest.TestCase):
-    def test_successful_tenant_release_checks_wildcard_before_promoting_api(self):
+    @patch.object(release, "activate_schedulers")
+    def test_successful_tenant_release_checks_wildcard_before_promoting_api(self, activate):
         cloud = Mock()
         cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
         marker = {"buildId": BUILD, "commit": COMMIT}
@@ -30,6 +31,7 @@ class ReleaseSafetyTests(unittest.TestCase):
         cloud.public_json.assert_any_call("https://alpha." + release.TENANT_BASE + "/release.json?build=" + BUILD)
         self.assertIn("--to-revisions=api-revision=100", cloud.command.call_args.args[0])
         cloud.delete_lock.assert_called_once_with("8")
+        activate.assert_called_once()
 
     def test_incorrect_wildcard_release_stops_promotion(self):
         cloud = Mock()

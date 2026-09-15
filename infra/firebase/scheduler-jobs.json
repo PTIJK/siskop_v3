@@ -1,0 +1,16 @@
+[
+  {
+    "id": "siskop-daily-scheduler",
+    "description": "Daily savings interest and loan KOL recalculation (07:05 WIB)",
+    "path": "/api/scheduler/run-daily",
+    "schedule": "5 0 * * *",
+    "timeZone": "Etc/UTC"
+  },
+  {
+    "id": "siskop-identity-recovery",
+    "description": "Recover interrupted Firebase account provisioning every 15 minutes",
+    "path": "/api/scheduler/reconcile-identities",
+    "schedule": "*/15 * * * *",
+    "timeZone": "Etc/UTC"
+  }
+]

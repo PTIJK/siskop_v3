@@ -22,7 +22,7 @@ gcloud run deploy siskop-staging-api \
   --update-secrets=DATABASE_URL=DATABASE_URL:2,JWT_SECRET=JWT_SECRET:1,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:1,XENDIT_SECRET_KEY=XENDIT_SECRET_KEY:1,XENDIT_WEBHOOK_TOKEN=XENDIT_WEBHOOK_TOKEN:1,TENANT_GATEWAY_SECRET=TENANT_GATEWAY_SECRET:1,SCHEDULER_SECRET=SCHEDULER_SECRET:1 \
   --env-vars-file="$env_file" \
   --execution-environment=gen2 --cpu=1 --memory=1Gi --concurrency=20 \
-  --min-instances=0 --max-instances=1 --timeout=60 --cpu-throttling \
+  --min-instances=0 --max-instances=1 --timeout=300 --cpu-throttling \
   --add-volume='name=uploads,type=cloud-storage,bucket=siskop-d0f8c-staging-uploads,mount-options=uid=1000;gid=1000' \
   --add-volume-mount=volume=uploads,mount-path=/mnt/uploads \
   --quiet "$@"

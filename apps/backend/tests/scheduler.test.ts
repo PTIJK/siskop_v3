@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import request from "supertest";
 import { db } from "../src/lib/db.js";
+import * as journal from "../src/lib/journal.js";
 import { app, createMemberAs, createMemberWithPokokSaving, setupTenant } from "./helpers.js";
 
 beforeAll(() => {
@@ -127,6 +128,33 @@ describe("POST /api/scheduler/run-daily", () => {
     expect(Number(afterMonthly?.balance)).toBe(1_000_000);
   });
 
+  it("credits a saving only once when duplicate daily requests overlap", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    const { saving } = await createDailySavingAs(admin.accessToken, member.id, 9, 1_000_000);
+    const server = app();
+    // Force all sweeps to obtain their initial snapshot before any can credit.
+    // This reproduces scheduler redelivery across concurrent workers reliably.
+    const findMany = db.saving.findMany.bind(db.saving);
+    let arrived = 0;
+    let release!: () => void;
+    const barrier = new Promise<void>(resolve => { release = resolve; });
+    db.saving.findMany = async args => {
+      const rows = await findMany(args);
+      if (++arrived === 6) release();
+      await barrier;
+      return rows;
+    };
+    let responses;
+    try {
+      responses = await Promise.all(Array.from({ length: 6 }, () => request(server).post("/api/scheduler/run-daily").set(TOKEN_HEADER, TOKEN)));
+    } finally { db.saving.findMany = findMany; }
+    expect(responses.every(response => response.status === 200)).toBe(true);
+    expect(await db.savingTransaction.count({ where: { tenantId: admin.user.tenantId, savingId: saving.id, type: "INTEREST" } })).toBe(1);
+    const updated = await db.saving.findUniqueOrThrow({ where: { id: saving.id } });
+    expect(updated.balance.toFixed(2)).toBe("1000250.00");
+  });
+
   it("flips the interest journal entry from UNPOSTED_MISSING_MAPPING to POSTED once a SAVING_INTEREST mapping exists", async () => {
     const admin = await setupTenant();
     const member = await createMemberAs(admin.accessToken);
@@ -160,6 +188,26 @@ describe("POST /api/scheduler/run-daily", () => {
     });
     const afterEntry = await db.journalEntry.findFirst({ where: { tenantId: admin.user.tenantId, sourceId: secondTransaction.id } });
     expect(afterEntry?.status).toBe("POSTED");
+  });
+
+  it("rolls back a failed account and retries it without re-crediting successful accounts", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    const first = await createDailySavingAs(admin.accessToken, member.id, 9, 1_000_000);
+    const second = await createDailySavingAs(admin.accessToken, member.id, 9, 1_000_000);
+    const posting = vi.spyOn(journal, "postSavingTransaction").mockRejectedValueOnce(new Error("temporary journal failure"));
+    try {
+      const failed = await request(app()).post("/api/scheduler/run-daily").set(TOKEN_HEADER, TOKEN);
+      expect(failed.status).toBe(503);
+      expect(failed.body.data.savingsInterest).toMatchObject({ posted: 1, failed: 1 });
+    } finally { posting.mockRestore(); }
+    const rows = await db.saving.findMany({ where: { tenantId: admin.user.tenantId, id: { in: [first.saving.id, second.saving.id] } } });
+    expect(rows.filter(row => row.lastInterestAt === null)).toHaveLength(1);
+    expect(rows.filter(row => row.balance.equals(1_000_000))).toHaveLength(1);
+    const retry = await request(app()).post("/api/scheduler/run-daily").set(TOKEN_HEADER, TOKEN);
+    expect(retry.status).toBe(200);
+    expect(retry.body.data.savingsInterest).toMatchObject({ posted: 1, skipped: 1, failed: 0 });
+    expect(await db.savingTransaction.count({ where: { tenantId: admin.user.tenantId, type: "INTEREST" } })).toBe(2);
   });
 
   it("recalculates loan KOL for an overdue loan with no payments", async () => {

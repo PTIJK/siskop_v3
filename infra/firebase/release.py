@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Coordinate a main release. Uses Cloud Build ADC; never reads app secrets.
+"""Coordinate a main release. Uses Cloud Build ADC, without Secret Manager access.
 
 The GCS object is a generation-checked mutex across all deployment steps. A later
 build can reclaim it only after Cloud Build confirms its owner has terminated.
@@ -69,6 +69,18 @@ class Cloud:
 
     def main_commit(self):
         return self.public_json("https://api.github.com/repos/PTIJK/siskop_v3/git/ref/heads/main")["object"]["sha"]
+
+    def scheduler_status(self, origin, token):
+        # Job metadata contains the app token. Keep it in memory and never pass
+        # it to gcloud arguments or logs. This GET does not execute either job.
+        request = urllib.request.Request(origin + "/api/scheduler/status", headers={
+            "x-scheduler-token": token, "Cache-Control": "no-cache",
+        })
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.load(response)
+        except (urllib.error.URLError, ValueError):
+            raise RuntimeError("Scheduler readiness failed; jobs have not been activated") from None
 
     def create_lock(self, owner):
         url = f"https://storage.googleapis.com/upload/storage/v1/b/{BUCKET}/o?uploadType=media&name=main-lock.json&ifGenerationMatch=0"
@@ -249,8 +261,43 @@ def finish(cloud, state):
         if workspace.get("success") is not True or not context.get("tenantId") or context.get("slug") != slug or context.get("isAlias") is not False:
             raise RuntimeError("Tenant gateway/database readiness check failed")
     cloud.command(gcloud("run", "services", "update-traffic", SERVICE, f"--region={REGION}", f"--to-revisions={state['revision']}=100"))
+    activate_schedulers(cloud, state)
     cloud.delete_lock(state["generation"])
     print(f"Published {state['commit']} to {ORIGIN}; backend {state['revision']}.")
+
+
+def activate_schedulers(cloud, state):
+    """Resume prepared jobs only when their exact target serves this release."""
+    origin = cloud.command(gcloud("run", "services", "describe", SERVICE, f"--region={REGION}", "--format=value(status.url)"))
+    if not re.fullmatch(r"https://siskop-staging-api-[a-z0-9-]+\.a\.run\.app", origin):
+        raise RuntimeError("Unexpected scheduler API origin")
+    specs = json.loads(pathlib.Path(__file__).with_name("scheduler-jobs.json").read_text())
+    pending = []
+    for spec in specs:
+        name = f"projects/{PROJECT}/locations/{REGION}/jobs/{spec['id']}"
+        url = "https://cloudscheduler.googleapis.com/v1/" + name
+        job = cloud.request("GET", url)
+        target = job.get("httpTarget", {})
+        token = target.get("headers", {}).get("x-scheduler-token")
+        if (job.get("name") != name or job.get("state") not in {"PAUSED", "ENABLED"}
+                or job.get("schedule") != spec["schedule"] or job.get("timeZone") != spec["timeZone"]
+                or target.get("uri") != origin + spec["path"] or target.get("httpMethod") != "POST"
+                or target.get("oidcToken") != {"audience": origin, "serviceAccountEmail": f"siskop-scheduler-invoker@{PROJECT}.iam.gserviceaccount.com"}
+                or not isinstance(token, str) or not token or "\r" in token or "\n" in token):
+            raise RuntimeError(f"Scheduler {spec['id']} needs setup-scheduler.mjs before activation")
+        readiness = cloud.scheduler_status(origin, token)
+        data = readiness.get("data", {})
+        if (readiness.get("success") is not True or data.get("version") != 1
+                or data.get("revision") != state["revision"] or data.get("daily") is not True
+                or data.get("identityRecovery") is not True):
+            raise RuntimeError("Serving API is not ready for both scheduled jobs; activation stopped")
+        if job["state"] == "PAUSED":
+            pending.append(url)
+    # Validate BOTH jobs before resuming either. Repeated releases leave enabled
+    # jobs alone; a failed resume keeps the release lock and can be retried.
+    for url in pending:
+        cloud.request("POST", url + ":resume", b"{}")
+    print("Daily calculations and Firebase identity recovery schedulers are enabled.")
 
 
 def main():
