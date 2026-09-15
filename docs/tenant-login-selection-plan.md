@@ -45,7 +45,7 @@ Member preview: `http://alpha-preview.koperasi.localhost:3050/anggota/login`, fi
 
 ### Release controls
 
-- Runtime flags: `TENANT_LOGIN_SELECTION_ENABLED` and `TENANT_SWITCHING_ENABLED`, both default off.
+- Runtime flags: `TENANT_LOGIN_SELECTION_ENABLED` and `TENANT_SWITCHING_ENABLED` remain explicit controls. The main release now defaults tenant hosting and login selection to on, so staff enter the tenant's canonical slug. Dashboard switching remains off by default.
 - Cloud Build substitutions: `_TENANT_HOSTING=true`, `_TENANT_LOGIN_SELECTION_ENABLED=true`, `_TENANT_SWITCHING_ENABLED=true`. Selection refuses deployment without coordinated tenant hosting.
 - First deploy the compatible schema/API/web revision with selection off, then enable selection/switching in a coordinated release. All revisions and recovery jobs must understand linked identities before invitations are used.
 - Apply both additive migrations before serving the new API. Never run database-clearing test suites against staging.

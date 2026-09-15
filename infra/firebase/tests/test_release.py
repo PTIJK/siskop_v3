@@ -19,6 +19,29 @@ COMMIT = "a" * 40
 
 
 class CloudBuildStatusTests(unittest.TestCase):
+    def test_candidate_checks_reject_missing_or_wrong_tenant_handoff_configuration(self):
+        cloud = Mock()
+        origin = "https://candidate.example"
+        def responses(config):
+            return [
+                {"success": True},
+                {"success": True, "data": {"checkoutAvailable": True, "packages": [{"id": "package"}]}},
+                config,
+            ]
+        with patch.dict(release.os.environ, {"RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "true"}):
+            for config in [
+                {"success": True, "data": {"enabled": False, "centralUrl": release.ORIGIN + "/login"}},
+                {"success": False},
+                {"success": True, "data": {"enabled": True, "centralUrl": "https://wrong.example/login"}},
+            ]:
+                with self.subTest(config=config):
+                    cloud.public_json.side_effect = responses(config)
+                    with self.assertRaisesRegex(RuntimeError, "Tenant login redirect"):
+                        release.check_api(cloud, origin)
+            cloud.public_json.side_effect = responses({"success": True, "data": {"enabled": True, "centralUrl": release.ORIGIN + "/login"}})
+            release.check_api(cloud, origin)
+            cloud.public_json.assert_called_with(origin + "/api/tenant-access/config")
+
     def test_login_readiness_requires_actual_frontend_html(self):
         cloud = release.Cloud()
         with patch.object(release.urllib.request, "urlopen") as open_url:

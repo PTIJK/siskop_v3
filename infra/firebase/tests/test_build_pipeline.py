@@ -23,6 +23,12 @@ def dependencies():
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_release_defaults_enable_staff_handoff_with_tenant_hosting(self):
+        text = (ROOT / "infra/firebase/cloudbuild-release.yaml").read_text()
+        self.assertIn("_TENANT_LOGIN_SELECTION_ENABLED: 'true'", text)
+        self.assertIn("_TENANT_HOSTING: 'true'", text)
+        self.assertIn("RELEASE_TENANT_LOGIN_SELECTION_ENABLED=${_TENANT_LOGIN_SELECTION_ENABLED}", text)
+
     def test_backend_build_starts_independently_of_verification(self):
         self.assertEqual(dependencies()["build-backend"], [])
 

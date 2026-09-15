@@ -81,12 +81,12 @@ images: ['${_IMAGE}:$BUILD_ID']
 timeout: 2400s
 substitutions:
   _DEPLOY: 'true'
-  # Enable after wildcard DNS/HTTPS and the two-tenant smoke test pass.
-  _TENANT_HOSTING: 'false'
+  # Wildcard hosting is live. Staff login and paid registrations must use it.
+  _TENANT_HOSTING: 'true'
   _TENANT_RENAME_ENABLED: 'false'
-  _TENANT_LOGIN_SELECTION_ENABLED: 'false'
+  _TENANT_LOGIN_SELECTION_ENABLED: 'true'
   _TENANT_SWITCHING_ENABLED: 'false'
-  _TENANT_SMOKE_SLUG: 'uji-firebase-0910'
+  _TENANT_SMOKE_SLUG: 'ptap'
   _IMAGE: asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api
 options:
   logging: CLOUD_LOGGING_ONLY
