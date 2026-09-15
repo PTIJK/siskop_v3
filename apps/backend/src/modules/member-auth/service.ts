@@ -47,6 +47,11 @@ function issue(claims: MemberAuthClaims): { accessToken: string; refreshToken: s
   };
 }
 
+/** Called only after credential verification and host-bound handoff redemption. */
+export function memberSessionFor(member: MemberProfile & { tenantId: string }): Session {
+  return { ...issue({ memberId: member.id, tenantId: member.tenantId, role: "member" }), member: toProfile(member) };
+}
+
 /**
  * Staff-invoked, not member-invoked: there is no member self-registration.
  * Idempotent, so the same action serves as both first activation and a

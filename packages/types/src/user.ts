@@ -154,6 +154,15 @@ export interface MemberLoginResponse {
   member: MemberProfile;
 }
 
+export interface MemberLoginMembership {
+  membershipId: string;
+  name: string;
+  slug: string;
+}
+export type MemberAccessResult =
+  | { next: "tenant_redirect"; startUrl: string }
+  | { next: "tenant_selection"; memberships: MemberLoginMembership[] };
+
 export interface MemberRefreshResponse {
   accessToken: string;
 }

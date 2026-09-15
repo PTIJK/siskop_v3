@@ -15,6 +15,7 @@ import { RegulatoryReportsPage } from "@/pages/reports/RegulatoryReportsPage";
 import { ProfilePage } from "@/pages/profile/ProfilePage";
 import MemberLoginPage from "@/pages/member/MemberLoginPage";
 import { MemberChangePasswordPage } from "@/pages/member/MemberChangePasswordPage";
+import { MemberHandoffPage } from "@/pages/member/MemberHandoffPage";
 import { MemberAppLayout } from "@/components/layout/MemberAppLayout";
 import { MemberDashboardPage } from "@/pages/member/DashboardPage";
 import { MemberSavingsPage } from "@/pages/member/SavingsPage";
@@ -32,6 +33,9 @@ export default function App() {
 
           <Route path="/anggota" element={<Navigate to="/anggota/dashboard" replace />} />
           <Route path="/anggota/login" element={<MemberLoginPage />} />
+          <Route path="/anggota/auth/start" element={<MemberHandoffPage mode="start" />} />
+          <Route path="/anggota/auth/authorize" element={<MemberHandoffPage mode="authorize" />} />
+          <Route path="/anggota/auth/callback" element={<MemberHandoffPage mode="callback" />} />
           <Route element={<MemberAppLayout />}>
             <Route path="/anggota/ganti-password" element={<MemberChangePasswordPage />} />
             <Route path="/anggota/dashboard" element={<MemberDashboardPage />} />
