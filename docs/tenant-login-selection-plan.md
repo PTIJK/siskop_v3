@@ -1,7 +1,58 @@
 # Tenant selection and canonical dashboard login
 
-Status: implementation plan; no application or staging changes made.
+Status: implemented on `feature/member-login`; coordinated staging rollout and hosted staff E2E remain pending.
 Date: 2026-09-15.
+
+## Implementation and verification (2026-09-15)
+
+Implemented the identity/membership migration, verified invitation linking, paginated membership discovery, central login modal, single-tenant redirect, browser-bound code handoff, generic staff-route guards, and the dashboard switcher. Existing staff IDs, role IDs, unit assignments, and transaction references remain in place. Legacy staff continue to use their koperasi's `/login/legacy`.
+
+Member entry is separate: `/anggota/login` serves the packaged mobile member application on central Hosting and the tenant gateway. On a generic hostname it asks for the koperasi address; on a tenant hostname it resolves the workspace through `/api/workspace` and accepts NIK/password. Member deep links and the forced password-change page bootstrap their own session.
+
+Local browser checks with isolated Firebase Auth/Postgres fixtures passed:
+
+- Central single-membership login -> Alpha `/dashboard`, Super Admin, one synthetic member.
+- Central multi-membership login -> modal showing Alpha/Teller and Beta/Super Admin -> Beta dashboard with zero members.
+- Dashboard picker cancellation stays on the current page; Alpha <-> Beta switching changes hostname, data and role.
+- Staff refresh after reload; logout returns to central login, preserves independent existing Beta/member sessions, and requires reauthentication before another switch.
+- Reauthentication resumes the selected membership, including existing UUID staff IDs.
+- Member NIK/password -> `/anggota/dashboard`; savings navigation and reload retain the member session. Generic `/anggota/login` displays the koperasi-address form.
+
+All 527 backend tests, 64 release tests and seven gateway/scheduler transport tests passed after rebasing onto current `main`. A rollback-only SQL smoke test also verified that backfill preserves an existing staff ID and historical actor reference, and leaves an unrelated legacy account with the same email unlinked.
+
+Automated tests cover invitations, unauthorized memberships, wrong tenant/browser/state/verifier, expiry, replay and concurrent redemption, inactive/no-access states, role/unit scopes, pagination, direct login, platform login, cookie transport, and existing member authentication. Production builds, type checking, lint and the release/gateway tests pass. Release checks now require the member HTML to reference `/member-app/assets/`, so a successful staff-SPA fallback cannot hide a broken member route.
+
+The requested existing PTAP member was activated only while its portal password was unset. Its staging member login and profile API checks returned 200, with first-login password change required. No real staff identity received an extra membership. The new routing and staff selector have **not** been deployed; local emulator/browser results do not prove hosted Google login or HTTPS handoffs.
+
+### Run the local E2E fixture
+
+Use the isolated Postgres setup in [tenant-domains.md](tenant-domains.md), then:
+
+```sh
+pnpm --filter @siskop/backend db:generate
+pnpm --filter @siskop/types build
+pnpm --filter @siskop/mobile exec vite build
+node infra/tenant-web/package-member-app.mjs
+# Run these in separate terminals:
+firebase emulators:start --only auth --project demo-siskop-tenants --config infra/tenant-web/emulators.json
+bash infra/tenant-web/preview-api.sh
+node infra/tenant-web/preview.mjs
+```
+
+Central login: `http://localhost:3050/login`. Single-tenant account: `alpha@tenant-preview.test`. Multi-tenant account: `beta@tenant-preview.test`. Both use the isolated fixture password `Preview-only-123`.
+
+Member preview: `http://alpha-preview.koperasi.localhost:3050/anggota/login`, fixture NIK `1234556787654321`, password `Member-preview-123`. These preview credentials do not apply to staging.
+
+### Release controls
+
+- Runtime flags: `TENANT_LOGIN_SELECTION_ENABLED` and `TENANT_SWITCHING_ENABLED`, both default off.
+- Cloud Build substitutions: `_TENANT_HOSTING=true`, `_TENANT_LOGIN_SELECTION_ENABLED=true`, `_TENANT_SWITCHING_ENABLED=true`. Selection refuses deployment without coordinated tenant hosting.
+- First deploy the compatible schema/API/web revision with selection off, then enable selection/switching in a coordinated release. All revisions and recovery jobs must understand linked identities before invitations are used.
+- Apply both additive migrations before serving the new API. Never run database-clearing test suites against staging.
+- Release publishing accepts only current `main`; the feature branch is for review. Hosted synthetic single/multi-account and real Google/password E2E checks remain a rollout gate.
+- Ordinary logout ends current staff and central identity cookies; other already-open tenant sessions remain independent. This is not a sign-out-everywhere implementation.
+
+The sections below retain the approved design and acceptance criteria.
 
 ## 1. Required behavior
 

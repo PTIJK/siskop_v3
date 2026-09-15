@@ -76,11 +76,14 @@ class Cloud:
     def main_commit(self):
         return self.public_json("https://api.github.com/repos/PTIJK/siskop_v3/git/ref/heads/main")["object"]["sha"]
 
-    def check_login_page(self, url):
+    def check_login_page(self, url, member=False):
         request = urllib.request.Request(url, headers={"Cache-Control": "no-cache", "User-Agent": "siskop-cloud-build"})
         with urllib.request.urlopen(request, timeout=60) as response:
-            if response.status != 200 or b'id="root"' not in response.read(1024 * 1024):
+            body = response.read(1024 * 1024)
+            if response.status != 200 or b'id="root"' not in body:
                 raise RuntimeError("Tenant login HTML is unavailable; refusing central publication")
+            if member and b'/member-app/assets/' not in body:
+                raise RuntimeError("Member login HTML is unavailable; staff fallback cannot serve the member portal")
 
     def scheduler_status(self, origin, token):
         # Job metadata contains the app token. Keep it in memory and never pass
@@ -269,6 +272,7 @@ def publish_tenant_hosting(cloud, state):
     publish_tenant(cloud, state)
     # Markers and API routing can work even if App Hosting pruned the SPA files.
     cloud.check_login_page(tenant_smoke_origin() + "/login?build=" + state["buildId"])
+    cloud.check_login_page(tenant_smoke_origin() + "/anggota/login?build=" + state["buildId"], member=True)
 
 
 def tenant_smoke_origin():
@@ -286,6 +290,7 @@ def finish(cloud, state):
     if deployed.get("buildId") != state["buildId"] or deployed.get("commit") != state["commit"]:
         raise RuntimeError("Firebase Hosting is not serving this release")
     check_api(cloud, ORIGIN)
+    cloud.check_login_page(ORIGIN + "/anggota/login?build=" + state["buildId"], member=True)
     if tenant_hosting_enabled():
         tenant_release = cloud.public_json(TENANT_ORIGIN + "/release.json?build=" + state["buildId"])
         if tenant_release.get("buildId") != state["buildId"] or tenant_release.get("commit") != state["commit"]:
