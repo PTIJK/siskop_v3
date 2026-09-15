@@ -114,6 +114,32 @@ async function callback(
     .send({ event: "payment_session.completed", data: session });
 }
 describe("cooperative onboarding", () => {
+  it("routes a paid registration to its current slug and later central login uses a tenant handoff", async () => {
+    const base = "koperasi.inovasijayakarsa.id";
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("TENANT_DOMAINS_ENABLED", "true");
+    vi.stubEnv("TENANT_BASE_DOMAIN", base);
+    vi.stubEnv("TENANT_LOGIN_SELECTION_ENABLED", "true");
+    const app = express().use(firebaseHosting()).use(createApp());
+    const headers = { Origin: "https://siskop.example" };
+    const registered = await request(app).post("/api/onboarding/register").set(headers).send(registration).expect(201);
+    const order = registered.body.data;
+    const cookie = registered.headers["set-cookie"][0].split(";")[0];
+    await request(app).post("/api/onboarding/checkout").set(headers).set("Cookie", cookie).send({}).expect(200);
+    const session = [...sessions.values()][0]!;
+    expect((await callback(app, { ...session, status: "COMPLETED" })).status).toBe(200);
+    // Canonical URLs must use the current tenant slug, not a stale order or client URL.
+    const record = await db.onboardingOrder.findUniqueOrThrow({ where: { id: order.id } });
+    await db.tenant.update({ where: { id: record.tenantId }, data: { slug: "onboarding-test-paid" } });
+    const completed = await request(app).post("/api/onboarding/complete").set(headers).set("Cookie", cookie).send({});
+    expect(completed.status).toBe(200);
+    expect(completed.body.data).toEqual({ next: "login", loginUrl: `https://onboarding-test-paid.${base}/login` });
+    const login = await request(app).post("/api/tenant-access/login").set(headers).send({ idToken: registration.idToken });
+    expect(login.status).toBe(200);
+    expect(login.body.data.next).toBe("tenant_redirect");
+    expect(new URL(login.body.data.startUrl).origin).toBe(`https://onboarding-test-paid.${base}`);
+    expect(login.body.data.session).toBeUndefined();
+  });
   it("generates a valid unique workspace and a default unit when the removed form fields are absent", async () => {
     const app = createApp();
     for (const [index, tenantName] of ["Onboarding Test Sérba Usaha", "Onboarding Test Sérba Usaha", "合作社"].entries()) {

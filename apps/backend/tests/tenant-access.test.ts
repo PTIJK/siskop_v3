@@ -78,8 +78,12 @@ async function fixtures(multi = false) {
 async function login() {
   return request(app).post('/api/tenant-access/login').set('Origin', central).send({ idToken: 'person-uid' })
 }
-async function prepare() {
+async function prepare(roleName?: string) {
   const f = await fixtures()
+  if (roleName) {
+    const role = await db.role.findFirstOrThrow({ where: { tenantId: f.a.user.tenantId, name: roleName } })
+    await db.user.update({ where: { id: f.a.user.id, tenantId: f.a.user.tenantId }, data: { roleId: role.id } })
+  }
   const response = await login()
   expect(response.status).toBe(200)
   const attempt = new URL(response.body.data.startUrl).searchParams.get('attempt')
@@ -97,6 +101,18 @@ async function prepare() {
   return { ...f, attempt, state, code, binding: cookie(started) }
 }
 describe('tenant selection and browser-bound handoff', () => {
+  it('redirects a single-tenant Teller to its slug and keeps the Teller role after handoff', async () => {
+    const p = await prepare('Teller')
+    const role = await db.role.findFirstOrThrow({ where: { tenantId: p.a.user.tenantId, name: 'Teller' } })
+    const config = await request(app).get('/api/tenant-access/config')
+    expect(config.body.data.enabled).toBe(true)
+    const path = '/api/tenant-access/redeem'
+    const res = await request(app).post(path).set(signed('POST', path)).set('Cookie', p.binding)
+      .send({ attempt: p.attempt, state: p.state, code: p.code })
+    expect(res.status).toBe(200)
+    expect(res.body.data.user).toMatchObject({ tenantId: p.a.user.tenantId, roleId: role.id, roleName: 'Teller' })
+    expect(res.body.data.user.permissions).toEqual(role.permissions)
+  })
   it('auto-selects one membership without issuing a central tenant session', async () => {
     await fixtures()
     const res = await login()

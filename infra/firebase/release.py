@@ -186,6 +186,11 @@ def check_api(cloud, origin):
     catalog = cloud.public_json(origin + "/api/onboarding/packages")
     if catalog.get("success") is not True or not catalog.get("data", {}).get("checkoutAvailable") or not catalog["data"].get("packages"):
         raise RuntimeError("Database/package checkout readiness check failed")
+    if os.environ.get("RELEASE_TENANT_LOGIN_SELECTION_ENABLED", "false") == "true":
+        routing = cloud.public_json(origin + "/api/tenant-access/config")
+        config = routing.get("data") or {}
+        if routing.get("success") is not True or config.get("enabled") is not True or config.get("centralUrl") != ORIGIN + "/login":
+            raise RuntimeError("Tenant login redirect configuration is not ready; refusing publication")
 
 
 def traffic_tag(build_id):
