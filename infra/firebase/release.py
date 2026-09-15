@@ -2,7 +2,8 @@
 """Coordinate a main release. Uses Cloud Build ADC, without Secret Manager access.
 
 The GCS object is a generation-checked mutex across all deployment steps. A later
-build can reclaim it only after Cloud Build confirms its owner has terminated.
+build can reclaim it only after its owner's Cloud Build has terminated and any
+deterministic App Hosting rollout has settled, even if the outer build timed out.
 """
 import base64
 import json
@@ -41,6 +42,9 @@ class Missing(Exception):
 
 
 class Cloud:
+    Conflict = Conflict
+    Missing = Missing
+
     def command(self, args):
         return subprocess.check_output(args, text=True).strip()
 
@@ -97,7 +101,19 @@ class Cloud:
         if not UUID.fullmatch(build_id):
             raise ValueError("Invalid lock owner; investigate the lock before retrying")
         url = f"https://cloudbuild.googleapis.com/v1/projects/{PROJECT}/locations/{REGION}/builds/{build_id}"
-        return self.request("GET", url)["status"]
+        status = self.request("GET", url)["status"]
+        if status not in TERMINAL:
+            return status
+        # A timed-out Cloud Build does not cancel the provider's traffic rollout.
+        # Check even when this new release has tenant hosting disabled.
+        rollout_url = f"https://firebaseapphosting.googleapis.com/v1beta/{TENANT_BACKEND}/rollouts/cb-{build_id}"
+        try:
+            rollout = self.request("GET", rollout_url)
+        except Missing:
+            return status  # No traffic-changing operation was created.
+        if rollout.get("state") not in {"SUCCEEDED", "FAILED"} or rollout.get("reconciling", False) is not False:
+            return "WORKING"  # Keep the lock while rollout outcome is unsettled.
+        return status
 
 
 class ReleaseLock:
@@ -237,6 +253,14 @@ def prepare_tenant(cloud, state):
     pathlib.Path("infra/tenant-web/release.json").write_text(json.dumps({"commit": state["commit"], "buildId": state["buildId"]}) + "\n")
 
 
+def publish_tenant_hosting(cloud, state):
+    if state is None or not tenant_hosting_enabled():
+        return
+    assert_owner(cloud, state)
+    from tenant_publish import publish_tenant
+    publish_tenant(cloud, state)
+
+
 def finish(cloud, state):
     if state is None:
         return
@@ -319,6 +343,8 @@ def main():
             backend(cloud, state, os.environ["RELEASE_IMAGE"])
         elif action == "prepare-tenant":
             prepare_tenant(cloud, state)
+        elif action == "publish-tenant":
+            publish_tenant_hosting(cloud, state)
         elif action == "finish":
             finish(cloud, state)
         else:

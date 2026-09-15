@@ -16,6 +16,60 @@ OTHER = "abcdefab-1234-1234-1234-123456789abc"
 COMMIT = "a" * 40
 
 
+class CloudBuildStatusTests(unittest.TestCase):
+    def test_active_outer_build_does_not_read_tenant_rollout(self):
+        cloud = release.Cloud()
+        for status in ["QUEUED", "WORKING", "STATUS_UNKNOWN"]:
+            with self.subTest(status=status), patch.object(cloud, "request", return_value={"status": status}) as request:
+                self.assertEqual(cloud.build_status(BUILD), status)
+                request.assert_called_once_with("GET", f"https://cloudbuild.googleapis.com/v1/projects/{release.PROJECT}/locations/{release.REGION}/builds/{BUILD}")
+
+    def test_pending_or_reconciling_rollout_keeps_terminal_outer_build_active(self):
+        cloud = release.Cloud()
+        unsettled = [{"state": state, "reconciling": False} for state in
+                     ["STATE_UNSPECIFIED", "QUEUED", "PENDING_BUILD", "PROGRESSING", "PAUSED", "CANCELLED", "SKIPPED"]]
+        unsettled += [{"state": state, "reconciling": True} for state in ["SUCCEEDED", "FAILED"]]
+        for rollout in unsettled:
+            with self.subTest(rollout=rollout), patch.object(cloud, "request", side_effect=[{"status": "TIMEOUT"}, rollout]) as request:
+                self.assertNotIn(cloud.build_status(BUILD), release.TERMINAL)
+                self.assertEqual(request.call_args.args, ("GET", f"https://firebaseapphosting.googleapis.com/v1beta/{release.TENANT_BACKEND}/rollouts/cb-{BUILD}"))
+
+    def test_settled_rollout_preserves_terminal_outer_result(self):
+        cloud = release.Cloud()
+        for status in release.TERMINAL:
+            for state in ["SUCCEEDED", "FAILED"]:
+                # Protobuf JSON may omit a false boolean; both encodings settle.
+                for fields in [{}, {"reconciling": False}]:
+                    with self.subTest(status=status, state=state, fields=fields):
+                        with patch.object(cloud, "request", side_effect=[{"status": status}, {"state": state, **fields}]):
+                            self.assertEqual(cloud.build_status(BUILD), status)
+
+    def test_missing_rollout_preserves_terminal_outer_result(self):
+        cloud = release.Cloud()
+        with patch.object(cloud, "request", side_effect=[{"status": "FAILURE"}, release.Missing()]):
+            self.assertEqual(cloud.build_status(BUILD), "FAILURE")
+
+    def test_rollout_read_error_does_not_reclaim_lock(self):
+        cloud = release.Cloud()
+        with patch.object(cloud, "create_lock", side_effect=release.Conflict()), \
+             patch.object(cloud, "read_lock", return_value=({"buildId": OTHER}, "8")), \
+             patch.object(cloud, "request", side_effect=[{"status": "FAILURE"}, RuntimeError("provider unavailable")]), \
+             patch.object(cloud, "delete_lock") as delete:
+            with self.assertRaisesRegex(RuntimeError, "provider unavailable"):
+                release.ReleaseLock(cloud, sleep=lambda _: None, attempts=1).take(BUILD, COMMIT)
+            delete.assert_not_called()
+
+    def test_pending_rollout_does_not_reclaim_lock(self):
+        cloud = release.Cloud()
+        with patch.object(cloud, "create_lock", side_effect=release.Conflict()), \
+             patch.object(cloud, "read_lock", return_value=({"buildId": OTHER}, "8")), \
+             patch.object(cloud, "request", side_effect=[{"status": "CANCELLED"}, {"state": "PROGRESSING"}]), \
+             patch.object(cloud, "delete_lock") as delete:
+            with self.assertRaisesRegex(TimeoutError, "Release lock is busy"):
+                release.ReleaseLock(cloud, sleep=lambda _: None, attempts=1).take(BUILD, COMMIT)
+            delete.assert_not_called()
+
+
 class ReleaseSafetyTests(unittest.TestCase):
     def setUp(self):
         # Keep the build's activation flag out of tests that use default mocks.
@@ -219,8 +273,35 @@ class ReleaseSafetyTests(unittest.TestCase):
     def test_missing_state_is_safe_noop(self):
         cloud = Mock()
         release.backend(cloud, None, "image")
+        release.publish_tenant_hosting(cloud, None)
         release.finish(cloud, None)
         self.assertEqual(cloud.mock_calls, [])
+
+    def test_tenant_publisher_requires_enabled_hosting_and_lock(self):
+        cloud = Mock()
+        state = {"buildId": BUILD, "generation": "8"}
+        publisher = Mock()
+        with patch.dict(release.sys.modules, {"tenant_publish": publisher}):
+            release.publish_tenant_hosting(cloud, state)
+            self.assertEqual(cloud.mock_calls, [])
+            publisher.publish_tenant.assert_not_called()
+            cloud.read_lock.return_value = ({"buildId": OTHER}, "8")
+            with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true"}):
+                with self.assertRaisesRegex(RuntimeError, "ownership changed"):
+                    release.publish_tenant_hosting(cloud, state)
+            publisher.publish_tenant.assert_not_called()
+
+    def test_tenant_publisher_failure_retains_release_lock(self):
+        cloud = Mock()
+        state = {"buildId": BUILD, "generation": "8"}
+        cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
+        publisher = Mock()
+        publisher.publish_tenant.side_effect = RuntimeError("tenant build failed")
+        with patch.dict(release.sys.modules, {"tenant_publish": publisher}), patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true"}):
+            with self.assertRaisesRegex(RuntimeError, "tenant build failed"):
+                release.publish_tenant_hosting(cloud, state)
+        publisher.publish_tenant.assert_called_once_with(cloud, state)
+        cloud.delete_lock.assert_not_called()
 
     def test_failed_migration_prevents_backend_deployment(self):
         cloud = Mock()
