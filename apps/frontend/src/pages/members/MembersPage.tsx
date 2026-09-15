@@ -9,11 +9,14 @@ import { DataTable, type ColumnDef } from "@/components/shared/DataTable";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserPlus } from "lucide-react";
+import { GenerateQrModal } from "./GenerateQrModal";
+import { RegistrationRequestsTab } from "./RegistrationRequestsTab";
 
 const LIMIT = 20;
 
-export function MembersPage() {
+function MembersListTab() {
   const navigate = useNavigate();
   const { can } = usePermissions();
   const [page, setPage] = useState(1);
@@ -74,39 +77,67 @@ export function MembersPage() {
   ];
 
   return (
+    <DataTable
+      columns={columns}
+      data={data?.items ?? []}
+      isLoading={isPending}
+      isError={isError}
+      errorMessage={error instanceof Error ? error.message : undefined}
+      onRetry={refetch}
+      search={{
+        value: search,
+        onChange: (v) => {
+          setSearch(v);
+          setPage(1);
+        },
+        placeholder: "Cari nama, NIK, ID..."
+      }}
+      pagination={{ page, limit: LIMIT, total: data?.meta.total ?? 0, onPageChange: setPage }}
+      onRowClick={(row) => navigate(`/members/${row.id}`)}
+      emptyMessage="Belum ada anggota terdaftar"
+    />
+  );
+}
+
+export function MembersPage() {
+  const navigate = useNavigate();
+  const { can } = usePermissions();
+  const canReviewRegistrations = can("members", "create");
+
+  return (
     <div className="space-y-6">
       <PageHeader
         title="Anggota"
         description="Daftar anggota koperasi"
         actions={
-          can("members", "create") && (
-            <Button onClick={() => navigate("/members/new")}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Tambah Anggota
-            </Button>
-          )
+          <div className="flex flex-wrap items-center gap-2">
+            {canReviewRegistrations && <GenerateQrModal />}
+            {can("members", "create") && (
+              <Button onClick={() => navigate("/members/new")}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Tambah Anggota
+              </Button>
+            )}
+          </div>
         }
       />
 
-      <DataTable
-        columns={columns}
-        data={data?.items ?? []}
-        isLoading={isPending}
-        isError={isError}
-        errorMessage={error instanceof Error ? error.message : undefined}
-        onRetry={refetch}
-        search={{
-          value: search,
-          onChange: (v) => {
-            setSearch(v);
-            setPage(1);
-          },
-          placeholder: "Cari nama, NIK, ID..."
-        }}
-        pagination={{ page, limit: LIMIT, total: data?.meta.total ?? 0, onPageChange: setPage }}
-        onRowClick={(row) => navigate(`/members/${row.id}`)}
-        emptyMessage="Belum ada anggota terdaftar"
-      />
+      {canReviewRegistrations ? (
+        <Tabs defaultValue="list">
+          <TabsList>
+            <TabsTrigger value="list">Daftar Anggota</TabsTrigger>
+            <TabsTrigger value="registrations">Pendaftaran Mandiri</TabsTrigger>
+          </TabsList>
+          <TabsContent value="list">
+            <MembersListTab />
+          </TabsContent>
+          <TabsContent value="registrations">
+            <RegistrationRequestsTab />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <MembersListTab />
+      )}
     </div>
   );
 }

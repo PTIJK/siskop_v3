@@ -15,3 +15,8 @@ coverage/
 
 # One-off data-migration inputs (real member/financial data) — never committed.
 apps/backend/scripts/data/
+
+# KTP photo storage (STORAGE_PATH default) — local dev/test runtime output,
+# never source. Both the internal upload-ktp route and the public
+# self-registration endpoint write here.
+apps/backend/uploads/

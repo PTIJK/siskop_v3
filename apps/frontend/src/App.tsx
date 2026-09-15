@@ -5,6 +5,11 @@ import { RequireMultiUnit } from "@/components/shared/RequireMultiUnit";
 import { onboardingRoutes } from "@/features/onboarding/routes";
 const HandoffPage = lazy(() => import("@/features/tenant-access/HandoffPage"));
 const InvitePage = lazy(() => import("@/features/tenant-access/InvitePage"));
+const PublicRegistrationPage = lazy(() =>
+  import("@/features/self-registration/PublicRegistrationPage").then((module) => ({
+    default: module.PublicRegistrationPage
+  }))
+);
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const AppLayout = lazy(() =>
   import("@/components/layout/AppLayout").then((module) => ({ default: module.AppLayout }))
@@ -114,6 +119,11 @@ export default function App() {
             <Route path="/auth/callback" element={<HandoffPage mode="callback" />} />
             <Route path="/auth/logout" element={<HandoffPage mode="logout" />} />
             <Route path="/invite" element={<InvitePage />} />
+
+            {/* Public QR self-registration — no AppLayout, tenant resolved
+                from :tenantSlug in the URL only, same as the backend's
+                POST /api/public/register/:tenantSlug. */}
+            <Route path='/daftar/:tenantSlug' element={<PublicRegistrationPage />} />
 
             <Route element={<AppLayout />}>
               <Route path='/dashboard' element={<DashboardPage />} />

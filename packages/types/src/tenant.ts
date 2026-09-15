@@ -53,3 +53,8 @@ export interface ModalDisetorInfo {
 export interface UpdateModalDisetorRequest {
   modalDisetor: number | null;
 }
+
+/** Gates POST /api/public/register/:tenantSlug, the QR self-registration form. */
+export interface SelfRegistrationConfig {
+  selfRegistrationEnabled: boolean;
+}

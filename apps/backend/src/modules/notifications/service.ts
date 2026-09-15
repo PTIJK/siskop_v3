@@ -1,5 +1,5 @@
 import type { AuthClaims, Permissions } from "@siskop/types";
-import { db } from "../../lib/db.js";
+import { db, type TxClient } from "../../lib/db.js";
 import { notFound } from "../../lib/errors.js";
 
 // Bounded rather than paginated: this feeds a Topbar bell dropdown, not a
@@ -19,8 +19,15 @@ export interface CreateTenantNotificationInput {
   relatedId?: string;
 }
 
-export async function createTenantNotification(input: CreateTenantNotificationInput) {
-  return db.tenantNotification.create({
+/**
+ * Takes an explicit client (db, or a caller's `tx`) rather than always using
+ * the module-level `db` — same convention as lib/journal.ts's post* helpers —
+ * so a notification raised as a side effect of some other write (e.g. a new
+ * MemberRegistrationRequest) commits atomically with it instead of on a
+ * separate connection.
+ */
+export async function createTenantNotification(client: TxClient | typeof db, input: CreateTenantNotificationInput) {
+  return client.tenantNotification.create({
     data: {
       tenantId: input.tenantId,
       type: input.type,

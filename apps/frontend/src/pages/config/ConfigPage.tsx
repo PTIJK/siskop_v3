@@ -11,6 +11,7 @@ import { AccountMappingsTab } from "./AccountMappingsTab";
 import { ShuConfigTab } from "./ShuConfigTab";
 import { WhitelabelConfigTab } from "./WhitelabelConfigTab";
 import { ModalDisetorConfigTab } from "./ModalDisetorConfigTab";
+import { SelfRegistrationConfigTab } from "./SelfRegistrationConfigTab";
 import { WorkspaceDomainSettings } from "@/features/workspace-domain/WorkspaceDomainSettings";
 
 export function ConfigPage() {
@@ -27,7 +28,13 @@ export function ConfigPage() {
     { value: "shu", label: "Konfigurasi SHU", show: can("accounting", "read"), content: <ShuConfigTab /> },
     { value: "whitelabel", label: "Whitelabel", show: can("config", "read"), content: <WhitelabelConfigTab /> },
     { value: "workspace-domain", label: "Alamat Workspace", show: can("config", "read"), content: <WorkspaceDomainSettings /> },
-    { value: "modal-disetor", label: "Modal Disetor", show: can("config", "read"), content: <ModalDisetorConfigTab /> }
+    { value: "modal-disetor", label: "Modal Disetor", show: can("config", "read"), content: <ModalDisetorConfigTab /> },
+    {
+      value: "self-registration",
+      label: "Pendaftaran Mandiri",
+      show: can("config", "read"),
+      content: <SelfRegistrationConfigTab />
+    }
   ].filter((t) => t.show);
 
   return (

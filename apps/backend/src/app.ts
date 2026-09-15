@@ -14,6 +14,7 @@ import { memberAuthRoutes } from "./modules/member-auth/routes.js";
 import { memberAccessRoutes } from "./modules/member-access/routes.js";
 import { memberPortalRoutes } from "./modules/member-portal/routes.js";
 import { membersRoutes } from "./modules/members/routes.js";
+import { publicMemberRegistrationRoutes } from "./modules/members/public-registration.routes.js";
 import { savingsRoutes } from "./modules/savings/routes.js";
 import { loansRoutes } from "./modules/loans/routes.js";
 import { dashboardRoutes } from "./modules/dashboard/routes.js";
@@ -88,6 +89,7 @@ export function createApp(): Express {
   app.use("/api/member-access", memberAccessRoutes());
   app.use("/api/member", memberPortalRoutes());
   app.use("/api/members", membersRoutes());
+  app.use("/api/public/register", publicMemberRegistrationRoutes());
   app.use("/api/savings", savingsRoutes());
   app.use("/api/loans", loansRoutes());
   app.use("/api/dashboard", dashboardRoutes());

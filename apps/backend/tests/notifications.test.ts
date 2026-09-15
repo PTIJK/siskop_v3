@@ -19,7 +19,7 @@ describe("GET /api/notifications", () => {
     const manager = await createStaffSession(admin.user.tenantId, "demo", "Manager", "manager@demo.test");
     const viewer = await createStaffSession(admin.user.tenantId, "demo", "Viewer", "viewer@demo.test");
 
-    await createTenantNotification({
+    await createTenantNotification(db, {
       tenantId: admin.user.tenantId,
       type: "MEMBER_REGISTRATION_PENDING",
       title: "Pendaftaran mandiri baru",
@@ -46,7 +46,7 @@ describe("GET /api/notifications", () => {
     const tenantA = await setupTenant({ slug: "demo" });
     const tenantB = await setupTenant({ slug: "demo2", registrationNo: "KOP-DEMO2" });
 
-    await createTenantNotification({
+    await createTenantNotification(db, {
       tenantId: tenantB.user.tenantId,
       type: "MEMBER_REGISTRATION_PENDING",
       title: "Pendaftaran mandiri baru",
@@ -64,7 +64,7 @@ describe("GET /api/notifications", () => {
 describe("POST /api/notifications/:id/read", () => {
   it("marks a notification read for that user only, and unreadCount drops", async () => {
     const admin = await setupTenant();
-    const notification = await createTenantNotification({
+    const notification = await createTenantNotification(db, {
       tenantId: admin.user.tenantId,
       type: "MEMBER_REGISTRATION_PENDING",
       title: "Pendaftaran mandiri baru",
@@ -85,7 +85,7 @@ describe("POST /api/notifications/:id/read", () => {
 
   it("is idempotent — marking an already-read notification read again does not error", async () => {
     const admin = await setupTenant();
-    const notification = await createTenantNotification({
+    const notification = await createTenantNotification(db, {
       tenantId: admin.user.tenantId,
       type: "MEMBER_REGISTRATION_PENDING",
       title: "t",
@@ -105,7 +105,7 @@ describe("POST /api/notifications/:id/read", () => {
   it("404s for a notification belonging to another tenant", async () => {
     const tenantA = await setupTenant({ slug: "demo" });
     const tenantB = await setupTenant({ slug: "demo2", registrationNo: "KOP-DEMO2" });
-    const notification = await createTenantNotification({
+    const notification = await createTenantNotification(db, {
       tenantId: tenantB.user.tenantId,
       type: "MEMBER_REGISTRATION_PENDING",
       title: "t",
