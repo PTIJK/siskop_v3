@@ -1,13 +1,31 @@
+# Backend image inputs only. In particular, Cloud Build's pnpm store and Turbo
+# outputs must not enter the context while verification runs in parallel.
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!apps/
+!apps/backend/
+!apps/backend/Dockerfile
+!apps/backend/package.json
+!apps/backend/tsconfig.json
+!apps/backend/src/
+!apps/backend/src/**
+!apps/backend/prisma/
+!apps/backend/prisma/**
+!packages/
+!packages/types/
+!packages/types/**
+!packages/eslint-config/
+!packages/eslint-config/**
 **/node_modules
+**/.pnpm-store
+**/.turbo
 **/.env*
 **/dist
 **/coverage
 **/uploads
 **/*.log
-.git
-.firebase
-apps/frontend
-apps/mobile
-apps/backend/scripts
-apps/backend/tests
+**/*.tsbuildinfo
 apps/backend/prisma/seed*

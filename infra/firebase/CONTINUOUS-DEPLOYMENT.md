@@ -49,11 +49,13 @@ both hosting products. Its default flags remain disabled during preparation.
 
 1. Start a disposable PostgreSQL 18 container, install dependencies with Node 22
    and pnpm 11.19.0, run release safety tests, lint, typecheck, database migrations,
-   application tests with coverage, compiled Node ESM imports, and workspace builds. No staging database
+   application tests with coverage, compiled Node ESM imports, and browser builds. No staging database
    credentials are available to the tests.
-2. Build and push the backend container, including the committed Prisma
-   migrations. Build the frontend with `vite build --mode staging` so it includes
-   the committed public Firebase web configuration.
+2. Build the backend container in parallel with verification, including its
+   compiled-import smoke check and committed Prisma migrations. Publish its unique
+   build tag only after both branches pass. Reuse dependency/runtime layers from
+   Artifact Registry. The frontend is bundled once with `vite build --mode staging`
+   so it includes the committed public Firebase web configuration.
 3. Confirm the commit still matches main and acquire a generation-checked lock
    in the private `siskop-d0f8c-deployments` bucket. Superseded builds skip
    publishing. Concurrent releases wait; a lock is reclaimed only after Cloud
@@ -76,6 +78,27 @@ both hosting products. Its default flags remain disabled during preparation.
 If a release fails after acquiring the lock, the next build can recover the
 lock after confirming that failure. A failed verification build does not acquire
 the lock, migrate Cloud SQL, or publish Hosting. It still produces a test image.
+
+## Build performance
+
+`build-backend.sh` maintains `api:cache-dependencies` and `api:cache-runtime` in
+the existing Artifact Registry repository. Cache misses fall back to ordinary
+builds; a failed cache upload does not block a verified release image. The
+dependency stage is keyed by manifests, lockfile, Prisma schema and
+build configuration; application source changes only recompile the application.
+System-package layers refresh monthly and Docker checks for updated Node images.
+Concurrent builds may replace cache tags, which can affect speed but cannot select
+the deployed image: releases still resolve their unique build tag to a digest.
+
+The Docker context allows only backend/shared-package inputs. In particular,
+verification's pnpm store, Turbo artifacts and frontend bundles cannot enter it
+while the backend builds in parallel. No extra machine-size setting or IAM role
+is required. The existing machine size and deployment checks are preserved.
+
+Lint, typechecking, all backend tests with coverage, release tests and browser
+bundles still run for each main commit. Backend compilation happens in Docker;
+the frontend and mobile bundles are built once after typechecking. Caches do not
+skip test results. See [performance measurements](BUILD-PERFORMANCE.md).
 
 ## Cloud setup
 

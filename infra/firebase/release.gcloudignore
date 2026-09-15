@@ -25,6 +25,7 @@
 **/dist/**
 **/coverage/**
 **/.turbo/**
+**/.pnpm-store/**
 **/uploads/**
 **/__pycache__/**
 **/*.log
