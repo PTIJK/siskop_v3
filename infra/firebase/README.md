@@ -37,7 +37,9 @@ hostname does not provide arbitrary cooperative subdomains.
 - Runtime account: `siskop-staging-api@siskop-d0f8c.iam.gserviceaccount.com`.
 - Image repository: `asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api`.
 - Private uploads bucket: `gs://siskop-d0f8c-staging-uploads`, mounted at `/mnt/uploads`.
-- Secret Manager versions: `DATABASE_URL:2`; JWT keys and Xendit secrets at version 1.
+- Secret Manager versions: `DATABASE_URL:2`; JWT keys, Xendit secrets, and `SCHEDULER_SECRET` at version 1.
+- Cloud Scheduler: `siskop-daily-scheduler`, `POST /api/scheduler/run-daily` at 00:05 UTC, authenticated
+  via OIDC as `siskop-scheduler-invoker@siskop-d0f8c.iam.gserviceaccount.com` (`roles/run.invoker` only).
 
 Cloud Run reads secrets at runtime; they are never bundled into the frontend/image.
 `.gcloudignore` permits only backend build inputs. The private local copy is
@@ -97,6 +99,38 @@ firebase deploy --only hosting --project=siskop-d0f8c
 Hosting pins the backend revision so a Hosting release rollback restores its
 associated API revision. Database migrations are separate and must remain
 compatible with the revision being restored.
+
+## Daily scheduler
+
+`main.ts`'s in-process `node-cron` timer only fires while a container instance
+happens to be alive at 00:05 UTC. `siskop-staging-api` runs with
+`--min-instances=0` (`deploy-api.sh`), so Cloud Run scales to zero overnight and
+the timer silently never runs — the daily savings-interest accrual and loan KOL
+reclassification jobs get skipped. `POST /api/scheduler/run-daily`
+(`modules/scheduler/routes.ts`) exists specifically as the production-safe
+alternative: an external caller hitting it cold-starts the instance on demand.
+
+One-time setup as a project administrator, once `gcloud` is authenticated:
+
+```sh
+node infra/firebase/setup-scheduler.mjs
+```
+
+This creates `SCHEDULER_SECRET` in Secret Manager (generated, never printed),
+attaches it to the running service, creates a least-privilege
+`siskop-scheduler-invoker` service account with `roles/run.invoker` on
+`siskop-staging-api` only, and creates the `siskop-daily-scheduler` Cloud
+Scheduler job — `POST {run-url}/api/scheduler/run-daily` at 00:05 UTC,
+authenticated via OIDC, with the shared secret as the `x-scheduler-token`
+header as defense-in-depth. It is idempotent: re-running it never rotates an
+already-deployed secret. After creating the secret for the first time, confirm
+its version number matches the `SCHEDULER_SECRET:1` pin in `deploy-api.sh`
+before the next release, or update the pin.
+
+The accrual logic itself already self-heals a missed day — `Saving.lastInterestAt`
+anchors how many calendar days elapsed since the last run
+(`modules/savings/service.ts`) — so a late or skipped tick catches up
+automatically on the next one; this setup only fixes the trigger, not the math.
 
 ## Xendit test setup
 
