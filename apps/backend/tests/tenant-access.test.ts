@@ -416,3 +416,136 @@ describe('tenant selection and browser-bound handoff', () => {
     ).toBe(404)
   })
 })
+
+const handoffPath = '/api/tenant-access/handoff'
+const acceptPath = '/api/tenant-access/accept'
+async function directTicket(response: request.Response, targetApp = app) {
+  const attempt = response.body.data.handoff.attempt as string
+  const bridge = await request(targetApp).post(handoffPath).set('Origin', central)
+    .set('Cookie', cookie(response)).type('form').send({ attempt })
+  expect(bridge.status).toBe(200)
+  expect(bridge.headers['content-type']).toContain('text/html')
+  expect(bridge.headers['cache-control']).toContain('no-store')
+  expect(bridge.headers['referrer-policy']).toBe('origin')
+  expect(bridge.headers['content-security-policy']).toContain("frame-ancestors 'none'")
+  const code = bridge.text.match(/name="code" value="([\w-]+)"/)?.[1]
+  expect(code).toHaveLength(43)
+  return { attempt, code: code! }
+}
+function acceptDirect(body: { attempt: string; code: string }, slug = 'alpha', origin = central, targetApp = app) {
+  return request(targetApp).post(acceptPath).set(signed('POST', acceptPath, slug))
+    .set('Origin', origin).type('form').send(body)
+}
+describe('direct staff handoff', () => {
+  it('transfers a Teller session with a host-only cookie and no tokens in the redirect', async () => {
+    const { a } = await fixtures()
+    const role = await db.role.findFirstOrThrow({ where: { tenantId: a.user.tenantId, name: 'Teller' } })
+    await db.user.update({ where: { id: a.user.id, tenantId: a.user.tenantId }, data: { roleId: role.id } })
+    const ticket = await directTicket(await login())
+    const res = await acceptDirect(ticket)
+    expect(res.status).toBe(303)
+    expect(res.headers.location).toBe('/dashboard?handoff=1')
+    expect(cookie(res)).toContain('siskop_refresh_token=')
+    expect(res.headers['set-cookie'].join(';')).toContain('HttpOnly; Secure; SameSite=Strict')
+    expect(res.headers['set-cookie'].join(';')).not.toContain('Domain=')
+    const path = '/api/auth/refresh'
+    const restored = await request(app).post(path).set(signed('POST', path)).set('Cookie', cookie(res)).send({})
+    expect(restored.status).toBe(200)
+    const mePath = '/api/auth/me'
+    const me = await request(app).get(mePath).set(signed('GET', mePath))
+      .set('Authorization', `Bearer ${restored.body.data.accessToken}`)
+    expect(me.body.data).toMatchObject({ id: a.user.id, tenantId: a.user.tenantId, roleName: 'Teller' })
+    expect(me.body.data.permissions).toEqual(role.permissions)
+  })
+  it('requires the initiating identity cookie and the exact central source', async () => {
+    await fixtures()
+    const response = await login()
+    const attempt = response.body.data.handoff.attempt
+    for (const origin of ['https://evil.example', 'null']) {
+      await request(app).post(handoffPath).set('Origin', origin).set('Cookie', cookie(response))
+        .type('form').send({ attempt }).expect(403)
+    }
+    await request(app).post(handoffPath).set('Origin', central).type('form').send({ attempt }).expect(401)
+    const other = await login()
+    await request(app).post(handoffPath).set('Origin', central).set('Cookie', cookie(other))
+      .type('form').send({ attempt }).expect(401)
+    const ticket = await directTicket(response)
+    await request(app).post(handoffPath).set('Origin', central).set('Cookie', cookie(response))
+      .type('form').send({ attempt }).expect(401)
+    for (const origin of ['https://evil.example', central + '.evil.example', 'null', `https://alpha.${base}`]) {
+      const denied = await acceptDirect(ticket, 'alpha', origin)
+      expect(denied.status).toBe(403)
+      expect(denied.headers['set-cookie']).toBeUndefined()
+    }
+    const headers = signed('POST', acceptPath)
+    const { Origin: _origin, ...withoutOrigin } = headers
+    await request(app).post(acceptPath).set(withoutOrigin).type('form').send(ticket).expect(403)
+    await acceptDirect(ticket, 'beta').expect(403)
+    await request(app).post(acceptPath).set('Origin', central).type('form').send(ticket).expect(403)
+    await request(app).post(acceptPath).set(signed('POST', acceptPath)).set('Origin', central)
+      .set('Sec-Fetch-Dest', 'iframe').type('form').send(ticket).expect(403)
+    // The workspace middleware exception must not apply to neighboring routes.
+    const refreshPath = '/api/auth/refresh'
+    await request(app).post(refreshPath).set(signed('POST', refreshPath)).set('Origin', central).send({}).expect(403)
+    await request(app).get(acceptPath).set(signed('GET', acceptPath)).expect(404)
+    await acceptDirect(ticket).expect(303)
+  })
+  it('rejects expired tickets, tampering and concurrent replay', async () => {
+    await fixtures()
+    const ticket = await directTicket(await login())
+    await acceptDirect({ ...ticket, code: 'x'.repeat(43) }).expect(401)
+    await db.tenantLoginAttempt.update({ where: { id: ticket.attempt }, data: { codeExpiresAt: new Date(0) } })
+    const expired = await acceptDirect(ticket).expect(401)
+    expect(expired.headers['content-type']).toContain('text/html')
+    expect(expired.text).toContain('Kembali ke halaman masuk')
+    expect(expired.text).not.toContain(ticket.code)
+    const fresh = await directTicket(await login())
+    const results = await Promise.all([acceptDirect(fresh), acceptDirect(fresh)])
+    expect(results.map(r => r.status).sort()).toEqual([303, 401])
+    expect(results.find(r => r.status === 401)!.headers['set-cookie']).toBeUndefined()
+  })
+  it('rechecks membership, identity, session, unit access and canonical slug before accepting', async () => {
+    const { a, identity } = await fixtures()
+    const changes = [
+      async () => { await db.user.update({ where: { id: a.user.id, tenantId: a.user.tenantId }, data: { isActive: false } }) },
+      async () => { await db.accountIdentity.update({ where: { id: identity.id }, data: { isActive: false } }) },
+      async () => { await db.identitySession.updateMany({ data: { expiresAt: new Date(0) } }) },
+      async () => { await db.cooperativeUnit.updateMany({ where: { tenantId: a.user.tenantId }, data: { isActive: false } }) },
+      async () => { await db.tenant.update({ where: { id: a.user.tenantId }, data: { slug: 'renamed-alpha' } }) },
+    ]
+    for (const change of changes) {
+      const ticket = await directTicket(await login())
+      await change()
+      const rejected = await acceptDirect(ticket)
+      expect([401, 403, 409]).toContain(rejected.status)
+      expect(rejected.headers['set-cookie']).toBeUndefined()
+      await db.user.update({ where: { id: a.user.id, tenantId: a.user.tenantId }, data: { isActive: true } })
+      await db.accountIdentity.update({ where: { id: identity.id }, data: { isActive: true } })
+      await db.cooperativeUnit.updateMany({ where: { tenantId: a.user.tenantId }, data: { isActive: true } })
+      await db.tenant.update({ where: { id: a.user.tenantId }, data: { slug: 'alpha' } })
+    }
+  })
+  it('selects a second authorized tenant through Firebase Hosting and keeps member cookies separate', async () => {
+    const { b } = await fixtures(true)
+    const hosted = express().use(firebaseHosting(), createApp())
+    const response = await request(hosted).post('/api/tenant-access/login').set('Origin', central).send({ idToken: 'person-uid' })
+    expect(response.body.data.next).toBe('tenant_selection')
+    const identityCookie = (response.headers['set-cookie'] as unknown as string[]).filter(c => c.includes('Path=/api/tenant-access'))
+    const selected = await request(hosted).post('/api/tenant-access/select').set('Origin', central)
+      .set('Cookie', identityCookie.map(c => c.split(';')[0]).join('; ')).send({ tenantId: b.user.tenantId })
+    expect(selected.status).toBe(200)
+    selected.headers['set-cookie'] = identityCookie
+    const ticket = await directTicket(selected, hosted)
+    const accepted = await acceptDirect(ticket, 'beta', central, hosted)
+    expect(accepted.status).toBe(303)
+    expect(cookie(accepted)).not.toMatch(/__session|member/)
+  })
+  it('keeps legacy browser-bound codes separate from direct tickets', async () => {
+    const legacy = await prepare()
+    await acceptDirect({ attempt: legacy.attempt!, code: legacy.code! }).expect(401)
+    const direct = await directTicket(await login())
+    const path = '/api/tenant-access/start'
+    await request(app).post(path).set(signed('POST', path)).send({ attempt: direct.attempt }).expect(401)
+    await acceptDirect(direct).expect(303)
+  })
+})

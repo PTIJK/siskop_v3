@@ -119,7 +119,11 @@ export async function selectTenant(
       expiresAt: future(5 * 60_000)
     }
   })
-  return { next: 'tenant_redirect' as const, startUrl: `${attempt.origin}/auth/start?attempt=${attempt.id}` }
+  return {
+    next: 'tenant_redirect' as const,
+    startUrl: `${attempt.origin}/auth/start?attempt=${attempt.id}`,
+    handoff: { attempt: attempt.id }
+  }
 }
 export async function login(idToken: string) {
   const proof = await verifyFirebaseIdentity(idToken)
@@ -186,7 +190,7 @@ export async function startAttempt(id: string, origin: string) {
     verifier = secretValue(),
     state = secretValue()
   const changed = await db.tenantLoginAttempt.updateMany({
-    where: { id, bindingHash: null, consumedAt: null },
+    where: { id, bindingHash: null, codeHash: null, consumedAt: null },
     data: { bindingHash: digest(binding), challenge: digest(verifier), stateHash: digest(state) }
   })
   if (changed.count !== 1) throw unauthorized('Tautan sudah dibuka. Silakan ulangi proses masuk.')
@@ -208,6 +212,34 @@ export async function authorizeAttempt(
   if (changed.count !== 1) throw unauthorized('Tautan sudah digunakan. Silakan ulangi.')
   return { callbackUrl: `${attempt.origin}/auth/callback#attempt=${id}&state=${state}&code=${code}` }
 }
+
+/** Issued only by a same-origin central form POST with the initiating identity cookie.
+ * Direct tickets have a code but no browser-binding fields; the two protocols
+ * cannot convert into one another after either has started.
+ */
+export async function issueDirectTicket(id: string, session: Awaited<ReturnType<typeof identitySession>>) {
+  const attempt = await attemptFor(id)
+  if (attempt.identitySessionId !== session.id) throw unauthorized()
+  const code = secretValue()
+  const changed = await db.tenantLoginAttempt.updateMany({
+    where: { id, bindingHash: null, stateHash: null, challenge: null, codeHash: null, consumedAt: null },
+    data: { codeHash: digest(code), codeExpiresAt: future(60_000) }
+  })
+  if (changed.count !== 1) throw unauthorized('Tautan sudah digunakan. Silakan ulangi.')
+  return { action: `${attempt.origin}/api/tenant-access/accept`, attempt: id, code }
+}
+
+/** Only the form receiver may call this, after checking the exact central Origin.
+ * Possession of a ticket alone is deliberately insufficient at the HTTP boundary.
+ */
+export async function acceptDirectTicket(id: string, code: string, origin: string) {
+  const attempt = await attemptFor(id, origin)
+  if (attempt.bindingHash || attempt.stateHash || attempt.challenge ||
+      attempt.codeHash !== digest(code) || !attempt.codeExpiresAt || attempt.codeExpiresAt <= new Date())
+    throw unauthorized()
+  return consumeAttempt(attempt)
+}
+
 export async function redeemAttempt(
   id: string,
   code: string,
@@ -228,12 +260,16 @@ export async function redeemAttempt(
     attempt.codeExpiresAt <= new Date()
   )
     throw unauthorized()
+  return consumeAttempt(attempt)
+}
+
+async function consumeAttempt(attempt: Awaited<ReturnType<typeof attemptFor>>) {
   // Derive permissions before consuming; the transactional conditional update allows one winner.
   const session = await sessionFor(attempt.membership, attempt.identitySession.authTime)
   await db.$transaction(async (tx) => {
     const changed = await tx.tenantLoginAttempt.updateMany({
       where: {
-        id,
+        id: attempt.id,
         consumedAt: null,
         codeExpiresAt: { gt: new Date() },
         expiresAt: { gt: new Date() },

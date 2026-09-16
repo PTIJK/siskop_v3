@@ -5,12 +5,16 @@ import { useAuth } from "@/stores/auth";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { Toaster } from "../ui/toaster";
+import { HandoffSessionGate } from "@/features/tenant-access/HandoffSessionGate";
 
 export function AppLayout() {
   const accessConfig = useTenantAccessConfig();
   const user = useAuth((s) => s.user);
   const isPlatformAdmin = useAuth((s) => s.user?.role === "super_admin");
   const location = useLocation();
+
+  if (tenantSlug() !== null && new URLSearchParams(location.search).get('handoff') === '1')
+    return <HandoffSessionGate />;
 
   // The access token lives only in memory (stores/auth.ts), so it's always
   // null right after a hard reload — but `user` is cached in localStorage and

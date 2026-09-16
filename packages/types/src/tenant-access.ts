@@ -12,8 +12,15 @@ export interface TenantMembershipPage {
   filteredTotal: number
   page: number
 }
+export interface StaffTenantRedirect {
+  next: 'tenant_redirect'
+  /** Retained for clients using the original browser-bound handoff. */
+  startUrl: string
+  /** Present when the backend supports direct form handoff. */
+  handoff?: { attempt: string }
+}
 export type StaffLoginResult =
-  | { next: 'tenant_redirect'; startUrl: string }
+  | StaffTenantRedirect
   | { next: 'tenant_selection'; eligibleCount: number }
   | { next: 'no_access' }
   | { next: 'dashboard'; session: import('./user.js').LoginResponse }

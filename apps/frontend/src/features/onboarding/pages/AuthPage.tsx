@@ -1,10 +1,10 @@
 import { TenantPickerDialog } from "../../tenant-access/TenantPickerDialog";
 import { accessApi, useTenantAccessConfig } from "../../tenant-access/api";
-import { canonicalWorkspaceUrl } from "../../workspace-domain/host";
+import { enterTenant } from "../../tenant-access/enterTenant";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, ArrowUpRight } from "lucide-react";
-import type { OnboardingSignInResponse, StaffLoginResult, TenantMembershipPage } from "@siskop/types";
+import type { OnboardingSignInResponse, StaffLoginResult, StaffTenantRedirect, TenantMembershipPage } from "@siskop/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,11 +33,11 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
     if (resume || workspace || search.get("select") !== "1" || !accessConfig.data?.enabled) return;
     void accessApi<TenantMembershipPage>("/memberships").then(async data => {
       if (search.get("tenant") && search.get("membership")) {
-        const result = await accessApi<{ startUrl: string }>("/select", { tenantId: search.get("tenant"), membershipId: search.get("membership") });
-        window.location.replace(canonicalWorkspaceUrl(result.startUrl));
+        const result = await accessApi<StaffTenantRedirect>("/select", { tenantId: search.get("tenant"), membershipId: search.get("membership") });
+        enterTenant(result);
       } else if (data.total === 1 && data.items[0]) {
-        const result = await accessApi<{ startUrl: string }>("/select", { tenantId: data.items[0].tenantId });
-        window.location.replace(canonicalWorkspaceUrl(result.startUrl));
+        const result = await accessApi<StaffTenantRedirect>("/select", { tenantId: data.items[0].tenantId });
+        enterTenant(result);
       } else if (data.total > 1) setPicker(true);
       else { setNotice("Anda belum memiliki akses ke koperasi aktif. Hubungi pengelola koperasi."); setNoAccess(true); }
     }).catch(() => { setNotice("Masuk kembali dengan akun yang memiliki akses ke koperasi yang dipilih."); });
@@ -58,10 +58,10 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
         ? await accessApi<StaffLoginResult>("/login", { idToken })
         : await onboardingApi<OnboardingSignInResponse>(resume ? "/firebase-resume" : "/login", { idToken });
       if ((result.next === "tenant_redirect" || result.next === "tenant_selection") && search.get("tenant") && search.get("membership")) {
-        const selected = await accessApi<{ startUrl: string }>("/select", { tenantId: search.get("tenant"), membershipId: search.get("membership") });
-        useAuth.getState().clear(); window.location.assign(canonicalWorkspaceUrl(selected.startUrl)); return;
+        const selected = await accessApi<StaffTenantRedirect>("/select", { tenantId: search.get("tenant"), membershipId: search.get("membership") });
+        useAuth.getState().clear(); enterTenant(selected); return;
       }
-      if (result.next === "tenant_redirect") { useAuth.getState().clear(); window.location.assign(canonicalWorkspaceUrl(result.startUrl)); return; }
+      if (result.next === "tenant_redirect") { useAuth.getState().clear(); enterTenant(result); return; }
       if (result.next === "tenant_selection") { useAuth.getState().clear(); setPicker(true); return; }
       if (result.next === "no_access") { setNoAccess(true); useAuth.getState().clear(); setNotice("Anda belum memiliki akses ke koperasi aktif. Hubungi pengelola koperasi."); return; }
       if (result.next === "dashboard") {

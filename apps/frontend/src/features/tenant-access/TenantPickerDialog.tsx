@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { TenantMembershipPage } from '@siskop/types'
+import type { StaffTenantRedirect, TenantMembershipPage } from '@siskop/types'
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { canonicalWorkspaceUrl } from '@/features/workspace-domain/host'
+import { enterTenant } from './enterTenant'
 import { apiFetch } from '@/api/client'
 import { accessApi, centralLocation } from './api'
 export function TenantPickerDialog({
@@ -60,8 +60,8 @@ export function TenantPickerDialog({
     setBusy(true)
     setError('')
     try {
-      const data = await accessApi<{ startUrl: string }>('/select', { tenantId: selected })
-      window.location.assign(canonicalWorkspaceUrl(data.startUrl))
+      const data = await accessApi<StaffTenantRedirect>('/select', { tenantId: selected })
+      enterTenant(data)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Belum dapat masuk.')
       setBusy(false)

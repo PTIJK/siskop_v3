@@ -1,8 +1,8 @@
 import { ErrorCode } from '@siskop/types'
-import { Router, type Request, type Response, type NextFunction } from 'express'
+import { Router, urlencoded, type Request, type Response, type NextFunction } from 'express'
 import { rateLimit } from 'express-rate-limit'
 import { z } from 'zod'
-import { forbidden } from '../../lib/errors.js'
+import { AppError, forbidden } from '../../lib/errors.js'
 import { requireAuth, authClaims } from '../../middleware/auth.js'
 import { clearRefreshCookie, setRefreshCookie } from '../auth/refresh-cookie.js'
 import { centralUrl, selectionEnabled, switchingEnabled } from './config.js'
@@ -14,11 +14,14 @@ import {
   startAttempt,
   authorizeAttempt,
   redeemAttempt,
+  issueDirectTicket,
+  acceptDirectTicket,
   logout
 } from './service.js'
 import { firebaseUidFor } from './identity.js'
 import { db } from '../../lib/db.js'
 import { acceptInvitation } from './invitations.js'
+import { sendHandoffForm, sendHandoffError } from './handoff-html.js'
 
 const NAME = 'siskop_identity'
 const PATH = '/api/tenant-access'
@@ -74,12 +77,41 @@ export function tenantAccessRoutes() {
   )
   router.use((req, _res, next) => {
     try {
-      if (req.method !== 'GET') sameOrigin(req)
+      if (req.method !== 'GET') {
+        if (req.path === '/accept') {
+          // This is the only cross-origin POST. Never accept a missing/null
+          // Origin or fall back to Referer, even when the ticket is valid.
+          destination(req)
+          if (req.get('Origin') !== new URL(centralUrl()).origin) throw forbidden('Origin not allowed')
+        } else sameOrigin(req)
+      }
       next()
     } catch (e) {
       next(e)
     }
   })
+  const formBody = urlencoded({ extended: false, limit: '2kb', parameterLimit: 3 })
+  const topLevel = (req: Request) => {
+    if ((req.get('Sec-Fetch-Dest') && req.get('Sec-Fetch-Dest') !== 'document') ||
+        (req.get('Sec-Fetch-Mode') && req.get('Sec-Fetch-Mode') !== 'navigate'))
+      throw forbidden('Gunakan halaman masuk pusat.')
+  }
+  router.post('/handoff', formBody, handle(async (req, res) => {
+    centralOnly(req)
+    topLevel(req)
+    const { attempt } = attemptSchema.parse(req.body)
+    const ticket = await issueDirectTicket(attempt, await identitySession(req.cookies[NAME]))
+    sendHandoffForm(res, ticket)
+  }))
+  router.post('/accept', formBody, handle(async (req, res) => {
+    topLevel(req)
+    const { attempt, code } = attemptSchema.extend({ code: z.string().regex(/^[\w-]{43}$/) }).parse(req.body)
+    const session = await acceptDirectTicket(attempt, code, destination(req))
+    setRefreshCookie(res, session.refreshToken)
+    // The query flag requests a fresh /me before rendering any cached account.
+    // It carries no credentials and does not authorize the dashboard itself.
+    res.redirect(303, '/dashboard?handoff=1')
+  }))
   router.post(
     '/login',
     handle(async (req, res) => {
@@ -218,5 +250,10 @@ export function tenantAccessRoutes() {
       )
     })
   )
+  router.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+    if (req.path !== '/handoff' && req.path !== '/accept') return next(err)
+    if (!(err instanceof AppError) && !(err instanceof z.ZodError)) console.error('Staff handoff failed', err)
+    sendHandoffError(res, err instanceof AppError ? err.status : err instanceof z.ZodError ? 422 : 500)
+  })
   return router
 }

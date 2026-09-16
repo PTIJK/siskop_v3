@@ -135,7 +135,58 @@ For existing direct tenant login, an authorized user enters that tenant immediat
 
 ## 5. Secure cross-domain handoff
 
-Changing `window.location` alone cannot transfer the host-only session. Use an authorization-code-style handoff with destination browser binding, transaction state, and PKCE S256; do not put Firebase ID tokens, access tokens, or refresh tokens in URLs.
+### Direct staff form handoff (current frontend)
+
+The current staff flow moves from the central origin to the tenant origin once.
+It does not render the intermediate React `/auth/start`, `/auth/authorize`, or
+`/auth/callback` pages. Member login keeps its existing browser-bound protocol.
+
+1. Login/selection records an attempt bound to the verified central identity
+   session, existing membership and canonical tenant origin. The response includes
+   `handoff.attempt` and the legacy `startUrl` for older clients.
+2. The central frontend submits a same-origin form POST to
+   `/api/tenant-access/handoff`. The backend checks the exact Origin and the
+   initiating identity cookie; a different session cannot approve this attempt.
+3. The backend issues a random, single-use ticket with a 60-second lifetime and
+   stores only its hash. A minimal HTML document submits it in a form body to the
+   server-resolved tenant `/api/tenant-access/accept`. It has no external assets,
+   uses a nonce-restricted script, denies framing, and is never cached. Its
+   `Referrer-Policy: origin` deliberately preserves the browser's Origin on the
+   cross-site POST without disclosing a path or ticket.
+4. The receiver requires POST, the **exact configured central Origin** (missing
+   and `null` are rejected), a signed tenant gateway and the current canonical
+   host. Fetch Metadata, when present, must describe a top-level navigation.
+   This is the sole exception to tenant API same-origin enforcement. Never relax
+   this to accept arbitrary origins, Referer fallback, GET, or ticket possession
+   alone: the trusted central form submission is the login-CSRF protection for
+   this protocol.
+5. Recheck identity/session validity, tenant and membership status, and current
+   role/unit access. Atomically consume the ticket, set the normal host-only
+   HttpOnly staff refresh cookie, then return 303 to `/dashboard?handoff=1`.
+6. The dashboard restores its session from that cookie and fetches `/auth/me`
+   before rendering any cached account. It then removes the non-secret handoff
+   flag. Failed restoration shows a sign-in link instead of redirecting in a loop.
+
+Both protocols use the existing attempt table without a migration. Direct tickets
+have a code hash and no binding/state/challenge fields. Starting either protocol
+atomically prevents conversion to the other. Old endpoints and clients remain
+compatible; the new frontend falls back to `startUrl` when `handoff` is absent.
+The normal coordinated backend/central/tenant release is still required.
+
+Validation for this change: all 603 backend tests pass with 95.95% line coverage;
+the 68 release tests pass with tenant hosting/selection enabled, and gateway tests
+cover form-body/Origin forwarding, cookie attributes and the 303 dashboard target.
+Local emulator/browser checks cover single membership, multiple-membership selection,
+switching, refresh, logout, expired-session recovery, and replacing a cached admin
+with the selected Teller account on the same tenant. Frontend production build,
+backend/frontend lint and type checks pass. These are local checks; the new flow
+still needs a hosted HTTPS smoke check after the coordinated deployment.
+
+### Original browser-bound handoff (compatibility)
+
+Changing `window.location` alone cannot transfer the host-only session. The original
+protocol uses destination browser binding, transaction state, and PKCE S256; do not
+put Firebase ID tokens, access tokens, or refresh tokens in URLs.
 
 Sequence:
 
@@ -146,7 +197,8 @@ Sequence:
 5. Redirect to the exact tenant callback. Redeem through the tenant's same-origin API with state, the destination browser binding, and PKCE proof. Verify signed gateway context, current identity/membership status, and canonical host. Consume the code atomically with session issuance.
 6. Issue the normal tenant-scoped session using the selected existing `User` record and freshly derived role/unit permissions. Clear the temporary transaction and immediately replace the callback URL with `/dashboard`.
 
-The destination must establish its browser binding before the code is issued. Single-use codes alone do not prevent login CSRF or code injection.
+For this original protocol, the destination must establish its browser binding
+before the code is issued. Single-use codes alone do not prevent login CSRF or code injection.
 
 Additional requirements:
 
