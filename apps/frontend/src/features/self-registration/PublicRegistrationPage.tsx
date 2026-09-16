@@ -14,11 +14,9 @@ import { FormError } from "@/components/shared/FormError";
 import { CheckCircle2, Upload } from "lucide-react";
 import { fetchPublicTenantBranding, submitPublicRegistration } from "./api";
 import { publicRegistrationSchema, type PublicRegistrationForm } from "./schema";
-import { TurnstileWidget } from "./TurnstileWidget";
 
 export function PublicRegistrationPage() {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const [captchaToken, setCaptchaToken] = useState("");
   const [ktpFile, setKtpFile] = useState<File | null>(null);
   const [apiError, setApiError] = useState("");
   const [result, setResult] = useState<PublicMemberRegistrationResult | null>(null);
@@ -38,10 +36,6 @@ export function PublicRegistrationPage() {
 
   async function onSubmit(values: PublicRegistrationForm) {
     if (!tenantSlug) return;
-    if (!captchaToken) {
-      setApiError("Selesaikan verifikasi captcha terlebih dahulu");
-      return;
-    }
     setApiError("");
     try {
       const formData = new FormData();
@@ -52,7 +46,6 @@ export function PublicRegistrationPage() {
       formData.append("birthDate", values.birthDate);
       formData.append("occupation", values.occupation);
       if (values.phone) formData.append("phone", values.phone);
-      formData.append("captchaToken", captchaToken);
       if (ktpFile) formData.append("ktp", ktpFile);
 
       const submitted = await submitPublicRegistration<PublicMemberRegistrationResult>(tenantSlug, formData);
@@ -171,11 +164,7 @@ export function PublicRegistrationPage() {
                   </label>
                 </div>
 
-                <div className="flex justify-center py-1">
-                  <TurnstileWidget onVerify={setCaptchaToken} onExpire={() => setCaptchaToken("")} />
-                </div>
-
-                <Button type="submit" className="w-full" disabled={isSubmitting || !captchaToken}>
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
                   {isSubmitting ? "Mengirim..." : "Daftar"}
                 </Button>
               </form>

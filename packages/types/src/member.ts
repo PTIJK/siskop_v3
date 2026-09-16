@@ -95,7 +95,7 @@ export interface SelfRegistrationLink {
 
 /** The shared field set — same validation rules as CreateMemberRequest,
  * minus isPengurus/isPengawas (staff-only concepts a prospect doesn't set),
- * plus the two things only the public form needs. */
+ * plus the optional public contact phone. */
 export interface PublicMemberRegistrationInput {
   fullName: string;
   nik: string;
@@ -105,7 +105,6 @@ export interface PublicMemberRegistrationInput {
   birthDate: string;
   occupation: string;
   phone?: string;
-  captchaToken: string;
 }
 
 export interface PublicMemberRegistrationResult {

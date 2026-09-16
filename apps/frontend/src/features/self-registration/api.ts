@@ -28,7 +28,7 @@ export function fetchPublicTenantBranding<T>(tenantSlug: string): Promise<T> {
   return envelope<T>(tenantSlug, { method: "GET" });
 }
 
-/** `formData` carries every field plus captchaToken, and optionally a "ktp" file. */
+/** `formData` carries the registration fields, and optionally a "ktp" file. */
 export function submitPublicRegistration<T>(tenantSlug: string, formData: FormData): Promise<T> {
   return envelope<T>(tenantSlug, { method: "POST", body: formData });
 }

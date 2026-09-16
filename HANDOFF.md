@@ -1,5 +1,11 @@
 # Handoff — Self-Service Member Registration (QR → public form → approval queue)
 
+> Update 2026-09-16: CAPTCHA was removed from QR member self-registration at the
+> user's request. The widget, token requirement, provider verification, and
+> Turnstile environment configuration are no longer used. Rate limiting, input
+> and KTP validation, tenant scoping, and staff approval remain. The notes below
+> describe the original implementation; CAPTCHA references are historical.
+
 Written 2026-09-15. No `HANDOFF.md` convention existed in this repo before this file — the
 closest precedent was `SETUP-VERIFICATION.md`'s "Known gaps / Open decisions" structure, which
 this follows.
