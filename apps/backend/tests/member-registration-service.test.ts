@@ -72,8 +72,9 @@ describe("listRegistrationRequests", () => {
 
   it("paginates newest-first", async () => {
     const tenant = await setupTenant();
-    await seedRequest(tenant.user.tenantId, { nik: "3171234567890001", fullName: "First" });
-    await seedRequest(tenant.user.tenantId, { nik: "3171234567890002", fullName: "Second" });
+    // Fast inserts can share a millisecond; make the intended age difference explicit.
+    await seedRequest(tenant.user.tenantId, { nik: "3171234567890001", fullName: "First", submittedAt: new Date("2026-01-01T00:00:00Z") });
+    await seedRequest(tenant.user.tenantId, { nik: "3171234567890002", fullName: "Second", submittedAt: new Date("2026-01-02T00:00:00Z") });
 
     const result = await listRegistrationRequests(tenant.user.tenantId, { page: 1, limit: 1, status: "PENDING" });
 
