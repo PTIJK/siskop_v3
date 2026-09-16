@@ -14,19 +14,29 @@ REVISION = "api-revision"
 
 class SchedulerActivationTests(unittest.TestCase):
     def test_finish_promotes_traffic_before_activation_and_keeps_lock_on_failure(self):
-        cloud = Mock()
-        cloud.read_lock.return_value = ({"buildId": "build"}, "8")
-        cloud.public_json.side_effect = [
-            {"buildId": "build", "commit": "commit"}, {"success": True},
-            {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}}
-        ]
-        def activate(*_):
-            self.assertIn("--to-revisions=api-revision=100", cloud.command.call_args.args[0])
-            raise RuntimeError("activation failed")
-        with patch.object(release, "activate_schedulers", side_effect=activate), patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "false"}):
-            with self.assertRaisesRegex(RuntimeError, "activation failed"):
-                release.finish(cloud, {"buildId": "build", "commit": "commit", "revision": REVISION, "generation": "8"})
-        cloud.delete_lock.assert_not_called()
+        for selection in ["false", "true"]:
+            with self.subTest(selection=selection), patch.dict(release.os.environ, {
+                "RELEASE_TENANT_HOSTING": "false",
+                "RELEASE_TENANT_LOGIN_SELECTION_ENABLED": selection,
+            }):
+                cloud = Mock()
+                cloud.read_lock.return_value = ({"buildId": "build"}, "8")
+                responses = [
+                    {"buildId": "build", "commit": "commit"}, {"success": True},
+                    {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+                ]
+                if selection == "true":
+                    responses.append({"success": True, "data": {"enabled": True, "centralUrl": release.ORIGIN + "/login"}})
+                cloud.public_json.side_effect = responses
+
+                def activate(*_):
+                    self.assertIn("--to-revisions=api-revision=100", cloud.command.call_args.args[0])
+                    raise RuntimeError("activation failed")
+
+                with patch.object(release, "activate_schedulers", side_effect=activate):
+                    with self.assertRaisesRegex(RuntimeError, "activation failed"):
+                        release.finish(cloud, {"buildId": "build", "commit": "commit", "revision": REVISION, "generation": "8"})
+                cloud.delete_lock.assert_not_called()
 
     def cloud(self):
         cloud = Mock()
