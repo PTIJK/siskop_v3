@@ -323,8 +323,8 @@ same tier as the Multi-Tenant Isolation module (§12).
 | TC-SREG-003 | public-registration.routes.ts | P | `GET /api/public/register/:tenantSlug` for an active, enabled tenant, no auth header | `200`, `{ tenantName, tenantLogoUrl, selfRegistrationEnabled: true }` | P2 |
 | TC-SREG-004 | public-registration.routes.ts | N | `GET /api/public/register/:tenantSlug` for an unknown slug | `404`, generic message, reveals nothing about whether the slug ever existed | P2 |
 | TC-SREG-005 | public-registration.schema.ts | N | `POST` with a 15-digit NIK, a non-numeric NIK, or a missing required field (fullName/address/birthPlace/birthDate/occupation) | `422 VALIDATION_ERROR` — identical field rules to the internal `CreateMemberSchema` (shared `memberFieldsSchema`) | P1 |
-| TC-SREG-006 | public-registration.routes.ts | N | `POST` with a missing or empty `captchaToken` | `400 CAPTCHA_FAILED`; verify directly against the DB that zero rows were written | P0 |
-| TC-SREG-007 | lib/captcha.ts | N | `POST` with a `captchaToken` that Turnstile's `siteverify` rejects (or the provider call fails/errors) | `400 CAPTCHA_FAILED`, fails closed; zero DB writes | P0 |
+| TC-SREG-006 | public-registration.routes.ts | P | `POST` valid fields without a CAPTCHA token and without provider configuration | `201`; one PENDING request is created; no external CAPTCHA request | P0 |
+| TC-SREG-007 | public-registration.routes.ts | P | A cached form sends an obsolete `captchaToken` with valid fields | `201`; obsolete field is ignored; no provider request | P0 |
 | TC-SREG-008 | public-registration.routes.ts | N | Send 6 valid submissions from the same IP inside the default 5-requests/hour window | First 5 succeed (`201`), the 6th returns `429 RATE_LIMIT` | P0 |
 | TC-SREG-009 | Tenant.selfRegistrationEnabled | N | `POST` to a tenant with `selfRegistrationEnabled: false` | `404` — byte-for-byte identical to TC-SREG-004's unknown-slug response, so scanning a disabled tenant's QR reveals nothing | P1 |
 | TC-SREG-010 | public-registration.service.ts | P | Submit a NIK that already belongs to an active Member in the same tenant | `201`; response includes `nikWarning: true`; the request is still created as PENDING — soft check only, never blocks submission | P1 |
@@ -375,8 +375,8 @@ The P0 concentration in Savings, Loans, and Multi-Tenant Isolation is intentiona
 four highest-risk areas named in `QA-INSTRUCTIONS.md` and test-plan §3.3, and none of those cases
 are eligible for a PM override on failure. Self-Service Registration's own P0 concentration (8 of
 28, the highest ratio outside §12) reflects the same standard applied to its cross-tenant-isolation
-case (TC-SREG-016) plus everything guarding the system's first unauthenticated write path — CAPTCHA
-(TC-SREG-006/007), rate limiting (TC-SREG-008), response data exposure (TC-SREG-013), file-type
+case (TC-SREG-016), provider-independent submission (TC-SREG-006/007), and the
+checks guarding this unauthenticated write path — rate limiting (TC-SREG-008), response data exposure (TC-SREG-013), file-type
 spoofing (TC-SREG-014), and the hard NIK uniqueness check at approval (TC-SREG-020) — none of
 which are eligible for a PM override either.
 

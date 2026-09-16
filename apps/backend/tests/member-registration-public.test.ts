@@ -9,26 +9,8 @@ const VALID_BODY = {
   address: "Jl. Kebon Jeruk No. 5, Jakarta Barat",
   birthPlace: "Jakarta",
   birthDate: "1985-03-15",
-  occupation: "Pedagang",
-  captchaToken: "any-token-is-fine-when-fetch-is-stubbed"
+  occupation: "Pedagang"
 };
-
-// mockImplementation (not mockResolvedValue), so each of the 6 rate-limit-test
-// calls gets a fresh Response — a Response body stream can only be read once,
-// and a shared instance would make every call after the first look like a
-// captcha failure once verifyCaptcha's res.json() throws on the reused stream.
-function stubCaptchaSuccess() {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation(async () => new Response(JSON.stringify({ success: true }), { status: 200 }))
-  );
-}
-function stubCaptchaFailure() {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation(async () => new Response(JSON.stringify({ success: false }), { status: 200 }))
-  );
-}
 
 beforeAll(() => {
   process.env.JWT_SECRET = "test-secret";
@@ -37,7 +19,8 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await db.tenant.deleteMany({});
-  vi.stubEnv("TURNSTILE_SECRET_KEY", "1x0000000000000000000000000000000AA");
+  vi.stubEnv("TURNSTILE_SECRET_KEY", "");
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Unexpected external request")));
 });
 
 afterEach(() => {
@@ -73,7 +56,6 @@ describe("GET /api/public/register/:tenantSlug", () => {
 
 describe("POST /api/public/register/:tenantSlug", () => {
   it("creates a PENDING request, masks the NIK, and returns no internal IDs", async () => {
-    stubCaptchaSuccess();
     const tenant = await setupTenant({ slug: "demo" });
 
     const res = await request(app()).post("/api/public/register/demo").send(VALID_BODY);
@@ -93,7 +75,6 @@ describe("POST /api/public/register/:tenantSlug", () => {
   });
 
   it("raises a tenant notification visible to members.create holders, with the pending count in the message", async () => {
-    stubCaptchaSuccess();
     const tenant = await setupTenant({ slug: "demo" });
 
     await request(app()).post("/api/public/register/demo").send(VALID_BODY);
@@ -107,13 +88,11 @@ describe("POST /api/public/register/:tenantSlug", () => {
   });
 
   it("404s when the tenant does not exist", async () => {
-    stubCaptchaSuccess();
     const res = await request(app()).post("/api/public/register/does-not-exist").send(VALID_BODY);
     expect(res.status).toBe(404);
   });
 
   it("responds identically (404) whether the tenant is disabled or nonexistent, and writes nothing", async () => {
-    stubCaptchaSuccess();
     const tenant = await setupTenant({ slug: "demo" });
     await db.tenant.update({ where: { id: tenant.user.tenantId }, data: { selfRegistrationEnabled: false } });
 
@@ -124,33 +103,24 @@ describe("POST /api/public/register/:tenantSlug", () => {
     expect(count).toBe(0);
   });
 
-  it("fails closed with 400 CAPTCHA_FAILED on an invalid token and writes nothing to the database", async () => {
-    stubCaptchaFailure();
+  it("accepts registration without a CAPTCHA token or provider configuration", async () => {
     const tenant = await setupTenant({ slug: "demo" });
-
     const res = await request(app()).post("/api/public/register/demo").send(VALID_BODY);
-
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe("CAPTCHA_FAILED");
-    const count = await db.memberRegistrationRequest.count({ where: { tenantId: tenant.user.tenantId } });
-    expect(count).toBe(0);
+    expect(res.status).toBe(201);
+    expect(await db.memberRegistrationRequest.count({ where: { tenantId: tenant.user.tenantId } })).toBe(1);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("fails closed with 400 on a missing captcha token and writes nothing", async () => {
-    stubCaptchaSuccess();
+  it("ignores an obsolete CAPTCHA field from a cached form without contacting a provider", async () => {
     const tenant = await setupTenant({ slug: "demo" });
-    const { captchaToken: _drop, ...bodyWithoutToken } = VALID_BODY;
-
-    const res = await request(app()).post("/api/public/register/demo").send(bodyWithoutToken);
-
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe("CAPTCHA_FAILED");
-    const count = await db.memberRegistrationRequest.count({ where: { tenantId: tenant.user.tenantId } });
-    expect(count).toBe(0);
+    const res = await request(app()).post("/api/public/register/demo")
+      .send({ ...VALID_BODY, captchaToken: "expired-legacy-token" });
+    expect(res.status).toBe(201);
+    expect(await db.memberRegistrationRequest.count({ where: { tenantId: tenant.user.tenantId } })).toBe(1);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("rejects the 6th submission from the same IP within the default 5/hour window", async () => {
-    stubCaptchaSuccess();
     await setupTenant({ slug: "demo" });
     const testApp = app();
 
@@ -167,7 +137,6 @@ describe("POST /api/public/register/:tenantSlug", () => {
   });
 
   it("rejects invalid field data with 422, same rules as the internal CreateMemberSchema", async () => {
-    stubCaptchaSuccess();
     await setupTenant({ slug: "demo" });
 
     const res = await request(app())
@@ -179,7 +148,6 @@ describe("POST /api/public/register/:tenantSlug", () => {
   });
 
   it("warns (but does not block) when the NIK already belongs to a Member in this tenant", async () => {
-    stubCaptchaSuccess();
     const admin = await setupTenant({ slug: "demo" });
     await request(app())
       .post("/api/members")
@@ -200,7 +168,6 @@ describe("POST /api/public/register/:tenantSlug", () => {
   });
 
   it("does not warn for a NIK nobody has used yet", async () => {
-    stubCaptchaSuccess();
     await setupTenant({ slug: "demo" });
 
     const res = await request(app()).post("/api/public/register/demo").send(VALID_BODY);
@@ -209,7 +176,6 @@ describe("POST /api/public/register/:tenantSlug", () => {
   });
 
   it("ignores a spoofed tenantId in the body — the row is created under the URL's tenant only, never the other tenant", async () => {
-    stubCaptchaSuccess();
     const tenantA = await setupTenant({ slug: "demo" });
     const tenantB = await setupTenant({ slug: "demo2", registrationNo: "KOP-DEMO2" });
 
@@ -225,7 +191,6 @@ describe("POST /api/public/register/:tenantSlug", () => {
   });
 
   it("rejects a KTP file whose bytes don't match its declared image/jpeg content-type", async () => {
-    stubCaptchaSuccess();
     const tenant = await setupTenant({ slug: "demo" });
 
     const res = await request(app())
@@ -236,7 +201,6 @@ describe("POST /api/public/register/:tenantSlug", () => {
       .field("birthPlace", VALID_BODY.birthPlace)
       .field("birthDate", VALID_BODY.birthDate)
       .field("occupation", VALID_BODY.occupation)
-      .field("captchaToken", VALID_BODY.captchaToken)
       .attach("ktp", Buffer.from("<script>not really a jpeg</script>"), { filename: "ktp.jpg", contentType: "image/jpeg" });
 
     expect(res.status).toBe(422);
@@ -246,7 +210,6 @@ describe("POST /api/public/register/:tenantSlug", () => {
   });
 
   it("accepts a genuine JPEG KTP photo and stores its URL", async () => {
-    stubCaptchaSuccess();
     const tenant = await setupTenant({ slug: "demo" });
     const jpegBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 
@@ -258,7 +221,6 @@ describe("POST /api/public/register/:tenantSlug", () => {
       .field("birthPlace", VALID_BODY.birthPlace)
       .field("birthDate", VALID_BODY.birthDate)
       .field("occupation", VALID_BODY.occupation)
-      .field("captchaToken", VALID_BODY.captchaToken)
       .attach("ktp", jpegBytes, { filename: "ktp.jpg", contentType: "image/jpeg" });
 
     expect(res.status).toBe(201);

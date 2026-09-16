@@ -2,9 +2,7 @@ import { z } from "zod";
 
 // Mirrors the backend's memberFieldsSchema (modules/members/schema.ts) field-
 // for-field, including message wording — the same rules the server enforces,
-// surfaced client-side for immediate feedback. captchaToken is deliberately
-// not part of this schema: it comes from the Turnstile widget's callback, not
-// a form field, and its presence is checked separately before submit.
+// surfaced client-side for immediate feedback.
 export const publicRegistrationSchema = z.object({
   fullName: z.string().min(2, "Nama minimal 2 karakter"),
   nik: z.string().length(16, "NIK harus 16 digit").regex(/^\d+$/, "NIK harus berupa angka"),

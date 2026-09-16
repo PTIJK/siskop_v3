@@ -183,8 +183,8 @@ of severity elsewhere, per the risk-based prioritization in §3.3.
     as an unauthenticated prospect (no session, no bearer token) → confirm a `members.create`
     holder sees a bell notification and the new row in the Pendaftaran Mandiri queue → approve it →
     confirm a Member is created with the standard `KOP-{SLUG}-{YYYYMM}-####` / `ACC-##########`
-    format, identical to a manually-entered member. Then confirm a second submission missing/with
-    an invalid CAPTCHA token is rejected with zero database writes.
+    format, identical to a manually-entered member. Confirm submission succeeds without a CAPTCHA token or provider configuration,
+    and that invalid fields and excess submissions are still rejected.
 
 ## 7. Known risk acceptances (carried forward each cycle until closed)
 

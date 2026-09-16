@@ -2,9 +2,8 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { rateLimit } from "express-rate-limit";
 import multer from "multer";
 import { ErrorCode } from "@siskop/types";
-import { verifyCaptcha } from "../../lib/captcha.js";
 import { sniffFileType } from "../../lib/file-sniff.js";
-import { AppError, captchaFailed, notFound } from "../../lib/errors.js";
+import { AppError, notFound } from "../../lib/errors.js";
 import { requireParam } from "../../lib/http.js";
 import { submitRegistrationSchema } from "./public-registration.schema.js";
 import { getPublicTenantBranding, resolveRegistrableTenant, submitPublicRegistration } from "./public-registration.service.js";
@@ -84,16 +83,10 @@ export function publicMemberRegistrationRoutes(): Router {
       const tenantSlug = requireParam(req, "tenantSlug");
 
       // Resolved (and the disabled/nonexistent case rejected, both as the
-      // same generic 404) before the CAPTCHA network round-trip or any
-      // validation — cheapest checks first, no signal about which case it was.
+      // same generic 404) before field validation or writes, with no signal
+      // about which case it was.
       const tenant = await resolveRegistrableTenant(tenantSlug);
       if (!tenant) throw notFound("Pendaftaran tidak ditemukan");
-
-      // Verified before anything else touches the database — a missing or
-      // invalid token fails closed here, with zero writes.
-      const token = typeof req.body?.captchaToken === "string" ? req.body.captchaToken : "";
-      const captchaOk = await verifyCaptcha(token, req.ip);
-      if (!captchaOk) throw captchaFailed();
 
       const data = submitRegistrationSchema.parse(req.body);
 
