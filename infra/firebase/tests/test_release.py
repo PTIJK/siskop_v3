@@ -19,6 +19,19 @@ COMMIT = "a" * 40
 
 
 class CloudBuildStatusTests(unittest.TestCase):
+    def test_candidate_checks_skip_tenant_config_when_selection_is_disabled(self):
+        cloud = Mock()
+        origin = "https://candidate.example"
+        cloud.public_json.side_effect = [
+            {"success": True},
+            {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+        ]
+        with patch.dict(release.os.environ, {"RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "false"}):
+            release.check_api(cloud, origin)
+        self.assertEqual([call.args[0] for call in cloud.public_json.call_args_list], [
+            origin + "/api/health", origin + "/api/onboarding/packages",
+        ])
+
     def test_candidate_checks_reject_missing_or_wrong_tenant_handoff_configuration(self):
         cloud = Mock()
         origin = "https://candidate.example"
@@ -126,8 +139,12 @@ class CloudBuildStatusTests(unittest.TestCase):
 
 class ReleaseSafetyTests(unittest.TestCase):
     def setUp(self):
-        # Keep the build's activation flag out of tests that use default mocks.
-        environment = patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "false"})
+        # Cloud Build exports these flags to verification too. Each test owns
+        # its configuration instead of inheriting the deployment environment.
+        environment = patch.dict(release.os.environ, {
+            "RELEASE_TENANT_HOSTING": "false",
+            "RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "false",
+        })
         environment.start()
         self.addCleanup(environment.stop)
 
@@ -138,14 +155,37 @@ class ReleaseSafetyTests(unittest.TestCase):
         marker = {"buildId": BUILD, "commit": COMMIT}
         cloud.public_json.side_effect = [
             marker, {"success": True}, {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+            {"success": True, "data": {"enabled": True, "centralUrl": release.ORIGIN + "/login"}},
             marker, marker, {"success": True, "data": {"tenantId": "tenant-alpha", "slug": "alpha", "isAlias": False}}
         ]
-        with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true", "RELEASE_TENANT_SMOKE_SLUG": "alpha"}):
+        with patch.dict(release.os.environ, {
+            "RELEASE_TENANT_HOSTING": "true", "RELEASE_TENANT_SMOKE_SLUG": "alpha",
+            "RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "true",
+        }):
             release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
+        cloud.public_json.assert_any_call(release.ORIGIN + "/api/tenant-access/config")
         cloud.public_json.assert_any_call("https://alpha." + release.TENANT_BASE + "/release.json?build=" + BUILD)
         self.assertIn("--to-revisions=api-revision=100", cloud.command.call_args.args[0])
         cloud.delete_lock.assert_called_once_with("8")
         activate.assert_called_once()
+
+    @patch.object(release, "activate_schedulers")
+    def test_invalid_tenant_routing_blocks_promotion_and_keeps_lock(self, activate):
+        cloud = Mock()
+        cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
+        cloud.public_json.side_effect = [
+            {"buildId": BUILD, "commit": COMMIT}, {"success": True},
+            {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+            {"success": True, "data": {"enabled": False, "centralUrl": release.ORIGIN + "/login"}},
+        ]
+        with patch.dict(release.os.environ, {
+            "RELEASE_TENANT_HOSTING": "true", "RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "true",
+        }):
+            with self.assertRaisesRegex(RuntimeError, "Tenant login redirect"):
+                release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
+        cloud.command.assert_not_called()
+        cloud.delete_lock.assert_not_called()
+        activate.assert_not_called()
 
     def test_incorrect_wildcard_release_stops_promotion(self):
         cloud = Mock()
