@@ -6,6 +6,7 @@ import { tenantBaseDomain, tenantDomainsEnabled } from "./config.js";
 import { classifyHost } from "./policy.js";
 import { tenantDomains } from "./service.js";
 import { gatewayHost } from "./gateway.js";
+import { centralUrl, selectionEnabled } from "../tenant-access/config.js";
 
 declare module "express-serve-static-core" {
   interface Request { workspace?: WorkspaceContext; workspaceHost?: string }
@@ -48,7 +49,12 @@ async function resolveRequest(req: Request, res: Response) {
   if (parsed.kind !== "tenant") throw notFound("Workspace tidak ditemukan.");
   req.workspaceHost = host;
   const origin = req.get("origin");
-  if (origin && origin !== trustedRequestOrigin(req)) throw forbidden("Origin does not match workspace");
+  // Only the direct staff form receiver may accept a central-site POST.
+  // Host resolution still requires the signed gateway and the route checks
+  // the ticket, canonical tenant, exact Origin, and top-level navigation.
+  const centralHandoff = req.method === 'POST' && req.path === '/api/tenant-access/accept' &&
+    selectionEnabled() && origin === new URL(centralUrl()).origin;
+  if (origin && origin !== trustedRequestOrigin(req) && !centralHandoff) throw forbidden("Origin does not match workspace");
   res.set("Cache-Control", "private, no-store");
   req.workspace = await tenantDomains.resolve(parsed.slug);
   if (req.workspace.isAlias && req.path !== "/api/workspace") {

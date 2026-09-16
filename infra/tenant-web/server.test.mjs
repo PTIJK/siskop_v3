@@ -66,3 +66,39 @@ test('production rejects unencrypted or caller-controlled upstream configuration
     assert.throws(() => createTenantWeb({ apiOrigin, baseDomain, secret, staticDir: '.' }));
   }
 });
+test('direct handoff preserves form Origin, navigation metadata, cookies and the dashboard redirect', async () => {
+  let received;
+  const upstream = createServer((req, res) => {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      received = { headers: req.headers, body: Buffer.concat(chunks).toString() };
+      res.writeHead(303, {
+        location: '/dashboard?handoff=1',
+        'set-cookie': 'siskop_refresh_token=fixture; Path=/api/auth; HttpOnly; Secure; SameSite=Strict',
+        'referrer-policy': 'no-referrer'
+      });
+      res.end();
+    });
+  });
+  const upstreamPort = await listen(upstream);
+  const server = createTenantWeb({ baseDomain, apiOrigin: `http://127.0.0.1:${upstreamPort}`, secret, staticDir: '.', production: false });
+  const port = await listen(server);
+  try {
+    const response = await send(port, '/api/tenant-access/accept', {
+      method: 'POST',
+      headers: { origin: 'https://siskop-d0f8c.web.app', 'content-type': 'application/x-www-form-urlencoded',
+        'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' },
+      body: 'attempt=fixture&code=synthetic-ticket'
+    });
+    assert.equal(received.headers.origin, 'https://siskop-d0f8c.web.app');
+    assert.equal(received.headers['sec-fetch-mode'], 'navigate');
+    assert.equal(received.headers['sec-fetch-dest'], 'document');
+    assert.equal(received.headers['content-type'], 'application/x-www-form-urlencoded');
+    assert.equal(received.body, 'attempt=fixture&code=synthetic-ticket');
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.location, '/dashboard?handoff=1');
+    assert.match(response.headers['set-cookie'][0], /HttpOnly; Secure; SameSite=Strict/);
+    assert.equal(response.headers['cache-control'], 'private, no-store');
+  } finally { await close(server); await close(upstream); }
+});
