@@ -1,0 +1,5 @@
+title: Siskop Artifact Tag Cleaner
+description: Remove completed release retention tags in the backend repository; does not grant image deletion.
+stage: GA
+includedPermissions:
+  - artifactregistry.tags.delete

@@ -27,6 +27,16 @@ for identity in "$runtime" "$migrator"; do
 done
 gcloud artifacts repositories add-iam-policy-binding siskop-staging --location="$region" --project="$project" \
   --member="serviceAccount:$builder" --role=roles/artifactregistry.writer --quiet --format='value(etag)'
+# Writer can create/move retention tags but cannot remove completed candidate
+# pins. Grant just tag deletion, scoped to this repository (not image deletion).
+tag_role=siskopArtifactTagCleaner
+if gcloud iam roles describe "$tag_role" --project="$project" >/dev/null 2>&1; then
+  gcloud iam roles update "$tag_role" --project="$project" --file=infra/firebase/artifact-tag-cleaner-role.yaml --quiet
+else
+  gcloud iam roles create "$tag_role" --project="$project" --file=infra/firebase/artifact-tag-cleaner-role.yaml --quiet
+fi
+gcloud artifacts repositories add-iam-policy-binding siskop-staging --location="$region" --project="$project" \
+  --member="serviceAccount:$builder" --role="projects/$project/roles/$tag_role" --quiet --format='value(etag)'
 if ! gcloud storage buckets describe "gs://$project-deployments" --project="$project" >/dev/null 2>&1; then
   gcloud storage buckets create "gs://$project-deployments" --location="$region" --project="$project" \
     --uniform-bucket-level-access --public-access-prevention --quiet

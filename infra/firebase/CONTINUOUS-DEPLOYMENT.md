@@ -81,6 +81,11 @@ the lock, migrate Cloud SQL, or publish Hosting. It still produces a test image.
 
 ## Build performance
 
+Backend images have a [retention policy](ARTIFACT-RETENTION.md): seven days of
+history, at least ten recent versions, and protected live/rollback/cache images.
+Release candidates are pinned before migration; successful releases rotate those
+pins after publication and scheduler verification.
+
 `build-backend.sh` maintains `api:cache-dependencies` and `api:cache-runtime` in
 the existing Artifact Registry repository. Cache misses fall back to ordinary
 builds; a failed cache upload does not block a verified release image. The

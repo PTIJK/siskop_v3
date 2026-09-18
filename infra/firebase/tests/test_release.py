@@ -148,8 +148,9 @@ class ReleaseSafetyTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
 
+    @patch.object(release, "finish_image_retention")
     @patch.object(release, "activate_schedulers")
-    def test_successful_tenant_release_checks_wildcard_before_promoting_api(self, activate):
+    def test_successful_tenant_release_checks_wildcard_before_promoting_api(self, activate, retention):
         cloud = Mock()
         cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
         marker = {"buildId": BUILD, "commit": COMMIT}
@@ -162,12 +163,13 @@ class ReleaseSafetyTests(unittest.TestCase):
             "RELEASE_TENANT_HOSTING": "true", "RELEASE_TENANT_SMOKE_SLUG": "alpha",
             "RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "true",
         }):
-            release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
+            release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision", "image": release.IMAGE + "@sha256:" + "b" * 64})
         cloud.public_json.assert_any_call(release.ORIGIN + "/api/tenant-access/config")
         cloud.public_json.assert_any_call("https://alpha." + release.TENANT_BASE + "/release.json?build=" + BUILD)
         self.assertIn("--to-revisions=api-revision=100", cloud.command.call_args.args[0])
         cloud.delete_lock.assert_called_once_with("8")
         activate.assert_called_once()
+        retention.assert_called_once_with(cloud, release.IMAGE + "@sha256:" + "b" * 64, coordinated=True)
 
     @patch.object(release, "activate_schedulers")
     def test_invalid_tenant_routing_blocks_promotion_and_keeps_lock(self, activate):
@@ -413,11 +415,13 @@ class ReleaseSafetyTests(unittest.TestCase):
     def test_failed_migration_prevents_backend_deployment(self):
         cloud = Mock()
         cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
-        cloud.command.side_effect = ["sha256:" + "b" * 64, RuntimeError("migration failed")]
+        cloud.command.side_effect = ["sha256:" + "b" * 64, "", RuntimeError("migration failed")]
         state = {"buildId": BUILD, "generation": "8", "commit": COMMIT}
         with self.assertRaisesRegex(RuntimeError, "migration failed"):
             release.backend(cloud, state, release.IMAGE + ":test")
-        self.assertEqual(cloud.command.call_count, 2)
+        self.assertEqual(cloud.command.call_count, 3)
+        self.assertIn(release.IMAGE + ":retain-pending-" + BUILD, cloud.command.call_args_list[1].args[0])
+        self.assertEqual(cloud.command.call_args.args[0][1:4], ["run", "jobs", "deploy"])
         cloud.delete_lock.assert_not_called()
 
     def test_wrong_hosted_release_blocks_completion(self):
