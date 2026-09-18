@@ -204,6 +204,44 @@ def traffic_tag(build_id):
     return tag
 
 
+def validate_image_ref(image):
+    if not re.fullmatch(re.escape(IMAGE) + r"@sha256:[a-f0-9]{64}", image):
+        raise ValueError("Retention requires an immutable backend image digest")
+
+
+def protect_candidate_image(cloud, image, build_id):
+    """Protect even a partial rollout until a later coordinated release succeeds."""
+    validate_image_ref(image)
+    if not UUID.fullmatch(build_id):
+        raise ValueError("Invalid build ID for image retention")
+    cloud.command(gcloud("artifacts", "docker", "tags", "add", image, IMAGE + ":retain-pending-" + build_id))
+
+
+def finish_image_retention(cloud, image, *, coordinated=False):
+    """Called under the release lock, after publication and scheduler checks."""
+    validate_image_ref(image)
+    rows = json.loads(cloud.command(gcloud("artifacts", "docker", "tags", "list", IMAGE, "--format=json")))
+    resource = f"projects/{PROJECT}/locations/{REGION}/repositories/siskop-staging/packages/api"
+    tags = {}
+    for row in rows:
+        if not row["tag"].startswith(resource + "/tags/") or not row["version"].startswith(resource + "/versions/"):
+            raise ValueError("Unexpected registry tag resource")
+        tags[row["tag"].removeprefix(resource + "/tags/")] = IMAGE + "@" + row["version"].removeprefix(resource + "/versions/")
+    previous = tags.get("retain-live")
+    if previous and previous != image:
+        validate_image_ref(previous)
+        # Save the old live digest before moving its pin. Retrying after either
+        # write fails is safe and never replaces rollback with the new image.
+        cloud.command(gcloud("artifacts", "docker", "tags", "add", previous, IMAGE + ":retain-rollback"))
+    cloud.command(gcloud("artifacts", "docker", "tags", "add", image, IMAGE + ":retain-live"))
+    for tag, ref in tags.items():
+        if tag.startswith("retain-pending-") and UUID.fullmatch(tag.removeprefix("retain-pending-")):
+            # With tenant hosting disabled, an older partial rollout may still
+            # serve tenants. Only a coordinated release can retire those pins.
+            if coordinated or ref == image:
+                cloud.command(gcloud("artifacts", "docker", "tags", "delete", IMAGE + ":" + tag))
+
+
 def backend(cloud, state, image):
     if state is None:
         return
@@ -222,6 +260,7 @@ def backend(cloud, state, image):
     if not re.fullmatch(r"sha256:[a-f0-9]{64}", digest):
         raise ValueError("Build did not resolve to an immutable image digest")
     image_ref = IMAGE + "@" + digest
+    protect_candidate_image(cloud, image_ref, state["buildId"])
     # The job receives only the database secret. No test or seed command runs here.
     cloud.command(gcloud(
         "run", "jobs", "deploy", "siskop-staging-migrate", f"--region={REGION}", f"--image={image_ref}",
@@ -311,6 +350,7 @@ def finish(cloud, state):
             raise RuntimeError("Tenant gateway/database readiness check failed")
     cloud.command(gcloud("run", "services", "update-traffic", SERVICE, f"--region={REGION}", f"--to-revisions={state['revision']}=100"))
     activate_schedulers(cloud, state)
+    finish_image_retention(cloud, state["image"], coordinated=tenant_hosting_enabled())
     cloud.delete_lock(state["generation"])
     print(f"Published {state['commit']} to {ORIGIN}; backend {state['revision']}.")
 

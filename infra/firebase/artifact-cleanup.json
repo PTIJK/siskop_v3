@@ -1,0 +1,28 @@
+[
+  {
+    "name": "delete-backend-older-than-seven-days",
+    "action": { "type": "Delete" },
+    "condition": {
+      "tagState": "any",
+      "packageNamePrefixes": ["api"],
+      "olderThan": "7d"
+    }
+  },
+  {
+    "name": "keep-ten-newest-backend-versions",
+    "action": { "type": "Keep" },
+    "mostRecentVersions": {
+      "packageNamePrefixes": ["api"],
+      "keepCount": 10
+    }
+  },
+  {
+    "name": "keep-protected-releases-and-caches",
+    "action": { "type": "Keep" },
+    "condition": {
+      "tagState": "tagged",
+      "tagPrefixes": ["retain-", "cache-"],
+      "packageNamePrefixes": ["api"]
+    }
+  }
+]
