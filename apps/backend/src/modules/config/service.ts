@@ -1,8 +1,10 @@
 import type { Prisma } from "@prisma/client";
+import type { RepostUnpostedResult, UnpostedJournalSummary } from "@siskop/types";
 import { db, type TxClient } from "../../lib/db.js";
 import { conflict, notFound, validationError } from "../../lib/errors.js";
+import { isRepostableSourceType, repostUnpostedEntries } from "../../lib/journal.js";
 import { withoutTenantScope } from "../../lib/tenant-scope.js";
-import { COA_TEMPLATE } from "../../lib/coaTemplate.js";
+import { COA_TEMPLATE, SYSTEM_MAPPING_TEMPLATE, type AccountSeed } from "../../lib/coaTemplate.js";
 import type {
   CreateAccountInput,
   CreateRoleInput,
@@ -172,6 +174,12 @@ export interface GenerateStandardCoaResult {
  * idempotent: existing accounts/mappings are left untouched and simply
  * counted as skipped, so this is safe to call more than once — including
  * after a new saving/loan config is added later, to pick up just its mapping.
+ *
+ * A tenant with an active KONSUMEN unit additionally gets the Toko accounts
+ * (Piutang Anggota, Persediaan, Penjualan, HPP) and the four tenant-wide
+ * SYSTEM/SALE_* mappings postPosSale() needs, so a POS sale reaches Neraca and
+ * Laba Rugi instead of posting as UNPOSTED_MISSING_MAPPING. Re-running after a
+ * Toko unit is added later picks these up the same way.
  */
 export async function generateStandardCoa(tenantId: string): Promise<GenerateStandardCoaResult> {
   return db.$transaction(async (tx: TxClient) => {
@@ -180,11 +188,7 @@ export async function generateStandardCoa(tenantId: string): Promise<GenerateSta
     let accountsCreated = 0;
     let accountsSkipped = 0;
 
-    for (const acc of COA_TEMPLATE) {
-      if (idByCode.has(acc.code)) {
-        accountsSkipped += 1;
-        continue;
-      }
+    async function createTemplateAccount(acc: AccountSeed): Promise<string> {
       const parentCode = acc.parentKey ? COA_TEMPLATE.find((t) => t.key === acc.parentKey)?.code : undefined;
       const parentId = parentCode ? idByCode.get(parentCode) : undefined;
       const created = await tx.account.create({
@@ -202,6 +206,17 @@ export async function generateStandardCoa(tenantId: string): Promise<GenerateSta
         }
       });
       idByCode.set(acc.code, created.id);
+      return created.id;
+    }
+
+    for (const acc of COA_TEMPLATE) {
+      // Unit-specific (Toko) accounts are handled below, only when the tenant has such a unit.
+      if (acc.unitType) continue;
+      if (idByCode.has(acc.code)) {
+        accountsSkipped += 1;
+        continue;
+      }
+      await createTemplateAccount(acc);
       accountsCreated += 1;
     }
 
@@ -258,6 +273,54 @@ export async function generateStandardCoa(tenantId: string): Promise<GenerateSta
       await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PRINCIPAL", kas, piutang);
       await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_INTEREST", kas, pendapatanBunga);
       await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PENALTY", kas, pendapatanLain);
+    }
+
+    // Toko: only for a tenant that has an active KONSUMEN unit. Lazy per
+    // mapping — a tenant that already wired a SYSTEM/SALE_* mapping by hand (to
+    // its own accounts) must not get a second, unused set of Toko accounts, so
+    // accounts are only created for a mapping that doesn't exist yet.
+    const hasKonsumenUnit = (await tx.cooperativeUnit.count({ where: { tenantId, type: "KONSUMEN", isActive: true } })) > 0;
+    if (hasKonsumenUnit) {
+      const tokoAccountIds = new Map<string, string>();
+      const resolveAccount = async (key: string): Promise<string> => {
+        const seed = COA_TEMPLATE.find((t) => t.key === key);
+        if (!seed?.unitType) return accountIdFor(key);
+
+        const known = tokoAccountIds.get(key);
+        if (known) return known;
+        let id = idByCode.get(seed.code);
+        if (id) {
+          accountsSkipped += 1;
+        } else {
+          id = await createTemplateAccount(seed);
+          accountsCreated += 1;
+        }
+        tokoAccountIds.set(key, id);
+        return id;
+      };
+
+      for (const template of SYSTEM_MAPPING_TEMPLATE) {
+        const existing = await tx.accountMapping.findFirst({
+          where: { tenantId, sourceType: "SYSTEM", sourceId: null, transactionKind: template.transactionKind }
+        });
+        if (existing) {
+          mappingsSkipped += 1;
+          continue;
+        }
+        const debitAccountId = await resolveAccount(template.debitKey);
+        const creditAccountId = await resolveAccount(template.creditKey);
+        await tx.accountMapping.create({
+          data: {
+            tenantId,
+            sourceType: "SYSTEM",
+            sourceId: null,
+            transactionKind: template.transactionKind,
+            debitAccountId,
+            creditAccountId
+          }
+        });
+        mappingsCreated += 1;
+      }
     }
 
     return { accountsCreated, accountsSkipped, mappingsCreated, mappingsSkipped };
@@ -340,6 +403,32 @@ export async function deleteAccountMapping(tenantId: string, id: string): Promis
   const mapping = await db.accountMapping.findFirst({ where: { id, tenantId } });
   if (!mapping) throw notFound("Pemetaan akun tidak ditemukan");
   await db.accountMapping.delete({ where: { id, tenantId } });
+}
+
+// ── Unposted journal entries ─────────────────────────────────────────────────
+// A transaction made before its mapping existed is stored UNPOSTED_MISSING_MAPPING
+// and stays out of every report until reposted. Reposting rewrites what past
+// periods' reports show, so it's an explicit action, never a side effect of
+// saving a mapping.
+
+export async function getUnpostedJournalSummary(tenantId: string): Promise<UnpostedJournalSummary> {
+  const groups = await db.journalEntry.groupBy({
+    by: ["sourceType"],
+    where: { tenantId, status: "UNPOSTED_MISSING_MAPPING" },
+    _count: { _all: true }
+  });
+
+  const items = groups
+    .map((g) => ({ sourceType: g.sourceType, count: g._count._all, repostable: isRepostableSourceType(g.sourceType) }))
+    .sort((a, b) => a.sourceType.localeCompare(b.sourceType));
+  const repostableCount = items.filter((i) => i.repostable).reduce((sum, i) => sum + i.count, 0);
+  return { items, repostableCount };
+}
+
+export async function repostUnpostedJournalEntries(tenantId: string): Promise<RepostUnpostedResult> {
+  // A tenant can have thousands of unposted sales; the batch itself is a
+  // handful of queries, but give the interactive transaction headroom anyway.
+  return db.$transaction((tx) => repostUnpostedEntries(tx, tenantId), { timeout: 60_000 });
 }
 
 // ── SHU Distribution ─────────────────────────────────────────────────────────

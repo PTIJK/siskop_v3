@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, Sparkles } from "lucide-react";
+import { UnpostedJournalBanner } from "./UnpostedJournalBanner";
 
 const CATEGORIES = ["ASET", "KEWAJIBAN", "EKUITAS", "PENDAPATAN", "BEBAN"] as const;
 const NO_PARENT = "__none__";
@@ -187,6 +188,8 @@ export function AccountsTab() {
 
   return (
     <div className="space-y-4">
+      <UnpostedJournalBanner />
+
       <DataTable
         columns={columns}
         data={data ?? []}
@@ -215,7 +218,7 @@ export function AccountsTab() {
         open={generateOpen}
         onOpenChange={setGenerateOpen}
         title="Buat COA Standar"
-        description="Menambahkan akun standar koperasi yang belum ada (± 20 akun) dan memetakan akun default untuk konfigurasi simpanan/pinjaman yang sudah ada. Akun dan pemetaan yang sudah ada tidak akan diubah — aman dijalankan lebih dari sekali."
+        description="Menambahkan akun standar koperasi yang belum ada (± 20 akun) dan memetakan akun default untuk konfigurasi simpanan/pinjaman yang sudah ada. Jika koperasi memiliki unit Toko, akun dan pemetaan penjualan toko ikut ditambahkan. Akun dan pemetaan yang sudah ada tidak akan diubah — aman dijalankan lebih dari sekali."
         confirmLabel="Buat COA Standar"
         onConfirm={generateStandardCoa}
       />

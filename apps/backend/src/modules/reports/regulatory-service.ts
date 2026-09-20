@@ -205,7 +205,8 @@ export async function getNeraca(tenantId: string, asOfDate: Date) {
  * Laporan Arus Kas (Cash Flow Statement, direct method) — Design Spec §6.3.
  * Groups JournalLines touching accounts marked `isCashEquivalent` into Operasi/
  * Investasi/Pendanaan. SAVING_TRANSACTION/LOAN_PAYMENT/LOAN_DISBURSEMENT are
- * always Operasi (a KSP's lending/savings activity is its core operation).
+ * always Operasi (a KSP's lending/savings activity is its core operation), and
+ * so are POS_SALE/MEMBER_CREDIT_REPAYMENT (a Toko unit's own trading).
  * MANUAL entries are classified by the category of their non-cash counter-
  * account: ASET counter -> Investasi, EKUITAS counter -> Pendanaan, otherwise
  * Operasi. Documented assumption, not spec-literal.
@@ -262,6 +263,10 @@ export async function getArusKas(tenantId: string, from: Date, to: Date) {
         return "Penerimaan Angsuran Pinjaman";
       case "LOAN_DISBURSEMENT":
         return "Pencairan Pinjaman ke Anggota";
+      case "POS_SALE":
+        return "Penerimaan Penjualan Toko";
+      case "MEMBER_CREDIT_REPAYMENT":
+        return "Pelunasan Kredit Anggota (Toko)";
       default:
         return "Transaksi Manual Lainnya";
     }

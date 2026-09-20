@@ -13,7 +13,10 @@ export interface ConsolidatedUnitAsset {
 }
 
 export interface ConsolidatedReport {
+  /** Tenant-wide ASET total — ties to the Neraca's total Aset. */
   totalAssets: number;
+  /** Part of `totalAssets` that can't be tied to one active unit (e.g. savings deposits, loan repayments). */
+  unallocated: number;
   byUnit: ConsolidatedUnitAsset[];
 }
 

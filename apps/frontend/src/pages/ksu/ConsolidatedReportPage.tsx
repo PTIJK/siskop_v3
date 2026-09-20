@@ -65,6 +65,20 @@ export function ConsolidatedReportPage() {
                     </CardContent>
                   </Card>
                 ))}
+                {data.unallocated !== 0 && (
+                  <Card>
+                    <CardContent className="flex items-center justify-between gap-4 p-4">
+                      <div>
+                        <span className="font-medium text-foreground">Belum dialokasikan ke unit</span>
+                        <p className="text-xs text-muted-foreground">
+                          Transaksi yang belum bisa dikaitkan ke satu unit usaha, mis. setoran simpanan, angsuran
+                          pinjaman, dan pelunasan kredit anggota.
+                        </p>
+                      </div>
+                      <span className="shrink-0 font-semibold text-foreground">{formatRupiah(data.unallocated)}</span>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
           </div>

@@ -436,6 +436,167 @@ describe("POST /api/config/accounts/generate-standard", () => {
   });
 });
 
+// ── Generate Standard COA — Toko (KONSUMEN unit) wiring ───────────────────────
+// Without these accounts + SYSTEM/SALE_* mappings a Toko sale posts as
+// UNPOSTED_MISSING_MAPPING and never reaches Neraca/Laba Rugi for any tenant
+// that didn't get them from prisma/seed-ksu-demo.ts.
+
+const TOKO_MAPPING_KINDS = ["MEMBER_CREDIT_REPAYMENT", "SALE_COGS", "SALE_RECEIVABLE", "SALE_REVENUE"];
+
+async function createKonsumenUnit(accessToken: string) {
+  await request(app())
+    .post("/api/config/units")
+    .set("Authorization", `Bearer ${accessToken}`)
+    .send({ type: "KONSUMEN", name: "Toko Koperasi" });
+}
+
+function generateStandard(accessToken: string) {
+  return request(app()).post("/api/config/accounts/generate-standard").set("Authorization", `Bearer ${accessToken}`);
+}
+
+async function listAccountCodes(accessToken: string): Promise<string[]> {
+  const res = await request(app()).get("/api/config/accounts").set("Authorization", `Bearer ${accessToken}`);
+  return res.body.data.map((a: { code: string }) => a.code);
+}
+
+async function listSystemMappings(accessToken: string) {
+  const res = await request(app()).get("/api/config/account-mappings").set("Authorization", `Bearer ${accessToken}`);
+  return (res.body.data as Array<{
+    sourceType: string;
+    transactionKind: string;
+    debitAccountName: string;
+    creditAccountName: string;
+  }>).filter((m) => m.sourceType === "SYSTEM");
+}
+
+describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)", () => {
+  it("adds the four Toko accounts and the four SYSTEM sale mappings when the tenant has a KONSUMEN unit", async () => {
+    const admin = await setupTenant();
+    await createKonsumenUnit(admin.accessToken);
+
+    const res = await generateStandard(admin.accessToken);
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.mappingsCreated).toBe(4);
+    expect(await listAccountCodes(admin.accessToken)).toEqual(
+      expect.arrayContaining(["1-1150", "1-1300", "4-3000", "5-4000"])
+    );
+
+    const system = await listSystemMappings(admin.accessToken);
+    expect(system.map((m) => m.transactionKind).sort()).toEqual(TOKO_MAPPING_KINDS);
+    const byKind = Object.fromEntries(system.map((m) => [m.transactionKind, m]));
+    expect(byKind.SALE_REVENUE).toMatchObject({ debitAccountName: "Kas", creditAccountName: "Penjualan Barang Dagang" });
+    expect(byKind.SALE_COGS).toMatchObject({
+      debitAccountName: "Harga Pokok Penjualan",
+      creditAccountName: "Persediaan Barang Dagang"
+    });
+    expect(byKind.SALE_RECEIVABLE).toMatchObject({
+      debitAccountName: "Piutang Anggota (Toko)",
+      creditAccountName: "Penjualan Barang Dagang"
+    });
+    expect(byKind.MEMBER_CREDIT_REPAYMENT).toMatchObject({
+      debitAccountName: "Kas",
+      creditAccountName: "Piutang Anggota (Toko)"
+    });
+  });
+
+  it("adds no Toko accounts or SYSTEM mappings for a tenant that only has a KSP unit", async () => {
+    const admin = await setupTenant();
+
+    const res = await generateStandard(admin.accessToken);
+
+    expect(res.body.data.mappingsCreated).toBe(0);
+    const codes = await listAccountCodes(admin.accessToken);
+    for (const tokoCode of ["1-1150", "1-1300", "4-3000", "5-4000"]) {
+      expect(codes).not.toContain(tokoCode);
+    }
+    expect(await listSystemMappings(admin.accessToken)).toHaveLength(0);
+  });
+
+  it("picks Toko up on a re-run once a KONSUMEN unit is added later", async () => {
+    const admin = await setupTenant();
+    const first = await generateStandard(admin.accessToken);
+    expect(first.body.data.mappingsCreated).toBe(0);
+
+    await createKonsumenUnit(admin.accessToken);
+    const second = await generateStandard(admin.accessToken);
+
+    expect(second.status).toBe(201);
+    expect(second.body.data.accountsCreated).toBe(4);
+    expect(second.body.data.mappingsCreated).toBe(4);
+  });
+
+  it("is idempotent — a second run creates nothing", async () => {
+    const admin = await setupTenant();
+    await createKonsumenUnit(admin.accessToken);
+    await generateStandard(admin.accessToken);
+
+    const second = await generateStandard(admin.accessToken);
+
+    expect(second.status).toBe(200);
+    expect(second.body.data.accountsCreated).toBe(0);
+    expect(second.body.data.mappingsCreated).toBe(0);
+    expect(second.body.data.mappingsSkipped).toBe(4);
+  });
+
+  it("does not create duplicate Toko accounts when the SYSTEM sale mappings were already set up by hand", async () => {
+    const admin = await setupTenant();
+    await createKonsumenUnit(admin.accessToken);
+    const kas = await createAccountAs(admin.accessToken, { code: "1-1000", name: "Kas" });
+    const penjualan = await createAccountAs(admin.accessToken, {
+      code: "4-2000",
+      name: "Penjualan Toko",
+      category: "PENDAPATAN",
+      normalBalance: "KREDIT",
+      isCashEquivalent: false
+    });
+    const hpp = await createAccountAs(admin.accessToken, {
+      code: "5-1000",
+      name: "HPP",
+      category: "BEBAN",
+      normalBalance: "DEBIT",
+      isCashEquivalent: false
+    });
+    const persediaan = await createAccountAs(admin.accessToken, {
+      code: "1-1300",
+      name: "Persediaan Barang Dagang",
+      category: "ASET",
+      normalBalance: "DEBIT",
+      isCashEquivalent: false
+    });
+    const piutang = await createAccountAs(admin.accessToken, {
+      code: "1-1150",
+      name: "Piutang Anggota (Toko)",
+      category: "ASET",
+      normalBalance: "DEBIT",
+      isCashEquivalent: false
+    });
+    const manual = [
+      ["SALE_REVENUE", kas.id, penjualan.id],
+      ["SALE_COGS", hpp.id, persediaan.id],
+      ["SALE_RECEIVABLE", piutang.id, penjualan.id],
+      ["MEMBER_CREDIT_REPAYMENT", kas.id, piutang.id]
+    ] as const;
+    for (const [transactionKind, debitAccountId, creditAccountId] of manual) {
+      await request(app())
+        .post("/api/config/account-mappings")
+        .set("Authorization", `Bearer ${admin.accessToken}`)
+        .send({ sourceType: "SYSTEM", transactionKind, debitAccountId, creditAccountId });
+    }
+
+    const res = await generateStandard(admin.accessToken);
+
+    expect(res.body.data.mappingsCreated).toBe(0);
+    expect(res.body.data.mappingsSkipped).toBeGreaterThanOrEqual(4);
+    const codes = await listAccountCodes(admin.accessToken);
+    expect(codes).not.toContain("4-3000");
+    expect(codes).not.toContain("5-4000");
+    // The hand-made mappings still point at the hand-made accounts.
+    const system = await listSystemMappings(admin.accessToken);
+    expect(system.find((m) => m.transactionKind === "SALE_REVENUE")?.creditAccountName).toBe("Penjualan Toko");
+  });
+});
+
 // ── Account Mappings ───────────────────────────────────────────────────────────
 
 describe("GET/POST/DELETE /api/config/account-mappings", () => {

@@ -179,3 +179,77 @@ export interface PayPPOBBillResponse {
   id: string;
   status: string;
 }
+
+// ── Laporan Toko (sales report) ─────────────────────────────────────────────
+// GET /api/konsumen/reports/sales (modules/konsumen/report.service.ts). Money
+// is Decimal-as-string like the rest of this file; `marginPercent` is a plain
+// number (a ratio, not money). Key names are Indonesian, matching the
+// ledger-derived reports in reports.ts. Everything except `persediaan` and
+// `piutangAnggota` is bounded by `periode`.
+
+export interface TokoSalesSummary {
+  /** Σ POSSale.totalPrice */
+  omzet: string;
+  /** Σ POSSale.totalCost */
+  hpp: string;
+  /** omzet − hpp */
+  labaKotor: string;
+  /** labaKotor / omzet × 100, 2 decimals; 0 when there is no omzet. */
+  marginPercent: number;
+  transactionCount: number;
+  /** Σ POSSaleLine.qty */
+  itemsSold: number;
+}
+
+export interface TokoSalesByPaymentMethod {
+  paymentMethod: string;
+  count: number;
+  total: string;
+}
+
+export interface TokoTopProduct {
+  productId: string;
+  sku: string;
+  name: string;
+  quantity: number;
+  omzet: string;
+  hpp: string;
+  labaKotor: string;
+}
+
+export interface TokoSalesTrendPoint {
+  /** yyyy-MM-dd, in the server's timezone (same convention as the dashboard charts). */
+  date: string;
+  omzet: string;
+  labaKotor: string;
+  count: number;
+}
+
+/** Current stock snapshot — not bounded by the report period. */
+export interface TokoInventorySnapshot {
+  productCount: number;
+  outOfStockCount: number;
+  /** Σ stockQty × cost over active products. */
+  stockValue: string;
+}
+
+export interface TokoStockMovementSummary {
+  /** "IN" | "OUT" | "ADJUSTMENT" */
+  type: string;
+  count: number;
+  quantity: number;
+}
+
+export interface TokoSalesReport {
+  periode: { from: string; to: string };
+  /** The unit reported on; null = every unit the caller may access, combined. */
+  unitId: string | null;
+  ringkasan: TokoSalesSummary;
+  perMetodeBayar: TokoSalesByPaymentMethod[];
+  produkTerlaris: TokoTopProduct[];
+  tren: TokoSalesTrendPoint[];
+  persediaan: TokoInventorySnapshot;
+  mutasiStok: TokoStockMovementSummary[];
+  /** Outstanding Kredit Anggota — tenant-wide (member credit is not unit-scoped), not period-bound. */
+  piutangAnggota: string;
+}

@@ -1,4 +1,5 @@
 import { endOfMonth, startOfMonth } from "date-fns";
+import { Prisma } from "@prisma/client";
 import { db } from "../../lib/db.js";
 import { notFound } from "../../lib/errors.js";
 import {
@@ -14,7 +15,13 @@ export interface UnitAssetTotal {
 }
 
 export interface ConsolidatedAssets {
+  /** Tenant-wide ASET total over every journal line — ties to the Neraca's total Aset. */
   totalAssets: number;
+  /**
+   * `totalAssets` minus every active unit's attributed share: assets on journal
+   * entries that can't be tied to one active unit (see getConsolidatedAssets).
+   */
+  unallocated: number;
   byUnit: UnitAssetTotal[];
 }
 
@@ -52,10 +59,40 @@ async function sumAssetLinesForSourceIds(tenantId: string, sourceIds: string[]):
 }
 
 /**
+ * Tenant-wide ASET total across every journal line, honoring normalBalance the
+ * same way getNeraca does. One groupBy per account instead of loading lines, so
+ * it stays cheap for a tenant with a long ledger.
+ */
+async function sumAllAssetLines(tenantId: string): Promise<Prisma.Decimal> {
+  const [accounts, sums] = await Promise.all([
+    db.account.findMany({ where: { tenantId, category: "ASET" }, select: { id: true, normalBalance: true } }),
+    db.journalLine.groupBy({
+      by: ["accountId"],
+      where: { tenantId, account: { category: "ASET" } },
+      _sum: { debit: true, credit: true }
+    })
+  ]);
+  const normalBalanceById = new Map(accounts.map((a) => [a.id, a.normalBalance]));
+
+  return sums.reduce((total, s) => {
+    const debit = s._sum.debit ?? new Prisma.Decimal(0);
+    const credit = s._sum.credit ?? new Prisma.Decimal(0);
+    return total.plus(normalBalanceById.get(s.accountId) === "DEBIT" ? debit.minus(credit) : credit.minus(debit));
+  }, new Prisma.Decimal(0));
+}
+
+/**
  * Read-only KSU consolidation: total ASET-category balance per active
- * CooperativeUnit, plus a tenant-wide sum, derived entirely from existing
+ * CooperativeUnit, plus the tenant-wide total and whatever part of it can't be
+ * tied to a unit (`unallocated`), derived entirely from existing
  * JournalEntry/JournalLine rows — nothing is written here (see lib/journal.ts
  * for the only posting path, which this module never calls).
+ *
+ * `totalAssets` is the real tenant-wide total (it ties to Neraca), NOT the sum
+ * of the per-unit figures: the per-unit tracing below is incomplete by design,
+ * so summing it would silently understate assets. The gap is reported as
+ * `unallocated` instead. It also absorbs assets of a since-deactivated unit,
+ * which `byUnit` (active units only) no longer lists.
  *
  * JournalEntry carries no unitId column of its own, so a line is attributed
  * to a unit by tracing its parent entry's `sourceId` back to the row that
@@ -93,8 +130,13 @@ export async function getConsolidatedAssets(tenantId: string): Promise<Consolida
     })
   );
 
-  const totalAssets = round2(byUnit.reduce((sum, u) => sum + u.assets, 0));
-  return { totalAssets, byUnit };
+  const attributed = byUnit.reduce((sum, u) => sum.plus(u.assets), new Prisma.Decimal(0));
+  const total = await sumAllAssetLines(tenantId);
+  return {
+    totalAssets: round2(total.toNumber()),
+    unallocated: round2(total.minus(attributed).toNumber()),
+    byUnit
+  };
 }
 
 // ── Day 4: per-member per-unit SHU statement ─────────────────────────────────

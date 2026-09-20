@@ -26,11 +26,13 @@ import {
   getModalDisetor,
   getSelfRegistrationConfig,
   getShuDistributionConfig,
+  getUnpostedJournalSummary,
   getWhitelabelConfig,
   listAccountMappings,
   listAccounts,
   listRoles,
   listUnits,
+  repostUnpostedJournalEntries,
   updateAccount,
   updateModalDisetor,
   updateRole,
@@ -165,6 +167,28 @@ export function configRoutes(): Router {
       const result = await generateStandardCoa(authClaims(req).tenantId);
       const status = result.accountsCreated + result.mappingsCreated > 0 ? 201 : 200;
       res.status(status).json({ success: true, data: result, meta: res.locals.meta });
+    })
+  );
+
+  // ── Unposted journal entries (transactions made before their mapping existed) ─
+
+  router.get(
+    "/journal/unposted",
+    requireAccountingEntitlement,
+    requirePermission("accounting", "read"),
+    handle(async (req, res) => {
+      const data = await getUnpostedJournalSummary(authClaims(req).tenantId);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.post(
+    "/journal/repost",
+    requireAccountingEntitlement,
+    requirePermission("accounting", "create"),
+    handle(async (req, res) => {
+      const data = await repostUnpostedJournalEntries(authClaims(req).tenantId);
+      res.json({ success: true, data, meta: res.locals.meta });
     })
   );
 

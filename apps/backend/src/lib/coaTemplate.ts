@@ -9,6 +9,12 @@ export interface AccountSeed {
   isHeader?: boolean;
   isCashEquivalent?: boolean;
   parentKey?: string;
+  /**
+   * When set, the account only belongs to tenants that have an active
+   * CooperativeUnit of this type. Left out of the base template so a pure KSP
+   * doesn't get zero-balance Toko lines cluttering its Neraca/Laba Rugi.
+   */
+  unitType?: "KONSUMEN";
 }
 
 // Standard COA template — Docs/specs/2026-07-21-konfigurasi-akun-coa-design.md §4.
@@ -42,5 +48,59 @@ export const COA_TEMPLATE: AccountSeed[] = [
   { key: "beban_gaji", code: "5-2000", name: "Beban Operasional — Gaji", category: "BEBAN", normalBalance: "DEBIT" },
   { key: "beban_sewa", code: "5-2100", name: "Beban Sewa", category: "BEBAN", normalBalance: "DEBIT" },
   { key: "beban_penyisihan", code: "5-3000", name: "Beban Penyisihan Kerugian Piutang", category: "BEBAN", normalBalance: "DEBIT" },
-  { key: "beban_lain", code: "5-9000", name: "Beban Lain-lain", category: "BEBAN", normalBalance: "DEBIT" }
+  { key: "beban_lain", code: "5-9000", name: "Beban Lain-lain", category: "BEBAN", normalBalance: "DEBIT" },
+
+  // ── Toko (KONSUMEN unit) — only generated for tenants that have one ─────────
+  // Codes deliberately avoid 4-2000 / 5-1000 (already Pendapatan Jasa
+  // Administrasi / Beban Bunga Simpanan above). 1-1150 and 1-1300 match what
+  // prisma/seed-ksu-demo.ts has always used for these two accounts.
+  {
+    key: "piutang_anggota_toko",
+    code: "1-1150",
+    name: "Piutang Anggota (Toko)",
+    category: "ASET",
+    normalBalance: "DEBIT",
+    unitType: "KONSUMEN"
+  },
+  {
+    key: "persediaan",
+    code: "1-1300",
+    name: "Persediaan Barang Dagang",
+    category: "ASET",
+    normalBalance: "DEBIT",
+    unitType: "KONSUMEN"
+  },
+  {
+    key: "penjualan_toko",
+    code: "4-3000",
+    name: "Penjualan Barang Dagang",
+    category: "PENDAPATAN",
+    normalBalance: "KREDIT",
+    unitType: "KONSUMEN"
+  },
+  {
+    key: "hpp",
+    code: "5-4000",
+    name: "Harga Pokok Penjualan",
+    category: "BEBAN",
+    normalBalance: "DEBIT",
+    unitType: "KONSUMEN"
+  }
+];
+
+export interface SystemMappingSeed {
+  transactionKind: "SALE_REVENUE" | "SALE_COGS" | "SALE_RECEIVABLE" | "MEMBER_CREDIT_REPAYMENT";
+  /** `COA_TEMPLATE` keys. */
+  debitKey: string;
+  creditKey: string;
+}
+
+// Tenant-wide SYSTEM mappings (sourceType "SYSTEM", no sourceId) that
+// lib/journal.ts#postPosSale / postMemberCreditRepayment resolve at posting
+// time. Same pairings prisma/seed-ksu-demo.ts has always set up by hand.
+export const SYSTEM_MAPPING_TEMPLATE: SystemMappingSeed[] = [
+  { transactionKind: "SALE_REVENUE", debitKey: "kas", creditKey: "penjualan_toko" },
+  { transactionKind: "SALE_COGS", debitKey: "hpp", creditKey: "persediaan" },
+  { transactionKind: "SALE_RECEIVABLE", debitKey: "piutang_anggota_toko", creditKey: "penjualan_toko" },
+  { transactionKind: "MEMBER_CREDIT_REPAYMENT", debitKey: "kas", creditKey: "piutang_anggota_toko" }
 ];
