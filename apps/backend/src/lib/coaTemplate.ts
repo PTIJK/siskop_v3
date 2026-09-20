@@ -89,7 +89,7 @@ export const COA_TEMPLATE: AccountSeed[] = [
 ];
 
 export interface SystemMappingSeed {
-  transactionKind: "SALE_REVENUE" | "SALE_COGS" | "SALE_RECEIVABLE" | "MEMBER_CREDIT_REPAYMENT";
+  transactionKind: "SALE_REVENUE" | "SALE_COGS" | "SALE_RECEIVABLE" | "MEMBER_CREDIT_REPAYMENT" | "STOCK_PURCHASE";
   /** `COA_TEMPLATE` keys. */
   debitKey: string;
   creditKey: string;
@@ -102,5 +102,8 @@ export const SYSTEM_MAPPING_TEMPLATE: SystemMappingSeed[] = [
   { transactionKind: "SALE_REVENUE", debitKey: "kas", creditKey: "penjualan_toko" },
   { transactionKind: "SALE_COGS", debitKey: "hpp", creditKey: "persediaan" },
   { transactionKind: "SALE_RECEIVABLE", debitKey: "piutang_anggota_toko", creditKey: "penjualan_toko" },
-  { transactionKind: "MEMBER_CREDIT_REPAYMENT", debitKey: "kas", creditKey: "piutang_anggota_toko" }
+  { transactionKind: "MEMBER_CREDIT_REPAYMENT", debitKey: "kas", creditKey: "piutang_anggota_toko" },
+  // A restock: the shelf gains goods, the koperasi pays cash. A koperasi that buys on credit
+  // remaps the credit side to Utang Usaha in Konfigurasi > Pemetaan Akun.
+  { transactionKind: "STOCK_PURCHASE", debitKey: "persediaan", creditKey: "kas" }
 ];

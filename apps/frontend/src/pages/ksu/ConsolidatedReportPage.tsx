@@ -5,6 +5,7 @@ import { formatRupiah } from "@/lib/format";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { EntitlementNotice } from "@/components/shared/EntitlementNotice";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Wallet } from "lucide-react";
 
@@ -60,7 +61,14 @@ export function ConsolidatedReportPage() {
                 {data.byUnit.map((u) => (
                   <Card key={u.unitId}>
                     <CardContent className="flex items-center justify-between p-4">
-                      <span className="font-medium text-foreground">{u.unitName}</span>
+                      <span className="font-medium text-foreground">
+                        {u.unitName}
+                        {!u.isActive && (
+                          <Badge variant="secondary" className="ml-2">
+                            Nonaktif
+                          </Badge>
+                        )}
+                      </span>
                       <span className="font-semibold text-foreground">{formatRupiah(u.assets)}</span>
                     </CardContent>
                   </Card>
@@ -71,8 +79,8 @@ export function ConsolidatedReportPage() {
                       <div>
                         <span className="font-medium text-foreground">Belum dialokasikan ke unit</span>
                         <p className="text-xs text-muted-foreground">
-                          Transaksi yang belum bisa dikaitkan ke satu unit usaha, mis. setoran simpanan, angsuran
-                          pinjaman, dan pelunasan kredit anggota.
+                          Transaksi yang tidak dimiliki satu unit usaha, mis. jurnal manual dan pelunasan kredit
+                          anggota.
                         </p>
                       </div>
                       <span className="shrink-0 font-semibold text-foreground">{formatRupiah(data.unallocated)}</span>

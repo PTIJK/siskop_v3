@@ -4,6 +4,7 @@ import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CooperativeType } from "@siskop/types";
 import { apiPost, ApiRequestError } from "@/api/client";
+import { invalidateUnitQueries } from "@/hooks/useAccessibleUnits";
 import { useToast } from "@/hooks/use-toast";
 import { FormError } from "@/components/shared/FormError";
 import { Button } from "@/components/ui/button";
@@ -59,7 +60,7 @@ export function CreateUnitDialog({
     mutationFn: (input: FormValues) => apiPost("/config/units", input),
     onSuccess: () => {
       toast({ title: "Unit koperasi ditambahkan" });
-      void qc.invalidateQueries({ queryKey: ["config", "units"] });
+      void invalidateUnitQueries(qc);
       reset({ type: defaultType, name: "" });
       onOpenChange(false);
     },

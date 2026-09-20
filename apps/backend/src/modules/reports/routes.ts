@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { endOfDay } from "date-fns";
 import { resolvePeriod } from "../../lib/period.js";
+import { resolveReadableUnitId } from "../../lib/unit-access.js";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { requireAccountingEntitlement } from "../../middleware/entitlement.js";
@@ -9,6 +10,7 @@ import {
   neracaParamsSchema,
   periodParamsSchema,
   ratParamsSchema,
+  unitPeriodParamsSchema,
   upsertCalkNarrativeSchema
 } from "./schema.js";
 import { getFinancialReport, getRATReport } from "./service.js";
@@ -35,6 +37,17 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
     fn(req, res).catch(next);
   };
+}
+
+/**
+ * The unit a per-unit report is cut to, or undefined for the consolidated one.
+ * 404 for a unit that isn't this tenant's, 403 for one outside the caller's
+ * assignment; a closed (inactive) unit stays reportable — its history is real.
+ */
+async function reportUnit(req: Request, unitId?: string): Promise<string | undefined> {
+  if (!unitId) return undefined;
+  const auth = authClaims(req);
+  return resolveReadableUnitId(auth.tenantId, auth.userId, unitId);
 }
 
 export function reportsRoutes(): Router {
@@ -100,9 +113,9 @@ export function reportsRoutes(): Router {
     requireAccountingEntitlement,
     requirePermission("reports", "read"),
     handle(async (req, res) => {
-      const { asOfDate } = neracaParamsSchema.parse(req.query);
+      const { asOfDate, unitId } = neracaParamsSchema.parse(req.query);
       const cutoff = asOfDate ? endOfDay(new Date(asOfDate)) : new Date();
-      const data = await getNeraca(authClaims(req).tenantId, cutoff);
+      const data = await getNeraca(authClaims(req).tenantId, cutoff, await reportUnit(req, unitId));
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );
@@ -112,9 +125,9 @@ export function reportsRoutes(): Router {
     requireAccountingEntitlement,
     requirePermission("reports", "export"),
     handle(async (req, res) => {
-      const { asOfDate } = neracaParamsSchema.parse(req.query);
+      const { asOfDate, unitId } = neracaParamsSchema.parse(req.query);
       const cutoff = asOfDate ? endOfDay(new Date(asOfDate)) : new Date();
-      const pdf = await generateNeracaPdf(authClaims(req).tenantId, cutoff);
+      const pdf = await generateNeracaPdf(authClaims(req).tenantId, cutoff, await reportUnit(req, unitId));
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="neraca-${cutoff.toISOString().split("T")[0]}.pdf"`
@@ -128,10 +141,10 @@ export function reportsRoutes(): Router {
     requireAccountingEntitlement,
     requirePermission("reports", "read"),
     handle(async (req, res) => {
-      const { from, to } = periodParamsSchema.parse(req.query);
+      const { from, to, unitId } = unitPeriodParamsSchema.parse(req.query);
       const { start, end } = resolvePeriod(from, to);
       assertValidPeriod(start, end);
-      const data = await getArusKas(authClaims(req).tenantId, start, end);
+      const data = await getArusKas(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );
@@ -141,10 +154,10 @@ export function reportsRoutes(): Router {
     requireAccountingEntitlement,
     requirePermission("reports", "export"),
     handle(async (req, res) => {
-      const { from, to } = periodParamsSchema.parse(req.query);
+      const { from, to, unitId } = unitPeriodParamsSchema.parse(req.query);
       const { start, end } = resolvePeriod(from, to);
       assertValidPeriod(start, end);
-      const pdf = await generateArusKasPdf(authClaims(req).tenantId, start, end);
+      const pdf = await generateArusKasPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="arus-kas-${start.toISOString().split("T")[0]}_${end.toISOString().split("T")[0]}.pdf"`
@@ -158,10 +171,10 @@ export function reportsRoutes(): Router {
     requireAccountingEntitlement,
     requirePermission("reports", "read"),
     handle(async (req, res) => {
-      const { from, to } = periodParamsSchema.parse(req.query);
+      const { from, to, unitId } = unitPeriodParamsSchema.parse(req.query);
       const { start, end } = resolvePeriod(from, to);
       assertValidPeriod(start, end);
-      const data = await getLaporanHasilUsaha(authClaims(req).tenantId, start, end);
+      const data = await getLaporanHasilUsaha(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );
@@ -171,10 +184,10 @@ export function reportsRoutes(): Router {
     requireAccountingEntitlement,
     requirePermission("reports", "export"),
     handle(async (req, res) => {
-      const { from, to } = periodParamsSchema.parse(req.query);
+      const { from, to, unitId } = unitPeriodParamsSchema.parse(req.query);
       const { start, end } = resolvePeriod(from, to);
       assertValidPeriod(start, end);
-      const pdf = await generateLaporanHasilUsahaPdf(authClaims(req).tenantId, start, end);
+      const pdf = await generateLaporanHasilUsahaPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="laporan-hasil-usaha-${start.toISOString().split("T")[0]}_${end.toISOString().split("T")[0]}.pdf"`

@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FileText } from "lucide-react";
 import { PeriodRangeControls } from "./PeriodRangeControls";
 import { defaultPeriodFrom, defaultPeriodTo } from "./period";
+import { ALL_UNITS, unitQueryParam } from "./unit";
+import { UnitFilter } from "./UnitFilter";
 
 function SectionTable({ title, section }: { title: string; section: LabaRugiSection }) {
   return (
@@ -48,13 +50,14 @@ export function LabaRugiTab() {
   const { toast } = useToast();
   const [from, setFrom] = useState(defaultPeriodFrom());
   const [to, setTo] = useState(defaultPeriodTo());
+  const [unitId, setUnitId] = useState(ALL_UNITS);
   const [data, setData] = useState<LaporanHasilUsaha | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchReport = async () => {
     setIsLoading(true);
     try {
-      const result = await apiFetch<LaporanHasilUsaha>(`/reports/regulatory/laporan-hasil-usaha?from=${from}&to=${to}`);
+      const result = await apiFetch<LaporanHasilUsaha>(`/reports/regulatory/laporan-hasil-usaha?from=${from}&to=${to}${unitQueryParam(unitId)}`);
       setData(result);
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
@@ -72,7 +75,15 @@ export function LabaRugiTab() {
     <div className="space-y-5">
       <Card>
         <CardContent className="pt-5">
-          <PeriodRangeControls from={from} to={to} onFromChange={setFrom} onToChange={setTo} onSubmit={fetchReport} isLoading={isLoading} />
+          <PeriodRangeControls
+            from={from}
+            to={to}
+            onFromChange={setFrom}
+            onToChange={setTo}
+            onSubmit={fetchReport}
+            isLoading={isLoading}
+            extra={<UnitFilter value={unitId} onChange={setUnitId} />}
+          />
         </CardContent>
       </Card>
 

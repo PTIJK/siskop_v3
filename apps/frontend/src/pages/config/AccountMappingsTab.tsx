@@ -46,7 +46,8 @@ const KIND_LABEL: Record<(typeof TRANSACTION_KINDS)[number], string> = {
   SALE_REVENUE: "Penjualan toko (tunai/transfer)",
   SALE_COGS: "Harga pokok penjualan toko",
   SALE_RECEIVABLE: "Penjualan toko (kredit anggota)",
-  MEMBER_CREDIT_REPAYMENT: "Pelunasan kredit anggota"
+  MEMBER_CREDIT_REPAYMENT: "Pelunasan kredit anggota",
+  STOCK_PURCHASE: "Pembelian / restok stok toko"
 };
 
 const schema = z.object({

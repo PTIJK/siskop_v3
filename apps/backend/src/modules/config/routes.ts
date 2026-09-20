@@ -3,6 +3,7 @@ import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { requireAccountingEntitlement, requireWhitelabelEntitlement } from "../../middleware/entitlement.js";
 import { requireParam } from "../../lib/http.js";
+import { listReadableUnits } from "../../lib/unit-access.js";
 import {
   createAccountSchema,
   createRoleSchema,
@@ -61,6 +62,20 @@ export function configRoutes(): Router {
     requirePermission("config", "read"),
     handle(async (req, res) => {
       const data = await listUnits(authClaims(req).tenantId);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  // "Which units may I open?" — answered from the caller's OWN unit assignment (their
+  // UserUnit rows, else every unit of the tenant), so it needs no module permission:
+  // /units above is the tenant's full list and needs config.read, which a Kasir
+  // (Toko-only, `config: {}`) deliberately lacks. It only ever returns units the caller
+  // can already act on or read, so it discloses nothing new.
+  router.get(
+    "/units/mine",
+    handle(async (req, res) => {
+      const auth = authClaims(req);
+      const data = await listReadableUnits(auth.tenantId, auth.userId);
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );

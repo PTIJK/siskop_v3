@@ -37,7 +37,7 @@ export async function runDailySavingInterestAccrual(asOf = new Date()): Promise<
           note: `Bunga harian otomatis (${days} hari)`
         } });
         await postSavingTransaction(tx, {
-          tenantId: saving.tenantId, savingTransactionId: transaction.id,
+          tenantId: saving.tenantId, unitId: saving.unitId, savingTransactionId: transaction.id,
           savingConfigId: saving.savingConfigId, kind: "SAVING_INTEREST", amount,
           entryDate: asOf, description: "Bunga simpanan harian"
         });

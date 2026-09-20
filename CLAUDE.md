@@ -29,7 +29,10 @@ SaaS cooperative management system (Sistem Informasi Koperasi) for Indonesian ko
    bound to the destination browser and canonical tenant host issues the portal
    session; the client never supplies the tenant for direct authentication.
 2. **Money is `Decimal`.** Never `Float`/`number` for balances, principal, or amounts.
-2b. **Every tenant has ≥1 `CooperativeUnit`.** Financial rows carry a non-null `unitId`.
+2b. **Every tenant has ≥1 `CooperativeUnit`.** Financial rows carry a non-null `unitId` — one
+   deliberate exception: `JournalEntry.unitId` is nullable, because an entry that belongs to no
+   single unit (a manual entry, a member-credit repayment) is the tenant-level "unallocated"
+   bucket. Per-unit figures plus that bucket always add back up to the consolidated one.
    `KSU` is not a type — it's `units.length > 1`. Never write `if (type === 'KSU')`.
    Consolidated reporting = omit the unit filter; per-unit = add it.
 3. **API envelope.** Every response is `ApiResponse<T>` from `@siskop/types`.

@@ -397,6 +397,7 @@ missing, nothing is posted and the entry stays unposted (`tests/toko-accounting.
 |---|---|---|
 | `id` | String PK | |
 | `tenantId` | FK → `Tenant.id`, `onDelete: Cascade` | |
+| `unitId` | FK → `CooperativeUnit.id`?, `onDelete: SetNull` | The unit the source transaction belongs to (`Saving`/`Loan`/`POSSale.unitId`), stamped by `lib/journal.ts` at posting time. **Nullable on purpose:** an entry that belongs to no single unit (`MANUAL`, `MEMBER_CREDIT_REPAYMENT`) is the tenant-level "unallocated" bucket. Indexed `(tenantId, unitId)`. Existing rows were backfilled by migration `20260920100000_journal_entry_unit`. |
 | `entryDate` | DateTime | |
 | `sourceType` | `JournalSourceType` | `SAVING_TRANSACTION` \| `LOAN_PAYMENT` \| `LOAN_DISBURSEMENT` \| `POS_SALE` \| `MEMBER_CREDIT_REPAYMENT` \| `MANUAL` |
 | `sourceId` | String? | The `SavingTransaction`/`LoanPayment`/`Loan`/`POSSale`/`MemberCreditRepayment` id, null for `MANUAL` |

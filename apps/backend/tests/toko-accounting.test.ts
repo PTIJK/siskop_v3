@@ -184,7 +184,9 @@ describe("Half-mapped Toko sale (all-or-nothing posting)", () => {
 
     const repost = await request(app()).post("/api/config/journal/repost").set(bearer(admin.accessToken));
     expect(repost.status).toBe(200);
-    expect(repost.body.data).toEqual({ reposted: 1, stillUnmapped: 0 });
+    // The sale is now fully mapped and posts. The restock that stocked the shelf (made before any
+    // mapping) stays unposted: this hand-wired scenario never mapped STOCK_PURCHASE.
+    expect(repost.body.data).toEqual({ reposted: 1, stillUnmapped: 1 });
 
     const complete = await entryFor(admin.user.tenantId, "POS_SALE", sale.id);
     expect(complete.status).toBe("POSTED");
@@ -218,11 +220,12 @@ describe("Reposting entries that were UNPOSTED_MISSING_MAPPING", () => {
 
     const before = await request(app()).get("/api/config/journal/unposted").set(bearer(admin.accessToken));
     expect(before.status).toBe(200);
-    expect(before.body.data.repostableCount).toBe(3);
+    expect(before.body.data.repostableCount).toBe(4); // 2 sales + 1 repayment + the shelf-stocking restock
     expect(before.body.data.items).toEqual(
       expect.arrayContaining([
         { sourceType: "POS_SALE", count: 2, repostable: true },
         { sourceType: "MEMBER_CREDIT_REPAYMENT", count: 1, repostable: true },
+        { sourceType: "STOCK_MOVEMENT", count: 1, repostable: true },
         // Savings/loan entries are listed but not repostable by this feature.
         { sourceType: "SAVING_TRANSACTION", count: 1, repostable: false }
       ])
@@ -231,7 +234,7 @@ describe("Reposting entries that were UNPOSTED_MISSING_MAPPING", () => {
     await generateStandardCoa(admin.accessToken);
     const repost = await request(app()).post("/api/config/journal/repost").set(bearer(admin.accessToken));
     expect(repost.status).toBe(200);
-    expect(repost.body.data).toEqual({ reposted: 3, stillUnmapped: 0 });
+    expect(repost.body.data).toEqual({ reposted: 4, stillUnmapped: 0 });
 
     expect((await entryFor(admin.user.tenantId, "POS_SALE", cashSale.id)).lines).toHaveLength(4);
     expect((await entryFor(admin.user.tenantId, "POS_SALE", creditSale.id)).lines).toHaveLength(4);
@@ -256,7 +259,7 @@ describe("Reposting entries that were UNPOSTED_MISSING_MAPPING", () => {
     const repost = await request(app()).post("/api/config/journal/repost").set(bearer(admin.accessToken));
 
     expect(repost.status).toBe(200);
-    expect(repost.body.data).toEqual({ reposted: 0, stillUnmapped: 1 });
+    expect(repost.body.data).toEqual({ reposted: 0, stillUnmapped: 2 }); // the sale and the restock that stocked the shelf
     const entry = await entryFor(admin.user.tenantId, "POS_SALE", sale.id);
     expect(entry.status).toBe("UNPOSTED_MISSING_MAPPING");
     expect(entry.lines).toEqual([]);
@@ -272,12 +275,12 @@ describe("Reposting entries that were UNPOSTED_MISSING_MAPPING", () => {
 
     await generateStandardCoa(tenantA.accessToken);
     const repostA = await request(app()).post("/api/config/journal/repost").set(bearer(tenantA.accessToken));
-    expect(repostA.body.data).toEqual({ reposted: 1, stillUnmapped: 0 });
+    expect(repostA.body.data).toEqual({ reposted: 2, stillUnmapped: 0 }); // A's sale + A's restock
 
     const entryB = await entryFor(tenantB.user.tenantId, "POS_SALE", saleB.id);
     expect(entryB.status).toBe("UNPOSTED_MISSING_MAPPING");
     const summaryB = await request(app()).get("/api/config/journal/unposted").set(bearer(tenantB.accessToken));
-    expect(summaryB.body.data.repostableCount).toBe(1);
+    expect(summaryB.body.data.repostableCount).toBe(2); // B's sale + B's restock, both untouched
   });
 
   it("rejects a Viewer (accounting.create not granted) and a tenant without the accounting entitlement", async () => {
@@ -323,7 +326,7 @@ describe("Laporan Arus Kas", () => {
 });
 
 describe("GET /api/ksu/consolidated — total ties to Neraca", () => {
-  it("reports the tenant-wide asset total plus an 'unallocated' remainder for entries it cannot tie to a unit", async () => {
+  it("attributes a savings deposit to its unit and leaves only unit-less entries as 'unallocated'", async () => {
     const admin = await setupTenant();
     const kspUnit = await db.cooperativeUnit.findFirstOrThrow({ where: { tenantId: admin.user.tenantId } });
     // A saving config first, so "Buat COA Standar" also wires its DEPOSIT mapping (Kas / Simpanan Pokok).
@@ -334,8 +337,7 @@ describe("GET /api/ksu/consolidated — total ties to Neraca", () => {
     const { unit: tokoUnit, product } = await seedToko(admin);
     await generateStandardCoa(admin.accessToken);
 
-    // Kas +500.000 via a SAVING_TRANSACTION entry — its sourceId is the transaction id, so
-    // the per-unit sourceId tracing has no way to attribute it to any unit.
+    // Kas +500.000 via a SAVING_TRANSACTION entry — it carries the saving's unit (the default KSP unit).
     const member = await createMemberAs(admin.accessToken);
     await request(app())
       .post("/api/savings")
@@ -343,16 +345,34 @@ describe("GET /api/ksu/consolidated — total ties to Neraca", () => {
       .send({ memberId: member.id, savingConfigId: config.body.data.id, initialDeposit: 500_000 });
     // Kas +45.000, Persediaan -27.000 => +18.000 of assets, attributed to the Toko unit.
     await sell(admin, tokoUnit.id, product.id, 3);
+    // A manual entry belongs to no unit: Kas +100.000 against Simpanan Pokok.
+    const kas = await db.account.findFirstOrThrow({ where: { tenantId: admin.user.tenantId, code: "1-1000" } });
+    const simpananPokok = await db.account.findFirstOrThrow({ where: { tenantId: admin.user.tenantId, code: "3-1000" } });
+    await db.journalEntry.create({
+      data: {
+        tenantId: admin.user.tenantId,
+        entryDate: new Date(),
+        sourceType: "MANUAL",
+        description: "Modal awal",
+        status: "POSTED",
+        lines: {
+          create: [
+            { tenantId: admin.user.tenantId, accountId: kas.id, debit: 100_000 },
+            { tenantId: admin.user.tenantId, accountId: simpananPokok.id, credit: 100_000 }
+          ]
+        }
+      }
+    });
 
     const consolidated = await request(app()).get("/api/ksu/consolidated").set(bearer(admin.accessToken));
     const neraca = await request(app()).get("/api/reports/regulatory/neraca").set(bearer(admin.accessToken));
 
     expect(consolidated.status).toBe(200);
     const byUnit = consolidated.body.data.byUnit as Array<{ unitId: string; assets: number }>;
-    expect(byUnit.find((u) => u.unitId === kspUnit.id)?.assets).toBe(0);
+    expect(byUnit.find((u) => u.unitId === kspUnit.id)?.assets).toBe(500_000);
     expect(byUnit.find((u) => u.unitId === tokoUnit.id)?.assets).toBe(18_000);
-    expect(consolidated.body.data.unallocated).toBe(500_000);
-    expect(consolidated.body.data.totalAssets).toBe(518_000);
+    expect(consolidated.body.data.unallocated).toBe(100_000);
+    expect(consolidated.body.data.totalAssets).toBe(618_000);
     expect(String(consolidated.body.data.totalAssets)).toBe(neraca.body.data.aset.total);
   });
 });

@@ -13,10 +13,17 @@ export type MappingTransactionKind =
   | "SALE_REVENUE"
   | "SALE_COGS"
   | "SALE_RECEIVABLE"
-  | "MEMBER_CREDIT_REPAYMENT";
+  | "MEMBER_CREDIT_REPAYMENT"
+  | "STOCK_PURCHASE";
 
 /** The SYSTEM-scope kinds, i.e. the ones that carry no per-config `sourceId`. */
-export const SYSTEM_MAPPING_KINDS = ["SALE_REVENUE", "SALE_COGS", "SALE_RECEIVABLE", "MEMBER_CREDIT_REPAYMENT"] as const;
+export const SYSTEM_MAPPING_KINDS = [
+  "SALE_REVENUE",
+  "SALE_COGS",
+  "SALE_RECEIVABLE",
+  "MEMBER_CREDIT_REPAYMENT",
+  "STOCK_PURCHASE"
+] as const;
 
 export interface Account {
   id: string;

@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { CooperativeUnit } from "@siskop/types";
 import { apiFetch, apiPost, apiPut, ApiRequestError } from "@/api/client";
+import { invalidateUnitQueries } from "@/hooks/useAccessibleUnits";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, type ColumnDef } from "@/components/shared/DataTable";
@@ -28,6 +29,7 @@ type FormValues = z.infer<typeof schema>;
 export function UnitsTab() {
   const { can } = usePermissions();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CooperativeUnit | null>(null);
   const [apiError, setApiError] = useState("");
@@ -72,7 +74,7 @@ export function UnitsTab() {
         toast({ title: "Unit koperasi ditambahkan" });
       }
       setDialogOpen(false);
-      void refetch();
+      void invalidateUnitQueries(queryClient);
     } catch (err) {
       setApiError(err instanceof ApiRequestError ? err.message : "Terjadi kesalahan");
     }
@@ -82,7 +84,7 @@ export function UnitsTab() {
     try {
       await apiPut(`/config/units/${unit.id}`, { isActive: !unit.isActive });
       toast({ title: unit.isActive ? "Unit dinonaktifkan" : "Unit diaktifkan kembali" });
-      void refetch();
+      void invalidateUnitQueries(queryClient);
     } catch (err) {
       toast({
         title: "Gagal mengubah status unit",

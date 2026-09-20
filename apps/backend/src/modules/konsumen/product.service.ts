@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { CooperativeType, type Product as ProductDTO, type StockMovement as StockMovementDTO } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { conflict, notFound, validationError } from "../../lib/errors.js";
+import { postStockPurchase } from "../../lib/journal.js";
 import { resolveUnitId } from "../../lib/units.js";
 import { assertUnitAccess } from "../../lib/unit-access.js";
 import type {
@@ -90,6 +91,9 @@ export async function createProduct(tenantId: string, data: CreateProductInput, 
  * to `quantity` directly — it's a correction to the true count (e.g. after a
  * physical stock-take), not a delta on top of the current one. Easy to get
  * backwards, so this exact semantic is locked by a test.
+ *
+ * An `IN` is a purchase, so it is journaled in the same transaction
+ * (lib/journal.ts#postStockPurchase); an `ADJUSTMENT` is not — see there.
  */
 export async function recordStockMovement(
   tenantId: string,
@@ -104,7 +108,7 @@ export async function recordStockMovement(
   const newStockQty = data.type === "IN" ? product.stockQty + data.quantity : data.quantity;
 
   const updated = await db.$transaction(async (tx) => {
-    await tx.stockMovement.create({
+    const movement = await tx.stockMovement.create({
       data: {
         tenantId,
         unitId: product.unitId,
@@ -116,10 +120,23 @@ export async function recordStockMovement(
       }
     });
 
-    return tx.product.update({
+    const updatedProduct = await tx.product.update({
       where: { id: product.id, tenantId },
       data: { stockQty: newStockQty }
     });
+
+    if (data.type === "IN") {
+      await postStockPurchase(tx, {
+        tenantId,
+        unitId: product.unitId,
+        movementId: movement.id,
+        amount: product.cost.mul(data.quantity),
+        entryDate: movement.createdAt,
+        description: `Restok ${product.name}`
+      });
+    }
+
+    return updatedProduct;
   });
 
   return toProductDTO(updated);

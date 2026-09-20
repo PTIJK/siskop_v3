@@ -91,7 +91,7 @@ export function UnpostedJournalBanner() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="Posting transaksi yang tertunda?"
-        description="Transaksi akan dicatat ke jurnal dengan tanggal aslinya, sehingga laporan periode yang sudah lewat ikut berubah. Hanya transaksi yang pemetaan akunnya sudah lengkap yang diposting; sisanya dibiarkan."
+        description="Transaksi akan dicatat ke jurnal dengan tanggal aslinya, sehingga laporan periode yang sudah lewat ikut berubah. Hanya transaksi yang pemetaan akunnya sudah lengkap yang diposting; sisanya dibiarkan. Jika restok lama sudah Anda catat sendiri lewat jurnal manual, memposting ulang akan menghitungnya dua kali."
         confirmLabel="Posting sekarang"
         onConfirm={repost}
       />

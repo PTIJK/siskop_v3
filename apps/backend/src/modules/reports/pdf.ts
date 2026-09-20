@@ -137,6 +137,13 @@ async function renderToPdf(html: string): Promise<Buffer> {
   }
 }
 
+/** " — Unit <name>" for a per-unit report's subtitle; "" for the consolidated one. */
+async function unitSuffix(tenantId: string, unitId?: string): Promise<string> {
+  if (!unitId) return "";
+  const unit = await db.cooperativeUnit.findFirst({ where: { id: unitId, tenantId }, select: { name: true } });
+  return unit ? ` — Unit ${unit.name}` : "";
+}
+
 async function requireTenant(tenantId: string): Promise<PdfTenant> {
   const tenant = await db.tenant.findUnique({ where: { id: tenantId } });
   if (!tenant) throw new Error("Tenant tidak ditemukan");
@@ -207,9 +214,10 @@ ${data.kolDistribution.map((k) => `<tr><td>${k.category}</td><td>${k.count}</td>
 
 // ── Regulatory (Permenkop UKM No. 2/2024) ────────────────────────────────────
 
-export async function generateNeracaPdf(tenantId: string, asOfDate: Date): Promise<Buffer> {
+export async function generateNeracaPdf(tenantId: string, asOfDate: Date, unitId?: string): Promise<Buffer> {
   const tenant = await requireTenant(tenantId);
-  const data = await getNeraca(tenantId, asOfDate);
+  const data = await getNeraca(tenantId, asOfDate, unitId);
+  const unitLabel = await unitSuffix(tenantId, unitId);
 
   const section = (label: string, s: { items: Array<{ code: string | null; name: string; balance: string; isComputed: boolean }>; total: string }) => `
     <h3>${label}</h3>
@@ -226,13 +234,13 @@ export async function generateNeracaPdf(tenantId: string, asOfDate: Date): Promi
       ${data.balanced ? "Aset = Kewajiban + Ekuitas (seimbang)" : "PERINGATAN: neraca tidak seimbang"}
     </p>`;
 
-  return renderToPdf(wrapPdf(tenant, "Neraca (Laporan Posisi Keuangan)", `Per Tanggal ${data.asOfDate}`, body));
+  return renderToPdf(wrapPdf(tenant, "Neraca (Laporan Posisi Keuangan)", `Per Tanggal ${data.asOfDate}${unitLabel}`, body));
 }
 
-export async function generateArusKasPdf(tenantId: string, from: Date, to: Date): Promise<Buffer> {
+export async function generateArusKasPdf(tenantId: string, from: Date, to: Date, unitId?: string): Promise<Buffer> {
   const tenant = await requireTenant(tenantId);
-  const data = await getArusKas(tenantId, from, to);
-  const subtitle = `Periode ${data.periode.from} s/d ${data.periode.to}`;
+  const data = await getArusKas(tenantId, from, to, unitId);
+  const subtitle = `Periode ${data.periode.from} s/d ${data.periode.to}${await unitSuffix(tenantId, unitId)}`;
 
   if (data.catatan) {
     return renderToPdf(wrapPdf(tenant, "Laporan Arus Kas", subtitle, `<div class="catatan">${data.catatan}</div>`));
@@ -260,9 +268,15 @@ export async function generateArusKasPdf(tenantId: string, from: Date, to: Date)
   return renderToPdf(wrapPdf(tenant, "Laporan Arus Kas", subtitle, body));
 }
 
-export async function generateLaporanHasilUsahaPdf(tenantId: string, from: Date, to: Date): Promise<Buffer> {
+export async function generateLaporanHasilUsahaPdf(
+  tenantId: string,
+  from: Date,
+  to: Date,
+  unitId?: string
+): Promise<Buffer> {
   const tenant = await requireTenant(tenantId);
-  const data = await getLaporanHasilUsaha(tenantId, from, to);
+  const data = await getLaporanHasilUsaha(tenantId, from, to, unitId);
+  const unitLabel = await unitSuffix(tenantId, unitId);
 
   const section = (label: string, s: { items: Array<{ code: string | null; name: string; total: string }>; total: string }) => `
     <h3>${label}</h3>
@@ -276,7 +290,7 @@ export async function generateLaporanHasilUsahaPdf(tenantId: string, from: Date,
     <table><tr class="total"><td>Sisa Hasil Usaha (SHU) Periode Berjalan</td><td>${rp(data.shuBerjalan)}</td></tr></table>`;
 
   return renderToPdf(
-    wrapPdf(tenant, "Laporan Perhitungan Hasil Usaha", `Periode ${data.periode.from} s/d ${data.periode.to}`, body)
+    wrapPdf(tenant, "Laporan Perhitungan Hasil Usaha", `Periode ${data.periode.from} s/d ${data.periode.to}${unitLabel}`, body)
   );
 }
 

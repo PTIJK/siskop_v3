@@ -1,5 +1,5 @@
 import { db } from "./db.js";
-import { forbidden } from "./errors.js";
+import { forbidden, notFound } from "./errors.js";
 
 /**
  * A user's real-time unit scope: explicit `UserUnit` rows if any exist, else
@@ -35,4 +35,45 @@ export async function assertUnitAccess(userId: string, tenantId: string, unitId:
   if (!unitIds.includes(unitId)) {
     throw forbidden(`No access to unit ${unitId}`);
   }
+}
+
+// ── Read access (reports, history) ───────────────────────────────────────────
+// getEffectiveUnitIds/assertUnitAccess answer "may I ACT on this unit" and so
+// only ever cover active units for an unscoped user. Reading a unit's history
+// is a different question: a closed (inactive) unit's sales and ledger are
+// still real, and a report that silently drops them would stop agreeing with
+// the consolidated ledger. These helpers therefore include inactive units.
+
+/**
+ * Units the caller may read reports/history for: their explicit `UserUnit`
+ * assignment if they have one (it may include a since-closed unit), else every
+ * unit of their tenant, closed ones included.
+ */
+export async function getReadableUnitIds(userId: string, tenantId: string): Promise<string[]> {
+  const assigned = await db.userUnit.findMany({ where: { userId }, select: { unitId: true } });
+  if (assigned.length > 0) return assigned.map((a) => a.unitId);
+
+  const units = await db.cooperativeUnit.findMany({ where: { tenantId }, select: { id: true } });
+  return units.map((u) => u.id);
+}
+
+/**
+ * Like resolveUnitId + assertUnitAccess for reading: 404 for a unit that isn't
+ * this tenant's (never confirming another tenant's unit exists), 403 for one
+ * that is but the caller isn't assigned to, and — unlike resolveUnitId — no
+ * objection to an inactive unit.
+ */
+export async function resolveReadableUnitId(tenantId: string, userId: string, unitId: string): Promise<string> {
+  const unit = await db.cooperativeUnit.findFirst({ where: { id: unitId, tenantId }, select: { id: true } });
+  if (!unit) throw notFound("Unit tidak ditemukan");
+
+  const readable = await getReadableUnitIds(userId, tenantId);
+  if (!readable.includes(unit.id)) throw forbidden(`No access to unit ${unit.id}`);
+  return unit.id;
+}
+
+/** The full unit rows behind getReadableUnitIds, oldest first — what the UI offers as "my units". */
+export async function listReadableUnits(tenantId: string, userId: string) {
+  const ids = await getReadableUnitIds(userId, tenantId);
+  return db.cooperativeUnit.findMany({ where: { tenantId, id: { in: ids } }, orderBy: { createdAt: "asc" } });
 }

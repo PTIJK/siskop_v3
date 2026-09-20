@@ -347,7 +347,15 @@ async function main() {
     debitAccountId: kas.id,
     creditAccountId: piutangToko.id
   });
-  console.log("Toko chart of accounts + SYSTEM/SALE_REVENUE + SYSTEM/SALE_COGS + SYSTEM/SALE_RECEIVABLE + SYSTEM/MEMBER_CREDIT_REPAYMENT mappings created");
+  // A restock: Dr Persediaan / Cr Kas. Must exist before step 13's opening-stock movements,
+  // otherwise those post as UNPOSTED_MISSING_MAPPING and Persediaan starts the demo empty.
+  await upsertAccountMapping(tenantId, {
+    sourceType: "SYSTEM",
+    transactionKind: "STOCK_PURCHASE",
+    debitAccountId: persediaan.id,
+    creditAccountId: kas.id
+  });
+  console.log("Toko chart of accounts + SYSTEM/SALE_REVENUE + SALE_COGS + SALE_RECEIVABLE + MEMBER_CREDIT_REPAYMENT + STOCK_PURCHASE mappings created");
 
   // ── 13. Five sembako products with realistic Rupiah prices + opening stock ─
   const SEMBAKO_PRODUCTS = [

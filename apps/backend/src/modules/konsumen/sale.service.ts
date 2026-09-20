@@ -155,6 +155,7 @@ export async function createSale(
 
     await postPosSale(tx, {
       tenantId,
+      unitId,
       saleId: sale.id,
       paymentMethod: data.paymentMethod,
       totalPrice: totalPrice.toNumber(),

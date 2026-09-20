@@ -1,7 +1,6 @@
 import { NavLink, Outlet, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { CooperativeType, type CooperativeUnit, type PermissionAction, type PermissionModule } from "@siskop/types";
-import { apiFetch } from "@/api/client";
+import { CooperativeType, type PermissionAction, type PermissionModule } from "@siskop/types";
+import { useAccessibleUnits } from "@/hooks/useAccessibleUnits";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
@@ -47,15 +46,8 @@ export function UnitLayout() {
   const { unitId } = useParams<{ unitId: string }>();
   const { can } = usePermissions();
 
-  const {
-    data: unit,
-    isPending,
-    isError
-  } = useQuery({
-    queryKey: ["config", "units"],
-    queryFn: () => apiFetch<CooperativeUnit[]>("/config/units"),
-    select: (units) => units.find((u) => u.id === unitId)
-  });
+  const { data: units, isPending, isError } = useAccessibleUnits();
+  const unit = units?.find((u) => u.id === unitId);
 
   if (isPending) return <PageLoading />;
 

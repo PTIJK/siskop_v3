@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { FileText, Info } from "lucide-react";
 import { PeriodRangeControls } from "./PeriodRangeControls";
+import { ALL_UNITS, unitQueryParam } from "./unit";
+import { UnitFilter } from "./UnitFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "./period";
 
 function ActivitySection({ title, section }: { title: string; section: ArusKasSection }) {
@@ -46,13 +48,14 @@ export function ArusKasTab() {
   const { toast } = useToast();
   const [from, setFrom] = useState(defaultPeriodFrom());
   const [to, setTo] = useState(defaultPeriodTo());
+  const [unitId, setUnitId] = useState(ALL_UNITS);
   const [data, setData] = useState<ArusKas | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchReport = async () => {
     setIsLoading(true);
     try {
-      const result = await apiFetch<ArusKas>(`/reports/regulatory/arus-kas?from=${from}&to=${to}`);
+      const result = await apiFetch<ArusKas>(`/reports/regulatory/arus-kas?from=${from}&to=${to}${unitQueryParam(unitId)}`);
       setData(result);
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
@@ -70,7 +73,15 @@ export function ArusKasTab() {
     <div className="space-y-5">
       <Card>
         <CardContent className="pt-5">
-          <PeriodRangeControls from={from} to={to} onFromChange={setFrom} onToChange={setTo} onSubmit={fetchReport} isLoading={isLoading} />
+          <PeriodRangeControls
+            from={from}
+            to={to}
+            onFromChange={setFrom}
+            onToChange={setTo}
+            onSubmit={fetchReport}
+            isLoading={isLoading}
+            extra={<UnitFilter value={unitId} onChange={setUnitId} />}
+          />
         </CardContent>
       </Card>
 

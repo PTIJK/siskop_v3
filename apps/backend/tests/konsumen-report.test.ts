@@ -232,6 +232,27 @@ describe("GET /api/konsumen/reports/sales — unit scope", () => {
   });
 });
 
+describe("GET /api/konsumen/reports/sales — a closed (inactive) Toko", () => {
+  it("still reports the closed unit's history, and the combined report keeps counting it", async () => {
+    const admin = await setupTenant();
+    const unitA = await createUnit(admin.accessToken, "KONSUMEN", "Toko A");
+    const unitB = await createUnit(admin.accessToken, "KONSUMEN", "Toko B");
+    const berasA = await addProduct(admin, unitA.id, BERAS);
+    const minyakB = await addProduct(admin, unitB.id, MINYAK);
+    await sell(admin, unitA.id, [{ productId: berasA.id, quantity: 3 }]); // 45.000
+    await sell(admin, unitB.id, [{ productId: minyakB.id, quantity: 1 }]); // 32.000
+    await request(app()).put(`/api/config/units/${unitB.id}`).set(bearer(admin.accessToken)).send({ isActive: false });
+
+    const closed = await salesReport(admin.accessToken, `?unitId=${unitB.id}`);
+    const combined = await salesReport(admin.accessToken);
+
+    expect(closed.status).toBe(200);
+    expect(closed.body.data.ringkasan.omzet).toBe("32000");
+    // Must keep agreeing with the ledger, which never forgets a closed unit's sales.
+    expect(combined.body.data.ringkasan.omzet).toBe("77000");
+  });
+});
+
 describe("GET /api/konsumen/reports/sales — access", () => {
   it("is a report: allowed for a Viewer (reports.read), refused for a Kasir (Toko-only, no reports)", async () => {
     const admin = await setupTenant();

@@ -26,7 +26,8 @@ type MappingKind =
   | "SALE_REVENUE"
   | "SALE_COGS"
   | "SALE_RECEIVABLE"
-  | "MEMBER_CREDIT_REPAYMENT";
+  | "MEMBER_CREDIT_REPAYMENT"
+  | "STOCK_PURCHASE";
 
 /**
  * Resolves the debit/credit accounts for one transaction kind and returns a
@@ -75,27 +76,36 @@ function assertBalanced(lines: JournalLineInput[], label: string): void {
  * (nothing could be mapped) is stored as UNPOSTED_MISSING_MAPPING. It stays out
  * of every report until repostUnpostedEntries() (below) rebuilds it — adding a
  * mapping later only affects transactions made *afterwards*, and reposting
- * currently covers POS sales and member-credit repayments only, not savings or
- * loan entries.
+ * currently covers POS sales, member-credit repayments and restocks, not savings
+ * or loan entries.
  */
 async function createJournalEntry(
   tx: TxClient,
   params: {
     tenantId: string;
+    /** The unit the source transaction belongs to; null for an entry that belongs to no single unit. */
+    unitId: string | null;
     entryDate: Date;
-    sourceType: "SAVING_TRANSACTION" | "LOAN_PAYMENT" | "LOAN_DISBURSEMENT" | "POS_SALE" | "MEMBER_CREDIT_REPAYMENT";
+    sourceType:
+      | "SAVING_TRANSACTION"
+      | "LOAN_PAYMENT"
+      | "LOAN_DISBURSEMENT"
+      | "POS_SALE"
+      | "MEMBER_CREDIT_REPAYMENT"
+      | "STOCK_MOVEMENT";
     sourceId: string;
     description: string;
     lines: JournalLineInput[];
   }
 ): Promise<void> {
-  const { tenantId, entryDate, sourceType, sourceId, description, lines } = params;
+  const { tenantId, unitId, entryDate, sourceType, sourceId, description, lines } = params;
 
   assertBalanced(lines, `${sourceType}:${sourceId}`);
 
   const entry = await tx.journalEntry.create({
     data: {
       tenantId,
+      unitId,
       entryDate,
       sourceType,
       sourceId,
@@ -121,6 +131,8 @@ export async function postSavingTransaction(
   tx: TxClient,
   params: {
     tenantId: string;
+    /** The Saving's unitId. */
+    unitId: string | null;
     savingTransactionId: string;
     savingConfigId: string;
     kind: "DEPOSIT" | "WITHDRAWAL" | "SAVING_INTEREST";
@@ -139,6 +151,7 @@ export async function postSavingTransaction(
   );
   await createJournalEntry(tx, {
     tenantId: params.tenantId,
+    unitId: params.unitId,
     entryDate: params.entryDate,
     sourceType: "SAVING_TRANSACTION",
     sourceId: params.savingTransactionId,
@@ -151,6 +164,8 @@ export async function postLoanDisbursement(
   tx: TxClient,
   params: {
     tenantId: string;
+    /** The Loan's unitId. */
+    unitId: string | null;
     loanId: string;
     loanConfigId: string;
     amount: number;
@@ -168,6 +183,7 @@ export async function postLoanDisbursement(
   );
   await createJournalEntry(tx, {
     tenantId: params.tenantId,
+    unitId: params.unitId,
     entryDate: params.entryDate,
     sourceType: "LOAN_DISBURSEMENT",
     sourceId: params.loanId,
@@ -180,6 +196,8 @@ export async function postLoanPayment(
   tx: TxClient,
   params: {
     tenantId: string;
+    /** The paid Loan's unitId. */
+    unitId: string | null;
     loanPaymentId: string;
     loanConfigId: string;
     principalAmount: number;
@@ -197,6 +215,7 @@ export async function postLoanPayment(
 
   await createJournalEntry(tx, {
     tenantId: params.tenantId,
+    unitId: params.unitId,
     entryDate: params.entryDate,
     sourceType: "LOAN_PAYMENT",
     sourceId: params.loanPaymentId,
@@ -272,6 +291,10 @@ function memberCreditRepaymentLinesFrom(mappings: SystemMappings, amount: number
   return componentLinesFrom(mappings, "MEMBER_CREDIT_REPAYMENT", amount) ?? [];
 }
 
+function stockPurchaseLinesFrom(mappings: SystemMappings, amount: number | Prisma.Decimal): JournalLineInput[] {
+  return componentLinesFrom(mappings, "STOCK_PURCHASE", amount) ?? [];
+}
+
 /**
  * Posts a POS sale's revenue and COGS as one balanced journal entry (up to
  * 4 lines: a Kas-or-Piutang/Penjualan pair plus an HPP/Persediaan pair).
@@ -296,6 +319,8 @@ export async function postPosSale(
   tx: TxClient,
   params: {
     tenantId: string;
+    /** The POSSale's unitId (the Toko that made the sale). */
+    unitId: string | null;
     saleId: string;
     paymentMethod: PosPaymentMethod;
     totalPrice: number | Prisma.Decimal;
@@ -307,6 +332,7 @@ export async function postPosSale(
   const mappings = await loadSystemMappings(tx, params.tenantId);
   await createJournalEntry(tx, {
     tenantId: params.tenantId,
+    unitId: params.unitId,
     entryDate: params.entryDate,
     sourceType: "POS_SALE",
     sourceId: params.saleId,
@@ -323,16 +349,68 @@ export async function postPosSale(
  */
 export async function postMemberCreditRepayment(
   tx: TxClient,
-  params: { tenantId: string; repaymentId: string; amount: number | Prisma.Decimal; entryDate: Date; description: string }
+  params: {
+    tenantId: string;
+    /**
+     * Always null today: MemberCreditRepayment is tenant-wide by design (eligibility and the
+     * Piutang account are tenant-level), so the repayment sits in the "unallocated" bucket.
+     */
+    unitId: string | null;
+    repaymentId: string;
+    amount: number | Prisma.Decimal;
+    entryDate: Date;
+    description: string;
+  }
 ): Promise<void> {
   const mappings = await loadSystemMappings(tx, params.tenantId);
   await createJournalEntry(tx, {
     tenantId: params.tenantId,
+    unitId: params.unitId,
     entryDate: params.entryDate,
     sourceType: "MEMBER_CREDIT_REPAYMENT",
     sourceId: params.repaymentId,
     description: params.description,
     lines: memberCreditRepaymentLinesFrom(mappings, params.amount)
+  });
+}
+
+/**
+ * A Toko restock (StockMovement `IN`): the shelf gains goods worth product cost x quantity and
+ * the koperasi pays for them — Dr Persediaan / Cr Kas through the tenant's SYSTEM/STOCK_PURCHASE
+ * mapping (an admin can point the credit side at Utang Usaha instead). Without this Persediaan
+ * was only ever credited (by HPP) and went negative in Neraca.
+ *
+ * Nothing is posted for a zero amount: a zero-cost item has nothing to book, and an entry for it
+ * would be a placeholder no mapping could ever clear. Valued at the product's current cost —
+ * Product.cost has no edit path today, so it is what the goods were bought at; if editing is ever
+ * added the movement should store its own cost.
+ *
+ * `ADJUSTMENT` movements are deliberately not journaled: they *set* the count and the previous
+ * quantity isn't stored, so the delta (and its value) can't be recovered.
+ */
+export async function postStockPurchase(
+  tx: TxClient,
+  params: {
+    tenantId: string;
+    /** The StockMovement's unitId (the Toko that was restocked). */
+    unitId: string | null;
+    movementId: string;
+    amount: number | Prisma.Decimal;
+    entryDate: Date;
+    description: string;
+  }
+): Promise<void> {
+  if (new Prisma.Decimal(params.amount).lte(0)) return;
+
+  const mappings = await loadSystemMappings(tx, params.tenantId);
+  await createJournalEntry(tx, {
+    tenantId: params.tenantId,
+    unitId: params.unitId,
+    entryDate: params.entryDate,
+    sourceType: "STOCK_MOVEMENT",
+    sourceId: params.movementId,
+    description: params.description,
+    lines: stockPurchaseLinesFrom(mappings, params.amount)
   });
 }
 
@@ -343,11 +421,16 @@ export async function postMemberCreditRepayment(
 
 /**
  * Source types repostUnpostedEntries() can rebuild, each from its own source
- * row plus the tenant's current SYSTEM mappings. Savings/loan entries are not
+ * row plus the tenant's current SYSTEM mappings (POS sales, member-credit
+ * repayments, restocks). Savings/loan entries are not
  * here yet (their split/config-scoped mappings need their own rebuild logic);
  * the registry shape is what lets them be added without touching the driver.
  */
-const REPOSTABLE_SOURCE_TYPES = ["POS_SALE", "MEMBER_CREDIT_REPAYMENT"] as const satisfies readonly JournalSourceType[];
+const REPOSTABLE_SOURCE_TYPES = [
+  "POS_SALE",
+  "MEMBER_CREDIT_REPAYMENT",
+  "STOCK_MOVEMENT"
+] as const satisfies readonly JournalSourceType[];
 
 export function isRepostableSourceType(sourceType: string): boolean {
   return (REPOSTABLE_SOURCE_TYPES as readonly string[]).includes(sourceType);
@@ -387,7 +470,7 @@ export async function repostUnpostedEntries(tx: TxClient, tenantId: string): Pro
   const idsOf = (sourceType: JournalSourceType) =>
     entries.filter((e) => e.sourceType === sourceType && e.sourceId).map((e) => e.sourceId as string);
 
-  const [mappings, sales, repayments] = await Promise.all([
+  const [mappings, sales, repayments, restocks] = await Promise.all([
     loadSystemMappings(tx, tenantId),
     tx.pOSSale.findMany({
       where: { tenantId, id: { in: idsOf("POS_SALE") } },
@@ -396,10 +479,15 @@ export async function repostUnpostedEntries(tx: TxClient, tenantId: string): Pro
     tx.memberCreditRepayment.findMany({
       where: { tenantId, id: { in: idsOf("MEMBER_CREDIT_REPAYMENT") } },
       select: { id: true, amount: true }
+    }),
+    tx.stockMovement.findMany({
+      where: { tenantId, id: { in: idsOf("STOCK_MOVEMENT") }, type: "IN" },
+      select: { id: true, quantity: true, product: { select: { cost: true } } }
     })
   ]);
   const saleById = new Map(sales.map((s) => [s.id, s]));
   const repaymentById = new Map(repayments.map((r) => [r.id, r]));
+  const restockById = new Map(restocks.map((m) => [m.id, m]));
 
   const postedEntryIds: string[] = [];
   const lineRows: Prisma.JournalLineCreateManyInput[] = [];
@@ -413,6 +501,9 @@ export async function repostUnpostedEntries(tx: TxClient, tenantId: string): Pro
     } else if (entry.sourceType === "MEMBER_CREDIT_REPAYMENT") {
       const repayment = entry.sourceId ? repaymentById.get(entry.sourceId) : undefined;
       if (repayment) lines = memberCreditRepaymentLinesFrom(mappings, repayment.amount);
+    } else if (entry.sourceType === "STOCK_MOVEMENT") {
+      const restock = entry.sourceId ? restockById.get(entry.sourceId) : undefined;
+      if (restock) lines = stockPurchaseLinesFrom(mappings, restock.product.cost.mul(restock.quantity));
     }
 
     if (lines.length === 0) {

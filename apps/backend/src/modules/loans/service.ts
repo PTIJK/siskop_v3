@@ -206,6 +206,7 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
 
     await postLoanDisbursement(tx, {
       tenantId,
+      unitId: loan.unitId,
       loanId: loan.id,
       loanConfigId: data.loanConfigId,
       amount: data.principalAmount,
@@ -255,6 +256,7 @@ export async function recordLoanPayment(
 
     await postLoanPayment(tx, {
       tenantId,
+      unitId: loan.unitId,
       loanPaymentId: payment.id,
       loanConfigId: loan.loanConfigId,
       principalAmount: principal,

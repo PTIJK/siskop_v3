@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileText } from "lucide-react";
+import { ALL_UNITS, unitQueryParam } from "./unit";
+import { UnitFilter } from "./UnitFilter";
 
 function SectionTable({ title, section }: { title: string; section: NeracaSection }) {
   return (
@@ -56,13 +58,14 @@ function SectionTable({ title, section }: { title: string; section: NeracaSectio
 export function NeracaTab() {
   const { toast } = useToast();
   const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [unitId, setUnitId] = useState(ALL_UNITS);
   const [data, setData] = useState<Neraca | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchReport = async () => {
     setIsLoading(true);
     try {
-      const result = await apiFetch<Neraca>(`/reports/regulatory/neraca?asOfDate=${asOfDate}`);
+      const result = await apiFetch<Neraca>(`/reports/regulatory/neraca?asOfDate=${asOfDate}${unitQueryParam(unitId)}`);
       setData(result);
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
@@ -84,6 +87,7 @@ export function NeracaTab() {
             <Label className="text-xs">Per Tanggal</Label>
             <Input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="w-40" />
           </div>
+          <UnitFilter value={unitId} onChange={setUnitId} />
           <Button onClick={fetchReport} disabled={isLoading}>
             <FileText className="mr-2 h-4 w-4" />
             {isLoading ? "Memuat..." : "Tampilkan"}

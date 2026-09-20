@@ -95,7 +95,9 @@ export const upsertAccountMappingSchema = z.object({
     // SALE_REVENUE's debit side (Piutang instead of Kas) for a MEMBER_CREDIT
     // sale; MEMBER_CREDIT_REPAYMENT reverses it as the member pays down.
     "SALE_RECEIVABLE",
-    "MEMBER_CREDIT_REPAYMENT"
+    "MEMBER_CREDIT_REPAYMENT",
+    // A Toko restock — Dr Persediaan / Cr Kas (or Utang Usaha) via lib/journal.ts#postStockPurchase.
+    "STOCK_PURCHASE"
   ]),
   debitAccountId: z.string().cuid("Akun debit tidak valid"),
   creditAccountId: z.string().cuid("Akun kredit tidak valid")

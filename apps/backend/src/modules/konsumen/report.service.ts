@@ -3,8 +3,7 @@ import { Prisma } from "@prisma/client";
 import type { TokoSalesReport } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { resolvePeriod } from "../../lib/period.js";
-import { resolveUnitId } from "../../lib/units.js";
-import { assertUnitAccess, getEffectiveUnitIds } from "../../lib/unit-access.js";
+import { getReadableUnitIds, resolveReadableUnitId } from "../../lib/unit-access.js";
 import { assertValidPeriod } from "../reports/regulatory-service.js";
 import { listOutstandingMemberCredit } from "./credit.service.js";
 import type { SalesReportQueryInput } from "./report.schema.js";
@@ -46,16 +45,17 @@ export async function getSalesReport(
   const { start, end } = resolvePeriod(query.from, query.to);
   assertValidPeriod(start, end);
 
+  // Reading, not acting: a closed (inactive) Toko's sales are still real and the ledger-derived
+  // Laba Rugi still counts them, so this report must too — hence the read-access helpers, which
+  // (unlike resolveUnitId/getEffectiveUnitIds) don't drop inactive units. 404 for another
+  // tenant's unit, 403 for one outside the caller's assignment.
   let unitIds: string[];
   let reportedUnitId: string | null = null;
   if (query.unitId) {
-    // resolveUnitId 404s another tenant's (or an inactive) unit before
-    // assertUnitAccess distinguishes "yours but not assigned to you" (403).
-    reportedUnitId = await resolveUnitId(tenantId, query.unitId);
-    await assertUnitAccess(userId, tenantId, reportedUnitId);
+    reportedUnitId = await resolveReadableUnitId(tenantId, userId, query.unitId);
     unitIds = [reportedUnitId];
   } else {
-    unitIds = await getEffectiveUnitIds(userId, tenantId);
+    unitIds = await getReadableUnitIds(userId, tenantId);
   }
 
   const saleWhere = { tenantId, unitId: { in: unitIds }, soldAt: { gte: start, lte: end } };
