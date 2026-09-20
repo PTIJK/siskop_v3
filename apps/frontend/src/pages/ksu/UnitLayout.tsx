@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { CooperativeType, type CooperativeUnit } from "@siskop/types";
-import { apiFetch } from "@/api/client";
+import { CooperativeType, type PermissionAction, type PermissionModule } from "@siskop/types";
+import { useAccessibleUnits } from "@/hooks/useAccessibleUnits";
+import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { Badge } from "@/components/ui/badge";
@@ -9,12 +9,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { UNIT_TYPE_ICON, UNIT_TYPE_LABEL } from "@/lib/unitTypeMeta";
 import { cn } from "@/lib/utils";
 
+interface UnitTab {
+  path: string;
+  label: string;
+  /** Hide the tab from callers without this permission (the API enforces it regardless). */
+  requires?: [PermissionModule, PermissionAction];
+}
+
 /** Tabs shown only for a KONSUMEN-type unit — extend this array to add another, the isKonsumen gate below wraps all of them alike. */
-const KONSUMEN_TABS = [
+const KONSUMEN_TABS: UnitTab[] = [
   { path: "products", label: "Produk" },
   { path: "stock", label: "Stok" },
   { path: "pos", label: "POS" },
-  { path: "ppob", label: "PPOB" }
+  { path: "ppob", label: "PPOB" },
+  // Carries HPP and margin, so it follows the same reports.read gate as every
+  // other report — a Kasir (Toko-only, no reports access) never sees this tab.
+  { path: "report", label: "Laporan", requires: ["reports", "read"] }
 ];
 
 /**
@@ -34,16 +44,10 @@ const KONSUMEN_TABS = [
  */
 export function UnitLayout() {
   const { unitId } = useParams<{ unitId: string }>();
+  const { can } = usePermissions();
 
-  const {
-    data: unit,
-    isPending,
-    isError
-  } = useQuery({
-    queryKey: ["config", "units"],
-    queryFn: () => apiFetch<CooperativeUnit[]>("/config/units"),
-    select: (units) => units.find((u) => u.id === unitId)
-  });
+  const { data: units, isPending, isError } = useAccessibleUnits();
+  const unit = units?.find((u) => u.id === unitId);
 
   if (isPending) return <PageLoading />;
 
@@ -78,7 +82,7 @@ export function UnitLayout() {
       {isKonsumen ? (
         <>
           <nav className="inline-flex h-10 items-center justify-center gap-1 rounded-md bg-muted p-1 text-muted-foreground">
-            {KONSUMEN_TABS.map((tab) => (
+            {KONSUMEN_TABS.filter((tab) => !tab.requires || can(...tab.requires)).map((tab) => (
               <NavLink
                 key={tab.path}
                 to={`${basePath}/${tab.path}`}

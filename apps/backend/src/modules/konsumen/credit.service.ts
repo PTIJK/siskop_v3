@@ -215,6 +215,7 @@ export async function recordCreditRepayment(tenantId: string, data: RecordCredit
 
     await postMemberCreditRepayment(tx, {
       tenantId,
+      unitId: null, // tenant-wide by design — see MemberCreditRepayment in schema.prisma
       repaymentId: repayment.id,
       amount: amount.toNumber(),
       entryDate: repayment.createdAt,

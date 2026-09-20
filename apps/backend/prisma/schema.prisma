@@ -106,6 +106,9 @@ enum MappingTransactionKind {
   // Daily interest credited to a DAILY-period SavingConfig by the scheduler —
   // a per-SavingConfig mapping like DEPOSIT/WITHDRAWAL, not a SYSTEM one.
   SAVING_INTEREST
+  // A Toko restock (StockMovement IN): Dr Persediaan / Cr Kas by default (an admin can
+  // remap the credit to Utang Usaha). Tenant-wide SYSTEM mapping like the SALE_* kinds.
+  STOCK_PURCHASE
 }
 
 enum JournalSourceType {
@@ -115,6 +118,9 @@ enum JournalSourceType {
   POS_SALE
   MEMBER_CREDIT_REPAYMENT
   MANUAL
+  // A restock (StockMovement IN). ADJUSTMENT movements are not journaled: they *set* the
+  // count and the previous quantity isn't stored, so the delta can't be recovered.
+  STOCK_MOVEMENT
 }
 
 enum JournalEntryStatus {
@@ -310,6 +316,7 @@ model CooperativeUnit {
   stockMovements   StockMovement[]
   ppobTransactions PPOBTransaction[]
   userAssignments  UserUnit[]
+  journalEntries   JournalEntry[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
@@ -990,10 +997,19 @@ model AccountMapping {
 
 // ── JOURNAL / POSTING ENGINE ───────────────────────────────────────────────────
 
+// unitId is the unit the source transaction belongs to (Saving/Loan/POSSale.unitId),
+// stamped by lib/journal.ts when the entry is posted — it is what lets Neraca /
+// Arus Kas / Laba Rugi be cut per unit and reconcile with the consolidated view.
+// NULL is deliberate, not a gap: an entry that belongs to no single unit (a MANUAL
+// entry, a member-credit repayment) is the tenant-level "unallocated" bucket.
+// SetNull rather than Restrict: a tenant delete cascades JournalEntry and
+// CooperativeUnit independently (same reasoning as the Product note below).
 model JournalEntry {
   id          String             @id @default(cuid())
   tenantId    String
   tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId      String?
+  unit        CooperativeUnit?   @relation(fields: [unitId], references: [id], onDelete: SetNull)
   entryDate   DateTime
   sourceType  JournalSourceType
   sourceId    String?
@@ -1004,6 +1020,7 @@ model JournalEntry {
   lines JournalLine[]
 
   @@index([tenantId])
+  @@index([tenantId, unitId])
   @@index([entryDate])
   @@index([sourceType, sourceId])
 }

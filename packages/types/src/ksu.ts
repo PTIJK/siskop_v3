@@ -10,10 +10,18 @@ export interface ConsolidatedUnitAsset {
   unitId: string;
   unitName: string;
   assets: number;
+  /** false for a closed unit that still carries assets — its history stays in the report. */
+  isActive: boolean;
 }
 
 export interface ConsolidatedReport {
+  /** Tenant-wide ASET total — ties to the Neraca's total Aset. */
   totalAssets: number;
+  /**
+   * Part of `totalAssets` on entries that belong to no single unit (a manual journal entry, a
+   * member-credit repayment). `byUnit` + `unallocated` always adds back up to `totalAssets`.
+   */
+  unallocated: number;
   byUnit: ConsolidatedUnitAsset[];
 }
 

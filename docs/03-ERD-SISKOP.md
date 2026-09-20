@@ -284,6 +284,7 @@ erDiagram
 | Account → AccountMapping | 1 → 0..N (as debit or credit target) | FK, two separate relations |
 | Tenant → AccountMapping | 1 → 0..N | `@@unique([tenantId, sourceType, sourceId, transactionKind])` — one mapping per key |
 | JournalEntry → JournalLine | 1 → 0..N | FK, `onDelete: Cascade` |
+| CooperativeUnit → JournalEntry | 1 → 0..N | Optional FK `unitId`, `onDelete: SetNull` — NULL = an entry that belongs to no single unit (the tenant-level "unallocated" bucket) |
 | Account → JournalLine | 1 → 0..N | FK |
 | Tenant → WhitelabelConfig | 1 → 0..1 | `@@unique(tenantId)` |
 | Tenant → ShuDistributionConfig | 1 → 0..1 | `@@unique(tenantId)` |

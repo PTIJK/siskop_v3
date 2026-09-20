@@ -458,6 +458,7 @@ async function main() {
           });
           await postLoanDisbursement(tx, {
             tenantId,
+            unitId,
             loanId: loan.id,
             loanConfigId: loanConfig.id,
             amount: principalAmount,

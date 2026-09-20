@@ -100,6 +100,9 @@ const POSPage = lazy(() =>
 const PPOBPage = lazy(() =>
   import("@/pages/konsumen/PPOBPage").then((module) => ({ default: module.PPOBPage }))
 );
+const SalesReportPage = lazy(() =>
+  import("@/pages/konsumen/SalesReportPage").then((module) => ({ default: module.SalesReportPage }))
+);
 
 export default function App() {
   return (
@@ -202,6 +205,7 @@ export default function App() {
                 <Route path='stock' element={<StockPage />} />
                 <Route path='pos' element={<POSPage />} />
                 <Route path='ppob' element={<PPOBPage />} />
+                <Route path='report' element={<SalesReportPage />} />
               </Route>
 
               <Route path='/platform/tenants' element={<PlatformTenantsPage />} />

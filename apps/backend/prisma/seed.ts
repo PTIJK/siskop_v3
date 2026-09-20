@@ -32,6 +32,9 @@ async function seedAccounting(
 ) {
   const accountIdByKey = new Map<string, string>();
   for (const acc of COA_TEMPLATE) {
+    // Unit-specific (Toko) accounts only belong to tenants with such a unit;
+    // every tenant seeded here is KSP-only.
+    if (acc.unitType) continue;
     const id = `${tenantId}_acc_${acc.key}`;
     accountIdByKey.set(acc.key, id);
     const parentId = acc.parentKey ? accountIdByKey.get(acc.parentKey) : undefined;

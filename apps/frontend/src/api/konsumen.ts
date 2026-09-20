@@ -13,7 +13,8 @@ import type {
   RecordCreditRepaymentRequest,
   RecordCreditRepaymentResponse,
   RecordStockMovementRequest,
-  StockMovement
+  StockMovement,
+  TokoSalesReport
 } from "@siskop/types";
 import { apiFetch, apiFetchPage, apiPost } from "./client";
 
@@ -97,4 +98,19 @@ export function listOutstandingCredit(params: { page: number; limit: number; sea
   const query = new URLSearchParams({ page: String(params.page), limit: String(params.limit) });
   if (params.search) query.set("search", params.search);
   return apiFetchPage<MemberCreditSummary[]>(`/konsumen/pos/credit?${query.toString()}`);
+}
+
+/**
+ * Laporan Toko (report.routes.ts, `GET /konsumen/reports/sales`). Gated on
+ * `reports:read`, not konsumen:* — it carries HPP and margin. Omit `unitId` for
+ * every unit the caller may access, combined; omit `from`/`to` for the current
+ * month.
+ */
+export function getTokoSalesReport(params: { unitId?: string; from?: string; to?: string }) {
+  const query = new URLSearchParams();
+  if (params.unitId) query.set("unitId", params.unitId);
+  if (params.from) query.set("from", params.from);
+  if (params.to) query.set("to", params.to);
+  const qs = query.toString();
+  return apiFetch<TokoSalesReport>(`/konsumen/reports/sales${qs ? `?${qs}` : ""}`);
 }

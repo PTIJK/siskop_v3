@@ -25,6 +25,7 @@
 // tenant will fail with a CONFLICT error rather than silently duplicating
 // data. That's intentional: this script creates exactly one new tenant.
 import { db } from "../src/lib/db.js";
+import { COA_TEMPLATE } from "../src/lib/coaTemplate.js";
 import { registerTenant } from "../src/modules/auth/service.js";
 import { createUnit, createAccount, upsertAccountMapping, listUnits } from "../src/modules/config/service.js";
 import { createMember } from "../src/modules/members/service.js";
@@ -296,42 +297,32 @@ async function main() {
   //       are new. SALE_REVENUE and SALE_COGS are tenant-wide (sourceType:
   //       "SYSTEM", no sourceId), mirroring lib/journal.ts#postPosSale and
   //       tests/konsumen-sale.test.ts#setupSaleMappings exactly.
-  const penjualan = await createAccount(tenantId, {
-    code: "4-2000",
-    name: "Penjualan Toko",
-    category: "PENDAPATAN",
-    normalBalance: "KREDIT",
-    isHeader: false,
-    isCashEquivalent: false
-  });
-  const hpp = await createAccount(tenantId, {
-    code: "5-1000",
-    name: "Harga Pokok Penjualan",
-    category: "BEBAN",
-    normalBalance: "DEBIT",
-    isHeader: false,
-    isCashEquivalent: false
-  });
-  const persediaan = await createAccount(tenantId, {
-    code: "1-1300",
-    name: "Persediaan Barang Dagang",
-    category: "ASET",
-    normalBalance: "DEBIT",
-    isHeader: false,
-    isCashEquivalent: false
-  });
+  //
+  //       The Toko accounts' codes/names come from the shared COA template
+  //       (lib/coaTemplate.ts) — the same ones the in-app "Buat COA Standar"
+  //       button creates — so this demo can't drift from what a real tenant
+  //       gets. (It used 4-2000/5-1000 for Penjualan/HPP before, which the
+  //       template uses for other accounts.)
+  const tokoAccount = (key: string) => {
+    const acc = COA_TEMPLATE.find((t) => t.key === key);
+    if (!acc) throw new Error(`COA template has no account "${key}"`);
+    return {
+      code: acc.code,
+      name: acc.name,
+      category: acc.category,
+      normalBalance: acc.normalBalance,
+      isHeader: false,
+      isCashEquivalent: false
+    };
+  };
+  const penjualan = await createAccount(tenantId, tokoAccount("penjualan_toko"));
+  const hpp = await createAccount(tenantId, tokoAccount("hpp"));
+  const persediaan = await createAccount(tenantId, tokoAccount("persediaan"));
   // Piutang Anggota (Toko) — the receivable a MEMBER_CREDIT sale debits
   // instead of Kas (see lib/journal.ts#postPosSale's SALE_RECEIVABLE branch),
   // reversed by a repayment's MEMBER_CREDIT_REPAYMENT posting. Distinct from
   // step 4's "Piutang Pinjaman Anggota" (loan receivable) — a different debt.
-  const piutangToko = await createAccount(tenantId, {
-    code: "1-1150",
-    name: "Piutang Anggota (Toko)",
-    category: "ASET",
-    normalBalance: "DEBIT",
-    isHeader: false,
-    isCashEquivalent: false
-  });
+  const piutangToko = await createAccount(tenantId, tokoAccount("piutang_anggota_toko"));
   await upsertAccountMapping(tenantId, {
     sourceType: "SYSTEM",
     transactionKind: "SALE_REVENUE",
@@ -356,7 +347,15 @@ async function main() {
     debitAccountId: kas.id,
     creditAccountId: piutangToko.id
   });
-  console.log("Toko chart of accounts + SYSTEM/SALE_REVENUE + SYSTEM/SALE_COGS + SYSTEM/SALE_RECEIVABLE + SYSTEM/MEMBER_CREDIT_REPAYMENT mappings created");
+  // A restock: Dr Persediaan / Cr Kas. Must exist before step 13's opening-stock movements,
+  // otherwise those post as UNPOSTED_MISSING_MAPPING and Persediaan starts the demo empty.
+  await upsertAccountMapping(tenantId, {
+    sourceType: "SYSTEM",
+    transactionKind: "STOCK_PURCHASE",
+    debitAccountId: persediaan.id,
+    creditAccountId: kas.id
+  });
+  console.log("Toko chart of accounts + SYSTEM/SALE_REVENUE + SALE_COGS + SALE_RECEIVABLE + MEMBER_CREDIT_REPAYMENT + STOCK_PURCHASE mappings created");
 
   // ── 13. Five sembako products with realistic Rupiah prices + opening stock ─
   const SEMBAKO_PRODUCTS = [

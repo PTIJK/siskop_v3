@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import type { CooperativeUnit } from "@siskop/types";
-import { apiFetch, ApiRequestError } from "@/api/client";
+import { ApiRequestError } from "@/api/client";
+import { useAccessibleUnits } from "@/hooks/useAccessibleUnits";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
@@ -22,10 +21,7 @@ export function TokoPage() {
   const { can } = usePermissions();
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const { data, isPending, isError, error } = useQuery({
-    queryKey: ["config", "units"],
-    queryFn: () => apiFetch<CooperativeUnit[]>("/config/units")
-  });
+  const { data, isPending, isError, error } = useAccessibleUnits();
 
   const tokoUnits = data?.filter((unit) => unit.type === "KONSUMEN") ?? [];
 

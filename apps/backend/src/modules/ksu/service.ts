@@ -1,4 +1,5 @@
 import { endOfMonth, startOfMonth } from "date-fns";
+import { Prisma } from "@prisma/client";
 import { db } from "../../lib/db.js";
 import { notFound } from "../../lib/errors.js";
 import {
@@ -11,10 +12,19 @@ export interface UnitAssetTotal {
   unitId: string;
   unitName: string;
   assets: number;
+  /** false for a closed unit that still carries assets — its history stays in the report. */
+  isActive: boolean;
 }
 
 export interface ConsolidatedAssets {
+  /** Tenant-wide ASET total over every journal line — ties to the Neraca's total Aset. */
   totalAssets: number;
+  /**
+   * The part of `totalAssets` on entries that belong to no single unit (a manual
+   * entry, a member-credit repayment). Always `totalAssets` minus every unit's
+   * share, so `byUnit` + `unallocated` adds back up to `totalAssets`.
+   */
+  unallocated: number;
   byUnit: UnitAssetTotal[];
 }
 
@@ -23,78 +33,71 @@ function round2(n: number): number {
 }
 
 /**
- * Sums ASET-category JournalLines whose parent JournalEntry.sourceId is one
- * of `sourceIds`, honoring each account's normalBalance the same way
- * modules/reports/regulatory-service.ts#getNeraca does (DEBIT-normal:
- * debit-credit; KREDIT-normal: credit-debit) — ASET accounts are normally
- * DEBIT, but this stays correct even for an unusual COA setup.
+ * ASET-category total over the journal, honoring each account's normalBalance
+ * the same way modules/reports/regulatory-service.ts#getNeraca does (DEBIT-
+ * normal: debit-credit; KREDIT-normal: credit-debit). `unitId` restricts it to
+ * one unit's entries; omitted = every entry of the tenant, unit-less included.
+ * One groupBy per account rather than loading lines, so it stays cheap on a long
+ * ledger.
  */
-async function sumAssetLinesForSourceIds(tenantId: string, sourceIds: string[]): Promise<number> {
-  if (sourceIds.length === 0) return 0;
+async function sumAssetLines(tenantId: string, unitId?: string): Promise<Prisma.Decimal> {
+  const [accounts, sums] = await Promise.all([
+    db.account.findMany({ where: { tenantId, category: "ASET" }, select: { id: true, normalBalance: true } }),
+    db.journalLine.groupBy({
+      by: ["accountId"],
+      where: { tenantId, account: { category: "ASET" }, ...(unitId ? { journalEntry: { unitId } } : {}) },
+      _sum: { debit: true, credit: true }
+    })
+  ]);
+  const normalBalanceById = new Map(accounts.map((a) => [a.id, a.normalBalance]));
 
-  const lines = await db.journalLine.findMany({
-    where: {
-      tenantId,
-      account: { category: "ASET" },
-      journalEntry: { tenantId, sourceId: { in: sourceIds } }
-    },
-    select: { debit: true, credit: true, account: { select: { normalBalance: true } } }
-  });
-
-  return round2(
-    lines.reduce((sum, line) => {
-      const debit = Number(line.debit);
-      const credit = Number(line.credit);
-      const net = line.account.normalBalance === "DEBIT" ? debit - credit : credit - debit;
-      return sum + net;
-    }, 0)
-  );
+  return sums.reduce((total, s) => {
+    const debit = s._sum.debit ?? new Prisma.Decimal(0);
+    const credit = s._sum.credit ?? new Prisma.Decimal(0);
+    return total.plus(normalBalanceById.get(s.accountId) === "DEBIT" ? debit.minus(credit) : credit.minus(debit));
+  }, new Prisma.Decimal(0));
 }
 
 /**
- * Read-only KSU consolidation: total ASET-category balance per active
- * CooperativeUnit, plus a tenant-wide sum, derived entirely from existing
- * JournalEntry/JournalLine rows — nothing is written here (see lib/journal.ts
- * for the only posting path, which this module never calls).
+ * Read-only KSU consolidation: the tenant-wide ASET total, each unit's share of
+ * it, and the remainder that belongs to no unit (`unallocated`), derived from
+ * JournalEntry/JournalLine — nothing is written here (see lib/journal.ts for
+ * the only posting path, which this module never calls).
  *
- * JournalEntry carries no unitId column of its own, so a line is attributed
- * to a unit by tracing its parent entry's `sourceId` back to the row that
- * triggered it. That tracing is exact for a LOAN_DISBURSEMENT entry, whose
- * `sourceId` is the Loan's own id (lib/journal.ts#postLoanDisbursement) — so
- * a unit's Loan ids match directly. It is a deliberate no-op for Saving ids:
- * a SAVING_TRANSACTION entry's `sourceId` is the *SavingTransaction* id, and
- * a LOAN_PAYMENT entry's `sourceId` is the *LoanPayment* id — both child rows,
- * never the Saving/Loan id itself — so neither ever matches a Saving/Loan id
- * and this MVP does not attribute savings deposits/withdrawals or loan
- * repayments to a unit. Extending that (resolving each unit's child
- * transaction ids too) is future work, not this spike's scope.
+ * Attribution is by the entry's own `unitId`, stamped at posting time from the
+ * source row (Saving/Loan/POSSale.unitId) — so savings deposits and loan
+ * repayments are attributed like everything else. (This used to trace
+ * `sourceId` back to a unit's Loan/Saving/POSSale ids, which silently missed
+ * every child-row entry and made the total understate assets.) Only entries
+ * that genuinely belong to no unit — a manual entry, a member-credit
+ * repayment — are `unallocated`.
  *
- * `POSSale` IS included, for symmetry with Loan: a POS_SALE entry's
- * `sourceId` is the POSSale's own id (lib/journal.ts#postPosSale), same
- * direct-attribution pattern as LOAN_DISBURSEMENT — no child-row indirection
- * like Saving/LoanPayment above, so no analogous gap to call out here.
+ * A closed (inactive) unit is listed only while it still carries assets, so its
+ * history isn't dropped from the report and isn't mislabelled "unallocated".
  */
 export async function getConsolidatedAssets(tenantId: string): Promise<ConsolidatedAssets> {
-  const units = await db.cooperativeUnit.findMany({
-    where: { tenantId, isActive: true },
-    orderBy: { createdAt: "asc" }
-  });
+  const units = await db.cooperativeUnit.findMany({ where: { tenantId }, orderBy: { createdAt: "asc" } });
 
-  const byUnit = await Promise.all(
-    units.map(async (unit) => {
-      const [loans, savings, sales] = await Promise.all([
-        db.loan.findMany({ where: { tenantId, unitId: unit.id }, select: { id: true } }),
-        db.saving.findMany({ where: { tenantId, unitId: unit.id }, select: { id: true } }),
-        db.pOSSale.findMany({ where: { tenantId, unitId: unit.id }, select: { id: true } })
-      ]);
-      const sourceIds = [...loans.map((l) => l.id), ...savings.map((s) => s.id), ...sales.map((s) => s.id)];
-      const assets = await sumAssetLinesForSourceIds(tenantId, sourceIds);
-      return { unitId: unit.id, unitName: unit.name, assets };
-    })
-  );
+  const [total, perUnit] = await Promise.all([
+    sumAssetLines(tenantId),
+    Promise.all(units.map(async (unit) => ({ unit, assets: await sumAssetLines(tenantId, unit.id) })))
+  ]);
 
-  const totalAssets = round2(byUnit.reduce((sum, u) => sum + u.assets, 0));
-  return { totalAssets, byUnit };
+  const attributed = perUnit.reduce((sum, u) => sum.plus(u.assets), new Prisma.Decimal(0));
+  const byUnit = perUnit
+    .filter(({ unit, assets }) => unit.isActive || !assets.isZero())
+    .map(({ unit, assets }) => ({
+      unitId: unit.id,
+      unitName: unit.name,
+      assets: round2(assets.toNumber()),
+      isActive: unit.isActive
+    }));
+
+  return {
+    totalAssets: round2(total.toNumber()),
+    unallocated: round2(total.minus(attributed).toNumber()),
+    byUnit
+  };
 }
 
 // ── Day 4: per-member per-unit SHU statement ─────────────────────────────────

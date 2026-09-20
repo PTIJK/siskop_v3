@@ -381,19 +381,26 @@ edit-in-place, not a duplicate to reject.
 
 ### 3.13 `JournalEntry` / `JournalLine` — posting engine
 
-Every Savings/Loans transaction attempts to post here automatically
+Every Savings/Loans/Toko transaction attempts to post here automatically
 (`lib/journal.ts`); a transaction still succeeds (200) even with no mapping — it just posts as
-`UNPOSTED_MISSING_MAPPING` and can be fixed retroactively once a mapping is added (verified by
-`config.test.ts`'s "flips a deposit's journal entry from `UNPOSTED_MISSING_MAPPING` to `POSTED`"
-test).
+`UNPOSTED_MISSING_MAPPING` (an entry with no lines, invisible to Neraca/Laba Rugi).
+
+Adding the mapping later only affects **new** transactions (`config.test.ts`'s "flips a deposit's
+journal entry from `UNPOSTED_MISSING_MAPPING` to `POSTED`" makes a *second* deposit after the mapping
+exists). Entries that were already unposted are rebuilt only by `repostUnpostedEntries()`
+(`POST /api/config/journal/repost`, explicit and confirmed in the UI because it changes past periods'
+reports), which today covers `POS_SALE` and `MEMBER_CREDIT_REPAYMENT` — not yet savings/loan entries.
+A POS sale is posted all-or-nothing: if either its revenue-side or COGS-side `SYSTEM` mapping is
+missing, nothing is posted and the entry stays unposted (`tests/toko-accounting.test.ts`).
 
 | `JournalEntry` column | Type | Notes |
 |---|---|---|
 | `id` | String PK | |
 | `tenantId` | FK → `Tenant.id`, `onDelete: Cascade` | |
+| `unitId` | FK → `CooperativeUnit.id`?, `onDelete: SetNull` | The unit the source transaction belongs to (`Saving`/`Loan`/`POSSale.unitId`), stamped by `lib/journal.ts` at posting time. **Nullable on purpose:** an entry that belongs to no single unit (`MANUAL`, `MEMBER_CREDIT_REPAYMENT`) is the tenant-level "unallocated" bucket. Indexed `(tenantId, unitId)`. Existing rows were backfilled by migration `20260920100000_journal_entry_unit`. |
 | `entryDate` | DateTime | |
-| `sourceType` | `JournalSourceType` | `SAVING_TRANSACTION` \| `LOAN_PAYMENT` \| `LOAN_DISBURSEMENT` \| `MANUAL` |
-| `sourceId` | String? | The `SavingTransaction`/`LoanPayment`/`Loan` id, null for `MANUAL` |
+| `sourceType` | `JournalSourceType` | `SAVING_TRANSACTION` \| `LOAN_PAYMENT` \| `LOAN_DISBURSEMENT` \| `POS_SALE` \| `MEMBER_CREDIT_REPAYMENT` \| `MANUAL` |
+| `sourceId` | String? | The `SavingTransaction`/`LoanPayment`/`Loan`/`POSSale`/`MemberCreditRepayment` id, null for `MANUAL` |
 | `description` | String | |
 | `status` | `JournalEntryStatus` | `POSTED` \| `UNPOSTED_MISSING_MAPPING` |
 | `createdAt` | DateTime | |

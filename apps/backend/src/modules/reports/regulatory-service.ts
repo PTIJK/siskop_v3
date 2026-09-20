@@ -14,13 +14,17 @@ interface AccountSums {
   credit: number;
 }
 
-async function getAccountSumsAsOf(tenantId: string, accountIds: string[] | undefined, cutoff: Date) {
+/**
+ * `unitId` narrows the ledger to one unit's entries; omitted = every entry of the
+ * tenant, unit-less ones included (CLAUDE.md rule 2b: consolidated = no filter).
+ */
+async function getAccountSumsAsOf(tenantId: string, accountIds: string[] | undefined, cutoff: Date, unitId?: string) {
   const sums = await db.journalLine.groupBy({
     by: ["accountId"],
     where: {
       tenantId,
       ...(accountIds ? { accountId: { in: accountIds } } : {}),
-      journalEntry: { entryDate: { lte: cutoff } }
+      journalEntry: { entryDate: { lte: cutoff }, ...(unitId ? { unitId } : {}) }
     },
     _sum: { debit: true, credit: true }
   });
@@ -29,10 +33,14 @@ async function getAccountSumsAsOf(tenantId: string, accountIds: string[] | undef
   );
 }
 
-async function getAccountSumsInPeriod(tenantId: string, accountIds: string[], from: Date, to: Date) {
+async function getAccountSumsInPeriod(tenantId: string, accountIds: string[], from: Date, to: Date, unitId?: string) {
   const sums = await db.journalLine.groupBy({
     by: ["accountId"],
-    where: { tenantId, accountId: { in: accountIds }, journalEntry: { entryDate: { gte: from, lte: to } } },
+    where: {
+      tenantId,
+      accountId: { in: accountIds },
+      journalEntry: { entryDate: { gte: from, lte: to }, ...(unitId ? { unitId } : {}) }
+    },
     _sum: { debit: true, credit: true }
   });
   return new Map<string, AccountSums>(
@@ -151,10 +159,10 @@ export async function getMemberInterestPaidInPeriod(
  * ASET = KEWAJIBAN + EKUITAS hold as an arithmetic property of a balanced trial
  * balance.
  */
-export async function getNeraca(tenantId: string, asOfDate: Date) {
+export async function getNeraca(tenantId: string, asOfDate: Date, unitId?: string) {
   const [accounts, sumsByAccount] = await Promise.all([
     db.account.findMany({ where: { tenantId, isHeader: false }, orderBy: { code: "asc" } }),
-    getAccountSumsAsOf(tenantId, undefined, asOfDate)
+    getAccountSumsAsOf(tenantId, undefined, asOfDate, unitId)
   ]);
 
   const balanceFor = (account: (typeof accounts)[number]): number => {
@@ -205,12 +213,13 @@ export async function getNeraca(tenantId: string, asOfDate: Date) {
  * Laporan Arus Kas (Cash Flow Statement, direct method) — Design Spec §6.3.
  * Groups JournalLines touching accounts marked `isCashEquivalent` into Operasi/
  * Investasi/Pendanaan. SAVING_TRANSACTION/LOAN_PAYMENT/LOAN_DISBURSEMENT are
- * always Operasi (a KSP's lending/savings activity is its core operation).
+ * always Operasi (a KSP's lending/savings activity is its core operation), and
+ * so are POS_SALE/MEMBER_CREDIT_REPAYMENT/STOCK_MOVEMENT (a Toko unit's own trading).
  * MANUAL entries are classified by the category of their non-cash counter-
  * account: ASET counter -> Investasi, EKUITAS counter -> Pendanaan, otherwise
  * Operasi. Documented assumption, not spec-literal.
  */
-export async function getArusKas(tenantId: string, from: Date, to: Date) {
+export async function getArusKas(tenantId: string, from: Date, to: Date, unitId?: string) {
   const cashAccounts = await db.account.findMany({ where: { tenantId, isCashEquivalent: true } });
   const cashAccountIds = cashAccounts.map((a) => a.id);
   const periode = { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] };
@@ -234,12 +243,16 @@ export async function getArusKas(tenantId: string, from: Date, to: Date) {
   const dayBeforeFrom = new Date(from.getTime() - 1);
 
   const [openingSums, periodLines, closingSums] = await Promise.all([
-    getAccountSumsAsOf(tenantId, cashAccountIds, dayBeforeFrom),
+    getAccountSumsAsOf(tenantId, cashAccountIds, dayBeforeFrom, unitId),
     db.journalLine.findMany({
-      where: { tenantId, accountId: { in: cashAccountIds }, journalEntry: { entryDate: { gte: from, lte: to } } },
+      where: {
+        tenantId,
+        accountId: { in: cashAccountIds },
+        journalEntry: { entryDate: { gte: from, lte: to }, ...(unitId ? { unitId } : {}) }
+      },
       include: { journalEntry: { include: { lines: { include: { account: true } } } } }
     }),
-    getAccountSumsAsOf(tenantId, cashAccountIds, to)
+    getAccountSumsAsOf(tenantId, cashAccountIds, to, unitId)
   ]);
 
   const sumBalances = (sums: Map<string, AccountSums>) =>
@@ -262,6 +275,12 @@ export async function getArusKas(tenantId: string, from: Date, to: Date) {
         return "Penerimaan Angsuran Pinjaman";
       case "LOAN_DISBURSEMENT":
         return "Pencairan Pinjaman ke Anggota";
+      case "POS_SALE":
+        return "Penerimaan Penjualan Toko";
+      case "MEMBER_CREDIT_REPAYMENT":
+        return "Pelunasan Kredit Anggota (Toko)";
+      case "STOCK_MOVEMENT":
+        return "Pembelian Persediaan Toko";
       default:
         return "Transaksi Manual Lainnya";
     }
@@ -315,13 +334,13 @@ export async function getArusKas(tenantId: string, from: Date, to: Date) {
  * Berjalan (Belum Ditutup)" line. Member/non-member split is structurally
  * present but "bukan anggota" stays zero — SISKOP's tenant model is closed-loop.
  */
-export async function getLaporanHasilUsaha(tenantId: string, from: Date, to: Date) {
+export async function getLaporanHasilUsaha(tenantId: string, from: Date, to: Date, unitId?: string) {
   const accounts = await db.account.findMany({
     where: { tenantId, isHeader: false, category: { in: ["PENDAPATAN", "BEBAN"] } },
     orderBy: { code: "asc" }
   });
   const accountIds = accounts.map((a) => a.id);
-  const sumsByAccount = await getAccountSumsInPeriod(tenantId, accountIds, from, to);
+  const sumsByAccount = await getAccountSumsInPeriod(tenantId, accountIds, from, to, unitId);
 
   const balanceFor = (account: (typeof accounts)[number]): number => {
     const sums = sumsByAccount.get(account.id) ?? { debit: 0, credit: 0 };

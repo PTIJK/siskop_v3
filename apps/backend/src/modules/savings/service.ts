@@ -140,6 +140,7 @@ export async function createSaving(tenantId: string, data: CreateSavingInput, cr
 
       await postSavingTransaction(tx, {
         tenantId,
+        unitId: saving.unitId,
         savingTransactionId: transaction.id,
         savingConfigId: data.savingConfigId,
         kind: "DEPOSIT",
@@ -195,6 +196,7 @@ export async function depositToSaving(
 
     await postSavingTransaction(tx, {
       tenantId,
+      unitId: saving.unitId,
       savingTransactionId: transaction.id,
       savingConfigId: saving.savingConfigId,
       kind: "DEPOSIT",
@@ -246,6 +248,7 @@ export async function withdrawFromSaving(
 
     await postSavingTransaction(tx, {
       tenantId,
+      unitId: saving.unitId,
       savingTransactionId: transaction.id,
       savingConfigId: saving.savingConfigId,
       kind: "WITHDRAWAL",

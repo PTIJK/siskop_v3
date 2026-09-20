@@ -12,6 +12,7 @@ import { createProduct, listProducts, listStockMovements, recordStockMovement } 
 import { ppobRoutes } from "./ppob.routes.js";
 import { saleRoutes } from "./sale.routes.js";
 import { creditRoutes } from "./credit.routes.js";
+import { reportRoutes } from "./report.routes.js";
 
 /** Forwards rejected promises to the error handler; Express 4 will not. */
 function handle(fn: (req: Request, res: Response) => Promise<void>) {
@@ -81,6 +82,9 @@ export function konsumenRoutes(): Router {
 
   // "Kredit Anggota" (member store credit) — /pos/credit/*, composed the same way.
   router.use(creditRoutes());
+
+  // Laporan Toko — /reports/sales, composed the same way (gated on reports:read).
+  router.use(reportRoutes());
 
   return router;
 }

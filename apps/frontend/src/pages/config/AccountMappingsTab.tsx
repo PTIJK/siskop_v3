@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { Account, AccountMapping, LoanConfig, SavingConfig } from "@siskop/types";
+import { SYSTEM_MAPPING_KINDS, type Account, type AccountMapping, type LoanConfig, type SavingConfig } from "@siskop/types";
 import { apiFetch, apiDelete, apiPost, ApiRequestError } from "@/api/client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
@@ -17,9 +17,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
+import { UnpostedJournalBanner } from "./UnpostedJournalBanner";
 
 const SOURCE_TYPES = ["SAVING_CONFIG", "LOAN_CONFIG", "SYSTEM"] as const;
-const TRANSACTION_KINDS = [
+// Per-config kinds (a mapping belongs to one saving/loan config) vs. the
+// tenant-wide SYSTEM kinds Toko postings resolve through — a SYSTEM/DEPOSIT or
+// config-scoped SALE_REVENUE mapping would never be read, so the dropdown only
+// offers the kinds that make sense for the chosen source.
+const CONFIG_KINDS = [
   "DEPOSIT",
   "WITHDRAWAL",
   "SAVING_INTEREST",
@@ -28,6 +33,22 @@ const TRANSACTION_KINDS = [
   "PAYMENT_INTEREST",
   "PAYMENT_PENALTY"
 ] as const;
+const TRANSACTION_KINDS = [...CONFIG_KINDS, ...SYSTEM_MAPPING_KINDS] as const;
+
+const KIND_LABEL: Record<(typeof TRANSACTION_KINDS)[number], string> = {
+  DEPOSIT: "Setoran simpanan",
+  WITHDRAWAL: "Penarikan simpanan",
+  SAVING_INTEREST: "Bunga simpanan",
+  DISBURSEMENT: "Pencairan pinjaman",
+  PAYMENT_PRINCIPAL: "Angsuran pokok",
+  PAYMENT_INTEREST: "Angsuran bunga",
+  PAYMENT_PENALTY: "Denda keterlambatan",
+  SALE_REVENUE: "Penjualan toko (tunai/transfer)",
+  SALE_COGS: "Harga pokok penjualan toko",
+  SALE_RECEIVABLE: "Penjualan toko (kredit anggota)",
+  MEMBER_CREDIT_REPAYMENT: "Pelunasan kredit anggota",
+  STOCK_PURCHASE: "Pembelian / restok stok toko"
+};
 
 const schema = z.object({
   sourceType: z.enum(SOURCE_TYPES),
@@ -76,6 +97,7 @@ export function AccountMappingsTab() {
   const values = watch();
 
   const sourceOptions = values.sourceType === "SAVING_CONFIG" ? savingConfigs ?? [] : values.sourceType === "LOAN_CONFIG" ? loanConfigs ?? [] : [];
+  const kindOptions: readonly FormValues["transactionKind"][] = values.sourceType === "SYSTEM" ? SYSTEM_MAPPING_KINDS : CONFIG_KINDS;
 
   const openCreate = () => {
     setApiError("");
@@ -134,6 +156,8 @@ export function AccountMappingsTab() {
 
   return (
     <div className="space-y-4">
+      <UnpostedJournalBanner />
+
       <DataTable
         columns={columns}
         data={data ?? []}
@@ -167,6 +191,8 @@ export function AccountMappingsTab() {
                 onValueChange={(v: FormValues["sourceType"]) => {
                   setValue("sourceType", v);
                   setValue("sourceId", "");
+                  // The previous kind may not exist for the new source — start from that source's first one.
+                  setValue("transactionKind", v === "SYSTEM" ? SYSTEM_MAPPING_KINDS[0] : CONFIG_KINDS[0]);
                 }}
               >
                 <SelectTrigger>
@@ -205,9 +231,9 @@ export function AccountMappingsTab() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TRANSACTION_KINDS.map((k) => (
+                  {kindOptions.map((k) => (
                     <SelectItem key={k} value={k}>
-                      {k}
+                      {KIND_LABEL[k]} ({k})
                     </SelectItem>
                   ))}
                 </SelectContent>

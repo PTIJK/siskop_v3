@@ -352,6 +352,28 @@ async function setupReceivableMapping(accessToken: string) {
   return { piutang, penjualan };
 }
 
+/**
+ * SYSTEM/SALE_COGS (HPP/Persediaan). A sale now posts all-or-nothing — a
+ * revenue-side mapping alone leaves the whole entry UNPOSTED_MISSING_MAPPING
+ * (see tests/toko-accounting.test.ts) — so any test that expects a sale's
+ * revenue lines to be POSTED needs the COGS side mapped too.
+ */
+async function setupCogsMapping(accessToken: string) {
+  const hpp = await createAccount(accessToken, { code: "5-1000", name: "HPP", category: "BEBAN", normalBalance: "DEBIT" });
+  const persediaan = await createAccount(accessToken, {
+    code: "1-1300",
+    name: "Persediaan Barang Dagang",
+    category: "ASET",
+    normalBalance: "DEBIT"
+  });
+  await createAccountMapping(accessToken, {
+    sourceType: "SYSTEM",
+    transactionKind: "SALE_COGS",
+    debitAccountId: hpp.id,
+    creditAccountId: persediaan.id
+  });
+}
+
 describe("createSale — MEMBER_CREDIT (Kredit Anggota)", () => {
   it("throws MEMBER_HAS_NO_ACTIVE_SAVING for a member with no active saving", async () => {
     const admin = await setupTenant();
@@ -397,6 +419,7 @@ describe("createSale — MEMBER_CREDIT (Kredit Anggota)", () => {
     const admin = await setupTenant();
     const member = await createMemberWithPokokSaving(admin.accessToken); // limit 250_000
     const { piutang } = await setupReceivableMapping(admin.accessToken);
+    await setupCogsMapping(admin.accessToken);
     const tokoUnit = await createUnit(admin.accessToken, "KONSUMEN", "Toko Koperasi");
     const product = await createProduct(admin.user.tenantId, { unitId: tokoUnit.id, ...SAMPLE_PRODUCT });
     await recordStockMovement(admin.user.tenantId, product.id, { type: "IN", quantity: 10, reason: "Restok" }, admin.user.id);

@@ -8,7 +8,22 @@ export type MappingTransactionKind =
   | "DISBURSEMENT"
   | "PAYMENT_PRINCIPAL"
   | "PAYMENT_INTEREST"
-  | "PAYMENT_PENALTY";
+  | "PAYMENT_PENALTY"
+  // Toko (KONSUMEN unit) — tenant-wide SYSTEM mappings, see lib/journal.ts#postPosSale.
+  | "SALE_REVENUE"
+  | "SALE_COGS"
+  | "SALE_RECEIVABLE"
+  | "MEMBER_CREDIT_REPAYMENT"
+  | "STOCK_PURCHASE";
+
+/** The SYSTEM-scope kinds, i.e. the ones that carry no per-config `sourceId`. */
+export const SYSTEM_MAPPING_KINDS = [
+  "SALE_REVENUE",
+  "SALE_COGS",
+  "SALE_RECEIVABLE",
+  "MEMBER_CREDIT_REPAYMENT",
+  "STOCK_PURCHASE"
+] as const;
 
 export interface Account {
   id: string;
@@ -65,4 +80,27 @@ export interface GenerateStandardCoaResult {
   accountsSkipped: number;
   mappingsCreated: number;
   mappingsSkipped: number;
+}
+
+/**
+ * Journal entries stored as UNPOSTED_MISSING_MAPPING (a transaction that
+ * happened before its account mapping existed), grouped by what produced them.
+ * `repostable` is true only for source types the repost action can rebuild.
+ */
+export interface UnpostedJournalItem {
+  sourceType: string;
+  count: number;
+  repostable: boolean;
+}
+
+export interface UnpostedJournalSummary {
+  items: UnpostedJournalItem[];
+  /** Sum of `count` over the repostable items — what "Posting sekarang" would act on. */
+  repostableCount: number;
+}
+
+export interface RepostUnpostedResult {
+  reposted: number;
+  /** Repostable entries whose required mapping still doesn't exist, left untouched. */
+  stillUnmapped: number;
 }
