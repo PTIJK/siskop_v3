@@ -624,7 +624,7 @@ async function main() {
       {
         type: NotificationType.AUDIT_THRESHOLD_EXCEEDED,
         title: "Ambang batas audit wajib tercapai",
-        message: "Modal disetor Koperasi Demo Sejahtera telah mencapai Rp5.000.000.000 — audit wajib sesuai Permenkop UKM No. 2/2024 Pasal 12",
+        message: "Modal disetor Koperasi Demo Sejahtera telah mencapai Rp5.000.000 — audit wajib sesuai Permenkop UKM No. 2/2024 Pasal 12",
         relatedTenantId: tenant.id,
         createdAt: now
       }
