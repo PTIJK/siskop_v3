@@ -138,6 +138,20 @@ class CloudBuildStatusTests(unittest.TestCase):
 
 
 class ReleaseSafetyTests(unittest.TestCase):
+    def test_missing_resend_bindings_block_candidate_publication(self):
+        service = {"spec": {"template": {"spec": {"containers": [{"env": [
+            {"name": "DATABASE_URL", "valueFrom": {"secretKeyRef": {"name": "DATABASE_URL", "key": "2"}}}
+        ]}]}}}}
+        with self.assertRaisesRegex(RuntimeError, "RESEND_API_KEY.*RESEND_FROM_EMAIL"):
+            release.check_email_bindings(service)
+
+    def test_resend_bindings_accept_numeric_secret_versions(self):
+        service = {"spec": {"template": {"spec": {"containers": [{"env": [
+            {"name": name, "valueFrom": {"secretKeyRef": {"name": name, "key": "1"}}}
+            for name in ("RESEND_API_KEY", "RESEND_FROM_EMAIL")
+        ]}]}}}}
+        release.check_email_bindings(service)
+
     def setUp(self):
         # Cloud Build exports these flags to verification too. Each test owns
         # its configuration instead of inheriting the deployment environment.
@@ -260,9 +274,15 @@ class ReleaseSafetyTests(unittest.TestCase):
                 self.assertRegex(selected_tag, r"^[a-z][a-z0-9-]*[a-z0-9]$")
                 self.assertIn("--no-traffic", args)
             if args[:4] == ["gcloud", "run", "services", "describe"]:
-                return json.dumps({"status": {"latestReadyRevisionName": "revision-4", "traffic": [
-                    {"tag": selected_tag, "revisionName": "revision-4", "url": "https://candidate.example"}
-                ]}})
+                return json.dumps({
+                    "spec": {"template": {"spec": {"containers": [{"env": [
+                        {"name": name, "valueFrom": {"secretKeyRef": {"name": name, "key": "1"}}}
+                        for name in ("RESEND_API_KEY", "RESEND_FROM_EMAIL")
+                    ]}]}}},
+                    "status": {"latestCreatedRevisionName": "revision-4", "latestReadyRevisionName": "older-ready-revision", "traffic": [
+                        {"tag": selected_tag, "revisionName": "revision-4", "url": "https://candidate.example"}
+                    ]}
+                })
             return ""
 
         cloud.command.side_effect = command

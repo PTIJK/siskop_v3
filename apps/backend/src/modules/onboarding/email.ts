@@ -12,7 +12,15 @@ const detailsSchema = z.object({
 /** Called only with an order resolved by a signed cookie or verified payment callback. */
 export async function deliverRegistrationEmail(orderId: string): Promise<void> {
   const config = resendConfiguration();
-  if (!config) return; // Keep the queued record until Resend has been configured.
+  if (!config) {
+    // Payment stays usable; record why its queued confirmation never reached Resend.
+    const pending = await db.registrationEmail.updateMany({
+      where: { orderId, status: "PENDING", lastError: null, order: { status: "PAID" } },
+      data: { lastError: "RESEND_NOT_CONFIGURED" }
+    });
+    if (pending.count) console.warn("Registration email awaiting Resend configuration", { orderId });
+    return;
+  }
   const reservation = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "orderId" FROM "RegistrationEmail" WHERE "orderId" = ${orderId} FOR UPDATE`;
     const email = await tx.registrationEmail.findUnique({ where: { orderId }, include: { order: { include: { tenant: true } } } });

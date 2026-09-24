@@ -205,6 +205,7 @@ describe("cooperative onboarding", () => {
     expect((await agent.post("/api/onboarding/reconcile").send({})).body.data.status).toBe("PAID");
     expect(emailRequests).toHaveLength(0);
     expect((await db.registrationEmail.findUniqueOrThrow({ where: { orderId: order.id } })).status).toBe("PENDING");
+    expect((await db.registrationEmail.findUniqueOrThrow({ where: { orderId: order.id } })).lastError).toBe("RESEND_NOT_CONFIGURED");
     vi.stubEnv("RESEND_API_KEY", "re_test_only");
     vi.stubEnv("RESEND_FROM_EMAIL", "SISKOP <noreply@siskop.example>");
     expect((await agent.post("/api/onboarding/reconcile").send({})).body.data.status).toBe("PAID");
