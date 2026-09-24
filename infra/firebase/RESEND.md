@@ -84,9 +84,11 @@ Have `gcloud` on PATH and sign in as `yudith.octo@gmail.com`. Alternatively, set
 API runtime account access to these secrets, and pins those versions on a
 candidate API revision without moving live traffic.
 
-Merge `feature/email` into `main`. Cloud Build applies the additive
-`RegistrationEmail` migration and deploys frontend/backend. The deploy script
-uses `--update-secrets` so optional Resend bindings survive subsequent releases.
+Merge the registration email deployment fix into `main`. Cloud Build applies the
+additive `RegistrationEmail` migration and deploys frontend/backend. The deploy
+script updates plain environment variables without replacing the entire environment,
+so Resend Secret Manager bindings survive subsequent releases. The release coordinator
+checks both bindings on the candidate before publishing Hosting.
 Build and migration accounts do not receive direct access to the email key.
 For later sender/key changes, run `configure` and rerun the current main trigger
 to publish the new configuration.
@@ -117,7 +119,9 @@ error so Xendit retries. Checkout reconciliation/completion also attempts pendin
 email without failing the user action. There is no background email worker or
 separate Resend webhook in this flow.
 
-Without configuration, email stays `PENDING` and callbacks are acknowledged.
+Without configuration, email stays `PENDING` with `RESEND_NOT_CONFIGURED` in
+`lastError`; callbacks are acknowledged. Once the bindings are restored, check
+the outbox before replaying paid registrations. Replaying can send real email.
 After enabling Resend, replay the completed payment webhook from Xendit, or
 resume the paid checkout and refresh payment status. Registrations paid before
 this feature was deployed are not automatically backfilled.

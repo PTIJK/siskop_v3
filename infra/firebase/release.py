@@ -193,6 +193,20 @@ def check_api(cloud, origin):
             raise RuntimeError("Tenant login redirect configuration is not ready; refusing publication")
 
 
+def check_email_bindings(service):
+    """Fail closed before Hosting publication when paid signups cannot send."""
+    containers = service.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+    bindings = {
+        item["name"]: item.get("valueFrom", {}).get("secretKeyRef", {})
+        for container in containers for item in container.get("env", [])
+        if item.get("name") in {"RESEND_API_KEY", "RESEND_FROM_EMAIL"}
+    }
+    missing = [name for name in ("RESEND_API_KEY", "RESEND_FROM_EMAIL")
+               if bindings.get(name, {}).get("name") != name or not bindings[name].get("key", "").isdigit()]
+    if missing:
+        raise RuntimeError("Registration email secret bindings missing: " + ", ".join(missing))
+
+
 def traffic_tag(build_id):
     if not UUID.fullmatch(build_id):
         raise ValueError("Invalid Cloud Build ID for traffic tag")
@@ -275,10 +289,14 @@ def backend(cloud, state, image):
         f"--labels=commit-sha={state['commit']},cloud-build-id={state['buildId']}",
     ])
     service = json.loads(cloud.command(gcloud("run", "services", "describe", SERVICE, f"--region={REGION}", "--format=json")))
-    revision = service["status"]["latestReadyRevisionName"]
+    check_email_bindings(service)
     target = next(item for item in service["status"]["traffic"] if item.get("tag") == tag)
-    if target.get("revisionName") != revision:
-        raise RuntimeError("Candidate tag does not point to the new ready revision")
+    revision = target.get("revisionName")
+    # A no-traffic configuration revision can leave latestReadyRevisionName
+    # pointing at the older serving revision. The unique tag identifies the
+    # candidate deployed by this build; deploy-api.sh waited for readiness.
+    if not revision or revision != service["status"].get("latestCreatedRevisionName"):
+        raise RuntimeError("Candidate tag does not point to the newly deployed revision")
     check_api(cloud, target["url"])
     state.update({"revision": revision, "image": image_ref, "candidateUrl": target["url"]})
     STATE.write_text(json.dumps(state))
