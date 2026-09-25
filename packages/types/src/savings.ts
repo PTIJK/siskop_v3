@@ -72,6 +72,19 @@ export interface ListSavingsQuery {
   type?: SavingType;
 }
 
+/** One row of the Simpanan list grouped by member — `GET /api/savings/by-member`. */
+export interface MemberSavingsSummary {
+  /** Member.id (cuid). */
+  memberId: string;
+  /** Member.memberId — the human-readable member number. */
+  memberNumber: string;
+  fullName: string;
+  accountNumber: string;
+  /** Sum of `savings[].balance`, Decimal serialized as a string. */
+  totalBalance: string;
+  savings: { id: string; name: string; type: SavingType; balance: string }[];
+}
+
 export interface ListSavingTransactionsQuery {
   page?: number;
   limit?: number;

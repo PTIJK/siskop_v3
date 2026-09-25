@@ -20,6 +20,7 @@ import {
   listSavingConfigs,
   listSavingTransactions,
   listSavings,
+  listSavingsByMember,
   updateSavingConfig,
   withdrawFromSaving
 } from "./service.js";
@@ -73,6 +74,21 @@ export function savingsRoutes(): Router {
     handle(async (req, res) => {
       const query = listSavingsQuerySchema.parse(req.query);
       const result = await listSavings(authClaims(req).tenantId, query);
+      res.json({
+        success: true,
+        data: result.items,
+        meta: { ...res.locals.meta, ...result.meta }
+      });
+    })
+  );
+
+  // Registered before "/:id" so "by-member" is never captured as a saving id.
+  router.get(
+    "/by-member",
+    requirePermission("savings", "read"),
+    handle(async (req, res) => {
+      const query = listSavingsQuerySchema.parse(req.query);
+      const result = await listSavingsByMember(authClaims(req).tenantId, query);
       res.json({
         success: true,
         data: result.items,

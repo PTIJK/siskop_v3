@@ -1,6 +1,6 @@
 import { Prisma, type TransactionType } from "@prisma/client";
 import { endOfDay, parseISO, startOfDay } from "date-fns";
-import { ErrorCode, type SavingStatement } from "@siskop/types";
+import { ErrorCode, type MemberSavingsSummary, type SavingStatement } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { postSavingTransaction } from "../../lib/journal.js";
@@ -84,6 +84,74 @@ export async function listSavings(tenantId: string, query: ListSavingsQueryInput
     }),
     db.saving.count({ where })
   ]);
+
+  return { items, meta: { page, limit, total } };
+}
+
+/**
+ * The Simpanan list grouped by member: paginates over members (not savings) so
+ * a member with several accounts appears exactly once per page.
+ */
+export async function listSavingsByMember(
+  tenantId: string,
+  query: ListSavingsQueryInput
+): Promise<{ items: MemberSavingsSummary[]; meta: { page: number; limit: number; total: number } }> {
+  const { page, limit, search, memberId, type } = query;
+  const skip = (page - 1) * limit;
+
+  const savingWhere: Prisma.SavingWhereInput = {
+    tenantId,
+    isActive: true,
+    ...(type ? { savingConfig: { type } } : {})
+  };
+  const where: Prisma.MemberWhereInput = {
+    tenantId,
+    savings: { some: savingWhere },
+    ...(memberId ? { id: memberId } : {}),
+    ...(search
+      ? {
+          OR: [
+            { fullName: { contains: search, mode: "insensitive" } },
+            { memberId: { contains: search, mode: "insensitive" } }
+          ]
+        }
+      : {})
+  };
+
+  const [members, total] = await Promise.all([
+    db.member.findMany({
+      where,
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        memberId: true,
+        fullName: true,
+        accountNumber: true,
+        savings: {
+          where: savingWhere,
+          select: { id: true, balance: true, savingConfig: { select: { name: true, type: true } } },
+          orderBy: [{ savingConfig: { type: "asc" } }, { createdAt: "asc" }]
+        }
+      },
+      orderBy: [{ fullName: "asc" }, { id: "asc" }]
+    }),
+    db.member.count({ where })
+  ]);
+
+  const items = members.map((m) => ({
+    memberId: m.id,
+    memberNumber: m.memberId,
+    fullName: m.fullName,
+    accountNumber: m.accountNumber,
+    totalBalance: m.savings.reduce((sum, s) => sum.add(s.balance), new Prisma.Decimal(0)).toFixed(2),
+    savings: m.savings.map((s) => ({
+      id: s.id,
+      name: s.savingConfig.name,
+      type: s.savingConfig.type,
+      balance: s.balance.toFixed(2)
+    }))
+  }));
 
   return { items, meta: { page, limit, total } };
 }
