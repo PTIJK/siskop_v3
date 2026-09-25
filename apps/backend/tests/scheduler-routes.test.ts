@@ -63,12 +63,19 @@ describe("scheduled job HTTP contracts", () => {
   });
 
   it("makes partial daily failures retryable and keeps the result counts", async () => {
-    vi.mocked(runDailyScheduler).mockResolvedValue({ date: new Date().toISOString(), savingsInterest: { checked: 3, posted: 2, skipped: 0, failed: 1 }, loanKol: { checked: 1, failed: 0 } });
+    vi.mocked(runDailyScheduler).mockResolvedValue({ date: new Date().toISOString(), savingsInterest: { checked: 3, posted: 2, skipped: 0, failed: 1 }, loanKol: { checked: 1, failed: 0 }, auditThreshold: { checked: 0, notified: 0, failed: 0 } });
     const response = await request(app()).post("/api/scheduler/run-daily").set("x-scheduler-token", "scheduler-test-only");
     expect(response.status).toBe(503);
     expect(response.body.success).toBe(false);
     expect(response.body.error.code).toBe("INTERNAL_ERROR");
     expect(response.body.data.savingsInterest.failed).toBe(1);
+  });
+
+  it("makes a failed audit-threshold check retryable", async () => {
+    vi.mocked(runDailyScheduler).mockResolvedValue({ date: new Date().toISOString(), savingsInterest: { checked: 0, posted: 0, skipped: 0, failed: 0 }, loanKol: { checked: 0, failed: 0 }, auditThreshold: { checked: 1, notified: 0, failed: 1 } });
+    const response = await request(app()).post("/api/scheduler/run-daily").set("x-scheduler-token", "scheduler-test-only");
+    expect(response.status).toBe(503);
+    expect(response.body.data.auditThreshold.failed).toBe(1);
   });
 
   it("returns a non-success status when Firebase recovery fails", async () => {

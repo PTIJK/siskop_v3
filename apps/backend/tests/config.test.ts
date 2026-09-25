@@ -902,4 +902,74 @@ describe("GET/PUT /api/config/modal-disetor", () => {
       .send({ modalDisetor: 1_000_000 });
     expect(res.status).toBe(200);
   });
+
+  async function putModalDisetor(accessToken: string, modalDisetor: unknown) {
+    return request(app())
+      .put("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ modalDisetor });
+  }
+
+  it("stores a decimal string exactly, without float rounding", async () => {
+    const admin = await setupTenant();
+    const res = await putModalDisetor(admin.accessToken, "1234567890123.45");
+    expect(res.status).toBe(200);
+    expect(res.body.data.modalDisetor).toBe("1234567890123.45");
+  });
+
+  it("reports the Rp5 miliar audit threshold and whether the tenant has reached it", async () => {
+    const admin = await setupTenant();
+
+    const below = await putModalDisetor(admin.accessToken, "4999999999.99");
+    expect(below.body.data.auditThreshold).toBe("5000000000");
+    expect(below.body.data.auditRequired).toBe(false);
+
+    const atThreshold = await putModalDisetor(admin.accessToken, "5000000000");
+    expect(atThreshold.body.data.auditRequired).toBe(true);
+
+    const reread = await request(app())
+      .get("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(reread.body.data.auditRequired).toBe(true);
+
+    const cleared = await putModalDisetor(admin.accessToken, null);
+    expect(cleared.body.data.auditRequired).toBe(false);
+  });
+
+  it("does not flag Rp5 juta as reaching the audit threshold", async () => {
+    const admin = await setupTenant();
+    const res = await putModalDisetor(admin.accessToken, 5_000_000);
+    expect(res.body.data.auditRequired).toBe(false);
+  });
+
+  it("rejects a value that does not fit Decimal(15,2) with 422, not a 500", async () => {
+    const admin = await setupTenant();
+    const res = await putModalDisetor(admin.accessToken, "99999999999999");
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects more than two decimal places", async () => {
+    const admin = await setupTenant();
+    const res = await putModalDisetor(admin.accessToken, "1000.123");
+    expect(res.status).toBe(422);
+  });
+
+  it("rejects a non-numeric string", async () => {
+    const admin = await setupTenant();
+    const res = await putModalDisetor(admin.accessToken, "abc");
+    expect(res.status).toBe(422);
+  });
+
+  it("clears the audit notification stamp when the value drops below the threshold", async () => {
+    const admin = await setupTenant();
+    await putModalDisetor(admin.accessToken, "6000000000");
+    await db.tenant.update({ where: { id: admin.user.tenantId }, data: { auditThresholdNotifiedAt: new Date() } });
+
+    const stillAbove = await putModalDisetor(admin.accessToken, "7000000000");
+    expect(stillAbove.body.data.auditThresholdNotifiedAt).not.toBeNull();
+
+    const below = await putModalDisetor(admin.accessToken, "1000000");
+    expect(below.body.data.auditThresholdNotifiedAt).toBeNull();
+  });
 });

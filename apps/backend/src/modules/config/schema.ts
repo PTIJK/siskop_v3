@@ -133,8 +133,21 @@ export const upsertWhitelabelConfigSchema = z.object({
 
 // ── Modal Disetor ────────────────────────────────────────────────────────────
 
+// Money stays a decimal string end to end (never a float). The pattern also
+// mirrors the Decimal(15,2) column: ≤13 integer digits, ≤2 decimal places, so
+// an out-of-range value is a 422 here rather than a Postgres overflow 500.
+const MODAL_DISETOR_PATTERN = /^\d{1,13}(\.\d{1,2})?$/;
+
 export const updateModalDisetorSchema = z.object({
-  modalDisetor: z.coerce.number().nonnegative("Modal disetor tidak boleh negatif").nullable()
+  modalDisetor: z
+    .union([z.string().trim(), z.number().finite()])
+    .transform((v) => String(v))
+    .refine((v) => !v.startsWith("-"), "Modal disetor tidak boleh negatif")
+    .refine(
+      (v) => MODAL_DISETOR_PATTERN.test(v),
+      "Modal disetor harus berupa angka non-negatif (maks. 13 digit, 2 desimal)"
+    )
+    .nullable()
 });
 
 // ── Self Registration ───────────────────────────────────────────────────────

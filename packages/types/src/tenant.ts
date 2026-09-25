@@ -44,14 +44,20 @@ export interface UpsertWhitelabelConfigRequest {
   emailSenderAddress?: string | null;
 }
 
-/** Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp5M) compliance field. */
+/** Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp5 miliar) compliance field. */
 export interface ModalDisetorInfo {
+  /** Decimal string, e.g. "5000000000". */
   modalDisetor: string | null;
+  /** The regulatory threshold as a decimal string — the backend owns it, not the UI. */
+  auditThreshold: string;
+  /** modalDisetor >= auditThreshold. */
+  auditRequired: boolean;
   auditThresholdNotifiedAt: string | null;
 }
 
 export interface UpdateModalDisetorRequest {
-  modalDisetor: number | null;
+  /** Decimal string (a JSON number is also accepted); at most 2 decimal places. */
+  modalDisetor: string | null;
 }
 
 /** Gates POST /api/public/register/:tenantSlug, the QR self-registration form. */

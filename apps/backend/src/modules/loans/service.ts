@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { addMonths, differenceInCalendarDays } from "date-fns";
 import { ErrorCode } from "@siskop/types";
 import { db } from "../../lib/db.js";
@@ -122,12 +122,15 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
         select: { principalAmount: true }
       })
     ]);
-    const existingActivePrincipal = activeLoans.reduce((sum, l) => sum + Number(l.principalAmount), 0);
+    const existingActivePrincipal = activeLoans.reduce(
+      (sum, l) => sum.add(l.principalAmount),
+      new Prisma.Decimal(0)
+    );
     validateRelatedPartyLoanLimit({
       isRelatedParty: true,
       existingActivePrincipal,
       newPrincipal: data.principalAmount,
-      modalDisetor: Number(tenant.modalDisetor ?? 0)
+      modalDisetor: tenant.modalDisetor ?? 0
     });
   }
 

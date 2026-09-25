@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { ErrorCode } from "@siskop/types";
 import { AppError } from "./errors.js";
 
@@ -10,6 +11,18 @@ export const REGULATORY_CAPS = {
   SAVING_ANNUAL_RATE_MAX_PCT: 9,
   RELATED_PARTY_LOAN_CONCENTRATION_PCT: 10
 } as const;
+
+/**
+ * Permenkop UKM No. 2/2024 Pasal 12: a koperasi whose modal disetor reaches
+ * Rp5 miliar must be audited by a registered public accountant. Rp5 *miliar*,
+ * not Rp5 juta — the original "Rp5M" shorthand was once misread as million.
+ * A reminder threshold only, never enforced.
+ */
+export const MODAL_DISETOR_AUDIT_THRESHOLD_RP = new Prisma.Decimal("5000000000");
+
+export function isModalDisetorAuditRequired(modalDisetor: Prisma.Decimal | null): boolean {
+  return modalDisetor !== null && modalDisetor.gte(MODAL_DISETOR_AUDIT_THRESHOLD_RP);
+}
 
 /** Throws RATE_EXCEEDS_REGULATORY_CAP if `rate` (annual %) exceeds the legal cap for `kind`. */
 export function validateRegulatoryRate(kind: "LOAN" | "SAVING", rate: number): void {
@@ -28,19 +41,22 @@ export function validateRegulatoryRate(kind: "LOAN" | "SAVING", rate: number): v
  * cumulative active-loan principal (existing + the loan being requested)
  * would exceed 10% of the tenant's modalDisetor. No-op for non-related-party
  * members. A tenant with no modalDisetor declared yet is treated as 0 — a
- * related-party member cannot borrow anything until it is set.
+ * related-party member cannot borrow anything until it is set. Decimal math
+ * throughout, so the cap boundary is exact to the sen.
  */
 export function validateRelatedPartyLoanLimit(params: {
   isRelatedParty: boolean;
-  existingActivePrincipal: number;
-  newPrincipal: number;
-  modalDisetor: number;
+  existingActivePrincipal: Prisma.Decimal.Value;
+  newPrincipal: Prisma.Decimal.Value;
+  modalDisetor: Prisma.Decimal.Value;
 }): void {
   if (!params.isRelatedParty) return;
 
-  const cap = (REGULATORY_CAPS.RELATED_PARTY_LOAN_CONCENTRATION_PCT / 100) * params.modalDisetor;
-  const combined = params.existingActivePrincipal + params.newPrincipal;
-  if (combined > cap) {
+  const cap = new Prisma.Decimal(params.modalDisetor)
+    .mul(REGULATORY_CAPS.RELATED_PARTY_LOAN_CONCENTRATION_PCT)
+    .div(100);
+  const combined = new Prisma.Decimal(params.existingActivePrincipal).add(params.newPrincipal);
+  if (combined.gt(cap)) {
     throw new AppError(
       ErrorCode.RELATED_PARTY_LIMIT_EXCEEDED,
       `Total pinjaman pengurus/pengawas melebihi batas ${REGULATORY_CAPS.RELATED_PARTY_LOAN_CONCENTRATION_PCT}% dari modal disetor`
