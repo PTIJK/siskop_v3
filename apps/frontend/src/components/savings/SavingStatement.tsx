@@ -150,8 +150,8 @@ export function SavingStatement({ savingId }: { savingId: string }) {
                           {[r.note, r.createdByName ?? (r.type === "INTEREST" ? "Sistem" : null)].filter(Boolean).join(" · ") || "-"}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-orange-700">{amountOrDash(r.debit)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-green-700">{amountOrDash(r.credit)}</TableCell>
+                      <TableCell className={`text-right tabular-nums ${Number(r.debit) ? "text-orange-700" : "text-muted-foreground"}`}>{amountOrDash(r.debit)}</TableCell>
+                      <TableCell className={`text-right tabular-nums ${Number(r.credit) ? "text-green-700" : "text-muted-foreground"}`}>{amountOrDash(r.credit)}</TableCell>
                       <TableCell className="text-right font-medium tabular-nums">{formatRupiahRinci(r.balance)}</TableCell>
                     </TableRow>
                   ))

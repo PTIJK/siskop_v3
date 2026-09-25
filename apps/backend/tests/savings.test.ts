@@ -409,10 +409,11 @@ describe("GET /api/savings/:id/statement", () => {
     await post("withdraw", 30_000);
     await post("deposit", 20_000);
 
-    const txns = await db.savingTransaction.findMany({ where: { savingId }, orderBy: { createdAt: "asc" } });
+    const tenantId = admin.user.tenantId;
+    const txns = await db.savingTransaction.findMany({ where: { savingId, tenantId }, orderBy: { createdAt: "asc" } });
     const dates = [new Date(2026, 0, 10, 9), new Date(2026, 0, 20, 9), new Date(2026, 1, 5, 9), new Date(2026, 2, 3, 9)];
     for (const [i, t] of txns.entries()) {
-      await db.savingTransaction.update({ where: { id: t.id }, data: { createdAt: dates[i] } });
+      await db.savingTransaction.update({ where: { id: t.id, tenantId }, data: { createdAt: dates[i] } });
     }
     await db.savingTransaction.create({
       data: {
@@ -423,7 +424,7 @@ describe("GET /api/savings/:id/statement", () => {
         createdAt: new Date(2026, 1, 6, 0, 5)
       }
     });
-    await db.saving.update({ where: { id: savingId }, data: { balance: { increment: "1250.50" } } });
+    await db.saving.update({ where: { id: savingId, tenantId }, data: { balance: { increment: "1250.50" } } });
     return { admin, savingId };
   }
 
@@ -502,8 +503,9 @@ describe("GET /api/savings/:id/statement", () => {
       .get(`/api/savings/${savingId}/statement?from=2024-01-01&to=2026-02-01`)
       .set("Authorization", `Bearer ${admin.accessToken}`);
 
-    expect(reversed.status).toBe(400);
-    expect(tooLong.status).toBe(400);
+    expect(reversed.status).toBe(422);
+    expect(reversed.body.error.code).toBe("VALIDATION_ERROR");
+    expect(tooLong.status).toBe(422);
   });
 
   it("does not expose another tenant's saving", async () => {
