@@ -27,3 +27,16 @@ export function formatTanggalPendek(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "short", year: "numeric" }).format(d);
 }
+
+/** Like formatRupiah but keeps sen (up to 2 decimals) — for statements, where
+ * rounding daily interest would make the running balance look wrong. */
+export function formatRupiahRinci(amount: number | string): string {
+  const num = typeof amount === "string" ? parseFloat(amount) : amount;
+  if (isNaN(num)) return "Rp 0";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(num);
+}
