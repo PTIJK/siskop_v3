@@ -1,6 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { validateRegulatoryRate, REGULATORY_CAPS } from "../src/lib/regulatory-config.js";
+import { validateRegulatoryRate, REGULATORY_CAPS, MODAL_SENDIRI_CLASSES } from "../src/lib/regulatory-config.js";
 import { AppError } from "../src/lib/errors.js";
+
+describe("MODAL_SENDIRI_CLASSES", () => {
+  // Permenkop UKM 8/2023 Pasal 1 angka 23 (+ angka 24 Modal Tetap for USP).
+  it("counts pokok, wajib, modal tetap, dana cadangan and hibah as Modal Sendiri", () => {
+    expect([...MODAL_SENDIRI_CLASSES].sort()).toEqual(
+      ["CADANGAN_RISIKO", "CADANGAN_UMUM", "HIBAH", "MODAL_TETAP", "SIMPANAN_POKOK", "SIMPANAN_WAJIB"].sort()
+    );
+  });
+
+  it("excludes modal penyertaan, SHU and other equity", () => {
+    for (const excluded of ["MODAL_PENYERTAAN", "SHU", "EKUITAS_LAIN"]) {
+      expect(MODAL_SENDIRI_CLASSES).not.toContain(excluded);
+    }
+  });
+});
 
 describe("validateRegulatoryRate", () => {
   it("rejects a LOAN rate above 24%/year", () => {

@@ -1,5 +1,19 @@
 export type AccountCategory = "ASET" | "KEWAJIBAN" | "EKUITAS" | "PENDAPATAN" | "BEBAN";
 export type NormalBalance = "DEBIT" | "KREDIT";
+
+/** Sub-classification of an EKUITAS account (Permenkop UKM 2/2024 lampiran, Akuntansi Ekuitas). */
+export const EQUITY_CLASSES = [
+  "SIMPANAN_POKOK",
+  "SIMPANAN_WAJIB",
+  "MODAL_TETAP",
+  "CADANGAN_UMUM",
+  "CADANGAN_RISIKO",
+  "HIBAH",
+  "MODAL_PENYERTAAN",
+  "SHU",
+  "EKUITAS_LAIN"
+] as const;
+export type EquityClass = (typeof EQUITY_CLASSES)[number];
 export type MappingSourceType = "SAVING_CONFIG" | "LOAN_CONFIG" | "SYSTEM";
 export type MappingTransactionKind =
   | "DEPOSIT"
@@ -37,6 +51,8 @@ export interface Account {
   isDefault: boolean;
   isActive: boolean;
   isCashEquivalent: boolean;
+  /** Set only on EKUITAS accounts; null everywhere else. */
+  equityClass: EquityClass | null;
   createdAt: string;
 }
 
@@ -48,9 +64,15 @@ export interface CreateAccountRequest {
   parentId?: string;
   isHeader?: boolean;
   isCashEquivalent?: boolean;
+  /** Only allowed when category is EKUITAS. */
+  equityClass?: EquityClass;
 }
 
-export type UpdateAccountRequest = Partial<CreateAccountRequest> & { isActive?: boolean };
+export type UpdateAccountRequest = Partial<Omit<CreateAccountRequest, "equityClass">> & {
+  isActive?: boolean;
+  /** null clears it. */
+  equityClass?: EquityClass | null;
+};
 
 export interface AccountMapping {
   id: string;

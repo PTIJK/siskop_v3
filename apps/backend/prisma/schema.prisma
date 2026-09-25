@@ -82,6 +82,23 @@ enum NormalBalance {
   KREDIT
 }
 
+// Sub-classification of EKUITAS accounts (Permenkop UKM 2/2024 lampiran,
+// Bagian IV Akuntansi Ekuitas). Drives the Modal Sendiri figure (Permenkop UKM
+// 8/2023 Pasal 1 angka 23 — see MODAL_SENDIRI_CLASSES in
+// lib/regulatory-config.ts), the Neraca equity grouping and the Laporan
+// Perubahan Ekuitas columns. Null on every non-EKUITAS account.
+enum EquityClass {
+  SIMPANAN_POKOK
+  SIMPANAN_WAJIB
+  MODAL_TETAP
+  CADANGAN_UMUM
+  CADANGAN_RISIKO
+  HIBAH
+  MODAL_PENYERTAAN
+  SHU
+  EKUITAS_LAIN
+}
+
 enum MappingSourceType {
   SAVING_CONFIG
   LOAN_CONFIG
@@ -964,6 +981,7 @@ model Account {
   isDefault        Boolean         @default(false)
   isActive         Boolean         @default(true)
   isCashEquivalent Boolean         @default(false)
+  equityClass      EquityClass?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 

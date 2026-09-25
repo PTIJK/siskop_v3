@@ -1,4 +1,4 @@
-import type { AccountCategory, NormalBalance } from "@prisma/client";
+import type { AccountCategory, EquityClass, NormalBalance } from "@prisma/client";
 
 export interface AccountSeed {
   key: string;
@@ -6,6 +6,8 @@ export interface AccountSeed {
   name: string;
   category: AccountCategory;
   normalBalance: NormalBalance;
+  /** Required in practice on every EKUITAS seed — see EquityClass in schema.prisma. */
+  equityClass?: EquityClass;
   isHeader?: boolean;
   isCashEquivalent?: boolean;
   parentKey?: string;
@@ -36,11 +38,18 @@ export const COA_TEMPLATE: AccountSeed[] = [
   { key: "aset_tetap", code: "1-2000", name: "Aset Tetap", category: "ASET", normalBalance: "DEBIT", isHeader: true },
   { key: "simpanan_sukarela", code: "2-1000", name: "Simpanan Sukarela — Anggota", category: "KEWAJIBAN", normalBalance: "KREDIT" },
   { key: "utang_usaha", code: "2-1100", name: "Utang Usaha", category: "KEWAJIBAN", normalBalance: "KREDIT" },
-  { key: "simpanan_pokok", code: "3-1000", name: "Simpanan Pokok", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "simpanan_wajib", code: "3-1100", name: "Simpanan Wajib", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "cadangan", code: "3-2000", name: "Cadangan / Modal Penyertaan", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "shu_berjalan", code: "3-3000", name: "SHU Tahun Berjalan", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "shu_lalu", code: "3-3100", name: "SHU Tahun Lalu Belum Dibagi", category: "EKUITAS", normalBalance: "KREDIT" },
+  // Equity lines follow Permenkop UKM 2/2024 lampiran (Akuntansi Ekuitas). Modal
+  // Penyertaan has its own account: it is not Modal Sendiri (Permenkop UKM 8/2023
+  // Pasal 1 angka 23), so it must never share one with Cadangan.
+  { key: "simpanan_pokok", code: "3-1000", name: "Simpanan Pokok", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "SIMPANAN_POKOK" },
+  { key: "simpanan_wajib", code: "3-1100", name: "Simpanan Wajib", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "SIMPANAN_WAJIB" },
+  { key: "cadangan", code: "3-2000", name: "Cadangan Umum", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "CADANGAN_UMUM" },
+  { key: "cadangan_risiko", code: "3-2100", name: "Cadangan Risiko", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "CADANGAN_RISIKO" },
+  { key: "shu_berjalan", code: "3-3000", name: "SHU Tahun Berjalan", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "SHU" },
+  { key: "shu_lalu", code: "3-3100", name: "SHU Tahun Lalu Belum Dibagi", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "SHU" },
+  { key: "hibah", code: "3-4000", name: "Hibah", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "HIBAH" },
+  { key: "modal_penyertaan", code: "3-5000", name: "Modal Penyertaan", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "MODAL_PENYERTAAN" },
+  { key: "ekuitas_lain", code: "3-9000", name: "Ekuitas Lain", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "EKUITAS_LAIN" },
   { key: "pendapatan_bunga", code: "4-1000", name: "Pendapatan Bunga/Margin Pinjaman", category: "PENDAPATAN", normalBalance: "KREDIT" },
   { key: "pendapatan_admin", code: "4-2000", name: "Pendapatan Jasa Administrasi", category: "PENDAPATAN", normalBalance: "KREDIT" },
   { key: "pendapatan_lain", code: "4-9000", name: "Pendapatan Lain-lain", category: "PENDAPATAN", normalBalance: "KREDIT" },

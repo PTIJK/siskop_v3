@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { ErrorCode } from "@siskop/types";
+import { ErrorCode, type EquityClass } from "@siskop/types";
 import { AppError } from "./errors.js";
 
 /**
@@ -11,6 +11,21 @@ export const REGULATORY_CAPS = {
   SAVING_ANNUAL_RATE_MAX_PCT: 9,
   RELATED_PARTY_LOAN_CONCENTRATION_PCT: 10
 } as const;
+
+/**
+ * Equity classes that make up Modal Sendiri — Permenkop UKM 8/2023 Pasal 1
+ * angka 23 (simpanan pokok, simpanan wajib, dana cadangan, hibah) plus angka 24
+ * (Modal Tetap of a USP). Modal Penyertaan, SHU not yet allocated and other
+ * equity are deliberately excluded.
+ */
+export const MODAL_SENDIRI_CLASSES: readonly EquityClass[] = [
+  "SIMPANAN_POKOK",
+  "SIMPANAN_WAJIB",
+  "MODAL_TETAP",
+  "CADANGAN_UMUM",
+  "CADANGAN_RISIKO",
+  "HIBAH"
+];
 
 /**
  * Permenkop UKM No. 2/2024 Pasal 12: a koperasi whose modal disetor reaches

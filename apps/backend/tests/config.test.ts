@@ -603,6 +603,166 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
   });
 });
 
+// ── Equity classification (Permenkop UKM 8/2023 Modal Sendiri) ────────────────
+// Every EKUITAS account carries an equityClass so Modal Sendiri, the Neraca
+// equity grouping and the Laporan Perubahan Ekuitas columns are derived from
+// the ledger instead of a hand-typed "modal disetor" figure.
+
+async function listAccounts(accessToken: string) {
+  const res = await request(app()).get("/api/config/accounts").set("Authorization", `Bearer ${accessToken}`);
+  return res.body.data as Array<{ id: string; code: string; name: string; equityClass: string | null }>;
+}
+
+describe("Account.equityClass", () => {
+  it("generates the split equity accounts, each with its equity class", async () => {
+    const admin = await setupTenant();
+    await generateStandard(admin.accessToken);
+
+    const byCode = new Map((await listAccounts(admin.accessToken)).map((a) => [a.code, a]));
+    expect(byCode.get("3-1000")?.equityClass).toBe("SIMPANAN_POKOK");
+    expect(byCode.get("3-1100")?.equityClass).toBe("SIMPANAN_WAJIB");
+    expect(byCode.get("3-2000")).toMatchObject({ name: "Cadangan Umum", equityClass: "CADANGAN_UMUM" });
+    expect(byCode.get("3-2100")?.equityClass).toBe("CADANGAN_RISIKO");
+    expect(byCode.get("3-3000")?.equityClass).toBe("SHU");
+    expect(byCode.get("3-3100")?.equityClass).toBe("SHU");
+    expect(byCode.get("3-4000")?.equityClass).toBe("HIBAH");
+    expect(byCode.get("3-5000")?.equityClass).toBe("MODAL_PENYERTAAN");
+    expect(byCode.get("3-9000")?.equityClass).toBe("EKUITAS_LAIN");
+  });
+
+  it("leaves non-equity template accounts unclassified", async () => {
+    const admin = await setupTenant();
+    await generateStandard(admin.accessToken);
+
+    const kas = (await listAccounts(admin.accessToken)).find((a) => a.code === "1-1000");
+    expect(kas?.equityClass).toBeNull();
+  });
+
+  it("classifies an existing unclassified template equity account on re-generate", async () => {
+    const admin = await setupTenant();
+    await createAccountAs(admin.accessToken, {
+      code: "3-1000",
+      name: "Simpanan Pokok",
+      category: "EKUITAS",
+      normalBalance: "KREDIT"
+    });
+
+    await generateStandard(admin.accessToken);
+
+    const pokok = (await listAccounts(admin.accessToken)).find((a) => a.code === "3-1000");
+    expect(pokok?.equityClass).toBe("SIMPANAN_POKOK");
+  });
+
+  it("leaves a template-coded account with a different name unclassified — the code alone can't say what it holds", async () => {
+    const admin = await setupTenant();
+    await createAccountAs(admin.accessToken, {
+      code: "3-1000",
+      name: "Modal Kerja",
+      category: "EKUITAS",
+      normalBalance: "KREDIT"
+    });
+
+    await generateStandard(admin.accessToken);
+
+    const account = (await listAccounts(admin.accessToken)).find((a) => a.code === "3-1000");
+    expect(account).toMatchObject({ name: "Modal Kerja", equityClass: null });
+  });
+
+  it("does not overwrite an equity class the tenant already chose", async () => {
+    const admin = await setupTenant();
+    await createAccountAs(admin.accessToken, {
+      code: "3-2000",
+      name: "Cadangan / Modal Penyertaan",
+      category: "EKUITAS",
+      normalBalance: "KREDIT",
+      equityClass: "MODAL_PENYERTAAN"
+    });
+
+    await generateStandard(admin.accessToken);
+
+    const account = (await listAccounts(admin.accessToken)).find((a) => a.code === "3-2000");
+    expect(account?.equityClass).toBe("MODAL_PENYERTAAN");
+  });
+
+  it("creates an EKUITAS account with an equity class", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .post("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ code: "3-4100", name: "Hibah Pemda", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "HIBAH" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.equityClass).toBe("HIBAH");
+  });
+
+  it("rejects an equity class on a non-EKUITAS account", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .post("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ ...KAS, equityClass: "HIBAH" });
+
+    expect(res.status).toBe(422);
+  });
+
+  it("updates an account's equity class and can clear it", async () => {
+    const admin = await setupTenant();
+    const account = await createAccountAs(admin.accessToken, {
+      code: "3-2000",
+      name: "Cadangan",
+      category: "EKUITAS",
+      normalBalance: "KREDIT"
+    });
+
+    const set = await request(app())
+      .put(`/api/config/accounts/${account.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ equityClass: "CADANGAN_UMUM" });
+    expect(set.status).toBe(200);
+    expect(set.body.data.equityClass).toBe("CADANGAN_UMUM");
+
+    const cleared = await request(app())
+      .put(`/api/config/accounts/${account.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ equityClass: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data.equityClass).toBeNull();
+  });
+
+  it("rejects setting an equity class on an existing non-EKUITAS account", async () => {
+    const admin = await setupTenant();
+    const kas = await createAccountAs(admin.accessToken);
+
+    const res = await request(app())
+      .put(`/api/config/accounts/${kas.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ equityClass: "CADANGAN_UMUM" });
+
+    expect(res.status).toBe(422);
+  });
+
+  it("clears the equity class when an account moves out of EKUITAS", async () => {
+    const admin = await setupTenant();
+    const account = await createAccountAs(admin.accessToken, {
+      code: "3-2000",
+      name: "Cadangan",
+      category: "EKUITAS",
+      normalBalance: "KREDIT",
+      equityClass: "CADANGAN_UMUM"
+    });
+
+    const res = await request(app())
+      .put(`/api/config/accounts/${account.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ category: "KEWAJIBAN" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.equityClass).toBeNull();
+  });
+});
+
 // ── Account Mappings ───────────────────────────────────────────────────────────
 
 describe("GET/POST/DELETE /api/config/account-mappings", () => {
