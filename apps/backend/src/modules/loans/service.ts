@@ -8,6 +8,7 @@ import { validateRegulatoryRate, validateRelatedPartyLoanLimit } from "../../lib
 import { recalculateKOL } from "../../lib/kol.js";
 import { postLoanDisbursement, postLoanPayment, splitPrincipalAndInterest } from "../../lib/journal.js";
 import { resolveUnitId } from "../../lib/units.js";
+import { getModalSendiri } from "../reports/capital-service.js";
 import { hasPokokSaving } from "../savings/service.js";
 import type {
   CreateLoanConfigInput,
@@ -115,8 +116,8 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
   }
 
   if (member.isPengurus || member.isPengawas) {
-    const [tenant, activeLoans] = await Promise.all([
-      db.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { modalDisetor: true } }),
+    const [modalSendiri, activeLoans] = await Promise.all([
+      getModalSendiri(tenantId, new Date()),
       db.loan.findMany({
         where: { tenantId, memberId: data.memberId, status: "ACTIVE" },
         select: { principalAmount: true }
@@ -130,7 +131,7 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
       isRelatedParty: true,
       existingActivePrincipal,
       newPrincipal: data.principalAmount,
-      modalDisetor: tenant.modalDisetor ?? 0
+      modalSendiri: modalSendiri.total
     });
   }
 

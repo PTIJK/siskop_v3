@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import request from "supertest";
 import { db } from "../src/lib/db.js";
-import { app, createMemberAs, createMemberWithPokokSaving, setupTenant } from "./helpers.js";
+import { app, createMemberAs, createMemberWithPokokSaving, postEquity, setupTenant } from "./helpers.js";
 
 beforeAll(() => {
   process.env.JWT_SECRET = "test-secret";
@@ -224,16 +224,15 @@ describe("POST /api/loans", () => {
 });
 
 describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8/2023)", () => {
-  async function setModalDisetor(accessToken: string, amount: number) {
-    await request(app())
-      .put("/api/config/modal-disetor")
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send({ modalDisetor: amount });
+  // The cap is 10% of Modal Sendiri as booked in the ledger (Pasal 44), not a
+  // hand-typed modal disetor figure.
+  async function setModalSendiri(tenantId: string, amount: number | string) {
+    await postEquity(tenantId, "SIMPANAN_POKOK", amount, { entryDate: new Date("2020-01-01T00:00:00Z") });
   }
 
-  it("rejects a pengurus member's loan exceeding 10% of modalDisetor", async () => {
+  it("rejects a pengurus member's loan exceeding 10% of Modal Sendiri", async () => {
     const admin = await setupTenant();
-    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    await setModalSendiri(admin.user.tenantId, 10_000_000); // 10% = 1,000,000
     const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
     const config = await createLoanConfigAs(admin.accessToken);
 
@@ -248,7 +247,7 @@ describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8
 
   it("allows a pengurus member's loan under the 10% threshold", async () => {
     const admin = await setupTenant();
-    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    await setModalSendiri(admin.user.tenantId, 10_000_000); // 10% = 1,000,000
     const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
     const config = await createLoanConfigAs(admin.accessToken);
 
@@ -262,10 +261,7 @@ describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8
 
   it("allows a pengurus member's loan exactly at a fractional 10% cap", async () => {
     const admin = await setupTenant();
-    await request(app())
-      .put("/api/config/modal-disetor")
-      .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ modalDisetor: "10000000.30" }); // 10% = 1,000,000.03
+    await setModalSendiri(admin.user.tenantId, "10000000.30"); // 10% = 1,000,000.03
     const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
     const config = await createLoanConfigAs(admin.accessToken);
 
@@ -279,7 +275,7 @@ describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8
 
   it("rejects a second loan whose combined principal with an existing active loan exceeds the threshold", async () => {
     const admin = await setupTenant();
-    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    await setModalSendiri(admin.user.tenantId, 10_000_000); // 10% = 1,000,000
     const member = await createMemberWithPokokSaving(admin.accessToken, { isPengawas: true });
     const config = await createLoanConfigAs(admin.accessToken);
 
@@ -298,9 +294,66 @@ describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8
     expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
   });
 
+  it("counts an opening-balance adjustment toward the cap", async () => {
+    const admin = await setupTenant();
+    await setModalSendiri(admin.user.tenantId, 4_000_000);
+    await db.modalSendiriAdjustment.create({
+      data: {
+        tenantId: admin.user.tenantId,
+        effectiveDate: new Date("2020-01-01T00:00:00Z"),
+        amount: 6_000_000,
+        reason: "Saldo awal sebelum SISKOP",
+        createdBy: "test"
+      }
+    }); // Modal Sendiri 10,000,000 -> cap 1,000,000
+    const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 12 });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("does not count modal penyertaan toward the cap", async () => {
+    const admin = await setupTenant();
+    await setModalSendiri(admin.user.tenantId, 1_000_000); // cap 100,000
+    await postEquity(admin.user.tenantId, "MODAL_PENYERTAAN", 50_000_000);
+    const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 100_001, termMonths: 12 });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
+  });
+
+  it("ignores the legacy manual modal disetor field", async () => {
+    const admin = await setupTenant();
+    await request(app())
+      .put("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ modalDisetor: 10_000_000 });
+    const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 12 });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
+  });
+
   it("allows a non-pengurus/pengawas member to borrow the same amount that would exceed the cap for a pengurus member", async () => {
     const admin = await setupTenant();
-    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    await setModalSendiri(admin.user.tenantId, 10_000_000); // 10% = 1,000,000
     const member = await createMemberWithPokokSaving(admin.accessToken);
     const config = await createLoanConfigAs(admin.accessToken);
 

@@ -54,27 +54,28 @@ export function validateRegulatoryRate(kind: "LOAN" | "SAVING", rate: number): v
 /**
  * Throws RELATED_PARTY_LIMIT_EXCEEDED if a pengurus/pengawas member's
  * cumulative active-loan principal (existing + the loan being requested)
- * would exceed 10% of the tenant's modalDisetor. No-op for non-related-party
- * members. A tenant with no modalDisetor declared yet is treated as 0 — a
- * related-party member cannot borrow anything until it is set. Decimal math
+ * would exceed 10% of the tenant's Modal Sendiri (Permenkop UKM 8/2023 Pasal
+ * 44 — see modules/reports/capital-service.ts#getModalSendiri). No-op for
+ * non-related-party members. With no Modal Sendiri yet (0), a related-party
+ * member cannot borrow anything. Decimal math
  * throughout, so the cap boundary is exact to the sen.
  */
 export function validateRelatedPartyLoanLimit(params: {
   isRelatedParty: boolean;
   existingActivePrincipal: Prisma.Decimal.Value;
   newPrincipal: Prisma.Decimal.Value;
-  modalDisetor: Prisma.Decimal.Value;
+  modalSendiri: Prisma.Decimal.Value;
 }): void {
   if (!params.isRelatedParty) return;
 
-  const cap = new Prisma.Decimal(params.modalDisetor)
+  const cap = new Prisma.Decimal(params.modalSendiri)
     .mul(REGULATORY_CAPS.RELATED_PARTY_LOAN_CONCENTRATION_PCT)
     .div(100);
   const combined = new Prisma.Decimal(params.existingActivePrincipal).add(params.newPrincipal);
   if (combined.gt(cap)) {
     throw new AppError(
       ErrorCode.RELATED_PARTY_LIMIT_EXCEEDED,
-      `Total pinjaman pengurus/pengawas melebihi batas ${REGULATORY_CAPS.RELATED_PARTY_LOAN_CONCENTRATION_PCT}% dari modal disetor`
+      `Total pinjaman pengurus/pengawas melebihi batas ${REGULATORY_CAPS.RELATED_PARTY_LOAN_CONCENTRATION_PCT}% dari modal sendiri`
     );
   }
 }
