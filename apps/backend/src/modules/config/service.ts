@@ -1,8 +1,9 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { RepostUnpostedResult, UnpostedJournalSummary } from "@siskop/types";
 import { db, type TxClient } from "../../lib/db.js";
-import { conflict, notFound, validationError } from "../../lib/errors.js";
+import { conflict, notFound } from "../../lib/errors.js";
 import { isRepostableSourceType, repostUnpostedEntries } from "../../lib/journal.js";
+import { isModalDisetorAuditRequired, MODAL_DISETOR_AUDIT_THRESHOLD_RP } from "../../lib/regulatory-config.js";
 import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import { COA_TEMPLATE, SYSTEM_MAPPING_TEMPLATE, type AccountSeed } from "../../lib/coaTemplate.js";
 import type {
@@ -478,12 +479,15 @@ export async function upsertWhitelabelConfig(tenantId: string, data: UpsertWhite
 }
 
 // ── Modal Disetor ────────────────────────────────────────────────────────────
-// Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp5M) compliance
-// field — a general tenant field, independent of the "accounting" entitlement.
+// Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp5 miliar)
+// compliance field — a general tenant field, independent of the "accounting"
+// entitlement. The daily reminder lives in ./audit-threshold.ts.
 
 function serializeModalDisetor(tenant: { modalDisetor: Prisma.Decimal | null; auditThresholdNotifiedAt: Date | null }) {
   return {
     modalDisetor: tenant.modalDisetor?.toString() ?? null,
+    auditThreshold: MODAL_DISETOR_AUDIT_THRESHOLD_RP.toString(),
+    auditRequired: isModalDisetorAuditRequired(tenant.modalDisetor),
     auditThresholdNotifiedAt: tenant.auditThresholdNotifiedAt
   };
 }
@@ -497,13 +501,16 @@ export async function getModalDisetor(tenantId: string) {
 }
 
 export async function updateModalDisetor(tenantId: string, data: UpdateModalDisetorInput) {
-  if (data.modalDisetor !== null && data.modalDisetor < 0) {
-    throw validationError("Modal disetor tidak boleh negatif");
-  }
+  const modalDisetor = data.modalDisetor === null ? null : new Prisma.Decimal(data.modalDisetor);
 
   const tenant = await db.tenant.update({
     where: { id: tenantId },
-    data: { modalDisetor: data.modalDisetor },
+    data: {
+      modalDisetor,
+      // Dropping below the threshold re-arms the reminder, so a later
+      // re-crossing in the same year notifies again instead of staying silent.
+      ...(isModalDisetorAuditRequired(modalDisetor) ? {} : { auditThresholdNotifiedAt: null })
+    },
     select: { modalDisetor: true, auditThresholdNotifiedAt: true }
   });
   return serializeModalDisetor(tenant);

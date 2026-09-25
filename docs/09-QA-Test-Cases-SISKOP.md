@@ -189,8 +189,8 @@ Conventions used below:
 | TC-CFG-008 | FR-CFG-04 | P | Configure whitelabel (custom domain, primary color, hide-branding, sender identity) on a tenant whose package has `whitelabelEnabled` | Settings saved and reflected in the branded UI | P2 |
 | TC-CFG-009 | FR-CFG-04 | N | Attempt to **write** whitelabel config on a tenant whose package does not have `whitelabelEnabled` | `FEATURE_NOT_ENTITLED` | P1 |
 | TC-CFG-010 | FR-CFG-04 | P | **Read** whitelabel config on a tenant without the entitlement | Read succeeds (read is ungated per spec) — confirm this is intentional, not a leftover gap | P2 |
-| TC-CFG-011 | FR-CFG-05 | P | Set `modalDisetor` ≥ Rp 5,000,000 | Saved; compliance threshold indicator (if any) reflects "met" | P2 |
-| TC-CFG-012 | FR-CFG-05 | P | Set `modalDisetor` < Rp 5,000,000 | Saved (field itself isn't gated), but any audit-threshold messaging correctly flags below-threshold status | P2 |
+| TC-CFG-011 | FR-CFG-05 | P | Set `modalDisetor` ≥ Rp 5,000,000,000 (Rp5 miliar) | Saved; compliance threshold indicator (if any) reflects "met" | P2 |
+| TC-CFG-012 | FR-CFG-05 | P | Set `modalDisetor` < Rp 5,000,000,000 (e.g. Rp 5,000,000) | Saved (field itself isn't gated), but any audit-threshold messaging correctly flags below-threshold status | P2 |
 
 ---
 

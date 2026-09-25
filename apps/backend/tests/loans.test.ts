@@ -260,6 +260,23 @@ describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8
     expect(res.status).toBe(201);
   });
 
+  it("allows a pengurus member's loan exactly at a fractional 10% cap", async () => {
+    const admin = await setupTenant();
+    await request(app())
+      .put("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ modalDisetor: "10000000.30" }); // 10% = 1,000,000.03
+    const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000.03, termMonths: 12 });
+
+    expect(res.status).toBe(201);
+  });
+
   it("rejects a second loan whose combined principal with an existing active loan exceeds the threshold", async () => {
     const admin = await setupTenant();
     await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
