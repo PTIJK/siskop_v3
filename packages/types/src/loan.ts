@@ -54,7 +54,31 @@ export interface CreateLoanRequest {
   termMonths: number;
   /** Resubmit with `force: true` to create a second loan after seeing `hasExistingLoan`. */
   force?: boolean;
+  /** Resubmit with `acknowledgeBmpp: true` to proceed after seeing `bmppExceeded`. */
+  acknowledgeBmpp?: boolean;
   disbursedAt?: string;
+  /** KSU only: the lending unit; omitted = the tenant's default unit. */
+  unitId?: string;
+}
+
+/**
+ * A member's room under the BMPP concentration limit (Permenkop UKM 8/2023
+ * Pasal 44-45): 10% of Modal Sendiri for pengurus/pengawas (a hard block),
+ * 15% for other members (a confirmable warning). A single-unit koperasi
+ * measures against its consolidated Modal Sendiri; a KSU against the lending
+ * unit's own, counting only that unit's loans. Decimal strings.
+ */
+export interface BmppHeadroom {
+  basis: "KONSOLIDASI" | "UNIT";
+  unitId: string | null;
+  modalSendiri: string;
+  isRelatedParty: boolean;
+  limitPct: number;
+  limit: string;
+  /** Principal of the member's ACTIVE loans counted against the limit. */
+  existingPrincipal: string;
+  /** limit − existingPrincipal, never below 0. */
+  headroom: string;
 }
 
 /**
@@ -68,7 +92,9 @@ export interface CreateLoanRequest {
  */
 export type CreateLoanResponse =
   | Loan
-  | { hasExistingLoan: true; existingLoan: { id: string; principalAmount: string; remainingAmount: string } };
+  | { hasExistingLoan: true; existingLoan: { id: string; principalAmount: string; remainingAmount: string } }
+  /** Same 200-and-resubmit pattern, for a non-related-party loan over 15% of Modal Sendiri. */
+  | { bmppExceeded: true; bmpp: BmppHeadroom & { requested: string } };
 
 export interface LoanPaymentRequest {
   amount: number;

@@ -3,7 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { Account, GenerateStandardCoaResult } from "@siskop/types";
+import {
+  EQUITY_CLASS_LABELS,
+  EQUITY_CLASSES,
+  type Account,
+  type EquityClass,
+  type GenerateStandardCoaResult
+} from "@siskop/types";
 import { apiFetch, apiPost, apiPut, ApiRequestError } from "@/api/client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +29,7 @@ import { UnpostedJournalBanner } from "./UnpostedJournalBanner";
 
 const CATEGORIES = ["ASET", "KEWAJIBAN", "EKUITAS", "PENDAPATAN", "BEBAN"] as const;
 const NO_PARENT = "__none__";
+const NO_EQUITY_CLASS = "__none__";
 
 const schema = z.object({
   code: z.string().min(1, "Kode wajib diisi"),
@@ -31,7 +38,8 @@ const schema = z.object({
   normalBalance: z.enum(["DEBIT", "KREDIT"]),
   parentId: z.string(),
   isHeader: z.boolean(),
-  isCashEquivalent: z.boolean()
+  isCashEquivalent: z.boolean(),
+  equityClass: z.string()
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -77,7 +85,7 @@ export function AccountsTab() {
   const openCreate = () => {
     setEditing(null);
     setApiError("");
-    reset({ code: "", name: "", category: "ASET", normalBalance: "DEBIT", parentId: NO_PARENT, isHeader: false, isCashEquivalent: false });
+    reset({ code: "", name: "", category: "ASET", normalBalance: "DEBIT", parentId: NO_PARENT, isHeader: false, isCashEquivalent: false, equityClass: NO_EQUITY_CLASS });
     setDialogOpen(true);
   };
 
@@ -91,14 +99,22 @@ export function AccountsTab() {
       normalBalance: account.normalBalance,
       parentId: account.parentId ?? NO_PARENT,
       isHeader: account.isHeader,
-      isCashEquivalent: account.isCashEquivalent
+      isCashEquivalent: account.isCashEquivalent,
+      equityClass: account.equityClass ?? NO_EQUITY_CLASS
     });
     setDialogOpen(true);
   };
 
   const onSubmit = async (values: FormValues) => {
     setApiError("");
-    const payload = { ...values, parentId: values.parentId === NO_PARENT ? undefined : values.parentId };
+    const equityClass =
+      values.category === "EKUITAS" && values.equityClass !== NO_EQUITY_CLASS ? (values.equityClass as EquityClass) : null;
+    const payload = {
+      ...values,
+      parentId: values.parentId === NO_PARENT ? undefined : values.parentId,
+      // Create omits an unset class; update sends null to clear it.
+      equityClass: editing ? equityClass : (equityClass ?? undefined)
+    };
     try {
       if (editing) {
         await apiPut(`/config/accounts/${editing.id}`, payload);
@@ -158,7 +174,15 @@ export function AccountsTab() {
         </span>
       )
     },
-    { header: "Kategori", cell: ({ row }) => <Badge variant="outline">{row.original.category}</Badge> },
+    {
+      header: "Kategori",
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          <Badge variant="outline">{row.original.category}</Badge>
+          {row.original.equityClass && <Badge variant="secondary">{EQUITY_CLASS_LABELS[row.original.equityClass]}</Badge>}
+        </div>
+      )
+    },
     { header: "Saldo Normal", accessorKey: "normalBalance" },
     {
       header: "Status",
@@ -218,7 +242,7 @@ export function AccountsTab() {
         open={generateOpen}
         onOpenChange={setGenerateOpen}
         title="Buat COA Standar"
-        description="Menambahkan akun standar koperasi yang belum ada (± 20 akun) dan memetakan akun default untuk konfigurasi simpanan/pinjaman yang sudah ada. Jika koperasi memiliki unit Toko, akun dan pemetaan penjualan toko ikut ditambahkan. Akun dan pemetaan yang sudah ada tidak akan diubah — aman dijalankan lebih dari sekali."
+        description="Menambahkan akun standar koperasi yang belum ada (± 25 akun) dan memetakan akun default untuk konfigurasi simpanan/pinjaman yang sudah ada. Jika koperasi memiliki unit Toko, akun dan pemetaan penjualan toko ikut ditambahkan. Akun dan pemetaan yang sudah ada tidak akan diubah — aman dijalankan lebih dari sekali."
         confirmLabel="Buat COA Standar"
         onConfirm={generateStandardCoa}
       />
@@ -271,6 +295,29 @@ export function AccountsTab() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {values.category === "EKUITAS" && (
+                <div className="col-span-2 space-y-1.5">
+                  <Label>Klasifikasi Ekuitas</Label>
+                  <Select value={values.equityClass} onValueChange={(v) => setValue("equityClass", v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_EQUITY_CLASS}>(Belum diklasifikasi)</SelectItem>
+                      {EQUITY_CLASSES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {EQUITY_CLASS_LABELS[c]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Menentukan Modal Sendiri: simpanan pokok, simpanan wajib, modal tetap, cadangan, dan hibah
+                    (Permenkop UKM 8/2023). Modal penyertaan dan SHU tidak termasuk.
+                  </p>
+                </div>
+              )}
 
               <div className="col-span-2 space-y-1.5">
                 <Label>Akun Induk</Label>

@@ -1,7 +1,9 @@
-import type { CalkSection } from "@prisma/client";
+import { Prisma, type CalkSection, type EquityClass } from "@prisma/client";
 import { db } from "../../lib/db.js";
 import { validationError } from "../../lib/errors.js";
 import { splitPrincipalAndInterest } from "../../lib/journal.js";
+import { MODAL_DISETOR_AUDIT_THRESHOLD_RP, MODAL_SENDIRI_CLASSES } from "../../lib/regulatory-config.js";
+import { EQUITY_CLASS_ORDER, getModalSendiri, komposisiModalSendiri } from "./capital-service.js";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -173,7 +175,14 @@ export async function getNeraca(tenantId: string, asOfDate: Date, unitId?: strin
   const buildSection = (category: string) => {
     const items = accounts
       .filter((a) => a.category === category)
-      .map((a) => ({ accountId: a.id, code: a.code, name: a.name, balance: round2(balanceFor(a)).toString(), isComputed: false }));
+      .map((a) => ({
+        accountId: a.id,
+        code: a.code,
+        name: a.name,
+        balance: round2(balanceFor(a)).toString(),
+        isComputed: false,
+        equityClass: a.equityClass
+      }));
     const total = round2(items.reduce((sum, i) => sum + Number(i.balance), 0));
     return { items, total };
   };
@@ -186,16 +195,23 @@ export async function getNeraca(tenantId: string, asOfDate: Date, unitId?: strin
   const totalBeban = accounts.filter((a) => a.category === "BEBAN").reduce((sum, a) => sum + balanceFor(a), 0);
   const shuBerjalanBelumDitutup = round2(totalPendapatan - totalBeban);
 
+  // Lampiran order (EQUITY_CLASS_ORDER), unclassified accounts last; stable, so
+  // accounts of one class keep their code order.
+  const classRank = (c: EquityClass | null) => (c === null ? EQUITY_CLASS_ORDER.length : EQUITY_CLASS_ORDER.indexOf(c));
   const ekuitasItems = [
-    ...ekuitas.items,
+    ...[...ekuitas.items].sort((a, b) => classRank(a.equityClass) - classRank(b.equityClass)),
     {
       accountId: null,
       code: null,
       name: "SHU Tahun Berjalan (Belum Ditutup — Dihitung Otomatis)",
       balance: shuBerjalanBelumDitutup.toString(),
-      isComputed: true
+      isComputed: true,
+      equityClass: "SHU" as EquityClass
     }
   ];
+  const modalSendiri = ekuitas.items
+    .filter((i) => i.equityClass !== null && MODAL_SENDIRI_CLASSES.includes(i.equityClass))
+    .reduce((sum, i) => sum.add(i.balance), new Prisma.Decimal(0));
   const ekuitasTotal = round2(ekuitas.total + shuBerjalanBelumDitutup);
   const totalKewajibanDanEkuitas = round2(kewajiban.total + ekuitasTotal);
 
@@ -205,7 +221,8 @@ export async function getNeraca(tenantId: string, asOfDate: Date, unitId?: strin
     kewajiban: { items: kewajiban.items, total: kewajiban.total.toString() },
     ekuitas: { items: ekuitasItems, total: ekuitasTotal.toString() },
     totalKewajibanDanEkuitas: totalKewajibanDanEkuitas.toString(),
-    balanced: Math.abs(aset.total - totalKewajibanDanEkuitas) < 0.01
+    balanced: Math.abs(aset.total - totalKewajibanDanEkuitas) < 0.01,
+    modalSendiri: modalSendiri.toString()
   };
 }
 
@@ -497,11 +514,12 @@ export async function getShuDistribution(tenantId: string, from: Date, to: Date)
 export async function getCalk(tenantId: string, from: Date, to: Date) {
   const dayBeforeFrom = new Date(from.getTime() - 1);
 
-  const [neracaAwal, neracaAkhir, laporanHasilUsaha, narrativeRows] = await Promise.all([
+  const [neracaAwal, neracaAkhir, laporanHasilUsaha, narrativeRows, modalSendiri] = await Promise.all([
     getNeraca(tenantId, dayBeforeFrom),
     getNeraca(tenantId, to),
     getLaporanHasilUsaha(tenantId, from, to),
-    db.calkNarrative.findMany({ where: { tenantId } })
+    db.calkNarrative.findMany({ where: { tenantId } }),
+    getModalSendiri(tenantId, to)
   ]);
 
   const narasi = Object.fromEntries(
@@ -537,7 +555,16 @@ export async function getCalk(tenantId: string, from: Date, to: Date) {
     rincianEkuitas: buildMutasi(neracaAwal.ekuitas.items, neracaAkhir.ekuitas.items),
     rincianPendapatan: laporanHasilUsaha.pendapatan.items,
     rincianBeban: laporanHasilUsaha.beban.items,
-    shuBerjalan: laporanHasilUsaha.shuBerjalan
+    shuBerjalan: laporanHasilUsaha.shuBerjalan,
+    // Permenkop UKM 8/2023 Modal Sendiri at the period end, and whether it
+    // reaches the Permenkop UKM 2/2024 Pasal 12 audit threshold.
+    permodalan: {
+      modalSendiri: modalSendiri.total.toString(),
+      penyesuaianSaldoAwal: modalSendiri.adjustment.toString(),
+      komposisi: komposisiModalSendiri(modalSendiri),
+      ambangAudit: MODAL_DISETOR_AUDIT_THRESHOLD_RP.toString(),
+      wajibAudit: modalSendiri.total.gte(MODAL_DISETOR_AUDIT_THRESHOLD_RP)
+    }
   };
 }
 

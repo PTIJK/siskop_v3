@@ -82,6 +82,23 @@ enum NormalBalance {
   KREDIT
 }
 
+// Sub-classification of EKUITAS accounts (Permenkop UKM 2/2024 lampiran,
+// Bagian IV Akuntansi Ekuitas). Drives the Modal Sendiri figure (Permenkop UKM
+// 8/2023 Pasal 1 angka 23 — see MODAL_SENDIRI_CLASSES in
+// lib/regulatory-config.ts), the Neraca equity grouping and the Laporan
+// Perubahan Ekuitas columns. Null on every non-EKUITAS account.
+enum EquityClass {
+  SIMPANAN_POKOK
+  SIMPANAN_WAJIB
+  MODAL_TETAP
+  CADANGAN_UMUM
+  CADANGAN_RISIKO
+  HIBAH
+  MODAL_PENYERTAAN
+  SHU
+  EKUITAS_LAIN
+}
+
 enum MappingSourceType {
   SAVING_CONFIG
   LOAN_CONFIG
@@ -216,58 +233,62 @@ model CheckoutAttempt {
 }
 
 model Tenant {
-  id                       String               @id @default(cuid())
-  name                     String
+  id                         String               @id @default(cuid())
+  name                       String
   // Login subdomain: `demo` serves demo.localhost:3000. Resolved from the
   // request's Host header (slugFromHost) — never from the request body.
-  slug                     String               @unique
-  slugLastChangedAt        DateTime?
-  address                  String
-  registrationNo           String               @unique
-  type                     TenantType
-  cooperativeType          String               @default("KSP")
-  logoUrl                  String?
-  packageId                String?
-  package                  SubscriptionPackage? @relation(fields: [packageId], references: [id])
-  isActive                 Boolean              @default(true)
-  nextBillingDate          DateTime?
-  billingReminder30SentAt  DateTime?
-  billingReminder7SentAt   DateTime?
-  modalDisetor             Decimal?             @db.Decimal(15, 2)
-  auditThresholdNotifiedAt DateTime?
+  slug                       String               @unique
+  slugLastChangedAt          DateTime?
+  address                    String
+  registrationNo             String               @unique
+  type                       TenantType
+  cooperativeType            String               @default("KSP")
+  logoUrl                    String?
+  packageId                  String?
+  package                    SubscriptionPackage? @relation(fields: [packageId], references: [id])
+  isActive                   Boolean              @default(true)
+  nextBillingDate            DateTime?
+  billingReminder30SentAt    DateTime?
+  billingReminder7SentAt     DateTime?
+  modalDisetor               Decimal?             @db.Decimal(15, 2)
+  auditThresholdNotifiedAt   DateTime?
+  // Once-a-year stamp for the early warning that the running tahun buku's
+  // Modal Sendiri already reached the audit threshold (modules/config/audit-threshold.ts).
+  auditApproachingNotifiedAt DateTime?
   // Gates POST /api/public/register/:tenantSlug — the QR self-registration
   // form. Defaults on so existing tenants don't need an opt-in step.
-  selfRegistrationEnabled  Boolean              @default(true)
-  createdAt                DateTime             @default(now())
+  selfRegistrationEnabled    Boolean              @default(true)
+  createdAt                  DateTime             @default(now())
 
-  units                  CooperativeUnit[]
-  users                  User[]
-  roles                  Role[]
-  members                Member[]
-  registrationRequests   MemberRegistrationRequest[]
-  tenantNotifications    TenantNotification[]
-  savingConfigs          SavingConfig[]
-  loanConfigs            LoanConfig[]
-  savings                Saving[]
-  loans                  Loan[]
-  savingTxns             SavingTransaction[]
-  loanPayments           LoanPayment[]
-  whitelabelConfig       WhitelabelConfig?
-  notifications          Notification[]
-  accounts               Account[]
-  accountMappings        AccountMapping[]
-  journalEntries         JournalEntry[]
-  journalLines           JournalLine[]
-  shuDistributionConfig  ShuDistributionConfig?
-  calkNarratives         CalkNarrative[]
-  products               Product[]
-  posSales               POSSale[]
-  stockMovements         StockMovement[]
-  ppobTransactions       PPOBTransaction[]
-  memberCreditRepayments MemberCreditRepayment[]
-  onboardingOrder        OnboardingOrder?
-  slugReservations       TenantSlugReservation[]
-  slugChanges            TenantSlugChange[]
+  units                   CooperativeUnit[]
+  users                   User[]
+  roles                   Role[]
+  members                 Member[]
+  registrationRequests    MemberRegistrationRequest[]
+  tenantNotifications     TenantNotification[]
+  modalSendiriAdjustments ModalSendiriAdjustment[]
+  savingConfigs           SavingConfig[]
+  loanConfigs             LoanConfig[]
+  savings                 Saving[]
+  loans                   Loan[]
+  savingTxns              SavingTransaction[]
+  loanPayments            LoanPayment[]
+  whitelabelConfig        WhitelabelConfig?
+  notifications           Notification[]
+  accounts                Account[]
+  accountMappings         AccountMapping[]
+  journalEntries          JournalEntry[]
+  journalLines            JournalLine[]
+  shuDistributionConfig   ShuDistributionConfig?
+  calkNarratives          CalkNarrative[]
+  products                Product[]
+  posSales                POSSale[]
+  stockMovements          StockMovement[]
+  ppobTransactions        PPOBTransaction[]
+  memberCreditRepayments  MemberCreditRepayment[]
+  onboardingOrder         OnboardingOrder?
+  slugReservations        TenantSlugReservation[]
+  slugChanges             TenantSlugChange[]
 }
 
 // Both current addresses and historical aliases share one global namespace.
@@ -307,16 +328,17 @@ model CooperativeUnit {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  memberships      UnitMembership[]
-  savings          Saving[]
-  loans            Loan[]
-  products         Product[]
-  posSales         POSSale[]
-  stockMovements   StockMovement[]
-  ppobTransactions PPOBTransaction[]
-  userAssignments  UserUnit[]
-  journalEntries   JournalEntry[]
+  tenant                  Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships             UnitMembership[]
+  savings                 Saving[]
+  loans                   Loan[]
+  products                Product[]
+  posSales                POSSale[]
+  stockMovements          StockMovement[]
+  ppobTransactions        PPOBTransaction[]
+  userAssignments         UserUnit[]
+  journalEntries          JournalEntry[]
+  modalSendiriAdjustments ModalSendiriAdjustment[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
@@ -355,23 +377,23 @@ model Role {
 }
 
 model User {
-  id              String    @id @default(cuid())
+  id              String           @id @default(cuid())
   tenantId        String
-  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roleId          String
-  role            Role      @relation(fields: [roleId], references: [id])
+  role            Role             @relation(fields: [roleId], references: [id])
   email           String
   passwordHash    String?
-  firebaseUid     String?   @unique
+  firebaseUid     String?          @unique
   identityId      String?
   identity        AccountIdentity? @relation(fields: [identityId], references: [id])
   authProvider    String?
   name            String
-  isActive        Boolean   @default(true)
-  isPlatformAdmin Boolean   @default(false)
+  isActive        Boolean          @default(true)
+  isPlatformAdmin Boolean          @default(false)
   lastLoginAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   savingTransactions            SavingTransaction[]
   loanPayments                  LoanPayment[]
@@ -393,56 +415,59 @@ model User {
 
 // Global identity is distinct from the tenant-specific User (membership).
 model AccountIdentity {
-  id          String @id @default(cuid())
-  firebaseUid String @unique
-  isActive    Boolean @default(true)
-  createdAt   DateTime @default(now())
+  id          String            @id @default(cuid())
+  firebaseUid String            @unique
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
   users       User[]
   sessions    IdentitySession[]
 }
 
 model IdentitySession {
-  id           String @id @default(cuid())
-  tokenHash    String @unique
-  identityId   String
-  identity     AccountIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
-  authTime     Int
-  expiresAt    DateTime
-  lastSeenAt   DateTime @default(now())
-  attempts     TenantLoginAttempt[]
+  id         String               @id @default(cuid())
+  tokenHash  String               @unique
+  identityId String
+  identity   AccountIdentity      @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  authTime   Int
+  expiresAt  DateTime
+  lastSeenAt DateTime             @default(now())
+  attempts   TenantLoginAttempt[]
+
   @@index([identityId])
   @@index([expiresAt])
   @@index([lastSeenAt])
 }
 
 model TenantLoginAttempt {
-  id                String @id @default(cuid())
+  id                String          @id @default(cuid())
   identitySessionId String
   identitySession   IdentitySession @relation(fields: [identitySessionId], references: [id], onDelete: Cascade)
   membershipId      String
-  membership        User @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  membership        User            @relation(fields: [membershipId], references: [id], onDelete: Cascade)
   origin            String
   expiresAt         DateTime
   bindingHash       String?
   stateHash         String?
   challenge         String?
-  codeHash          String? @unique
+  codeHash          String?         @unique
   codeExpiresAt     DateTime?
   consumedAt        DateTime?
+
   @@index([expiresAt])
   @@index([identitySessionId])
   @@index([membershipId])
 }
 
 model MembershipInvitation {
-  id           String @id @default(cuid())
-  tokenHash    String @unique
+  id           String    @id @default(cuid())
+  tokenHash    String    @unique
   membershipId String
-  membership   User @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  membership   User      @relation(fields: [membershipId], references: [id], onDelete: Cascade)
   email        String
   expiresAt    DateTime
   acceptedAt   DateTime?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
+
   @@index([membershipId])
 }
 
@@ -516,27 +541,29 @@ model Member {
 
 // Short-lived proof of credentials verified centrally; never a portal session.
 model MemberLoginSession {
-  id        String @id @default(cuid())
-  tokenHash String @unique
+  id        String             @id @default(cuid())
+  tokenHash String             @unique
   expiresAt DateTime
   grants    MemberLoginGrant[]
+
   @@index([expiresAt])
 }
 
 model MemberLoginGrant {
-  id                String @id @default(cuid())
+  id                String               @id @default(cuid())
   sessionId         String
-  session           MemberLoginSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session           MemberLoginSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   memberId          String
-  member            Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member            Member               @relation(fields: [memberId], references: [id], onDelete: Cascade)
   credentialVersion String
   attempts          MemberLoginAttempt[]
+
   @@unique([sessionId, memberId])
   @@index([memberId])
 }
 
 model MemberLoginAttempt {
-  id            String @id @default(cuid())
+  id            String           @id @default(cuid())
   grantId       String
   grant         MemberLoginGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
   origin        String
@@ -544,9 +571,10 @@ model MemberLoginAttempt {
   bindingHash   String?
   stateHash     String?
   challenge     String?
-  codeHash      String? @unique
+  codeHash      String?          @unique
   codeExpiresAt DateTime?
   consumedAt    DateTime?
+
   @@index([grantId])
   @@index([expiresAt])
 }
@@ -964,6 +992,7 @@ model Account {
   isDefault        Boolean         @default(false)
   isActive         Boolean         @default(true)
   isCashEquivalent Boolean         @default(false)
+  equityClass      EquityClass?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
@@ -1023,6 +1052,26 @@ model JournalEntry {
   @@index([tenantId, unitId])
   @@index([entryDate])
   @@index([sourceType, sourceId])
+}
+
+// Modal Sendiri that predates the ledger (opening equity never journaled),
+// added on top of the ledger figure by modules/reports/capital-service.ts.
+// Append-only history: the latest row with effectiveDate <= asOf wins, per
+// scope (unitId null = the tenant-level unallocated bucket). Being an addend
+// rather than an override, it never goes stale as the ledger moves.
+model ModalSendiriAdjustment {
+  id            String           @id @default(cuid())
+  tenantId      String
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId        String?
+  unit          CooperativeUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  effectiveDate DateTime         @db.Date
+  amount        Decimal          @db.Decimal(15, 2)
+  reason        String
+  createdBy     String
+  createdAt     DateTime         @default(now())
+
+  @@index([tenantId, effectiveDate])
 }
 
 model JournalLine {

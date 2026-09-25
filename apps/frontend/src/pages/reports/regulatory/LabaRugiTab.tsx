@@ -9,8 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FileText } from "lucide-react";
 import { PeriodRangeControls } from "./PeriodRangeControls";
 import { defaultPeriodFrom, defaultPeriodTo } from "./period";
-import { ALL_UNITS, unitQueryParam } from "./unit";
-import { UnitFilter } from "./UnitFilter";
+import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { UnitFilter } from "@/components/shared/UnitFilter";
 
 function SectionTable({ title, section }: { title: string; section: LabaRugiSection }) {
   return (

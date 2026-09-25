@@ -11,10 +11,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileText } from "lucide-react";
-import { ALL_UNITS, unitQueryParam } from "./unit";
-import { UnitFilter } from "./UnitFilter";
+import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { UnitFilter } from "@/components/shared/UnitFilter";
 
-function SectionTable({ title, section }: { title: string; section: NeracaSection }) {
+function SectionTable({
+  title,
+  section,
+  subtotal
+}: {
+  title: string;
+  section: NeracaSection;
+  /** Extra line above the section total, e.g. the Modal Sendiri subtotal under Ekuitas. */
+  subtotal?: { label: string; amount: string };
+}) {
   return (
     <Card>
       <CardHeader>
@@ -44,6 +53,12 @@ function SectionTable({ title, section }: { title: string; section: NeracaSectio
                 <TableCell className="text-right">{formatRupiah(item.balance)}</TableCell>
               </TableRow>
             ))}
+            {subtotal && (
+              <TableRow className="text-muted-foreground">
+                <TableCell colSpan={2}>{subtotal.label}</TableCell>
+                <TableCell className="text-right">{formatRupiah(subtotal.amount)}</TableCell>
+              </TableRow>
+            )}
             <TableRow className="font-semibold">
               <TableCell colSpan={2}>Total {title}</TableCell>
               <TableCell className="text-right">{formatRupiah(section.total)}</TableCell>
@@ -105,7 +120,11 @@ export function NeracaTab() {
           </div>
           <SectionTable title="Aset" section={data.aset} />
           <SectionTable title="Kewajiban" section={data.kewajiban} />
-          <SectionTable title="Ekuitas" section={data.ekuitas} />
+          <SectionTable
+            title="Ekuitas"
+            section={data.ekuitas}
+            subtotal={{ label: "Modal Sendiri (pokok, wajib, modal tetap, cadangan, hibah)", amount: data.modalSendiri }}
+          />
           <Card>
             <CardContent className="flex items-center justify-between py-4">
               <p className="text-sm font-semibold">Total Kewajiban dan Ekuitas</p>

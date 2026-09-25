@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { RepostUnpostedResult, UnpostedJournalSummary } from "@siskop/types";
 import { db, type TxClient } from "../../lib/db.js";
-import { conflict, notFound } from "../../lib/errors.js";
+import { conflict, notFound, validationError } from "../../lib/errors.js";
 import { isRepostableSourceType, repostUnpostedEntries } from "../../lib/journal.js";
 import { isModalDisetorAuditRequired, MODAL_DISETOR_AUDIT_THRESHOLD_RP } from "../../lib/regulatory-config.js";
 import { withoutTenantScope } from "../../lib/tenant-scope.js";
@@ -109,6 +109,7 @@ export async function createAccount(tenantId: string, data: CreateAccountInput) 
       parentId: data.parentId ?? null,
       isHeader: data.isHeader,
       isCashEquivalent: data.isCashEquivalent,
+      equityClass: data.equityClass ?? null,
       isDefault: false,
       isActive: true
     }
@@ -128,6 +129,14 @@ export async function updateAccount(tenantId: string, id: string, data: UpdateAc
     const parent = await db.account.findFirst({ where: { id: data.parentId, tenantId } });
     if (!parent) throw notFound("Akun induk tidak ditemukan");
   }
+
+  // An equity class only means something on an EKUITAS account: reject one on
+  // any other category, and drop the stored one when the account leaves EKUITAS.
+  const nextCategory = data.category ?? account.category;
+  if (data.equityClass && nextCategory !== "EKUITAS") {
+    throw validationError("Klasifikasi ekuitas hanya untuk akun kategori EKUITAS");
+  }
+  const equityClass = nextCategory !== "EKUITAS" ? null : data.equityClass;
 
   if (data.isActive === false && account.isActive) {
     const [childCount, mappingCount, journalLineCount] = await Promise.all([
@@ -154,7 +163,8 @@ export async function updateAccount(tenantId: string, id: string, data: UpdateAc
       ...(data.parentId !== undefined ? { parentId: data.parentId } : {}),
       ...(data.isHeader !== undefined ? { isHeader: data.isHeader } : {}),
       ...(data.isCashEquivalent !== undefined ? { isCashEquivalent: data.isCashEquivalent } : {}),
-      ...(data.isActive !== undefined ? { isActive: data.isActive } : {})
+      ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+      ...(equityClass !== undefined ? { equityClass } : {})
     }
   });
 }
@@ -184,7 +194,21 @@ export interface GenerateStandardCoaResult {
  */
 export async function generateStandardCoa(tenantId: string): Promise<GenerateStandardCoaResult> {
   return db.$transaction(async (tx: TxClient) => {
-    const idByCode = new Map((await tx.account.findMany({ where: { tenantId } })).map((a) => [a.code, a.id]));
+    const existingAccounts = await tx.account.findMany({ where: { tenantId } });
+    const idByCode = new Map(existingAccounts.map((a) => [a.code, a.id]));
+
+    // Classify a pre-existing template EKUITAS account the tenant left
+    // unclassified (created before equityClass existed). Matched on code AND
+    // name: the same code can hold something else entirely (seed-ksu-demo.ts's
+    // 3-1000 is "Modal Kerja"), and a wrong class would silently skew Modal
+    // Sendiri — an unclassified account is left for an admin instead. Never
+    // overrides a class the tenant chose.
+    for (const account of existingAccounts) {
+      if (account.category !== "EKUITAS" || account.equityClass !== null) continue;
+      const seed = COA_TEMPLATE.find((t) => t.code === account.code && t.name === account.name);
+      if (!seed?.equityClass) continue;
+      await tx.account.update({ where: { id: account.id, tenantId }, data: { equityClass: seed.equityClass } });
+    }
 
     let accountsCreated = 0;
     let accountsSkipped = 0;
@@ -201,6 +225,7 @@ export async function generateStandardCoa(tenantId: string): Promise<GenerateSta
           normalBalance: acc.normalBalance,
           isHeader: acc.isHeader ?? false,
           isCashEquivalent: acc.isCashEquivalent ?? false,
+          equityClass: acc.equityClass ?? null,
           isDefault: true,
           isActive: true,
           ...(parentId ? { parentId } : {})
@@ -210,9 +235,11 @@ export async function generateStandardCoa(tenantId: string): Promise<GenerateSta
       return created.id;
     }
 
+    const isMultiUnit = (await tx.cooperativeUnit.count({ where: { tenantId, isActive: true } })) > 1;
     for (const acc of COA_TEMPLATE) {
       // Unit-specific (Toko) accounts are handled below, only when the tenant has such a unit.
       if (acc.unitType) continue;
+      if (acc.multiUnitOnly && !isMultiUnit) continue;
       if (idByCode.has(acc.code)) {
         accountsSkipped += 1;
         continue;

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { CreateLoanResponse, Loan, LoanConfig, Member } from "@siskop/types";
+import type { BmppHeadroom, CreateLoanResponse, LoanConfig, Member } from "@siskop/types";
 import { apiFetch, apiFetchPage, apiPost, ApiRequestError } from "@/api/client";
 import { formatRupiah } from "@/lib/format";
 import { addMonths, differenceInCalendarDays } from "date-fns";
@@ -50,13 +50,16 @@ export function NewLoanPage() {
   const [memberResults, setMemberResults] = useState<MemberResult[]>([]);
   const [selectedMember, setSelectedMember] = useState<MemberResult | null>(null);
   const [hasPokokSaving, setHasPokokSaving] = useState<boolean | null>(null);
-  const [relatedPartyExposure, setRelatedPartyExposure] = useState<{ current: number; cap: number } | null>(null);
+  const [bmpp, setBmpp] = useState<BmppHeadroom | null>(null);
   const [selectedConfig, setSelectedConfig] = useState<LoanConfig | null>(null);
   const [calc, setCalc] = useState<LoanCalculation | null>(null);
   const [apiError, setApiError] = useState("");
   const [existingLoanDialog, setExistingLoanDialog] = useState(false);
   const [existingLoanInfo, setExistingLoanInfo] = useState<{ amount: string; remaining: string } | null>(null);
   const [pendingFormData, setPendingFormData] = useState<Step2Form | null>(null);
+  // Set when the API asks to confirm a loan over the 15% BMPP; "force" carries
+  // over so the resubmit doesn't ask the existing-loan question again.
+  const [bmppWarning, setBmppWarning] = useState<(BmppHeadroom & { requested: string; force: boolean }) | null>(null);
 
   const {
     register,
@@ -73,22 +76,12 @@ export function NewLoanPage() {
   const termMonths = watch("termMonths");
   const disbursedAt = watch("disbursedAt");
 
-  /** Pengurus/pengawas only — the 10% modalDisetor concentration cap (Permenkop UKM 8/2023). */
-  const loadRelatedPartyExposure = async (member: MemberWithSavings) => {
-    if (!member.isPengurus && !member.isPengawas) {
-      setRelatedPartyExposure(null);
-      return;
-    }
+  /** The member's BMPP room (Permenkop UKM 8/2023): 10% of Modal Sendiri for pengurus/pengawas, 15% otherwise. */
+  const loadBmpp = async (member: MemberWithSavings) => {
     try {
-      const [{ modalDisetor }, activeLoans] = await Promise.all([
-        apiFetch<{ modalDisetor: string | null }>("/config/modal-disetor"),
-        apiFetchPage<Loan[]>(`/loans?memberId=${member.id}&status=ACTIVE&limit=100`)
-      ]);
-      const cap = Number(modalDisetor ?? 0) * 0.1;
-      const current = activeLoans.items.reduce((sum, l) => sum + Number(l.principalAmount), 0);
-      setRelatedPartyExposure({ current, cap });
+      setBmpp(await apiFetch<BmppHeadroom>(`/loans/bmpp-headroom?memberId=${member.id}`));
     } catch {
-      setRelatedPartyExposure(null);
+      setBmpp(null);
     }
   };
 
@@ -107,7 +100,7 @@ export function NewLoanPage() {
           setSelectedMember({ id: m.id, memberId: m.memberId, fullName: m.fullName, accountNumber: m.accountNumber });
           const hasPokok = m.savings?.some((s) => s.savingConfig.type === "POKOK" && s.isActive);
           setHasPokokSaving(hasPokok ?? false);
-          void loadRelatedPartyExposure(m);
+          void loadBmpp(m);
         })
         .catch((err) => {
           const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
@@ -165,14 +158,14 @@ export function NewLoanPage() {
       const member = await apiFetch<MemberWithSavings>(`/members/${m.id}`);
       const hasPokok = member.savings?.some((s) => s.savingConfig.type === "POKOK" && s.isActive);
       setHasPokokSaving(hasPokok ?? false);
-      void loadRelatedPartyExposure(member);
+      void loadBmpp(member);
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
       toast({ title: "Gagal memuat data anggota", description: message, variant: "destructive" });
     }
   };
 
-  const submitLoan = async (data: Step2Form, force = false) => {
+  const submitLoan = async (data: Step2Form, force = false, acknowledgeBmpp = false) => {
     setApiError("");
     try {
       const result = await apiPost<CreateLoanResponse>("/loans", {
@@ -181,7 +174,8 @@ export function NewLoanPage() {
         principalAmount: parseFloat(data.principalAmount),
         termMonths: parseInt(data.termMonths),
         disbursedAt: data.disbursedAt,
-        force
+        force,
+        acknowledgeBmpp
       });
 
       // The member already has an active/pending loan — a 200 with this flag,
@@ -195,6 +189,13 @@ export function NewLoanPage() {
         });
         setPendingFormData(data);
         setExistingLoanDialog(true);
+        return;
+      }
+
+      // Over 15% of Modal Sendiri for a non-pengurus member: a warning to confirm, not a rejection.
+      if ("bmppExceeded" in result) {
+        setPendingFormData(data);
+        setBmppWarning({ ...result.bmpp, force });
         return;
       }
 
@@ -237,7 +238,7 @@ export function NewLoanPage() {
                     onClick={() => {
                       setSelectedMember(null);
                       setHasPokokSaving(null);
-                      setRelatedPartyExposure(null);
+                      setBmpp(null);
                     }}
                   >
                     Ganti
@@ -304,14 +305,21 @@ export function NewLoanPage() {
               <form onSubmit={handleSubmit(onStep2Submit)} className="space-y-5">
                 {apiError && <FormError error={apiError} />}
 
-                {relatedPartyExposure && (
+                {bmpp?.isRelatedParty && (
                   <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                     <p className="font-medium">Anggota ini pengurus/pengawas — batas pinjaman pihak terkait berlaku</p>
                     <p className="text-xs">
-                      Eksposur aktif saat ini: {formatRupiah(relatedPartyExposure.current)} dari batas{" "}
-                      {formatRupiah(relatedPartyExposure.cap)} (10% modal disetor, Permenkop UKM 8/2023)
+                      Pinjaman aktif {formatRupiah(bmpp.existingPrincipal)} dari batas {formatRupiah(bmpp.limit)} (10% modal
+                      sendiri{bmpp.basis === "UNIT" ? " unit" : ""}, Permenkop UKM 8/2023). Sisa ruang:{" "}
+                      <strong>{formatRupiah(bmpp.headroom)}</strong>.
                     </p>
                   </div>
+                )}
+                {bmpp && !bmpp.isRelatedParty && Number(bmpp.modalSendiri) > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Batas konsentrasi pinjaman (BMPP 15% modal sendiri{bmpp.basis === "UNIT" ? " unit" : ""}): sisa ruang{" "}
+                    {formatRupiah(bmpp.headroom)} dari {formatRupiah(bmpp.limit)}.
+                  </p>
                 )}
 
                 <div className="space-y-1.5">
@@ -404,6 +412,34 @@ export function NewLoanPage() {
           )}
         </div>
       )}
+
+      <Dialog open={bmppWarning !== null} onOpenChange={(open) => !open && setBmppWarning(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Melebihi Batas Konsentrasi Pinjaman (BMPP)</DialogTitle>
+            <DialogDescription>
+              Pinjaman aktif anggota {formatRupiah(bmppWarning?.existingPrincipal ?? 0)} ditambah pengajuan ini{" "}
+              {formatRupiah(bmppWarning?.requested ?? 0)} melebihi batas <strong>{formatRupiah(bmppWarning?.limit ?? 0)}</strong>{" "}
+              (15% dari modal sendiri {formatRupiah(bmppWarning?.modalSendiri ?? 0)}, Permenkop UKM 8/2023 Pasal 45). Lanjutkan
+              hanya jika pengurus telah menyetujui pengecualian ini.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBmppWarning(null)}>
+              Batal
+            </Button>
+            <Button
+              onClick={async () => {
+                const force = bmppWarning?.force ?? false;
+                setBmppWarning(null);
+                if (pendingFormData) await submitLoan(pendingFormData, force, true);
+              }}
+            >
+              Tetap Ajukan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={existingLoanDialog} onOpenChange={setExistingLoanDialog}>
         <DialogContent>

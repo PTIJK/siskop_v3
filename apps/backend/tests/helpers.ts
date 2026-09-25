@@ -135,3 +135,62 @@ export async function createPlatformAdminSession(email = "platform-admin@demo.te
   });
   return login("demo", email, "rahasia123");
 }
+
+type EquityClassName =
+  | "SIMPANAN_POKOK"
+  | "SIMPANAN_WAJIB"
+  | "MODAL_TETAP"
+  | "CADANGAN_UMUM"
+  | "CADANGAN_RISIKO"
+  | "HIBAH"
+  | "MODAL_PENYERTAAN"
+  | "SHU"
+  | "EKUITAS_LAIN";
+
+/**
+ * Books `amount` of equity straight into the ledger: Kas (debit) against an
+ * EKUITAS account of `equityClass` (credit; a negative amount books the
+ * reverse). Creates the two accounts on first use. Lets Modal Sendiri tests
+ * set up balances without going through savings configs and mappings.
+ */
+export async function postEquity(
+  tenantId: string,
+  equityClass: EquityClassName,
+  amount: number | string,
+  opts: { entryDate?: Date; unitId?: string | null } = {}
+) {
+  const kas =
+    (await db.account.findFirst({ where: { tenantId, code: "T-KAS" } })) ??
+    (await db.account.create({
+      data: { tenantId, code: "T-KAS", name: "Kas (test)", category: "ASET", normalBalance: "DEBIT", isCashEquivalent: true }
+    }));
+  const code = `T-${equityClass}`;
+  const equity =
+    (await db.account.findFirst({ where: { tenantId, code } })) ??
+    (await db.account.create({
+      data: { tenantId, code, name: `${equityClass} (test)`, category: "EKUITAS", normalBalance: "KREDIT", equityClass }
+    }));
+  const value = Number(amount);
+  const abs = Math.abs(value).toFixed(2);
+  await db.journalEntry.create({
+    data: {
+      tenantId,
+      unitId: opts.unitId ?? null,
+      entryDate: opts.entryDate ?? new Date("2026-01-15T00:00:00Z"),
+      sourceType: "MANUAL",
+      description: `Ekuitas ${equityClass} (test)`,
+      lines: {
+        create:
+          value >= 0
+            ? [
+                { tenantId, accountId: kas.id, debit: abs, credit: 0 },
+                { tenantId, accountId: equity.id, debit: 0, credit: abs }
+              ]
+            : [
+                { tenantId, accountId: equity.id, debit: abs, credit: 0 },
+                { tenantId, accountId: kas.id, debit: 0, credit: abs }
+              ]
+      }
+    }
+  });
+}

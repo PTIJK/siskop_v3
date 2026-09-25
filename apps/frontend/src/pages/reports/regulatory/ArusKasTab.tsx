@@ -10,8 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { FileText, Info } from "lucide-react";
 import { PeriodRangeControls } from "./PeriodRangeControls";
-import { ALL_UNITS, unitQueryParam } from "./unit";
-import { UnitFilter } from "./UnitFilter";
+import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { UnitFilter } from "@/components/shared/UnitFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "./period";
 
 function ActivitySection({ title, section }: { title: string; section: ArusKasSection }) {

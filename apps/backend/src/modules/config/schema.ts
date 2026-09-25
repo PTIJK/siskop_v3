@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CooperativeType } from "@siskop/types";
+import { CooperativeType, EQUITY_CLASSES } from "@siskop/types";
 
 // ── Units ────────────────────────────────────────────────────────────────────
 
@@ -50,16 +50,26 @@ export const updateRoleSchema = z.object({
 
 // ── Accounts (Chart of Accounts) ───────────────────────────────────────────────
 
-export const createAccountSchema = z.object({
-  code: z.string().min(1, "Kode akun wajib diisi"),
-  name: z.string().min(2, "Nama akun minimal 2 karakter"),
-  category: z.enum(["ASET", "KEWAJIBAN", "EKUITAS", "PENDAPATAN", "BEBAN"]),
-  normalBalance: z.enum(["DEBIT", "KREDIT"]),
-  parentId: z.string().cuid("Parent ID tidak valid").optional(),
-  isHeader: z.boolean().default(false),
-  isCashEquivalent: z.boolean().default(false)
-});
+const EQUITY_CLASS_ONLY_ON_EKUITAS = "Klasifikasi ekuitas hanya untuk akun kategori EKUITAS";
 
+export const createAccountSchema = z
+  .object({
+    code: z.string().min(1, "Kode akun wajib diisi"),
+    name: z.string().min(2, "Nama akun minimal 2 karakter"),
+    category: z.enum(["ASET", "KEWAJIBAN", "EKUITAS", "PENDAPATAN", "BEBAN"]),
+    normalBalance: z.enum(["DEBIT", "KREDIT"]),
+    parentId: z.string().cuid("Parent ID tidak valid").optional(),
+    isHeader: z.boolean().default(false),
+    isCashEquivalent: z.boolean().default(false),
+    equityClass: z.enum(EQUITY_CLASSES).optional()
+  })
+  .refine((data) => data.equityClass === undefined || data.category === "EKUITAS", {
+    message: EQUITY_CLASS_ONLY_ON_EKUITAS,
+    path: ["equityClass"]
+  });
+
+// Whether a non-null equityClass fits the account's (possibly unchanged)
+// category is checked in updateAccount — this schema doesn't know the stored one.
 export const updateAccountSchema = z.object({
   code: z.string().min(1).optional(),
   name: z.string().min(2).optional(),
@@ -68,7 +78,8 @@ export const updateAccountSchema = z.object({
   parentId: z.string().cuid().nullable().optional(),
   isHeader: z.boolean().optional(),
   isCashEquivalent: z.boolean().optional(),
-  isActive: z.boolean().optional()
+  isActive: z.boolean().optional(),
+  equityClass: z.enum(EQUITY_CLASSES).nullable().optional()
 });
 
 // ── Account Mappings ─────────────────────────────────────────────────────────

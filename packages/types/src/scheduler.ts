@@ -12,7 +12,7 @@ export interface DailySchedulerResult {
   auditThreshold: AuditThresholdCheckResult;
 }
 
-/** Daily Permenkop UKM 2/2024 Pasal 12 modal-disetor audit-threshold reminder. */
+/** Daily Permenkop UKM 2/2024 Pasal 12 audit-threshold reminder, judged on ledger Modal Sendiri. */
 export interface AuditThresholdCheckResult {
   checked: number;
   notified: number;
