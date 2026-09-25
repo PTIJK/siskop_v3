@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { ErrorCode, type EquityClass } from "@siskop/types";
+import { ErrorCode, type EquityClass, type KspClass } from "@siskop/types";
 import { AppError } from "./errors.js";
 
 /**
@@ -81,4 +81,30 @@ export function validateRelatedPartyLoanLimit(params: {
       `Total pinjaman pengurus/pengawas melebihi batas ${REGULATORY_CAPS.RELATED_PARTY_LOAN_CONCENTRATION_PCT}% dari modal sendiri`
     );
   }
+}
+
+/**
+ * Upper bounds of KSP I-III — Permenkop UKM 8/2023 Pasal 49: jumlah anggota,
+ * Modal Sendiri and/or aset. Above KSP III is KSP IV.
+ */
+const KSP_CLASS_BOUNDS: { class: KspClass; members: number; modalSendiri: string; aset: string }[] = [
+  { class: "KSP_I", members: 5_000, modalSendiri: "2500000000", aset: "15000000000" },
+  { class: "KSP_II", members: 10_000, modalSendiri: "15000000000", aset: "100000000000" },
+  { class: "KSP_III", members: 30_000, modalSendiri: "50000000000", aset: "500000000000" }
+];
+
+/**
+ * The koperasi's KSP class under Pasal 49. The criteria are joined by
+ * "dan/atau", so any one of them exceeding a class's bound lifts it to the
+ * next: the result is the highest class any criterion lands in.
+ */
+export function classifyKsp(input: { members: number; modalSendiri: Prisma.Decimal.Value; aset: Prisma.Decimal.Value }): KspClass {
+  const modalSendiri = new Prisma.Decimal(input.modalSendiri);
+  const aset = new Prisma.Decimal(input.aset);
+  for (const bound of KSP_CLASS_BOUNDS) {
+    if (input.members <= bound.members && modalSendiri.lte(bound.modalSendiri) && aset.lte(bound.aset)) {
+      return bound.class;
+    }
+  }
+  return "KSP_IV";
 }

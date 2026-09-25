@@ -209,3 +209,30 @@ export async function getPerubahanEkuitas(tenantId: string, from: Date, to: Date
     }
   };
 }
+
+/** Total ASET from the ledger as of `asOf` (Decimal), optionally one unit's — the Neraca's aset total. */
+export async function getTotalAset(tenantId: string, asOf: Date, unitId?: string): Promise<Prisma.Decimal> {
+  const accounts = await db.account.findMany({
+    where: { tenantId, isHeader: false, category: "ASET" },
+    select: { id: true, normalBalance: true }
+  });
+  const sums = await sumsByAccount(
+    tenantId,
+    accounts.map((a) => a.id),
+    asOf,
+    undefined,
+    unitId
+  );
+  return accounts.reduce((total, account) => {
+    const sum = sums.get(account.id);
+    if (!sum) return total;
+    return total.add(account.normalBalance === "DEBIT" ? sum.debit.sub(sum.credit) : sum.credit.sub(sum.debit));
+  }, ZERO);
+}
+
+/** Ledger amount per Modal Sendiri class with a non-zero balance, in lampiran order. */
+export function komposisiModalSendiri(modalSendiri: ModalSendiri): { equityClass: EquityClass; amount: string }[] {
+  return EQUITY_CLASS_ORDER.filter((c) => MODAL_SENDIRI_CLASSES.includes(c) && !modalSendiri.byClass[c].isZero()).map(
+    (equityClass) => ({ equityClass, amount: modalSendiri.byClass[equityClass].toString() })
+  );
+}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -9,7 +10,9 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip
+  Tooltip,
+  Legend,
+  ReferenceLine
 } from "recharts";
 import {
   PiggyBank,
@@ -22,14 +25,18 @@ import {
   Info,
   CheckCircle2
 } from "lucide-react";
-import type { ChartPoint, DashboardSummary } from "@siskop/types";
+import type { CapitalDashboard, DashboardSummary, GrowthPoint, LoanQualityDashboard } from "@siskop/types";
 import { apiFetch } from "@/api/client";
 import { formatRupiah, formatRupiahSingkat } from "@/lib/format";
 import { buildAiSuggestions, type SuggestionTone } from "@/lib/aiSuggestions";
+import { ALL_UNITS } from "@/lib/unit";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatCard } from "@/components/shared/StatCard";
+import { UnitFilter } from "@/components/shared/UnitFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SERIES } from "./chartColors";
+import { ComplianceSection, HealthSection } from "./HealthSection";
 
 const SUGGESTION_ICONS: Record<SuggestionTone, typeof AlertTriangle> = {
   danger: AlertTriangle,
@@ -45,55 +52,112 @@ const SUGGESTION_COLORS: Record<SuggestionTone, string> = {
   success: "text-green-600"
 };
 
-function CustomTooltip({
+type ValueFormat = "rupiah" | "count";
+
+function ChartTooltip({
   active,
   payload,
-  label
+  label,
+  format = "rupiah"
 }: {
   active?: boolean;
-  payload?: { value: number }[];
+  payload?: { name?: string; value: number; color?: string }[];
   label?: string;
+  format?: ValueFormat;
 }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-md border bg-background px-3 py-2 shadow-md">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="text-sm font-bold">{formatRupiah(payload[0]?.value ?? 0)}</p>
+      {payload.map((p) => (
+        <p key={p.name} className="flex items-center gap-1.5 text-sm font-bold">
+          {payload.length > 1 && <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} aria-hidden />}
+          {payload.length > 1 && <span className="font-normal text-muted-foreground">{p.name}:</span>}
+          {format === "rupiah" ? formatRupiah(p.value) : p.value.toLocaleString("id-ID")}
+        </p>
+      ))}
     </div>
   );
 }
 
+function ChartCard({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{title}</CardTitle>
+        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
+}
+
+/** "+2 dari bulan lalu" with a trend arrow, or nothing when unchanged. */
+function memberDelta(summary: DashboardSummary): { subtitle?: string; trend?: "up" | "down" } {
+  const delta = summary.memberCount - summary.previous.memberCount;
+  if (delta === 0) return {};
+  return { subtitle: `${delta > 0 ? "+" : ""}${delta} dari bulan lalu`, trend: delta > 0 ? "up" : "down" };
+}
+
 export function DashboardPage() {
   const navigate = useNavigate();
+  const [unitId, setUnitId] = useState(ALL_UNITS);
+  const unitQuery = unitId === ALL_UNITS ? "" : `?unitId=${encodeURIComponent(unitId)}`;
 
   const summaryQuery = useQuery({
-    queryKey: ["dashboard", "summary"],
-    queryFn: () => apiFetch<DashboardSummary>("/dashboard/summary")
+    queryKey: ["dashboard", "summary", unitId],
+    queryFn: () => apiFetch<DashboardSummary>(`/dashboard/summary${unitQuery}`)
   });
-  const loanChartQuery = useQuery({
-    queryKey: ["dashboard", "loan-chart"],
-    queryFn: () => apiFetch<ChartPoint[]>("/dashboard/loan-chart?months=12")
+  const growthQuery = useQuery({
+    queryKey: ["dashboard", "growth", unitId],
+    queryFn: () => apiFetch<GrowthPoint[]>(`/dashboard/growth${unitQuery}`)
   });
-  const paymentChartQuery = useQuery({
-    queryKey: ["dashboard", "payment-chart"],
-    queryFn: () => apiFetch<ChartPoint[]>("/dashboard/payment-chart?months=12")
+  const capitalQuery = useQuery({
+    queryKey: ["dashboard", "capital", unitId],
+    queryFn: () => apiFetch<CapitalDashboard>(`/dashboard/capital${unitQuery}`)
+  });
+  const qualityQuery = useQuery({
+    queryKey: ["dashboard", "loan-quality", unitId],
+    queryFn: () => apiFetch<LoanQualityDashboard>(`/dashboard/loan-quality${unitQuery}`)
   });
 
   const summary = summaryQuery.data;
   const isLoading = summaryQuery.isPending;
-  const loanChartData = (loanChartQuery.data ?? []).map((d) => ({ ...d, value: parseFloat(d.value) }));
-  const paymentChartData = (paymentChartQuery.data ?? []).map((d) => ({ ...d, value: parseFloat(d.value) }));
-  const suggestionsLoading = summaryQuery.isPending || loanChartQuery.isPending || paymentChartQuery.isPending;
-  const suggestions = buildAiSuggestions(summary, loanChartData, paymentChartData);
+  const growth = (growthQuery.data ?? []).map((g) => ({
+    month: g.month,
+    disbursement: parseFloat(g.disbursement),
+    repayment: parseFloat(g.repayment),
+    savingsNetFlow: parseFloat(g.savingsNetFlow),
+    newMembers: g.newMembers
+  }));
+  const capitalTrend = (capitalQuery.data?.trend ?? []).map((p) => ({ month: p.month, value: parseFloat(p.value) }));
+
+  // The capital / loan-quality rules join in once their data arrives; the
+  // original summary-and-trend rules never wait for them.
+  const suggestionsLoading = summaryQuery.isPending || growthQuery.isPending;
+  const suggestions = buildAiSuggestions(
+    summary,
+    growth.map((g) => ({ month: g.month, value: g.disbursement })),
+    growth.map((g) => ({ month: g.month, value: g.repayment })),
+    { capital: capitalQuery.data, loanQuality: qualityQuery.data }
+  );
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Dashboard" description="Ringkasan operasional koperasi" />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <PageHeader title="Dashboard" description="Ringkasan operasional dan kesehatan koperasi" />
+        <UnitFilter value={unitId} onChange={setUnitId} />
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title="Total Simpanan"
           value={summary ? formatRupiah(summary.totalSavings) : "-"}
+          subtitle={
+            summary
+              ? `Modal (pokok+wajib) ${formatRupiahSingkat(summary.savingsEquity)} · dapat ditarik ${formatRupiahSingkat(summary.savingsLiability)}`
+              : undefined
+          }
           icon={PiggyBank}
           iconColor="text-blue-600"
           isLoading={isLoading}
@@ -110,6 +174,7 @@ export function DashboardPage() {
         <StatCard
           title="Jumlah Anggota"
           value={summary?.memberCount?.toString() ?? "-"}
+          {...(summary ? memberDelta(summary) : {})}
           icon={Users}
           iconColor="text-green-600"
           isLoading={isLoading}
@@ -118,6 +183,7 @@ export function DashboardPage() {
         <StatCard
           title="Angsuran Bulan Ini"
           value={summary ? formatRupiah(summary.monthlyPayments) : "-"}
+          subtitle={summary ? `Bulan lalu: ${formatRupiahSingkat(summary.previous.monthlyPayments)}` : undefined}
           icon={TrendingUp}
           iconColor="text-teal-600"
           isLoading={isLoading}
@@ -163,48 +229,60 @@ export function DashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Pencairan Pinjaman per Bulan</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={loanChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 11 }} width={70} />
-                <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Pencairan" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <HealthSection capital={capitalQuery.data} quality={qualityQuery.data} />
+      <ComplianceSection capital={capitalQuery.data} />
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Pembayaran Cicilan per Bulan</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={paymentChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 11 }} width={70} />
-                <Tooltip content={<CustomTooltip />} />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  dot={{ r: 3 }}
-                  activeDot={{ r: 5 }}
-                  name="Pembayaran"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ChartCard title="Pencairan vs Angsuran per Bulan" description="12 bulan terakhir">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={growth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barGap={2}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 11 }} width={70} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fillOpacity: 0.3 }} />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="disbursement" name="Pencairan" fill={SERIES.primary} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="repayment" name="Angsuran" fill={SERIES.secondary} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Modal Sendiri" description="Posisi akhir bulan, 12 bulan terakhir">
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={capitalTrend} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 11 }} width={70} />
+              <Tooltip content={<ChartTooltip />} />
+              <Line type="monotone" dataKey="value" name="Modal Sendiri" stroke={SERIES.primary} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Arus Bersih Simpanan" description="Setoran dan bunga dikurangi penarikan, per bulan">
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={growth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 11 }} width={70} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fillOpacity: 0.3 }} />
+              <ReferenceLine y={0} className="stroke-muted-foreground" />
+              <Bar dataKey="savingsNetFlow" name="Arus bersih" fill={SERIES.primary} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Anggota Baru per Bulan" description="12 bulan terakhir">
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={growth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={40} />
+              <Tooltip content={<ChartTooltip format="count" />} cursor={{ fillOpacity: 0.3 }} />
+              <Bar dataKey="newMembers" name="Anggota baru" fill={SERIES.primary} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
       </div>
     </div>
   );

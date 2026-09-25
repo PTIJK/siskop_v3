@@ -11,8 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileText } from "lucide-react";
-import { ALL_UNITS, unitQueryParam } from "./unit";
-import { UnitFilter } from "./UnitFilter";
+import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { UnitFilter } from "@/components/shared/UnitFilter";
 
 function SectionTable({
   title,

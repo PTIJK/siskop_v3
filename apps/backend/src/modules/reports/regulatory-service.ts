@@ -3,7 +3,7 @@ import { db } from "../../lib/db.js";
 import { validationError } from "../../lib/errors.js";
 import { splitPrincipalAndInterest } from "../../lib/journal.js";
 import { MODAL_DISETOR_AUDIT_THRESHOLD_RP, MODAL_SENDIRI_CLASSES } from "../../lib/regulatory-config.js";
-import { EQUITY_CLASS_ORDER, getModalSendiri } from "./capital-service.js";
+import { EQUITY_CLASS_ORDER, getModalSendiri, komposisiModalSendiri } from "./capital-service.js";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -561,9 +561,7 @@ export async function getCalk(tenantId: string, from: Date, to: Date) {
     permodalan: {
       modalSendiri: modalSendiri.total.toString(),
       penyesuaianSaldoAwal: modalSendiri.adjustment.toString(),
-      komposisi: EQUITY_CLASS_ORDER.filter((c) => MODAL_SENDIRI_CLASSES.includes(c) && !modalSendiri.byClass[c].isZero()).map(
-        (equityClass) => ({ equityClass, amount: modalSendiri.byClass[equityClass].toString() })
-      ),
+      komposisi: komposisiModalSendiri(modalSendiri),
       ambangAudit: MODAL_DISETOR_AUDIT_THRESHOLD_RP.toString(),
       wajibAudit: modalSendiri.total.gte(MODAL_DISETOR_AUDIT_THRESHOLD_RP)
     }
