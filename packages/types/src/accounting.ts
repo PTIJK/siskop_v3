@@ -14,6 +14,18 @@ export const EQUITY_CLASSES = [
   "EKUITAS_LAIN"
 ] as const;
 export type EquityClass = (typeof EQUITY_CLASSES)[number];
+
+export const EQUITY_CLASS_LABELS: Record<EquityClass, string> = {
+  SIMPANAN_POKOK: "Simpanan Pokok",
+  SIMPANAN_WAJIB: "Simpanan Wajib",
+  MODAL_TETAP: "Modal Tetap (USP)",
+  CADANGAN_UMUM: "Cadangan Umum",
+  CADANGAN_RISIKO: "Cadangan Risiko",
+  HIBAH: "Hibah",
+  MODAL_PENYERTAAN: "Modal Penyertaan",
+  SHU: "Sisa Hasil Usaha",
+  EKUITAS_LAIN: "Ekuitas Lain"
+};
 export type MappingSourceType = "SAVING_CONFIG" | "LOAN_CONFIG" | "SYSTEM";
 export type MappingTransactionKind =
   | "DEPOSIT"

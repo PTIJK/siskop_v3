@@ -14,6 +14,7 @@ import {
   upsertCalkNarrativeSchema
 } from "./schema.js";
 import { getFinancialReport, getRATReport } from "./service.js";
+import { getPerubahanEkuitas } from "./capital-service.js";
 import {
   assertValidPeriod,
   getArusKas,
@@ -28,6 +29,7 @@ import {
   generateFinancialPdf,
   generateLaporanHasilUsahaPdf,
   generateNeracaPdf,
+  generatePerubahanEkuitasPdf,
   generateRatPdf,
   generateShuDistributionPdf
 } from "./pdf.js";
@@ -191,6 +193,36 @@ export function reportsRoutes(): Router {
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="laporan-hasil-usaha-${start.toISOString().split("T")[0]}_${end.toISOString().split("T")[0]}.pdf"`
+      });
+      res.send(pdf);
+    })
+  );
+
+  router.get(
+    "/regulatory/perubahan-ekuitas",
+    requireAccountingEntitlement,
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const { from, to, unitId } = unitPeriodParamsSchema.parse(req.query);
+      const { start, end } = resolvePeriod(from, to);
+      assertValidPeriod(start, end);
+      const data = await getPerubahanEkuitas(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/regulatory/perubahan-ekuitas/pdf",
+    requireAccountingEntitlement,
+    requirePermission("reports", "export"),
+    handle(async (req, res) => {
+      const { from, to, unitId } = unitPeriodParamsSchema.parse(req.query);
+      const { start, end } = resolvePeriod(from, to);
+      assertValidPeriod(start, end);
+      const pdf = await generatePerubahanEkuitasPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
+      res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="perubahan-ekuitas-${start.toISOString().split("T")[0]}_${end.toISOString().split("T")[0]}.pdf"`
       });
       res.send(pdf);
     })

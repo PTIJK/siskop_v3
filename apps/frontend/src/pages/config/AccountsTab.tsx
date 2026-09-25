@@ -3,7 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { EQUITY_CLASSES, type Account, type EquityClass, type GenerateStandardCoaResult } from "@siskop/types";
+import {
+  EQUITY_CLASS_LABELS,
+  EQUITY_CLASSES,
+  type Account,
+  type EquityClass,
+  type GenerateStandardCoaResult
+} from "@siskop/types";
 import { apiFetch, apiPost, apiPut, ApiRequestError } from "@/api/client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
@@ -24,18 +30,6 @@ import { UnpostedJournalBanner } from "./UnpostedJournalBanner";
 const CATEGORIES = ["ASET", "KEWAJIBAN", "EKUITAS", "PENDAPATAN", "BEBAN"] as const;
 const NO_PARENT = "__none__";
 const NO_EQUITY_CLASS = "__none__";
-
-const EQUITY_CLASS_LABELS: Record<EquityClass, string> = {
-  SIMPANAN_POKOK: "Simpanan Pokok",
-  SIMPANAN_WAJIB: "Simpanan Wajib",
-  MODAL_TETAP: "Modal Tetap (USP)",
-  CADANGAN_UMUM: "Cadangan Umum",
-  CADANGAN_RISIKO: "Cadangan Risiko",
-  HIBAH: "Hibah",
-  MODAL_PENYERTAAN: "Modal Penyertaan",
-  SHU: "Sisa Hasil Usaha",
-  EKUITAS_LAIN: "Ekuitas Lain"
-};
 
 const schema = z.object({
   code: z.string().min(1, "Kode wajib diisi"),

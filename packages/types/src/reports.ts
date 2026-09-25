@@ -1,3 +1,5 @@
+import type { EquityClass } from "./accounting.js";
+
 // RPT-01/RPT-02 — hand-aggregated savings/loan summary reports (predates the
 // ledger). Kept alongside the ledger-derived regulatory reports below; see
 // Docs/specs/2026-07-22-pelaporan-regulasi-design.md §12 ("Changes to today's
@@ -33,6 +35,8 @@ export interface NeracaItem {
   name: string;
   balance: string;
   isComputed: boolean;
+  /** EKUITAS lines only (the computed unclosed-SHU line is SHU); null elsewhere or when unclassified. */
+  equityClass: EquityClass | null;
 }
 
 export interface NeracaSection {
@@ -47,6 +51,35 @@ export interface Neraca {
   ekuitas: NeracaSection;
   totalKewajibanDanEkuitas: string;
   balanced: boolean;
+  /**
+   * Subtotal of the ekuitas lines that are Modal Sendiri (Permenkop UKM 8/2023
+   * Pasal 1 angka 23). Ledger only: an opening-balance adjustment sits outside
+   * the Neraca so it stays balanced.
+   */
+  modalSendiri: string;
+}
+
+// ── Laporan Perubahan Ekuitas (Permenkop UKM 2/2024 lampiran) ────────────────
+
+/** An equity class column, or the column for EKUITAS accounts not classified yet. */
+export type PerubahanEkuitasColumnKey = EquityClass | "BELUM_DIKLASIFIKASI";
+
+export type PerubahanEkuitasRowKey = "SALDO_AWAL" | "PENAMBAHAN" | "PENGURANGAN" | "SHU_PERIODE_BERJALAN" | "SALDO_AKHIR";
+
+export interface PerubahanEkuitasRow {
+  key: PerubahanEkuitasRowKey;
+  label: string;
+  /** Keyed by every column in `columns`. PENGURANGAN values are positive amounts. */
+  values: Record<string, string>;
+  total: string;
+}
+
+export interface PerubahanEkuitas {
+  periode: { from: string; to: string };
+  columns: { key: PerubahanEkuitasColumnKey; label: string }[];
+  rows: PerubahanEkuitasRow[];
+  /** Includes the opening-balance adjustment, unlike the columns (ledger only). */
+  modalSendiri: { awal: string; akhir: string; penyesuaianSaldoAwal: string };
 }
 
 export interface ArusKasRincian {
@@ -155,6 +188,17 @@ export interface Calk {
   rincianPendapatan: LabaRugiItem[];
   rincianBeban: LabaRugiItem[];
   shuBerjalan: string;
+  permodalan: CalkPermodalan;
+}
+
+/** Modal Sendiri as of the period end, and whether it triggers Permenkop UKM 2/2024 Pasal 12. */
+export interface CalkPermodalan {
+  modalSendiri: string;
+  penyesuaianSaldoAwal: string;
+  /** Ledger amount per Modal Sendiri class; classes with no balance are left out. */
+  komposisi: { equityClass: EquityClass; amount: string }[];
+  ambangAudit: string;
+  wajibAudit: boolean;
 }
 
 export interface UpsertCalkNarrativeRequest {

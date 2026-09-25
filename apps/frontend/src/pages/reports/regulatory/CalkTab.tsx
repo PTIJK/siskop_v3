@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CALK_SECTION_LABEL, type Calk, type CalkMutasiItem, type CalkSection, type LabaRugiItem } from "@siskop/types";
+import { CALK_SECTION_LABEL, EQUITY_CLASS_LABELS, type Calk, type CalkMutasiItem, type CalkSection, type LabaRugiItem } from "@siskop/types";
 import { apiFetch, apiPut, ApiRequestError } from "@/api/client";
 import { formatRupiah, formatTanggalIndonesia } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -215,6 +215,35 @@ export function CalkTab() {
               <CardContent className="flex items-center justify-between py-4">
                 <p className="text-sm font-semibold">SHU Berjalan</p>
                 <p className="text-sm font-semibold">{formatRupiah(data.shuBerjalan)}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-3">
+            <h2 className="text-sm font-semibold">Permodalan</h2>
+            <Card>
+              <CardContent className="space-y-2 pt-5 text-sm">
+                {data.permodalan.komposisi.map((k) => (
+                  <div key={k.equityClass} className="flex justify-between">
+                    <span>{EQUITY_CLASS_LABELS[k.equityClass]}</span>
+                    <span className="tabular-nums">{formatRupiah(k.amount)}</span>
+                  </div>
+                ))}
+                {Number(data.permodalan.penyesuaianSaldoAwal) !== 0 && (
+                  <div className="flex justify-between">
+                    <span>Penyesuaian saldo awal (di luar buku besar)</span>
+                    <span className="tabular-nums">{formatRupiah(data.permodalan.penyesuaianSaldoAwal)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t pt-2 font-semibold">
+                  <span>Modal Sendiri per {data.periode.to}</span>
+                  <span className="tabular-nums">{formatRupiah(data.permodalan.modalSendiri)}</span>
+                </div>
+                <p className={data.permodalan.wajibAudit ? "text-amber-600" : "text-muted-foreground"}>
+                  {data.permodalan.wajibAudit
+                    ? `Modal sendiri mencapai ambang ${formatRupiah(data.permodalan.ambangAudit)} — laporan keuangan tahunan wajib diaudit akuntan publik (Permenkop UKM No. 2/2024 Pasal 12).`
+                    : `Di bawah ambang audit wajib ${formatRupiah(data.permodalan.ambangAudit)} (Permenkop UKM No. 2/2024 Pasal 12).`}
+                </p>
               </CardContent>
             </Card>
           </div>

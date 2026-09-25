@@ -4,6 +4,7 @@ import type { SavingStatement } from "@siskop/types";
 import { STATEMENT_TYPE_LABEL } from "../savings/statement-export.js";
 import { db } from "../../lib/db.js";
 import { getFinancialReport, getRATReport, type ReportParams } from "./service.js";
+import { getPerubahanEkuitas } from "./capital-service.js";
 import {
   getArusKas,
   getLaporanHasilUsaha,
@@ -238,6 +239,32 @@ export async function generateNeracaPdf(tenantId: string, asOfDate: Date, unitId
     </p>`;
 
   return renderToPdf(wrapPdf(tenant, "Neraca (Laporan Posisi Keuangan)", `Per Tanggal ${data.asOfDate}${unitLabel}`, body));
+}
+
+export async function generatePerubahanEkuitasPdf(tenantId: string, from: Date, to: Date, unitId?: string): Promise<Buffer> {
+  const tenant = await requireTenant(tenantId);
+  const data = await getPerubahanEkuitas(tenantId, from, to, unitId);
+  const subtitle = `Periode ${data.periode.from} s/d ${data.periode.to}${await unitSuffix(tenantId, unitId)}`;
+
+  const header = data.columns.map((c) => `<th>${c.label}</th>`).join("");
+  const rows = data.rows
+    .map((r) => {
+      const cls = r.key === "SALDO_AWAL" || r.key === "SALDO_AKHIR" ? ` class="total"` : "";
+      const sign = r.key === "PENGURANGAN" ? "-" : "";
+      const cells = data.columns.map((c) => `<td>${sign}${rp(r.values[c.key] ?? "0")}</td>`).join("");
+      return `<tr${cls}><td>${r.label}</td>${cells}<td>${sign}${rp(r.total)}</td></tr>`;
+    })
+    .join("");
+  const body = `
+    <table><tr><th>Keterangan</th>${header}<th>Total</th></tr>${rows}</table>
+    <h3>Modal Sendiri (Permenkop UKM 8/2023)</h3>
+    <table>
+      <tr><td>Awal periode</td><td>${rp(data.modalSendiri.awal)}</td></tr>
+      <tr><td>Akhir periode</td><td>${rp(data.modalSendiri.akhir)}</td></tr>
+      <tr><td>Termasuk penyesuaian saldo awal di luar buku besar</td><td>${rp(data.modalSendiri.penyesuaianSaldoAwal)}</td></tr>
+    </table>`;
+
+  return renderToPdf(wrapPdf(tenant, "Laporan Perubahan Ekuitas", subtitle, body));
 }
 
 export async function generateArusKasPdf(tenantId: string, from: Date, to: Date, unitId?: string): Promise<Buffer> {
