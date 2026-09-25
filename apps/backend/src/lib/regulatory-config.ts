@@ -9,7 +9,10 @@ import { AppError } from "./errors.js";
 export const REGULATORY_CAPS = {
   LOAN_ANNUAL_RATE_MAX_PCT: 24,
   SAVING_ANNUAL_RATE_MAX_PCT: 9,
-  RELATED_PARTY_LOAN_CONCENTRATION_PCT: 10
+  /** BMPP pihak terkait (pengurus, pengawas) — Permenkop UKM 8/2023 Pasal 44. */
+  RELATED_PARTY_LOAN_CONCENTRATION_PCT: 10,
+  /** BMPP pihak tidak terkait (other members) — Pasal 45. */
+  NON_RELATED_PARTY_LOAN_CONCENTRATION_PCT: 15
 } as const;
 
 /**

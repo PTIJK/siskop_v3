@@ -1,16 +1,17 @@
 import { Prisma } from "@prisma/client";
 import { addMonths, differenceInCalendarDays } from "date-fns";
-import { ErrorCode } from "@siskop/types";
+import { ErrorCode, type BmppHeadroom } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { calculateLoan } from "../../lib/loan-calc.js";
-import { validateRegulatoryRate, validateRelatedPartyLoanLimit } from "../../lib/regulatory-config.js";
+import { REGULATORY_CAPS, validateRegulatoryRate, validateRelatedPartyLoanLimit } from "../../lib/regulatory-config.js";
 import { recalculateKOL } from "../../lib/kol.js";
 import { postLoanDisbursement, postLoanPayment, splitPrincipalAndInterest } from "../../lib/journal.js";
 import { resolveUnitId } from "../../lib/units.js";
 import { getModalSendiri } from "../reports/capital-service.js";
 import { hasPokokSaving } from "../savings/service.js";
 import type {
+  BmppHeadroomQueryInput,
   CreateLoanConfigInput,
   CreateLoanInput,
   ListLoansQueryInput,
@@ -98,6 +99,75 @@ export async function getLoanById(tenantId: string, id: string) {
   return loan;
 }
 
+// ── BMPP (Permenkop UKM 8/2023 Pasal 44-45) ─────────────────────────────────
+
+interface Bmpp {
+  basis: "KONSOLIDASI" | "UNIT";
+  unitId: string | null;
+  modalSendiri: Prisma.Decimal;
+  isRelatedParty: boolean;
+  limitPct: number;
+  limit: Prisma.Decimal;
+  existingPrincipal: Prisma.Decimal;
+}
+
+/**
+ * The member's BMPP position when lending from `unitId`. A single-unit
+ * koperasi measures against its consolidated Modal Sendiri and all of the
+ * member's ACTIVE loans; a KSU (more than one active unit) against the
+ * lending unit's own Modal Sendiri — the USP's Modal Tetap in Pasal 1 angka
+ * 18 terms — and only that unit's loans.
+ */
+async function computeBmpp(
+  tenantId: string,
+  member: { id: string; isPengurus: boolean; isPengawas: boolean },
+  unitId: string
+): Promise<Bmpp> {
+  const activeUnits = await db.cooperativeUnit.count({ where: { tenantId, isActive: true } });
+  const perUnit = activeUnits > 1;
+  const [modalSendiri, activeLoans] = await Promise.all([
+    getModalSendiri(tenantId, new Date(), perUnit ? unitId : undefined),
+    db.loan.aggregate({
+      where: { tenantId, memberId: member.id, status: "ACTIVE", ...(perUnit ? { unitId } : {}) },
+      _sum: { principalAmount: true }
+    })
+  ]);
+  const isRelatedParty = member.isPengurus || member.isPengawas;
+  const limitPct = isRelatedParty
+    ? REGULATORY_CAPS.RELATED_PARTY_LOAN_CONCENTRATION_PCT
+    : REGULATORY_CAPS.NON_RELATED_PARTY_LOAN_CONCENTRATION_PCT;
+  return {
+    basis: perUnit ? "UNIT" : "KONSOLIDASI",
+    unitId: perUnit ? unitId : null,
+    modalSendiri: modalSendiri.total,
+    isRelatedParty,
+    limitPct,
+    limit: modalSendiri.total.mul(limitPct).div(100),
+    existingPrincipal: activeLoans._sum.principalAmount ?? new Prisma.Decimal(0)
+  };
+}
+
+function serializeBmpp(bmpp: Bmpp): BmppHeadroom {
+  const headroom = bmpp.limit.sub(bmpp.existingPrincipal);
+  return {
+    basis: bmpp.basis,
+    unitId: bmpp.unitId,
+    modalSendiri: bmpp.modalSendiri.toString(),
+    isRelatedParty: bmpp.isRelatedParty,
+    limitPct: bmpp.limitPct,
+    limit: bmpp.limit.toString(),
+    existingPrincipal: bmpp.existingPrincipal.toString(),
+    headroom: (headroom.isNegative() ? new Prisma.Decimal(0) : headroom).toString()
+  };
+}
+
+export async function getBmppHeadroom(tenantId: string, query: BmppHeadroomQueryInput): Promise<BmppHeadroom> {
+  const member = await db.member.findFirst({ where: { id: query.memberId, tenantId } });
+  if (!member) throw notFound("Anggota tidak ditemukan");
+  const unitId = await resolveUnitId(tenantId, query.unitId);
+  return serializeBmpp(await computeBmpp(tenantId, member, unitId));
+}
+
 /**
  * `createdBy` is accepted for API-shape parity with Savings (and because the
  * caller is who initiated the disbursement) but not persisted — `Loan` has no
@@ -115,23 +185,14 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
     );
   }
 
-  if (member.isPengurus || member.isPengawas) {
-    const [modalSendiri, activeLoans] = await Promise.all([
-      getModalSendiri(tenantId, new Date()),
-      db.loan.findMany({
-        where: { tenantId, memberId: data.memberId, status: "ACTIVE" },
-        select: { principalAmount: true }
-      })
-    ]);
-    const existingActivePrincipal = activeLoans.reduce(
-      (sum, l) => sum.add(l.principalAmount),
-      new Prisma.Decimal(0)
-    );
+  const unitId = await resolveUnitId(tenantId, data.unitId);
+  const bmpp = await computeBmpp(tenantId, member, unitId);
+  if (bmpp.isRelatedParty) {
     validateRelatedPartyLoanLimit({
       isRelatedParty: true,
-      existingActivePrincipal,
+      existingActivePrincipal: bmpp.existingPrincipal,
       newPrincipal: data.principalAmount,
-      modalSendiri: modalSendiri.total
+      modalSendiri: bmpp.modalSendiri
     });
   }
 
@@ -152,6 +213,19 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
         }
       };
     }
+  }
+
+  // Pasal 45 for other members is a confirmable warning, not a block — and
+  // only once there is a Modal Sendiri to judge against: a tenant without a
+  // ledger (no accounting module) would otherwise be asked on every loan.
+  const requested = new Prisma.Decimal(data.principalAmount);
+  if (
+    !bmpp.isRelatedParty &&
+    !data.acknowledgeBmpp &&
+    bmpp.modalSendiri.gt(0) &&
+    bmpp.existingPrincipal.add(requested).gt(bmpp.limit)
+  ) {
+    return { bmppExceeded: true as const, bmpp: { ...serializeBmpp(bmpp), requested: requested.toString() } };
   }
 
   const loanConfig = await db.loanConfig.findFirst({
@@ -183,8 +257,6 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
     loanConfig.rateType,
     { termDays }
   );
-
-  const unitId = await resolveUnitId(tenantId, data.unitId);
 
   return db.$transaction(async (tx) => {
     const loan = await tx.loan.create({

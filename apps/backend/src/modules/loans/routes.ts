@@ -3,6 +3,7 @@ import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { requireParam } from "../../lib/http.js";
 import {
+  bmppHeadroomQuerySchema,
   createLoanConfigSchema,
   createLoanSchema,
   listLoansQuerySchema,
@@ -12,6 +13,7 @@ import {
 import {
   createLoan,
   createLoanConfig,
+  getBmppHeadroom,
   getLoanById,
   getOverdueLoans,
   listLoanConfigs,
@@ -91,8 +93,19 @@ export function loansRoutes(): Router {
       const data = createLoanSchema.parse(req.body);
       const auth = authClaims(req);
       const result = await createLoan(auth.tenantId, data, auth.userId);
-      const status = "hasExistingLoan" in result && result.hasExistingLoan ? 200 : 201;
+      // 200 = the API asks for confirmation (second loan, or BMPP over 15%) and nothing was created.
+      const status = "hasExistingLoan" in result || "bmppExceeded" in result ? 200 : 201;
       res.status(status).json({ success: true, data: result, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/bmpp-headroom",
+    requirePermission("loans", "read"),
+    handle(async (req, res) => {
+      const query = bmppHeadroomQuerySchema.parse(req.query);
+      const data = await getBmppHeadroom(authClaims(req).tenantId, query);
+      res.json({ success: true, data, meta: res.locals.meta });
     })
   );
 

@@ -17,6 +17,12 @@ export interface AccountSeed {
    * doesn't get zero-balance Toko lines cluttering its Neraca/Laba Rugi.
    */
   unitType?: "KONSUMEN";
+  /**
+   * Only for a multi-unit (KSU) koperasi — i.e. more than one active
+   * CooperativeUnit (CLAUDE.md rule 2b). A single-unit koperasi has no USP
+   * whose Modal Tetap needs its own account.
+   */
+  multiUnitOnly?: true;
 }
 
 // Standard COA template — Docs/specs/2026-07-21-konfigurasi-akun-coa-design.md §4.
@@ -47,6 +53,17 @@ export const COA_TEMPLATE: AccountSeed[] = [
   { key: "cadangan_risiko", code: "3-2100", name: "Cadangan Risiko", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "CADANGAN_RISIKO" },
   { key: "shu_berjalan", code: "3-3000", name: "SHU Tahun Berjalan", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "SHU" },
   { key: "shu_lalu", code: "3-3100", name: "SHU Tahun Lalu Belum Dibagi", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "SHU" },
+  // The capital a KSU places in its simpan pinjam unit (Permenkop UKM 8/2023
+  // Pasal 1 angka 24) — journal it with that unit so the unit's BMPP basis sees it.
+  {
+    key: "modal_tetap_usp",
+    code: "3-6000",
+    name: "Modal Tetap USP",
+    category: "EKUITAS",
+    normalBalance: "KREDIT",
+    equityClass: "MODAL_TETAP",
+    multiUnitOnly: true
+  },
   { key: "hibah", code: "3-4000", name: "Hibah", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "HIBAH" },
   { key: "modal_penyertaan", code: "3-5000", name: "Modal Penyertaan", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "MODAL_PENYERTAAN" },
   { key: "ekuitas_lain", code: "3-9000", name: "Ekuitas Lain", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "EKUITAS_LAIN" },

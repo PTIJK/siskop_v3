@@ -527,7 +527,8 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     const second = await generateStandard(admin.accessToken);
 
     expect(second.status).toBe(201);
-    expect(second.body.data.accountsCreated).toBe(4);
+    // The four Toko accounts, plus Modal Tetap USP now that the koperasi is multi-unit.
+    expect(second.body.data.accountsCreated).toBe(5);
     expect(second.body.data.mappingsCreated).toBe(5);
   });
 
@@ -628,6 +629,21 @@ describe("Account.equityClass", () => {
     expect(byCode.get("3-4000")?.equityClass).toBe("HIBAH");
     expect(byCode.get("3-5000")?.equityClass).toBe("MODAL_PENYERTAAN");
     expect(byCode.get("3-9000")?.equityClass).toBe("EKUITAS_LAIN");
+  });
+
+  it("adds a Modal Tetap USP account only for a multi-unit (KSU) koperasi", async () => {
+    const single = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
+    const ksu = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
+    await createKonsumenUnit(ksu.accessToken);
+
+    await generateStandard(single.accessToken);
+    await generateStandard(ksu.accessToken);
+
+    expect((await listAccounts(single.accessToken)).some((a) => a.code === "3-6000")).toBe(false);
+    expect((await listAccounts(ksu.accessToken)).find((a) => a.code === "3-6000")).toMatchObject({
+      name: "Modal Tetap USP",
+      equityClass: "MODAL_TETAP"
+    });
   });
 
   it("leaves non-equity template accounts unclassified", async () => {

@@ -16,6 +16,7 @@ export const createLoanSchema = z.object({
   principalAmount: z.coerce.number().positive("Nominal pinjaman harus lebih dari 0"),
   termMonths: z.coerce.number().int().min(1),
   force: z.boolean().default(false),
+  acknowledgeBmpp: z.boolean().default(false),
   disbursedAt: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD")
@@ -45,6 +46,12 @@ export const listLoansQuerySchema = z.object({
 
 export type CreateLoanConfigInput = z.infer<typeof createLoanConfigSchema>;
 export type UpdateLoanConfigInput = z.infer<typeof updateLoanConfigSchema>;
+export const bmppHeadroomQuerySchema = z.object({
+  memberId: z.string().cuid("Member ID tidak valid"),
+  unitId: z.string().cuid("Unit ID tidak valid").optional()
+});
+
 export type CreateLoanInput = z.infer<typeof createLoanSchema>;
+export type BmppHeadroomQueryInput = z.infer<typeof bmppHeadroomQuerySchema>;
 export type LoanPaymentInput = z.infer<typeof loanPaymentSchema>;
 export type ListLoansQueryInput = z.infer<typeof listLoansQuerySchema>;

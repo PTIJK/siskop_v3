@@ -235,9 +235,11 @@ export async function generateStandardCoa(tenantId: string): Promise<GenerateSta
       return created.id;
     }
 
+    const isMultiUnit = (await tx.cooperativeUnit.count({ where: { tenantId, isActive: true } })) > 1;
     for (const acc of COA_TEMPLATE) {
       // Unit-specific (Toko) accounts are handled below, only when the tenant has such a unit.
       if (acc.unitType) continue;
+      if (acc.multiUnitOnly && !isMultiUnit) continue;
       if (idByCode.has(acc.code)) {
         accountsSkipped += 1;
         continue;

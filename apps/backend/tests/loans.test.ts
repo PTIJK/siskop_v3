@@ -366,6 +366,196 @@ describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8
   });
 });
 
+describe("POST /api/loans — BMPP pihak tidak terkait (Permenkop UKM 8/2023 Pasal 45)", () => {
+  // A 15% concentration warning, not a block: the API asks for confirmation
+  // the same way it does for a second loan, and `acknowledgeBmpp` proceeds.
+  async function setup(modalSendiri: number) {
+    const admin = await setupTenant();
+    if (modalSendiri > 0) {
+      await postEquity(admin.user.tenantId, "SIMPANAN_WAJIB", modalSendiri, { entryDate: new Date("2020-01-01T00:00:00Z") });
+    }
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+    return { admin, member, config };
+  }
+
+  function borrow(accessToken: string, body: Record<string, unknown>) {
+    return request(app()).post("/api/loans").set("Authorization", `Bearer ${accessToken}`).send({ termMonths: 12, ...body });
+  }
+
+  it("asks for confirmation above 15% of Modal Sendiri, without creating the loan", async () => {
+    const { admin, member, config } = await setup(10_000_000); // 15% = 1,500,000
+
+    const res = await borrow(admin.accessToken, { memberId: member.id, loanConfigId: config.id, principalAmount: 1_500_001 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      bmppExceeded: true,
+      bmpp: {
+        basis: "KONSOLIDASI",
+        modalSendiri: "10000000",
+        limitPct: 15,
+        limit: "1500000",
+        existingPrincipal: "0",
+        requested: "1500001"
+      }
+    });
+    expect(await db.loan.count({ where: { tenantId: admin.user.tenantId } })).toBe(0);
+  });
+
+  it("creates the loan once the warning is acknowledged", async () => {
+    const { admin, member, config } = await setup(10_000_000);
+
+    const res = await borrow(admin.accessToken, {
+      memberId: member.id,
+      loanConfigId: config.id,
+      principalAmount: 1_500_001,
+      acknowledgeBmpp: true
+    });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("does not warn exactly at the 15% limit", async () => {
+    const { admin, member, config } = await setup(10_000_000);
+
+    const res = await borrow(admin.accessToken, { memberId: member.id, loanConfigId: config.id, principalAmount: 1_500_000 });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("counts the member's existing active loans toward the limit", async () => {
+    const { admin, member, config } = await setup(10_000_000);
+    await borrow(admin.accessToken, { memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000 });
+
+    const res = await borrow(admin.accessToken, {
+      memberId: member.id,
+      loanConfigId: config.id,
+      principalAmount: 600_000,
+      force: true
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.bmpp.existingPrincipal).toBe("1000000");
+  });
+
+  it("stays silent when there is no Modal Sendiri to judge against (tenant without a ledger)", async () => {
+    const { admin, member, config } = await setup(0);
+
+    const res = await borrow(admin.accessToken, { memberId: member.id, loanConfigId: config.id, principalAmount: 50_000_000 });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("keeps the related-party 10% cap a hard block, acknowledgement or not", async () => {
+    const admin = await setupTenant();
+    await postEquity(admin.user.tenantId, "SIMPANAN_WAJIB", 10_000_000, { entryDate: new Date("2020-01-01T00:00:00Z") });
+    const pengurus = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await borrow(admin.accessToken, {
+      memberId: pengurus.id,
+      loanConfigId: config.id,
+      principalAmount: 1_000_001,
+      acknowledgeBmpp: true
+    });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
+  });
+});
+
+describe("BMPP basis for a multi-unit (KSU) koperasi — the lending unit's own Modal Sendiri", () => {
+  async function ksu() {
+    const admin = await setupTenant();
+    const tenantId = admin.user.tenantId;
+    const ksp = await db.cooperativeUnit.findFirstOrThrow({ where: { tenantId, type: "KSP" } });
+    await db.cooperativeUnit.create({ data: { tenantId, type: "KONSUMEN", name: "Toko" } });
+    const early = new Date("2020-01-01T00:00:00Z");
+    await postEquity(tenantId, "SIMPANAN_POKOK", 10_000_000, { entryDate: early }); // unallocated
+    await postEquity(tenantId, "MODAL_TETAP", 2_000_000, { entryDate: early, unitId: ksp.id });
+    const config = await createLoanConfigAs(admin.accessToken);
+    return { admin, ksp, config };
+  }
+
+  it("caps a pengurus loan at 10% of the unit's Modal Sendiri, not the koperasi's", async () => {
+    const { admin, ksp, config } = await ksu();
+    const pengurus = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: pengurus.id, loanConfigId: config.id, principalAmount: 200_001, termMonths: 12, unitId: ksp.id });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
+  });
+
+  it("reports the unit basis in the headroom endpoint", async () => {
+    const { admin, ksp } = await ksu();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+
+    const res = await request(app())
+      .get("/api/loans/bmpp-headroom")
+      .query({ memberId: member.id, unitId: ksp.id })
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      basis: "UNIT",
+      unitId: ksp.id,
+      modalSendiri: "2000000",
+      isRelatedParty: false,
+      limitPct: 15,
+      limit: "300000",
+      existingPrincipal: "0",
+      headroom: "300000"
+    });
+  });
+});
+
+describe("GET /api/loans/bmpp-headroom", () => {
+  it("returns a pengurus member's remaining room under the 10% cap, net of active loans", async () => {
+    const admin = await setupTenant();
+    await postEquity(admin.user.tenantId, "SIMPANAN_WAJIB", 10_000_000, { entryDate: new Date("2020-01-01T00:00:00Z") });
+    const pengurus = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+    await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: pengurus.id, loanConfigId: config.id, principalAmount: 400_000, termMonths: 12 });
+
+    const res = await request(app())
+      .get("/api/loans/bmpp-headroom")
+      .query({ memberId: pengurus.id })
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      basis: "KONSOLIDASI",
+      unitId: null,
+      isRelatedParty: true,
+      limitPct: 10,
+      limit: "1000000",
+      existingPrincipal: "400000",
+      headroom: "600000"
+    });
+  });
+
+  it("never reveals another tenant's member", async () => {
+    const tenantA = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
+    const tenantB = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
+    const memberB = await createMemberWithPokokSaving(tenantB.accessToken);
+
+    const res = await request(app())
+      .get("/api/loans/bmpp-headroom")
+      .query({ memberId: memberB.id })
+      .set("Authorization", `Bearer ${tenantA.accessToken}`);
+
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("GET /api/loans", () => {
   it("returns a paginated list", async () => {
     const admin = await setupTenant();
