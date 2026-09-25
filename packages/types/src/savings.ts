@@ -76,3 +76,44 @@ export interface ListSavingTransactionsQuery {
   page?: number;
   limit?: number;
 }
+
+/** Period for a Rekening Koran (bank-statement) view — `YYYY-MM-DD`, inclusive.
+ * Both default server-side: `from` to the 1st of the current month, `to` to today. */
+export interface SavingStatementQuery {
+  from?: string;
+  to?: string;
+}
+
+/**
+ * One line of a savings account statement, from the account holder's side:
+ * money in (DEPOSIT, INTEREST) is `credit`, money out (WITHDRAWAL) is `debit`;
+ * the other column is "0". `balance` is the running balance after this line.
+ * Decimal(15,2) values serialized as strings.
+ */
+export interface SavingStatementRow {
+  id: string;
+  date: string;
+  type: SavingTransactionType;
+  note: string | null;
+  debit: string;
+  credit: string;
+  balance: string;
+  /** Acting staff user; null for scheduler-posted INTEREST and in member-portal responses. */
+  createdByName: string | null;
+}
+
+export interface SavingStatement {
+  saving: {
+    id: string;
+    configName: string;
+    type: SavingType;
+    member: { fullName: string; memberId: string };
+  };
+  period: { from: string; to: string };
+  openingBalance: string;
+  totalDebit: string;
+  totalCredit: string;
+  closingBalance: string;
+  /** Chronological (oldest first), like a printed bank statement. */
+  rows: SavingStatementRow[];
+}

@@ -17,12 +17,15 @@ import { getAccessToken } from "@/stores/auth";
  * docs/06-PRD-SISKOP-Mobile-Version.md §8.4/§12 — this is the best
  * code-level mitigation available without that verification, not a final
  * confirmed-working claim.
+ *
+ * `getToken` defaults to the staff session; member-portal pages pass
+ * `getMemberAccessToken` so the request carries the member's bearer token.
  */
-export async function openPdf(path: string): Promise<void> {
+export async function openPdf(path: string, getToken: () => string | null = getAccessToken): Promise<void> {
   const newTab = window.open("", "_blank");
 
   try {
-    const token = getAccessToken();
+    const token = getToken();
     const res = await fetch(`/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
     if (!res.ok) throw new Error("Gagal memuat PDF");
     const blob = await res.blob();
@@ -39,4 +42,25 @@ export async function openPdf(path: string): Promise<void> {
     newTab?.close();
     throw err;
   }
+}
+
+/**
+ * CSV and other data files: a blob + `<a download>` save. Unlike a PDF there's
+ * nothing to preview in a tab, and iOS Safari 13+ honours `download` for
+ * same-origin blob URLs.
+ */
+export async function downloadFile(
+  path: string,
+  filename: string,
+  getToken: () => string | null = getAccessToken
+): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error("Gagal mengunduh berkas");
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

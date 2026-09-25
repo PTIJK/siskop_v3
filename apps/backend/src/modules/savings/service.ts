@@ -1,5 +1,6 @@
-import type { Prisma } from "@prisma/client";
-import { ErrorCode } from "@siskop/types";
+import { Prisma, type TransactionType } from "@prisma/client";
+import { endOfDay, parseISO, startOfDay } from "date-fns";
+import { ErrorCode, type SavingStatement } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { postSavingTransaction } from "../../lib/journal.js";
@@ -10,6 +11,7 @@ import type {
   CreateSavingInput,
   ListSavingTransactionsQueryInput,
   ListSavingsQueryInput,
+  SavingStatementQueryInput,
   SavingTransactionInput,
   UpdateSavingConfigInput
 } from "./schema.js";
@@ -176,6 +178,91 @@ export async function listSavingTransactions(
   ]);
 
   return { items, meta: { page, limit, total } };
+}
+
+// WITHDRAWAL is the only balance-decreasing type — an explicit check, not a
+// DEPOSIT one, so a future credit type defaults safely (same rule as
+// reports/regulatory-service.ts#memberSavingsBreakdownAsOf).
+function signedAmount(type: TransactionType, amount: Prisma.Decimal): Prisma.Decimal {
+  return type === "WITHDRAWAL" ? amount.neg() : amount;
+}
+
+/**
+ * Rekening Koran for one saving account. No balance snapshots are stored, so
+ * the closing balance is today's `Saving.balance` minus everything posted after
+ * the period, and each row's running balance walks forward from the opening
+ * balance. Rows are oldest first, like a printed bank statement.
+ */
+export async function getSavingStatement(
+  tenantId: string,
+  savingId: string,
+  query: SavingStatementQueryInput
+): Promise<SavingStatement> {
+  const saving = await db.saving.findFirst({
+    where: { id: savingId, tenantId },
+    select: {
+      id: true,
+      balance: true,
+      member: { select: { memberId: true, fullName: true } },
+      savingConfig: { select: { name: true, type: true } }
+    }
+  });
+  if (!saving) throw notFound("Rekening simpanan tidak ditemukan");
+
+  const start = startOfDay(parseISO(query.from));
+  const end = endOfDay(parseISO(query.to));
+  const [laterSums, transactions] = await Promise.all([
+    db.savingTransaction.groupBy({
+      by: ["type"],
+      where: { savingId, tenantId, createdAt: { gt: end } },
+      _sum: { amount: true }
+    }),
+    db.savingTransaction.findMany({
+      where: { savingId, tenantId, createdAt: { gte: start, lte: end } },
+      include: { createdByUser: { select: { name: true } } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+    })
+  ]);
+
+  const zero = new Prisma.Decimal(0);
+  const postedAfter = laterSums.reduce((sum, g) => sum.add(signedAmount(g.type, g._sum.amount ?? zero)), zero);
+  const closingBalance = saving.balance.sub(postedAfter);
+  const openingBalance = transactions.reduce((bal, t) => bal.sub(signedAmount(t.type, t.amount)), closingBalance);
+
+  let running = openingBalance;
+  let totalDebit = zero;
+  let totalCredit = zero;
+  const rows = transactions.map((t) => {
+    const isDebit = t.type === "WITHDRAWAL";
+    running = running.add(signedAmount(t.type, t.amount));
+    if (isDebit) totalDebit = totalDebit.add(t.amount);
+    else totalCredit = totalCredit.add(t.amount);
+    return {
+      id: t.id,
+      date: t.createdAt.toISOString(),
+      type: t.type,
+      note: t.note,
+      debit: (isDebit ? t.amount : zero).toString(),
+      credit: (isDebit ? zero : t.amount).toString(),
+      balance: running.toString(),
+      createdByName: t.createdByUser?.name ?? null
+    };
+  });
+
+  return {
+    saving: {
+      id: saving.id,
+      configName: saving.savingConfig.name,
+      type: saving.savingConfig.type,
+      member: saving.member
+    },
+    period: { from: query.from, to: query.to },
+    openingBalance: openingBalance.toString(),
+    totalDebit: totalDebit.toString(),
+    totalCredit: totalCredit.toString(),
+    closingBalance: closingBalance.toString(),
+    rows
+  };
 }
 
 export async function depositToSaving(

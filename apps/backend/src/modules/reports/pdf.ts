@@ -1,4 +1,7 @@
 import puppeteer from "puppeteer";
+import { format } from "date-fns";
+import type { SavingStatement } from "@siskop/types";
+import { STATEMENT_TYPE_LABEL } from "../savings/statement-export.js";
 import { db } from "../../lib/db.js";
 import { getFinancialReport, getRATReport, type ReportParams } from "./service.js";
 import {
@@ -327,4 +330,50 @@ export async function generateShuDistributionPdf(tenantId: string, from: Date, t
     </table>`;
 
   return renderToPdf(wrapPdf(tenant, "Daftar Pembagian SHU per Anggota", subtitle, body, { asOfDate: data.periode.to }));
+}
+
+// ── Rekening Koran (savings account statement) ──────────────────────────────
+
+/** Notes and member names are free text typed by staff/members — escaped
+ * before they reach the headless browser, unlike the report figures above. */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+/** Takes an already-built statement so the staff and member-portal routes
+ * render the exact figures their JSON endpoints return. */
+export async function generateSavingStatementPdf(tenantId: string, statement: SavingStatement): Promise<Buffer> {
+  const tenant = await requireTenant(tenantId);
+  const { saving, period } = statement;
+  const money = (value: string) => (value === "0" ? "" : rp(value));
+  const rows = statement.rows
+    .map(
+      (r) => `<tr>
+        <td>${format(new Date(r.date), "dd/MM/yyyy")}</td>
+        <td>${STATEMENT_TYPE_LABEL[r.type]}${r.note ? ` — ${escapeHtml(r.note)}` : ""}</td>
+        <td class="num">${money(r.debit)}</td>
+        <td class="num">${money(r.credit)}</td>
+        <td class="num">${rp(r.balance)}</td>
+      </tr>`
+    )
+    .join("");
+
+  const body = `
+    <table style="width:auto">
+      <tr><td>Nama Anggota</td><td>${escapeHtml(saving.member.fullName)}</td></tr>
+      <tr><td>No. Anggota</td><td>${escapeHtml(saving.member.memberId)}</td></tr>
+      <tr><td>Produk Simpanan</td><td>${escapeHtml(saving.configName)} (${saving.type})</td></tr>
+    </table>
+    <style>td.num, th.num { text-align: right; white-space: nowrap; }</style>
+    <table>
+      <tr><th>Tanggal</th><th>Keterangan</th><th class="num">Debit</th><th class="num">Kredit</th><th class="num">Saldo</th></tr>
+      <tr><td>${period.from.split("-").reverse().join("/")}</td><td>Saldo Awal</td><td></td><td></td><td class="num">${rp(statement.openingBalance)}</td></tr>
+      ${rows || '<tr><td colspan="5">Tidak ada transaksi pada periode ini</td></tr>'}
+      <tr class="total"><td>${period.to.split("-").reverse().join("/")}</td><td>Saldo Akhir</td>
+        <td class="num">${rp(statement.totalDebit)}</td><td class="num">${rp(statement.totalCredit)}</td>
+        <td class="num">${rp(statement.closingBalance)}</td></tr>
+    </table>`;
+
+  const subtitle = `Periode ${period.from} s/d ${period.to}`;
+  return renderToPdf(wrapPdf(tenant, "Rekening Koran Simpanan", subtitle, body));
 }

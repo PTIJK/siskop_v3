@@ -129,3 +129,58 @@ describe("member ownership isolation", () => {
     expect(res.body.data[0].balance).toBe("10000");
   });
 });
+
+describe("GET /api/member/savings/:id/statement", () => {
+  it("returns the caller's own statement without staff names", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    const config = await createConfigAs(admin.accessToken);
+    const saving = await request(app())
+      .post("/api/savings")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, savingConfigId: config.id, initialDeposit: 100_000 });
+    await request(app())
+      .post(`/api/savings/${saving.body.data.id}/withdraw`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: 40_000 });
+
+    const accessToken = await activateMember(admin.accessToken, member.id, DEFAULT_MEMBER.nik);
+    const res = await request(app())
+      .get(`/api/member/savings/${saving.body.data.id}/statement`)
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.openingBalance).toBe("0");
+    expect(res.body.data.totalCredit).toBe("100000");
+    expect(res.body.data.totalDebit).toBe("40000");
+    expect(res.body.data.closingBalance).toBe("60000");
+    expect(res.body.data.rows.map((r: { balance: string }) => r.balance)).toEqual(["100000", "60000"]);
+    expect(res.body.data.rows.every((r: { createdByName: string | null }) => r.createdByName === null)).toBe(true);
+
+    const csv = await request(app())
+      .get(`/api/member/savings/${saving.body.data.id}/statement/csv`)
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(csv.status).toBe(200);
+    expect(csv.headers["content-type"]).toContain("text/csv");
+  });
+
+  it("cannot read another member's statement, including exports", async () => {
+    const admin = await setupTenant();
+    const memberA = await createMemberAs(admin.accessToken, { nik: "1111111111111111" });
+    const memberB = await createMemberAs(admin.accessToken, { nik: "2222222222222222" });
+    const config = await createConfigAs(admin.accessToken);
+    const savingB = await request(app())
+      .post("/api/savings")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: memberB.id, savingConfigId: config.id, initialDeposit: 100_000 });
+
+    const tokenA = await activateMember(admin.accessToken, memberA.id, "1111111111111111");
+
+    for (const suffix of ["", "/csv", "/pdf"]) {
+      const res = await request(app())
+        .get(`/api/member/savings/${savingB.body.data.id}/statement${suffix}`)
+        .set("Authorization", `Bearer ${tokenA}`);
+      expect(res.status).toBe(404);
+    }
+  });
+});
