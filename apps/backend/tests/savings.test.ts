@@ -387,6 +387,136 @@ describe("GET /api/savings", () => {
   });
 });
 
+describe("GET /api/savings/by-member", () => {
+  async function openSaving(accessToken: string, memberId: string, savingConfigId: string, initialDeposit?: number) {
+    const res = await request(app())
+      .post("/api/savings")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ memberId, savingConfigId, ...(initialDeposit !== undefined ? { initialDeposit } : {}) });
+    return res.body.data as { id: string };
+  }
+
+  async function setupThreeTypes(accessToken: string) {
+    const pokok = await createConfigAs(accessToken);
+    const wajib = await createConfigAs(accessToken, { type: "WAJIB", name: "Simpanan Wajib" });
+    const sukarela = await createConfigAs(accessToken, { type: "SUKARELA", name: "Simpanan Sukarela" });
+    return { pokok, wajib, sukarela };
+  }
+
+  it("returns one row per member with nested savings and an exact Decimal total", async () => {
+    const admin = await setupTenant();
+    const configs = await setupThreeTypes(admin.accessToken);
+    const member = await createMemberAs(admin.accessToken);
+    await openSaving(admin.accessToken, member.id, configs.pokok.id, 100_000.1);
+    await openSaving(admin.accessToken, member.id, configs.wajib.id, 50_000.2);
+    await openSaving(admin.accessToken, member.id, configs.sukarela.id, 0.3);
+
+    const res = await request(app())
+      .get("/api/savings/by-member")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    const row = res.body.data[0];
+    expect(row.memberId).toBe(member.id);
+    expect(row.fullName).toBe("Budi Santoso");
+    expect(row.savings).toHaveLength(3);
+    expect(row.savings.map((s: { type: string }) => s.type)).toEqual(["POKOK", "WAJIB", "SUKARELA"]);
+    expect(row.totalBalance).toBe("150000.60");
+  });
+
+  it("counts members, not savings, in meta.total", async () => {
+    const admin = await setupTenant();
+    const configs = await setupThreeTypes(admin.accessToken);
+    const a = await createMemberAs(admin.accessToken);
+    const b = await createMemberAs(admin.accessToken, { fullName: "Siti Aminah", nik: "3171234567890002" });
+    await openSaving(admin.accessToken, a.id, configs.pokok.id);
+    await openSaving(admin.accessToken, a.id, configs.wajib.id);
+    await openSaving(admin.accessToken, b.id, configs.pokok.id);
+
+    const res = await request(app())
+      .get("/api/savings/by-member?limit=1")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.meta.total).toBe(2);
+  });
+
+  it("filters members and nested savings by ?type=, recomputing the total", async () => {
+    const admin = await setupTenant();
+    const configs = await setupThreeTypes(admin.accessToken);
+    const a = await createMemberAs(admin.accessToken);
+    const b = await createMemberAs(admin.accessToken, { fullName: "Siti Aminah", nik: "3171234567890002" });
+    await openSaving(admin.accessToken, a.id, configs.pokok.id, 100_000);
+    await openSaving(admin.accessToken, a.id, configs.wajib.id, 25_000);
+    await openSaving(admin.accessToken, b.id, configs.pokok.id, 100_000);
+
+    const res = await request(app())
+      .get("/api/savings/by-member?type=WAJIB")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].memberId).toBe(a.id);
+    expect(res.body.data[0].savings).toHaveLength(1);
+    expect(res.body.data[0].totalBalance).toBe("25000.00");
+  });
+
+  it("searches by member name", async () => {
+    const admin = await setupTenant();
+    const configs = await setupThreeTypes(admin.accessToken);
+    const a = await createMemberAs(admin.accessToken);
+    const b = await createMemberAs(admin.accessToken, { fullName: "Siti Aminah", nik: "3171234567890002" });
+    await openSaving(admin.accessToken, a.id, configs.pokok.id);
+    await openSaving(admin.accessToken, b.id, configs.pokok.id);
+
+    const res = await request(app())
+      .get("/api/savings/by-member?search=siti")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].memberId).toBe(b.id);
+  });
+
+  it("excludes inactive savings and members with only inactive savings", async () => {
+    const admin = await setupTenant();
+    const configs = await setupThreeTypes(admin.accessToken);
+    const a = await createMemberAs(admin.accessToken);
+    const b = await createMemberAs(admin.accessToken, { fullName: "Siti Aminah", nik: "3171234567890002" });
+    await openSaving(admin.accessToken, a.id, configs.pokok.id);
+    const closed = await openSaving(admin.accessToken, a.id, configs.wajib.id);
+    const bOnly = await openSaving(admin.accessToken, b.id, configs.pokok.id);
+    await db.saving.updateMany({
+      where: { tenantId: admin.user.tenantId, id: { in: [closed.id, bOnly.id] } },
+      data: { isActive: false }
+    });
+
+    const res = await request(app())
+      .get("/api/savings/by-member")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].memberId).toBe(a.id);
+    expect(res.body.data[0].savings).toHaveLength(1);
+  });
+
+  it("never returns another tenant's members", async () => {
+    const tenantA = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
+    const tenantB = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
+    const configB = await createConfigAs(tenantB.accessToken);
+    const memberB = await createMemberAs(tenantB.accessToken);
+    await openSaving(tenantB.accessToken, memberB.id, configB.id);
+
+    const res = await request(app())
+      .get("/api/savings/by-member")
+      .set("Authorization", `Bearer ${tenantA.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(0);
+    expect(res.body.meta.total).toBe(0);
+  });
+});
+
 describe("GET /api/savings/:id/statement", () => {
   // Builds a SUKARELA account with a fixed, backdated ledger so period math is
   // deterministic: 10 Jan +100.000 (setoran awal), 20 Jan +50.000,

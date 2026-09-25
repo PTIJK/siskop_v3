@@ -9,15 +9,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PiggyBank } from "lucide-react";
-
-interface SavingRow {
-  id: string;
-  member: { fullName: string; memberId: string; accountNumber: string };
-  savingConfig: { name: string; type: string };
-  balance: string;
-  isActive: boolean;
-}
+import { ChevronRight, PiggyBank } from "lucide-react";
+import type { MemberSavingsSummary } from "@siskop/types";
 
 const LIMIT = 20;
 
@@ -31,45 +24,75 @@ export function SavingsPage() {
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["savings", { page, search, typeFilter }],
     queryFn: () =>
-      apiFetchPage<SavingRow[]>(
-        `/savings?page=${page}&limit=${LIMIT}${search ? `&search=${encodeURIComponent(search)}` : ""}${
+      apiFetchPage<MemberSavingsSummary[]>(
+        `/savings/by-member?page=${page}&limit=${LIMIT}${search ? `&search=${encodeURIComponent(search)}` : ""}${
           typeFilter ? `&type=${typeFilter}` : ""
         }`
       )
   });
 
-  const columns: ColumnDef<SavingRow>[] = [
+  const columns: ColumnDef<MemberSavingsSummary>[] = [
     {
       header: "Anggota",
       cell: ({ row }) => (
         <div>
-          <p className="font-medium">{row.original.member.fullName}</p>
-          <p className="font-mono text-xs text-muted-foreground">{row.original.member.memberId}</p>
+          <button
+            type="button"
+            className="font-medium hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/members/${row.original.memberId}`);
+            }}
+          >
+            {row.original.fullName}
+          </button>
+          <p className="font-mono text-xs text-muted-foreground">{row.original.memberNumber}</p>
         </div>
       )
     },
-    { header: "No. Rekening", cell: ({ row }) => <span className="font-mono text-xs">{row.original.member.accountNumber}</span> },
+    { header: "No. Rekening", cell: ({ row }) => <span className="font-mono text-xs">{row.original.accountNumber}</span> },
     {
-      header: "Jenis Simpanan",
+      header: "Rekening Simpanan",
       cell: ({ row }) => (
-        <div>
-          <p className="text-sm">{row.original.savingConfig.name}</p>
-          <Badge variant="secondary" className="text-xs">
-            {row.original.savingConfig.type}
-          </Badge>
+        <div className="flex flex-wrap gap-1">
+          {row.original.savings.map((s) => (
+            <Badge key={s.id} variant="secondary" className="text-xs">
+              {s.type}
+            </Badge>
+          ))}
         </div>
       )
     },
-    { header: "Saldo", cell: ({ row }) => <span className="font-semibold">{formatRupiah(row.original.balance)}</span> },
     {
-      header: "Status",
-      cell: ({ row }) => (
-        <Badge variant={row.original.isActive ? "default" : "secondary"}>
-          {row.original.isActive ? "Aktif" : "Nonaktif"}
-        </Badge>
-      )
+      header: "Total Saldo",
+      className: "text-right",
+      cell: ({ row }) => <span className="font-semibold">{formatRupiah(row.original.totalBalance)}</span>
     }
   ];
+
+  const renderAccounts = (row: MemberSavingsSummary) => (
+    <ul className="divide-y">
+      {row.savings.map((s) => (
+        <li key={s.id}>
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 rounded px-2 py-2 text-left text-sm hover:bg-muted"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/savings/${s.id}`);
+            }}
+          >
+            <span className="flex-1">{s.name}</span>
+            <Badge variant="outline" className="text-xs">
+              {s.type}
+            </Badge>
+            <span className="w-36 text-right font-medium">{formatRupiah(s.balance)}</span>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
 
   return (
     <div className="space-y-6">
@@ -121,7 +144,8 @@ export function SavingsPage() {
           placeholder: "Cari nama anggota..."
         }}
         pagination={{ page, limit: LIMIT, total: data?.meta.total ?? 0, onPageChange: setPage }}
-        onRowClick={(row) => navigate(`/savings/${row.id}`)}
+        getRowKey={(row) => row.memberId}
+        renderExpanded={renderAccounts}
         emptyMessage="Belum ada rekening simpanan"
       />
     </div>
