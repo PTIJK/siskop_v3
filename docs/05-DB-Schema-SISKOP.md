@@ -96,8 +96,8 @@ scaffold-era `Tenant.email`/`Tenant.phone` that no longer exist post-merge).
 | `isActive` | Boolean | default `true` | An inactive tenant's users cannot log in |
 | `nextBillingDate` | DateTime? | nullable | Set by a platform admin; drives the (unbuilt) billing-reminder notification flow — `Notification.type = BILLING_BLOCKED`/`PACKAGE_CHANGED` exist as enum values with no scheduler writing them yet |
 | `billingReminder30SentAt` / `billingReminder7SentAt` | DateTime? | nullable | Reserved for that same unbuilt reminder flow |
-| `modalDisetor` | Decimal(15,2)? | nullable | Paid-in capital — Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp 5,000,000) compliance field. Tenant self-service via `GET/PUT /config/modal-disetor`, never gated by the accounting entitlement (a general compliance field, not part of the Konfigurasi Akun module) |
-| `auditThresholdNotifiedAt` | DateTime? | nullable | Reserved for an (unbuilt) notification once `modalDisetor` crosses the threshold |
+| `modalDisetor` | Decimal(15,2)? | nullable | Paid-in capital — Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp 5,000,000,000 — Rp5 miliar) compliance field. Tenant self-service via `GET/PUT /config/modal-disetor`, never gated by the accounting entitlement (a general compliance field, not part of the Konfigurasi Akun module) |
+| `auditThresholdNotifiedAt` | DateTime? | nullable | Stamped by the daily scheduler (`modules/config/audit-threshold.ts`) when it raises the once-per-year `AUDIT_THRESHOLD_EXCEEDED` tenant notification; reset to null when `modalDisetor` is lowered below the threshold |
 | `createdAt` | DateTime | default `now()` | |
 
 Every tenant has **at least one** `CooperativeUnit` at all times — enforced in application code
