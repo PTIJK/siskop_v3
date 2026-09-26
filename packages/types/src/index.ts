@@ -20,3 +20,4 @@ export * from "./notification.js";
 export * from "./audit-log.js";
 export * from "./calendar.js";
 export * from "./expenses.js";
+export * from "./market.js";

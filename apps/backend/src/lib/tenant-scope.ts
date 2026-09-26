@@ -52,7 +52,10 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   "TenantHoliday",
   // Koperasi pasar plan F2 — LoanPaymentAllocation deliberately NOT added,
   // same reasoning as POSSaleLine above (no tenantId column of its own).
-  "LoanInstallment"
+  "LoanInstallment",
+  // Koperasi pasar plan F3 — Market/Stall.
+  "Market",
+  "Stall"
 ]);
 
 const WHERE_REQUIRED_ACTIONS = new Set([

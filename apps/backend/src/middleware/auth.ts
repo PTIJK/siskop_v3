@@ -40,7 +40,9 @@ const permissionsSchema = z.object({
   // `accounting`/`konsumen`/`auditLog` above: a token signed before this
   // module existed still parses, `permissions.expenses` just comes back
   // undefined (requirePermission("expenses", ...) then denies).
-  expenses: permissionActions.optional()
+  expenses: permissionActions.optional(),
+  // Koperasi pasar plan F3 — optional like `konsumen`/`auditLog` above.
+  market: permissionActions.optional()
 });
 
 const claimsSchema = z.object({

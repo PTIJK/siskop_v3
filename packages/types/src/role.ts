@@ -36,6 +36,8 @@ export interface Permissions {
   // docs/2026-09-27-beban-umum-design.md. `update` is never seeded — an
   // entry is deleted and re-entered, not edited in place.
   expenses?: ModulePermissions;
+  // Koperasi pasar plan F3 (Market/Stall) — optional like `konsumen` above.
+  market?: ModulePermissions;
 }
 
 export type PermissionModule = keyof Permissions;

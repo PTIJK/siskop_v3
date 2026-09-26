@@ -62,7 +62,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       accounting: FULL,
       konsumen: FULL,
       auditLog: READ_ONLY,
-      expenses: FULL
+      expenses: FULL,
+      market: FULL
     }
   },
   {
@@ -79,7 +80,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       accounting: { create: false, read: false, update: false, delete: false },
       konsumen: FULL,
       auditLog: READ_ONLY,
-      expenses: FULL
+      expenses: FULL,
+      market: FULL
     }
   },
   {
@@ -97,7 +99,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       // (create) but don't add/remove SKUs — that's Manager territory.
       konsumen: { create: true, read: true, update: true },
       auditLog: {},
-      expenses: {}
+      expenses: {},
+      market: READ_ONLY
     }
   },
   {
@@ -113,7 +116,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       roles: {},
       konsumen: READ_ONLY,
       auditLog: {},
-      expenses: READ_ONLY
+      expenses: READ_ONLY,
+      market: READ_ONLY
     }
   },
   {

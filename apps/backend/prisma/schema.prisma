@@ -312,6 +312,8 @@ model Tenant {
   auditLogs               AuditLog[]
   holidays                TenantHoliday[]
   loanInstallments        LoanInstallment[]
+  markets                 Market[]
+  stalls                  Stall[]
 }
 
 // A tenant's own non-collection day (public holiday, market closure). Loan
@@ -376,6 +378,7 @@ model CooperativeUnit {
   userAssignments         UserUnit[]
   journalEntries          JournalEntry[]
   modalSendiriAdjustments ModalSendiriAdjustment[]
+  markets                 Market[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
@@ -561,6 +564,9 @@ model Member {
   lastLoginAt        DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  // Koperasi pasar plan F3 — a pasar trader's kind of goods, e.g. "Sayur",
+  // "Daging". Null for a member who isn't a pasar trader.
+  commodity          String?
 
   savings             Saving[]
   loans               Loan[]
@@ -1240,4 +1246,58 @@ model AuditLog {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, actorUserId])
+}
+
+// ── MARKET (koperasi pasar) ──────────────────────────────────────────────────
+// Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F3. A
+// tenant that manages a pasar gets these alongside its existing units — a
+// KSU with a Simpan-Pinjam unit and a pasar is not a new "type", just a
+// tenant with a JASA unit that has markets (rule 2b: never `if (type === ...)`).
+
+enum StallKind {
+  KIOS
+  LOS
+  LAPAK
+}
+
+enum StallStatus {
+  AVAILABLE
+  OCCUPIED
+  INACTIVE
+}
+
+// A koperasi can manage more than one pasar, all under the same JASA unit
+// (lib/units.ts#ensureUnitOfType) — auto-created on the first Market, same as
+// a KSU's units are never auto-created for it (see CooperativeUnit.type).
+model Market {
+  id        String          @id @default(cuid())
+  tenantId  String
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId    String
+  unit      CooperativeUnit @relation(fields: [unitId], references: [id])
+  name      String
+  address   String?
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+
+  stalls Stall[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Stall {
+  id       String      @id @default(cuid())
+  tenantId String
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  marketId String
+  market   Market      @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  code     String // e.g. "A-12"
+  block    String?
+  kind     StallKind
+  areaM2   Decimal?    @db.Decimal(8, 2)
+  status   StallStatus @default(AVAILABLE)
+
+  @@unique([tenantId, marketId, code])
+  @@index([tenantId, marketId, block])
 }
