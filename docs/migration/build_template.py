@@ -271,6 +271,7 @@ checks = [
     ("Akun Neraca yang belum cocok", '=COUNTIF($I$26:$I$175,"SELISIH")', "zero", "Harus 0"),
     ("Jumlah akun Neraca terisi", f'=COUNTA(Neraca!$A$2:$A${R})', "pos", "Harus > 0"),
     ("Tanggal cutover terisi", '=IF(Info_Koperasi!$C$8="",0,1)', "pos", "Harus terisi di Info_Koperasi"),
+    ("Penyesuaian belum disetujui pengurus", f'=SUMPRODUCT((Penyesuaian!$A$2:$A${NR + 1}<>"")*(Penyesuaian!$E$2:$E${NR + 1}=""))', "zero", "Harus 0 — isi disetujuiOleh setelah konfirmasi klien"),
 ]
 rk["B5"], rk["C5"], rk["D5"], rk["E5"], rk["F5"] = "", "Pemeriksaan", "Hasil", "Status", "Syarat"
 for c in ("C5", "D5", "E5", "F5"):
@@ -286,10 +287,10 @@ for i, (label, formula, kind, note) in enumerate(checks, 6):
     rk[f"F{i}"] = note; rk[f"F{i}"].font = font(size=10, color=GREY)
     rk[f"E{i}"].font = font(size=10, bold=True)
 assert rk["C16"].value.startswith("Total saldo normal DEBIT") and rk["C18"].value.startswith("Saldo Awal")
-rk["C23"] = "STATUS BATCH"; rk["C23"].font = font(bold=True, size=12)
-rk["D23"] = '=IF(COUNTIF(E6:E21,"PERBAIKI")=0,"SIAP DISETUJUI KLIEN","BELUM SIAP")'
-rk["D23"].font = font(bold=True, size=12)
-rk.merge_cells("D23:F23")
+rk["C24"] = "STATUS BATCH"; rk["C24"].font = font(bold=True, size=12)
+rk["D24"] = '=IF(COUNTIF(E6:E22,"PERBAIKI")=0,"SIAP DISETUJUI KLIEN","BELUM SIAP")'
+rk["D24"].font = font(bold=True, size=12)
+rk.merge_cells("D24:F24")
 
 rk["B24"] = "Per akun Neraca: saldo Neraca = rincian anggota + penyesuaian"; rk["B24"].font = font(bold=True, size=12, color=TEAL)
 heads = ["kodeAkun", "namaAkun", "Saldo Neraca", "Rincian simpanan", "Rincian pembiayaan", "Penyesuaian", "Selisih", "Status"]
@@ -313,12 +314,12 @@ for k in range(NR):
     for col in "BCDEFGHI": rk[f"{col}{r}"].font = font(size=10)
 rk.freeze_panes = "A6"
 green = PatternFill("solid", fgColor="D8F0E6"); red = PatternFill("solid", fgColor="F9D7D3")
-rk.conditional_formatting.add("E6:E21", CellIsRule(operator="equal", formula=['"OK"'], fill=green))
-rk.conditional_formatting.add("E6:E21", CellIsRule(operator="equal", formula=['"PERBAIKI"'], fill=red))
+rk.conditional_formatting.add("E6:E22", CellIsRule(operator="equal", formula=['"OK"'], fill=green))
+rk.conditional_formatting.add("E6:E22", CellIsRule(operator="equal", formula=['"PERBAIKI"'], fill=red))
 rk.conditional_formatting.add("I26:I175", CellIsRule(operator="equal", formula=['"COCOK"'], fill=green))
 rk.conditional_formatting.add("I26:I175", CellIsRule(operator="equal", formula=['"SELISIH"'], fill=red))
-rk.conditional_formatting.add("D23", CellIsRule(operator="equal", formula=['"SIAP DISETUJUI KLIEN"'], fill=green))
-rk.conditional_formatting.add("D23", CellIsRule(operator="equal", formula=['"BELUM SIAP"'], fill=red))
+rk.conditional_formatting.add("D24", CellIsRule(operator="equal", formula=['"SIAP DISETUJUI KLIEN"'], fill=green))
+rk.conditional_formatting.add("D24", CellIsRule(operator="equal", formula=['"BELUM SIAP"'], fill=red))
 for ws, rng in [(an, f"O2:P{RN}"), (si, f"F2:G{RN}"), (pb, f"Q2:S{RN}")]:
     for bad in ("GANDA", "TIDAK VALID", "TIDAK ADA", "PRODUK?", "SELISIH"):
         ws.conditional_formatting.add(rng, CellIsRule(operator="equal", formula=[f'"{bad}"'], fill=red))
