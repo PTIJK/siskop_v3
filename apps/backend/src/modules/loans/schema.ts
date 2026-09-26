@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { moneySchema } from "../../lib/money.js";
 
 export const createLoanConfigSchema = z.object({
   name: z.string().min(2, "Nama minimal 2 karakter"),
@@ -13,7 +14,7 @@ export const updateLoanConfigSchema = createLoanConfigSchema.partial();
 export const createLoanSchema = z.object({
   memberId: z.string().cuid("Member ID tidak valid"),
   loanConfigId: z.string().cuid("Loan config ID tidak valid"),
-  principalAmount: z.coerce.number().positive("Nominal pinjaman harus lebih dari 0"),
+  principalAmount: moneySchema("Nominal pinjaman", { positive: true }),
   termMonths: z.coerce.number().int().min(1),
   force: z.boolean().default(false),
   acknowledgeBmpp: z.boolean().default(false),
@@ -27,8 +28,8 @@ export const createLoanSchema = z.object({
 });
 
 export const loanPaymentSchema = z.object({
-  amount: z.coerce.number().positive("Nominal bayar harus lebih dari 0"),
-  penalty: z.coerce.number().min(0).default(0),
+  amount: moneySchema("Nominal bayar", { positive: true }),
+  penalty: moneySchema("Denda").default(0),
   paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD"),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD"),
   note: z.string().optional()
