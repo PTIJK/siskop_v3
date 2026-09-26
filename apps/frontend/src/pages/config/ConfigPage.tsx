@@ -12,6 +12,7 @@ import { ShuConfigTab } from "./ShuConfigTab";
 import { WhitelabelConfigTab } from "./WhitelabelConfigTab";
 import { ModalDisetorConfigTab } from "./ModalDisetorConfigTab";
 import { SelfRegistrationConfigTab } from "./SelfRegistrationConfigTab";
+import { AuditTrailTab } from "./AuditTrailTab";
 import { WorkspaceDomainSettings } from "@/features/workspace-domain/WorkspaceDomainSettings";
 
 export function ConfigPage() {
@@ -34,7 +35,8 @@ export function ConfigPage() {
       label: "Pendaftaran Mandiri",
       show: can("config", "read"),
       content: <SelfRegistrationConfigTab />
-    }
+    },
+    { value: "audit-trail", label: "Jejak Audit", show: can("auditLog", "read"), content: <AuditTrailTab /> }
   ].filter((t) => t.show);
 
   return (
