@@ -27,7 +27,8 @@ const STATUS: Record<ErrorCode, number> = {
   [ErrorCode.RATE_NOTE_REQUIRED]: 422,
   [ErrorCode.PAYMENT_EXCEEDS_REMAINING]: 422,
   [ErrorCode.NOT_ASSIGNED_COLLECTOR]: 403,
-  [ErrorCode.BATCH_NOT_OPEN]: 409
+  [ErrorCode.BATCH_NOT_OPEN]: 409,
+  [ErrorCode.STALL_ALREADY_OCCUPIED]: 409
 };
 
 /**

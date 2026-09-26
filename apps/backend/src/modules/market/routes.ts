@@ -5,6 +5,9 @@ import { requirePasarEntitlement } from "../../middleware/entitlement.js";
 import { requireParam } from "../../lib/http.js";
 import { createMarketSchema, createStallSchema, listStallsQuerySchema, updateMarketSchema, updateStallSchema } from "./schema.js";
 import { createMarket, createStall, listMarkets, listStalls, updateMarket, updateStall } from "./service.js";
+import { contractsRoutes } from "./contracts.routes.js";
+import { levyRatesRoutes } from "./levy-rates.routes.js";
+import { chargesRoutes } from "./charges.routes.js";
 
 /** Forwards rejected promises to the error handler; Express 4 will not. */
 function handle(fn: (req: Request, res: Response) => Promise<void>) {
@@ -79,6 +82,16 @@ export function marketRoutes(): Router {
       res.json({ success: true, data: stall, meta: res.locals.meta });
     })
   );
+
+  // Kontrak sewa kios (koperasi pasar F5) — /contracts, composed the same
+  // way konsumen's product.routes.ts composes saleRoutes()/creditRoutes().
+  router.use(contractsRoutes());
+
+  // Tarif retribusi (koperasi pasar F5) — /levy-rates, same composition.
+  router.use(levyRatesRoutes());
+
+  // Tagihan sewa/retribusi (koperasi pasar F5) — /charges, same composition.
+  router.use(chargesRoutes());
 
   return router;
 }

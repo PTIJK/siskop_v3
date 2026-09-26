@@ -34,6 +34,9 @@ export const ErrorCode = {
   // Koperasi pasar plan F4 — Kolektor & setoran.
   NOT_ASSIGNED_COLLECTOR: "NOT_ASSIGNED_COLLECTOR",
   BATCH_NOT_OPEN: "BATCH_NOT_OPEN",
+  // Koperasi pasar plan F5 — Sewa & retribusi. PAYMENT_EXCEEDS_REMAINING
+  // (above) is reused for a Charge overpay.
+  STALL_ALREADY_OCCUPIED: "STALL_ALREADY_OCCUPIED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
