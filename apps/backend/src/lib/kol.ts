@@ -38,7 +38,7 @@ export async function recalculateKOL(loanId: string): Promise<KOLCategory> {
     if (dueDate > today) break;
 
     const payment = payments.find(
-      (p) => p.dueDate.getFullYear() === dueDate.getFullYear() && p.dueDate.getMonth() === dueDate.getMonth()
+      (p) => p.dueDate && p.dueDate.getFullYear() === dueDate.getFullYear() && p.dueDate.getMonth() === dueDate.getMonth()
     );
 
     if (!payment) {

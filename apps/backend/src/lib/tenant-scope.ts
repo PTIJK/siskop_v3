@@ -49,7 +49,10 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   // the 90-day retention purge crosses tenants deliberately and goes through
   // withoutTenantScope() (see modules/audit-log/service.ts#purgeStaleAuditLogs).
   "AuditLog",
-  "TenantHoliday"
+  "TenantHoliday",
+  // Koperasi pasar plan F2 — LoanPaymentAllocation deliberately NOT added,
+  // same reasoning as POSSaleLine above (no tenantId column of its own).
+  "LoanInstallment"
 ]);
 
 const WHERE_REQUIRED_ACTIONS = new Set([

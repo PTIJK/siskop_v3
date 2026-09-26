@@ -56,6 +56,19 @@ enum KOLCategory {
   MACET
 }
 
+// Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F2.
+enum InstallmentFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum InstallmentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
 enum DomainStatus {
   PENDING
   VERIFIED
@@ -298,6 +311,7 @@ model Tenant {
   slugChanges             TenantSlugChange[]
   auditLogs               AuditLog[]
   holidays                TenantHoliday[]
+  loanInstallments        LoanInstallment[]
 }
 
 // A tenant's own non-collection day (public holiday, market closure). Loan
@@ -791,16 +805,19 @@ model SavingTransaction {
 // ── LOANS ─────────────────────────────────────────────────────────────────────
 
 model LoanConfig {
-  id            String   @id @default(cuid())
-  tenantId      String
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name          String
-  type          LoanType
-  rateType      RateType
-  rate          Decimal  @db.Decimal(8, 4)
-  maxTermMonths Int
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
+  id                   String               @id @default(cuid())
+  tenantId             String
+  tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name                 String
+  type                 LoanType
+  rateType             RateType
+  rate                 Decimal              @db.Decimal(8, 4)
+  maxTermMonths        Int
+  installmentFrequency InstallmentFrequency @default(MONTHLY)
+  // Caps installmentCount for DAILY/WEEKLY loans; maxTermMonths still caps MONTHLY ones.
+  maxInstallments      Int?
+  isActive             Boolean              @default(true)
+  createdAt            DateTime             @default(now())
 
   loans Loan[]
 }
@@ -828,7 +845,21 @@ model Loan {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  payments LoanPayment[]
+  // Koperasi pasar plan F2 — per-installment schedule alongside the fields
+  // above, which stay filled (for DAILY/WEEKLY, termMonths/monthlyPayment
+  // are the calendar-months-to-maturity/average installment) so existing
+  // dashboards/reports keep working unchanged.
+  installmentFrequency InstallmentFrequency @default(MONTHLY)
+  installmentCount     Int?
+  installmentAmount    Decimal?             @db.Decimal(15, 2)
+  // Effective annual rate %, snapshotted at creation — may differ from loanConfig.rate (D3).
+  rate                 Decimal?             @db.Decimal(8, 4)
+  // Required when `rate` was overridden away from the product's rate.
+  rateNote             String?
+  maturityDate         DateTime?            @db.Date
+
+  payments     LoanPayment[]
+  installments LoanInstallment[]
 
   @@index([tenantId])
   @@index([tenantId, unitId])
@@ -838,23 +869,69 @@ model Loan {
 }
 
 model LoanPayment {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   loanId        String
-  loan          Loan     @relation(fields: [loanId], references: [id])
+  loan          Loan      @relation(fields: [loanId], references: [id])
   tenantId      String
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  amount        Decimal  @db.Decimal(15, 2)
-  penalty       Decimal  @default(0) @db.Decimal(15, 2)
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  amount        Decimal   @db.Decimal(15, 2)
+  penalty       Decimal   @default(0) @db.Decimal(15, 2)
   paidAt        DateTime
-  dueDate       DateTime
+  // Nullable since F2: a payment can now span several installments (see
+  // LoanPaymentAllocation), so there is no longer one due date per payment.
+  // Historical rows keep the value the old per-loan-month matching wrote.
+  dueDate       DateTime?
   note          String?
   createdBy     String
-  createdByUser User     @relation(fields: [createdBy], references: [id])
-  createdAt     DateTime @default(now())
+  createdByUser User      @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime  @default(now())
+
+  allocations LoanPaymentAllocation[]
 
   @@index([loanId])
   @@index([tenantId])
   @@index([dueDate])
+}
+
+// Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F2.
+model LoanInstallment {
+  id            String            @id @default(cuid())
+  tenantId      String
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  loanId        String
+  loan          Loan              @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  seq           Int
+  dueDate       DateTime          @db.Date
+  principalDue  Decimal           @db.Decimal(15, 2)
+  interestDue   Decimal           @db.Decimal(15, 2)
+  principalPaid Decimal           @default(0) @db.Decimal(15, 2)
+  interestPaid  Decimal           @default(0) @db.Decimal(15, 2)
+  status        InstallmentStatus @default(UNPAID)
+  paidOffAt     DateTime?
+
+  allocations LoanPaymentAllocation[]
+
+  @@unique([loanId, seq])
+  @@index([tenantId, dueDate, status])
+}
+
+// One payment can close or partially cover several installments (oldest
+// first) and one installment can be closed by several payments — hence the
+// join row rather than a column on either side. No tenantId of its own
+// (only paymentId/installmentId): same pattern as POSSaleLine/
+// TenantNotificationRead in lib/tenant-scope.ts, reached only through its
+// already tenant-scoped parents.
+model LoanPaymentAllocation {
+  id            String          @id @default(cuid())
+  paymentId     String
+  payment       LoanPayment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  installmentId String
+  installment   LoanInstallment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  principal     Decimal         @db.Decimal(15, 2)
+  interest      Decimal         @db.Decimal(15, 2)
+
+  @@index([paymentId])
+  @@index([installmentId])
 }
 
 // ── KONSUMEN (Toko/POS) ────────────────────────────────────────────────────────
