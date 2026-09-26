@@ -4,6 +4,7 @@ import { requirePermission } from "../../middleware/rbac.js";
 import { requirePasarEntitlement } from "../../middleware/entitlement.js";
 import { requireParam } from "../../lib/http.js";
 import {
+  collectorChargePaymentSchema,
   collectorDepositSchema,
   collectorLoanPaymentSchema,
   listBatchesQuerySchema,
@@ -14,6 +15,7 @@ import {
   depositAsCollector,
   getTodayForCollector,
   listBatches,
+  payChargeAsCollector,
   payLoanAsCollector,
   setAssignments,
   submitBatch,
@@ -71,6 +73,17 @@ export function collectionsRoutes(): Router {
       const data = collectorLoanPaymentSchema.parse(req.body);
       const auth = authClaims(req);
       const result = await payLoanAsCollector(auth.tenantId, auth.userId, data);
+      res.status(201).json({ success: true, data: result, meta: res.locals.meta });
+    })
+  );
+
+  router.post(
+    "/charge-payment",
+    requirePermission("collections", "create"),
+    handle(async (req, res) => {
+      const data = collectorChargePaymentSchema.parse(req.body);
+      const auth = authClaims(req);
+      const result = await payChargeAsCollector(auth.tenantId, auth.userId, data);
       res.status(201).json({ success: true, data: result, meta: res.locals.meta });
     })
   );

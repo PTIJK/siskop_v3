@@ -24,6 +24,12 @@ export const collectorLoanPaymentSchema = z.object({
   note: z.string().optional()
 });
 
+export const collectorChargePaymentSchema = z.object({
+  chargeId: z.string().cuid("Charge ID tidak valid"),
+  amount: z.coerce.number().positive("Nominal harus lebih dari 0"),
+  note: z.string().optional()
+});
+
 export const verifyBatchSchema = z.object({
   receivedTotal: z.coerce.number().nonnegative("Nominal tidak boleh negatif")
 });
@@ -38,5 +44,6 @@ export const listBatchesQuerySchema = z.object({
 export type SetAssignmentsInput = z.infer<typeof setAssignmentsSchema>;
 export type CollectorDepositInput = z.infer<typeof collectorDepositSchema>;
 export type CollectorLoanPaymentInput = z.infer<typeof collectorLoanPaymentSchema>;
+export type CollectorChargePaymentInput = z.infer<typeof collectorChargePaymentSchema>;
 export type VerifyBatchInput = z.infer<typeof verifyBatchSchema>;
 export type ListBatchesQueryInput = z.infer<typeof listBatchesQuerySchema>;

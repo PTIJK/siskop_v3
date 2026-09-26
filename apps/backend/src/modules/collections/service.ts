@@ -6,8 +6,10 @@ import { businessDate } from "../../lib/operating-calendar.js";
 import { postCollectionBatchVerification } from "../../lib/journal.js";
 import { depositToSaving } from "../savings/service.js";
 import { recordLoanPayment } from "../loans/service.js";
+import { payCharge } from "../market/charges.service.js";
 import { recordAudit } from "../audit-log/service.js";
 import type {
+  CollectorChargePaymentInput,
   CollectorDepositInput,
   CollectorLoanPaymentInput,
   ListBatchesQueryInput,
@@ -64,10 +66,37 @@ async function assertBinaan(tenantId: string, collectorUserId: string, memberId:
 // ── Today's list ──────────────────────────────────────────────────────────
 
 /**
+ * A binaan's pasar location from their active StallContract (F5), or null for
+ * a member who isn't a pasar trader — sorted last, by name, below.
+ */
+interface BinaanLocation {
+  marketName: string;
+  block: string | null;
+  stallCode: string;
+}
+
+/** Pasar/blok/kode kios first (plan's "urut pasar/blok/kode kios"), stall-less binaan last by name. */
+function compareByLocation(
+  a: { location: BinaanLocation | null; memberName: string },
+  b: { location: BinaanLocation | null; memberName: string }
+): number {
+  if (a.location && b.location) {
+    return (
+      a.location.marketName.localeCompare(b.location.marketName) ||
+      (a.location.block ?? "").localeCompare(b.location.block ?? "") ||
+      a.location.stallCode.localeCompare(b.location.stallCode)
+    );
+  }
+  if (a.location && !b.location) return -1;
+  if (!a.location && b.location) return 1;
+  return a.memberName.localeCompare(b.memberName);
+}
+
+/**
  * The collector's binaan members plus their oldest UNPAID/PARTIAL loan
- * installment, if any. Sorted by member name — the plan's "urut pasar/blok/
- * kode kios" needs F5's StallContract to derive a member's location, which
- * doesn't exist yet.
+ * installment, if any. Sorted by pasar → blok → kode kios via each member's
+ * active StallContract (F5 plan); a binaan with no stall contract sorts last,
+ * by name.
  */
 export async function getTodayForCollector(tenantId: string, collectorUserId: string) {
   const assignments = await db.collectorAssignment.findMany({
@@ -78,6 +107,11 @@ export async function getTodayForCollector(tenantId: string, collectorUserId: st
           id: true,
           memberId: true,
           fullName: true,
+          stallContracts: {
+            where: { isActive: true },
+            take: 1,
+            select: { stall: { select: { code: true, block: true, market: { select: { name: true } } } } }
+          },
           loans: {
             where: { status: "ACTIVE" },
             select: {
@@ -93,32 +127,36 @@ export async function getTodayForCollector(tenantId: string, collectorUserId: st
           }
         }
       }
-    },
-    orderBy: { member: { fullName: "asc" } }
+    }
   });
 
   const today = businessDate();
 
-  return assignments.map(({ member }) => {
-    const loan = member.loans[0];
-    const installment = loan?.installments[0];
-    const amountDue = installment
-      ? installment.principalDue.plus(installment.interestDue).sub(installment.principalPaid).sub(installment.interestPaid)
-      : null;
-    const daysOverdue =
-      installment && installment.dueDate < today ? Math.floor((today.getTime() - installment.dueDate.getTime()) / 86_400_000) : 0;
+  return assignments
+    .map(({ member }) => {
+      const loan = member.loans[0];
+      const installment = loan?.installments[0];
+      const amountDue = installment
+        ? installment.principalDue.plus(installment.interestDue).sub(installment.principalPaid).sub(installment.interestPaid)
+        : null;
+      const daysOverdue =
+        installment && installment.dueDate < today ? Math.floor((today.getTime() - installment.dueDate.getTime()) / 86_400_000) : 0;
+      const stall = member.stallContracts[0]?.stall;
 
-    return {
-      memberId: member.id,
-      memberCode: member.memberId,
-      memberName: member.fullName,
-      loanId: loan?.id ?? null,
-      installmentSeq: installment?.seq ?? null,
-      dueDate: installment ? installment.dueDate.toISOString().slice(0, 10) : null,
-      amountDue: amountDue ? amountDue.toString() : null,
-      daysOverdue
-    };
-  });
+      return {
+        location: stall ? { marketName: stall.market.name, block: stall.block, stallCode: stall.code } : null,
+        memberName: member.fullName,
+        memberId: member.id,
+        memberCode: member.memberId,
+        loanId: loan?.id ?? null,
+        installmentSeq: installment?.seq ?? null,
+        dueDate: installment ? installment.dueDate.toISOString().slice(0, 10) : null,
+        amountDue: amountDue ? amountDue.toString() : null,
+        daysOverdue
+      };
+    })
+    .sort(compareByLocation)
+    .map(({ location: _location, ...item }) => item);
 }
 
 // ── Batches ───────────────────────────────────────────────────────────────
@@ -177,6 +215,20 @@ export async function payLoanAsCollector(tenantId: string, collectorUserId: stri
     collectorUserId,
     { batchId: batch.id }
   );
+  await db.collectionBatch.update({ where: { id: batch.id, tenantId }, data: { expectedTotal: { increment: data.amount } } });
+  return result;
+}
+
+/** A Kolektor paying a member's sewa/retribusi Charge in the field — same batch-accrual shape as depositAsCollector/payLoanAsCollector above. */
+export async function payChargeAsCollector(tenantId: string, collectorUserId: string, data: CollectorChargePaymentInput) {
+  const charge = await db.charge.findFirst({ where: { id: data.chargeId, tenantId } });
+  if (!charge) throw notFound("Tagihan tidak ditemukan");
+  await assertBinaan(tenantId, collectorUserId, charge.memberId);
+
+  const batch = await ensureOpenBatchToday(tenantId, collectorUserId);
+  const result = await payCharge(tenantId, data.chargeId, { amount: data.amount, note: data.note }, collectorUserId, {
+    batchId: batch.id
+  });
   await db.collectionBatch.update({ where: { id: batch.id, tenantId }, data: { expectedTotal: { increment: data.amount } } });
   return result;
 }

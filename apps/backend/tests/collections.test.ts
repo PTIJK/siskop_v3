@@ -113,6 +113,54 @@ describe("GET /api/collections/today", () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(0);
   });
+
+  it("sorts binaan by pasar, then blok, then kode kios, with stall-less members last (by name)", async () => {
+    const { admin, collector } = await setupTenantWithCollector();
+    const memberZBlokBA01 = await createMemberWithPokokSaving(admin.accessToken, { nik: "3000000000000001", fullName: "Zaenal" });
+    const memberABlokAB02 = await createMemberWithPokokSaving(admin.accessToken, { nik: "3000000000000002", fullName: "Amir" });
+    const memberABlokAA01 = await createMemberWithPokokSaving(admin.accessToken, { nik: "3000000000000003", fullName: "Budi" });
+    const memberNoStall = await createMemberWithPokokSaving(admin.accessToken, { nik: "3000000000000004", fullName: "Agus" });
+    for (const m of [memberZBlokBA01, memberABlokAB02, memberABlokAA01, memberNoStall]) {
+      await assign(admin.accessToken, m.id, collector.user.id);
+    }
+
+    const marketA = await request(app()).post("/api/market/markets").set(bearer(admin.accessToken)).send({ name: "Pasar A" });
+    const marketZ = await request(app()).post("/api/market/markets").set(bearer(admin.accessToken)).send({ name: "Pasar Z" });
+    const stallZBA01 = await request(app())
+      .post("/api/market/stalls")
+      .set(bearer(admin.accessToken))
+      .send({ marketId: marketZ.body.data.id, code: "A-01", block: "B", kind: "KIOS" });
+    const stallABB02 = await request(app())
+      .post("/api/market/stalls")
+      .set(bearer(admin.accessToken))
+      .send({ marketId: marketA.body.data.id, code: "B-02", block: "A", kind: "KIOS" });
+    const stallABA01 = await request(app())
+      .post("/api/market/stalls")
+      .set(bearer(admin.accessToken))
+      .send({ marketId: marketA.body.data.id, code: "A-01", block: "A", kind: "KIOS" });
+    await request(app())
+      .post("/api/market/contracts")
+      .set(bearer(admin.accessToken))
+      .send({ stallId: stallZBA01.body.data.id, memberId: memberZBlokBA01.id, startDate: "2026-09-01", rentAmount: 100000, rentPeriod: "MONTHLY" });
+    await request(app())
+      .post("/api/market/contracts")
+      .set(bearer(admin.accessToken))
+      .send({ stallId: stallABB02.body.data.id, memberId: memberABlokAB02.id, startDate: "2026-09-01", rentAmount: 100000, rentPeriod: "MONTHLY" });
+    await request(app())
+      .post("/api/market/contracts")
+      .set(bearer(admin.accessToken))
+      .send({ stallId: stallABA01.body.data.id, memberId: memberABlokAA01.id, startDate: "2026-09-01", rentAmount: 100000, rentPeriod: "MONTHLY" });
+
+    const res = await request(app()).get("/api/collections/today").set(bearer(collector.accessToken));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.map((i: { memberId: string }) => i.memberId)).toEqual([
+      memberABlokAA01.id,
+      memberABlokAB02.id,
+      memberZBlokBA01.id,
+      memberNoStall.id
+    ]);
+  });
 });
 
 describe("POST /api/collections/savings-deposit and /loan-payment", () => {
@@ -325,5 +373,88 @@ describe("GET /api/collections/batches", () => {
 
     expect(open.body.data).toHaveLength(1);
     expect(verified.body.data).toHaveLength(0);
+  });
+});
+
+describe("POST /api/collections/charge-payment", () => {
+  async function setupBinaanWithCharge() {
+    const ctx = await setupTenantWithCollector();
+    const member = await createMemberWithPokokSaving(ctx.admin.accessToken);
+    await assign(ctx.admin.accessToken, member.id, ctx.collector.user.id);
+    const market = await request(app())
+      .post("/api/market/markets")
+      .set(bearer(ctx.admin.accessToken))
+      .send({ name: "Pasar Kolektor" });
+    const stall = await request(app())
+      .post("/api/market/stalls")
+      .set(bearer(ctx.admin.accessToken))
+      .send({ marketId: market.body.data.id, code: "A-01", kind: "KIOS" });
+    // After the market exists, so its JASA/pasar mapping block gets wired too
+    // (setupTenantWithCollector's own generate-standard call ran before it existed).
+    await request(app()).post("/api/config/accounts/generate-standard").set(bearer(ctx.admin.accessToken));
+    const charge = await db.charge.create({
+      data: {
+        tenantId: ctx.admin.user.tenantId,
+        unitId: market.body.data.unitId,
+        memberId: member.id,
+        stallId: stall.body.data.id,
+        kind: "RETRIBUSI",
+        sourceId: "test-source-1",
+        periodStart: new Date("2026-09-26"),
+        dueDate: new Date("2026-09-26"),
+        amount: 5000
+      }
+    });
+    return { ...ctx, member, chargeId: charge.id };
+  }
+
+  it("records a charge payment for a binaan member, opens a batch, and accrues expectedTotal", async () => {
+    const ctx = await setupBinaanWithCharge();
+
+    const res = await request(app())
+      .post("/api/collections/charge-payment")
+      .set(bearer(ctx.collector.accessToken))
+      .send({ chargeId: ctx.chargeId, amount: 5000 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.status).toBe("PAID");
+
+    const batch = await db.collectionBatch.findFirstOrThrow({ where: { tenantId: ctx.admin.user.tenantId, collectorId: ctx.collector.user.id } });
+    expect(batch.expectedTotal.toString()).toBe("5000");
+
+    const payment = await db.chargePayment.findFirstOrThrow({ where: { tenantId: ctx.admin.user.tenantId, chargeId: ctx.chargeId } });
+    expect(payment.collectionBatchId).toBe(batch.id);
+
+    const entry = await db.journalEntry.findFirstOrThrow({ where: { tenantId: ctx.admin.user.tenantId, sourceType: "CHARGE_PAYMENT" } });
+    const kasDiKolektor = await db.account.findFirstOrThrow({ where: { tenantId: ctx.admin.user.tenantId, name: "Kas di Kolektor" } });
+    const line = await db.journalLine.findFirstOrThrow({
+      where: { tenantId: ctx.admin.user.tenantId, journalEntryId: entry.id, accountId: kasDiKolektor.id }
+    });
+    expect(line.debit.toString()).toBe("5000");
+  });
+
+  it("403s a charge payment for a member not assigned to this collector", async () => {
+    const ctx = await setupBinaanWithCharge();
+    const other = await createStaffSession(ctx.admin.user.tenantId, "demo", "Kolektor", "other-charge-kolektor@demo.test");
+
+    const res = await request(app())
+      .post("/api/collections/charge-payment")
+      .set(bearer(other.accessToken))
+      .send({ chargeId: ctx.chargeId, amount: 5000 });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("NOT_ASSIGNED_COLLECTOR");
+  });
+
+  it("404s a charge belonging to another tenant", async () => {
+    const ctx = await setupBinaanWithCharge();
+    const other = await setupTenant({ slug: "other-pasar", registrationNo: "KOP-OTHER-PASAR" });
+
+    const res = await request(app())
+      .post("/api/collections/charge-payment")
+      .set(bearer(other.accessToken))
+      .send({ chargeId: ctx.chargeId, amount: 5000 });
+
+    expect(res.status).toBe(404);
   });
 });
