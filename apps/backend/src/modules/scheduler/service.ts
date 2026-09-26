@@ -1,8 +1,15 @@
-import type { AuditLogPurgeResult, AuditThresholdCheckResult, DailySchedulerResult, SavingInterestAccrualResult } from "@siskop/types";
+import type {
+  AuditLogPurgeResult,
+  AuditThresholdCheckResult,
+  ChargeGenerationResult,
+  DailySchedulerResult,
+  SavingInterestAccrualResult
+} from "@siskop/types";
 import { recalculateAllKOL } from "../../lib/kol.js";
 import { checkAuditThreshold } from "../config/audit-threshold.js";
 import { purgeStaleAuditLogs } from "../audit-log/service.js";
 import { runDailySavingInterestAccrual } from "../savings/daily-interest.js";
+import { runDailyChargeGeneration } from "../market/charge-generator.js";
 
 /**
  * The one daily "system date tick" for every date-driven calculation that
@@ -17,7 +24,7 @@ import { runDailySavingInterestAccrual } from "../savings/daily-interest.js";
  * retry the unfinished work.
  */
 export async function runDailyScheduler(asOf: Date = new Date()): Promise<DailySchedulerResult> {
-  const [savingsInterest, loanKol, auditThreshold, auditLogPurge] = await Promise.all([
+  const [savingsInterest, loanKol, auditThreshold, auditLogPurge, chargeGeneration] = await Promise.all([
     runDailySavingInterestAccrual(asOf).catch((err: unknown) => {
       console.error("Daily savings interest accrual failed", err);
       return { checked: 0, posted: 0, skipped: 0, failed: 1 } satisfies SavingInterestAccrualResult;
@@ -33,8 +40,12 @@ export async function runDailyScheduler(asOf: Date = new Date()): Promise<DailyS
     purgeStaleAuditLogs(asOf).catch((err: unknown) => {
       console.error("Daily audit log purge failed", err);
       return { deleted: 0, failed: 1 } satisfies AuditLogPurgeResult;
+    }),
+    runDailyChargeGeneration(asOf).catch((err: unknown) => {
+      console.error("Daily charge generation failed", err);
+      return { checked: 0, created: 0, skipped: 0, failed: 1 } satisfies ChargeGenerationResult;
     })
   ]);
 
-  return { date: asOf.toISOString(), savingsInterest, loanKol, auditThreshold, auditLogPurge };
+  return { date: asOf.toISOString(), savingsInterest, loanKol, auditThreshold, auditLogPurge, chargeGeneration };
 }
