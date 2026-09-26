@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { BmppHeadroom, CreateLoanResponse, LoanConfig, Member } from "@siskop/types";
+import type { BmppHeadroom, CreateLoanResponse, LoanConfig, Member, PreviewScheduleResult } from "@siskop/types";
 import { apiFetch, apiFetchPage, apiPost, ApiRequestError } from "@/api/client";
 import { formatRupiah } from "@/lib/format";
 import { addMonths, differenceInCalendarDays } from "date-fns";
@@ -33,7 +33,12 @@ interface MemberWithSavings extends Member {
 const step2Schema = z.object({
   loanConfigId: z.string().min(1, "Pilih jenis pembiayaan"),
   principalAmount: z.string().min(1, "Nominal wajib diisi").refine((v) => parseFloat(v) > 0, "Harus lebih dari 0"),
-  termMonths: z.string().min(1, "Tenor wajib diisi").refine((v) => parseInt(v) > 0, "Harus lebih dari 0"),
+  // Required for a MONTHLY loan config; installmentCount is required instead for DAILY/WEEKLY
+  // (checked imperatively in onStep2Submit, since that depends on the selected config).
+  termMonths: z.string().optional(),
+  installmentCount: z.string().optional(),
+  rate: z.string().optional(),
+  rateNote: z.string().optional(),
   disbursedAt: z.string().min(1, "Tanggal cair wajib diisi")
 });
 
@@ -53,6 +58,8 @@ export function NewLoanPage() {
   const [bmpp, setBmpp] = useState<BmppHeadroom | null>(null);
   const [selectedConfig, setSelectedConfig] = useState<LoanConfig | null>(null);
   const [calc, setCalc] = useState<LoanCalculation | null>(null);
+  const [schedulePreview, setSchedulePreview] = useState<PreviewScheduleResult | null>(null);
+  const [previewError, setPreviewError] = useState("");
   const [apiError, setApiError] = useState("");
   const [existingLoanDialog, setExistingLoanDialog] = useState(false);
   const [existingLoanInfo, setExistingLoanInfo] = useState<{ amount: string; remaining: string } | null>(null);
@@ -74,7 +81,10 @@ export function NewLoanPage() {
 
   const principal = watch("principalAmount");
   const termMonths = watch("termMonths");
+  const installmentCount = watch("installmentCount");
+  const rateOverride = watch("rate");
   const disbursedAt = watch("disbursedAt");
+  const isMonthly = !selectedConfig || selectedConfig.installmentFrequency === "MONTHLY";
 
   /** The member's BMPP room (Permenkop UKM 8/2023): 10% of Modal Sendiri for pengurus/pengawas, 15% otherwise. */
   const loadBmpp = async (member: MemberWithSavings) => {
@@ -136,6 +146,41 @@ export function NewLoanPage() {
     setCalc(result);
   }, [selectedConfig, principal, termMonths, disbursedAt]);
 
+  // DAILY/WEEKLY loans have no client-side formula (D8's Rp500 rounding and
+  // operating-day due dates live in buildSchedule on the backend), so their
+  // preview comes from the same endpoint createLoan will use.
+  useEffect(() => {
+    if (!selectedConfig || selectedConfig.installmentFrequency === "MONTHLY") {
+      setSchedulePreview(null);
+      setPreviewError("");
+      return;
+    }
+    const p = parseFloat(principal);
+    const count = parseInt(installmentCount ?? "");
+    if (isNaN(p) || p <= 0 || isNaN(count) || count <= 0) {
+      setSchedulePreview(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      apiPost<PreviewScheduleResult>("/loans/configs/preview-schedule", {
+        loanConfigId: selectedConfig.id,
+        principalAmount: p,
+        installmentCount: count,
+        rate: rateOverride ? parseFloat(rateOverride) : undefined,
+        disbursedAt: disbursedAt || undefined
+      })
+        .then((result) => {
+          setSchedulePreview(result);
+          setPreviewError("");
+        })
+        .catch((err) => {
+          setSchedulePreview(null);
+          setPreviewError(err instanceof ApiRequestError ? err.message : "Gagal memuat pratinjau jadwal");
+        });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [selectedConfig, principal, installmentCount, rateOverride, disbursedAt]);
+
   const searchMembers = async (q: string) => {
     if (q.length < 2) {
       setMemberResults([]);
@@ -167,12 +212,24 @@ export function NewLoanPage() {
 
   const submitLoan = async (data: Step2Form, force = false, acknowledgeBmpp = false) => {
     setApiError("");
+    const configFrequency = configs.find((c) => c.id === data.loanConfigId)?.installmentFrequency ?? "MONTHLY";
+    if (configFrequency === "MONTHLY" && !data.termMonths) {
+      setApiError("Tenor (bulan) wajib diisi");
+      return;
+    }
+    if (configFrequency !== "MONTHLY" && !data.installmentCount) {
+      setApiError("Jumlah cicilan wajib diisi");
+      return;
+    }
     try {
       const result = await apiPost<CreateLoanResponse>("/loans", {
         memberId: selectedMember!.id,
         loanConfigId: data.loanConfigId,
         principalAmount: parseFloat(data.principalAmount),
-        termMonths: parseInt(data.termMonths),
+        termMonths: configFrequency === "MONTHLY" ? parseInt(data.termMonths!) : undefined,
+        installmentCount: configFrequency !== "MONTHLY" ? parseInt(data.installmentCount!) : undefined,
+        rate: data.rate ? parseFloat(data.rate) : undefined,
+        rateNote: data.rateNote || undefined,
         disbursedAt: data.disbursedAt,
         force,
         acknowledgeBmpp
@@ -336,7 +393,10 @@ export function NewLoanPage() {
                     <SelectContent>
                       {configs.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
-                          {c.name} — {c.rateType} {c.rate}% — Maks {c.maxTermMonths} bln
+                          {c.name} — {c.rateType} {c.rate}% —{" "}
+                          {c.installmentFrequency === "MONTHLY"
+                            ? `Maks ${c.maxTermMonths} bln`
+                            : `${c.installmentFrequency === "DAILY" ? "Harian" : "Mingguan"}${c.maxInstallments ? `, maks ${c.maxInstallments}x` : ""}`}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -350,21 +410,47 @@ export function NewLoanPage() {
                   {errors.principalAmount && <p className="text-xs text-destructive">{errors.principalAmount.message}</p>}
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label>Tenor (bulan) *</Label>
-                  <Input
-                    type="number"
-                    placeholder={`1–${selectedConfig?.maxTermMonths ?? 60}`}
-                    min="1"
-                    max={selectedConfig?.maxTermMonths}
-                    {...register("termMonths")}
-                  />
-                  {errors.termMonths && <p className="text-xs text-destructive">{errors.termMonths.message}</p>}
-                </div>
+                {isMonthly ? (
+                  <div className="space-y-1.5">
+                    <Label>Tenor (bulan) *</Label>
+                    <Input
+                      type="number"
+                      placeholder={`1–${selectedConfig?.maxTermMonths ?? 60}`}
+                      min="1"
+                      max={selectedConfig?.maxTermMonths}
+                      {...register("termMonths")}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label>Jumlah Cicilan ({selectedConfig?.installmentFrequency === "DAILY" ? "hari" : "minggu"}) *</Label>
+                    <Input
+                      type="number"
+                      placeholder={selectedConfig?.maxInstallments ? `1–${selectedConfig.maxInstallments}` : undefined}
+                      min="1"
+                      max={selectedConfig?.maxInstallments ?? undefined}
+                      {...register("installmentCount")}
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <Label>Tanggal Cair *</Label>
                   <Input type="date" {...register("disbursedAt")} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 rounded-md border p-3">
+                  <div className="col-span-2 text-xs font-medium text-muted-foreground">
+                    Ubah Rate (opsional) — kosongkan untuk memakai rate produk ({selectedConfig?.rate ?? "-"}%)
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Rate (%)</Label>
+                    <Input type="number" step="0.01" placeholder={selectedConfig?.rate} {...register("rate")} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Catatan {rateOverride && "*"}</Label>
+                    <Input placeholder="Alasan perubahan rate" {...register("rateNote")} />
+                  </div>
                 </div>
 
                 <div className="flex gap-3">
@@ -407,6 +493,53 @@ export function NewLoanPage() {
                     </div>
                   ))}
                 </dl>
+              </CardContent>
+            </Card>
+          )}
+
+          {!isMonthly && (
+            <Card className="bg-muted/30">
+              <CardHeader>
+                <CardTitle className="text-base">Pratinjau Jadwal Cicilan</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {previewError && <FormError error={previewError} />}
+                {!schedulePreview && !previewError && (
+                  <p className="text-sm text-muted-foreground">Isi nominal dan jumlah cicilan untuk melihat jadwal.</p>
+                )}
+                {schedulePreview && (
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between border-b pb-3">
+                      <span className="text-muted-foreground">Total Kewajiban</span>
+                      <span className="font-semibold">{formatRupiah(schedulePreview.totalAmount)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total Jasa/Bunga</span>
+                      <span>{formatRupiah(schedulePreview.totalInterest)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Cicilan Pertama</span>
+                      <span className="text-lg font-bold text-primary">
+                        {formatRupiah(
+                          Number(schedulePreview.installments[0]?.principalDue ?? 0) +
+                            Number(schedulePreview.installments[0]?.interestDue ?? 0)
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Jatuh Tempo Pertama</span>
+                      <span>{schedulePreview.installments[0]?.dueDate}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Jatuh Tempo Terakhir</span>
+                      <span>{schedulePreview.installments.at(-1)?.dueDate}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {schedulePreview.installments.length} cicilan, dibulatkan ke Rp500 terdekat (cicilan terakhir
+                      menyerap sisa).
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
