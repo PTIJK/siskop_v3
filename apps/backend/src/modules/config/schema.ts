@@ -167,6 +167,38 @@ export const updateSelfRegistrationSchema = z.object({
   selfRegistrationEnabled: z.boolean()
 });
 
+// ── Operating calendar (hari libur & hari tutup) ─────────────────────────────
+
+const holidayDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD")
+  // Reject dates that Date would silently roll over (2026-02-30 → March 2).
+  .refine((v) => new Date(`${v}T00:00:00.000Z`).toISOString().startsWith(v), "Tanggal tidak valid");
+
+export const createHolidaySchema = z.object({
+  date: holidayDate,
+  name: z.string().trim().min(1, "Nama hari libur wajib diisi").max(100)
+});
+
+export const importHolidaysSchema = z.object({
+  holidays: z.array(createHolidaySchema).min(1).max(100)
+});
+
+export const listHolidaysQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100).optional()
+});
+
+export const updateOperatingDaysSchema = z.object({
+  closedWeekdays: z
+    .array(z.number().int().min(0).max(6))
+    .transform((days) => [...new Set(days)].sort((a, b) => a - b))
+    .refine((days) => days.length < 7, "Minimal satu hari dalam seminggu harus buka")
+});
+
+export type CreateHolidayInput = z.infer<typeof createHolidaySchema>;
+export type ImportHolidaysInput = z.infer<typeof importHolidaysSchema>;
+export type ListHolidaysQuery = z.infer<typeof listHolidaysQuerySchema>;
+export type UpdateOperatingDaysInput = z.infer<typeof updateOperatingDaysSchema>;
 export type CreateUnitInput = z.infer<typeof createUnitSchema>;
 export type UpdateUnitInput = z.infer<typeof updateUnitSchema>;
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;

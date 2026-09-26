@@ -258,6 +258,9 @@ model Tenant {
   // Gates POST /api/public/register/:tenantSlug — the QR self-registration
   // form. Defaults on so existing tenants don't need an opt-in step.
   selfRegistrationEnabled    Boolean              @default(true)
+  // Weekdays with no collection (0 = Sunday … 6 = Saturday, as getUTCDay).
+  // Together with TenantHoliday this is lib/operating-calendar.ts's input.
+  closedWeekdays             Int[]                @default([0])
   createdAt                  DateTime             @default(now())
 
   units                   CooperativeUnit[]
@@ -290,6 +293,21 @@ model Tenant {
   slugReservations        TenantSlugReservation[]
   slugChanges             TenantSlugChange[]
   auditLogs               AuditLog[]
+  holidays                TenantHoliday[]
+}
+
+// A tenant's own non-collection day (public holiday, market closure). Loan
+// installments and market charges that would fall on one shift to the next
+// operating day — see lib/operating-calendar.ts.
+model TenantHoliday {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  name      String
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, date])
 }
 
 // Both current addresses and historical aliases share one global namespace.
