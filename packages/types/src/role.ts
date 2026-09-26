@@ -38,6 +38,8 @@ export interface Permissions {
   expenses?: ModulePermissions;
   // Koperasi pasar plan F3 (Market/Stall) — optional like `konsumen` above.
   market?: ModulePermissions;
+  // Koperasi pasar plan F4 (Kolektor & setoran) — optional like `market` above.
+  collections?: ModulePermissions;
 }
 
 export type PermissionModule = keyof Permissions;

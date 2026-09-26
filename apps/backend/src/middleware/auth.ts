@@ -42,7 +42,9 @@ const permissionsSchema = z.object({
   // undefined (requirePermission("expenses", ...) then denies).
   expenses: permissionActions.optional(),
   // Koperasi pasar plan F3 — optional like `konsumen`/`auditLog` above.
-  market: permissionActions.optional()
+  market: permissionActions.optional(),
+  // Koperasi pasar plan F4 — optional like `market` above.
+  collections: permissionActions.optional()
 });
 
 const claimsSchema = z.object({

@@ -41,11 +41,13 @@ const FULL: Permissions["members"] = { create: true, read: true, update: true, d
 const READ_ONLY = { read: true };
 
 /**
- * Every tenant is seeded with these 4 roles at provisioning time (ported
- * verbatim from the pre-rescaffold demo seed, now created for every tenant —
- * not just the demo — so RBAC works out of the box). `Role`/`Permissions` are
- * the fine-grained axis; `AuthClaims.role` (super_admin|tenant_admin|
- * accountant|member) is the separate, coarse axis — see packages/types/src/role.ts.
+ * Every tenant is seeded with these roles at provisioning time (Super Admin/
+ * Manager/Teller/Viewer ported verbatim from the pre-rescaffold demo seed,
+ * now created for every tenant — not just the demo — so RBAC works out of
+ * the box; Kasir and Kolektor added later for Toko and koperasi pasar).
+ * `Role`/`Permissions` are the fine-grained axis; `AuthClaims.role`
+ * (super_admin|tenant_admin|accountant|member) is the separate, coarse axis
+ * — see packages/types/src/role.ts.
  */
 const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
   {
@@ -63,7 +65,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       konsumen: FULL,
       auditLog: READ_ONLY,
       expenses: FULL,
-      market: FULL
+      market: FULL,
+      collections: FULL
     }
   },
   {
@@ -81,7 +84,10 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       konsumen: FULL,
       auditLog: READ_ONLY,
       expenses: FULL,
-      market: FULL
+      market: FULL,
+      // Manages Kolektor assignments (PUT /api/collections/assignments) and
+      // verifies batches, same as Teller does for the latter.
+      collections: FULL
     }
   },
   {
@@ -100,7 +106,10 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       konsumen: { create: true, read: true, update: true },
       auditLog: {},
       expenses: {},
-      market: READ_ONLY
+      market: READ_ONLY,
+      // Verifies a Kolektor's batch (POST /api/collections/batches/:id/verify);
+      // does not create collection transactions itself.
+      collections: { read: true, update: true }
     }
   },
   {
@@ -117,7 +126,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       konsumen: READ_ONLY,
       auditLog: {},
       expenses: READ_ONLY,
-      market: READ_ONLY
+      market: READ_ONLY,
+      collections: READ_ONLY
     }
   },
   {
@@ -137,6 +147,30 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       konsumen: { create: true, read: true, update: true },
       auditLog: {},
       expenses: {}
+    }
+  },
+  {
+    name: "Kolektor",
+    permissions: {
+      // Koperasi pasar plan F4: a Kolektor only records collections for
+      // their own binaan members (create) and reads their own today's list/
+      // batches (read) — no members/savings/loans/reports/config/users/
+      // roles/accounting/konsumen/auditLog/market access at all. Cannot
+      // verify their own batch (see modules/collections/service.ts) or
+      // reassign members (that's Manager's PUT /assignments, gated on
+      // collections:update, which Kolektor deliberately lacks).
+      dashboard: {},
+      members: {},
+      savings: {},
+      loans: {},
+      reports: {},
+      config: {},
+      users: {},
+      roles: {},
+      konsumen: {},
+      auditLog: {},
+      market: {},
+      collections: { create: true, read: true }
     }
   }
 ];

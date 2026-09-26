@@ -159,10 +159,10 @@ const CUSTOM_ROLE = {
 };
 
 describe("GET/POST/PUT/DELETE /api/config/roles", () => {
-  it("lists the 5 seed roles and creates a new one", async () => {
+  it("lists the 6 seed roles and creates a new one", async () => {
     const admin = await setupTenant();
     const list = await request(app()).get("/api/config/roles").set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(5);
+    expect(list.body.data).toHaveLength(6);
 
     const created = await request(app())
       .post("/api/config/roles")
