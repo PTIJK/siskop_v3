@@ -679,3 +679,85 @@ describe("GET /api/savings/:id/statement", () => {
     expect(res.body.length).toBeGreaterThan(1000);
   }, 20_000);
 });
+
+describe("Savings audit trail", () => {
+  it("audits account creation with the opening balance", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    const config = await createConfigAs(admin.accessToken);
+
+    const saving = await request(app())
+      .post("/api/savings")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, savingConfigId: config.id, initialDeposit: 500_000 });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "saving.create", entityId: saving.body.data.id }
+    });
+    expect(log.actorUserId).toBe(admin.user.id);
+    expect(log.after).toMatchObject({ memberId: member.id, balance: "500000" });
+  });
+
+  it("audits a deposit with before/after balance", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    const config = await createConfigAs(admin.accessToken);
+    const saving = await request(app())
+      .post("/api/savings")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, savingConfigId: config.id, initialDeposit: 100_000 });
+
+    await request(app())
+      .post(`/api/savings/${saving.body.data.id}/deposit`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: 50_000 });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "saving.deposit", entityId: saving.body.data.id }
+    });
+    expect(log.before).toMatchObject({ balance: "100000" });
+    expect(log.after).toMatchObject({ balance: "150000", amount: "50000" });
+  });
+
+  it("audits a withdrawal with before/after balance", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    const config = await createConfigAs(admin.accessToken, { type: "SUKARELA" });
+    const saving = await request(app())
+      .post("/api/savings")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, savingConfigId: config.id, initialDeposit: 100_000 });
+
+    await request(app())
+      .post(`/api/savings/${saving.body.data.id}/withdraw`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: 30_000 });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "saving.withdraw", entityId: saving.body.data.id }
+    });
+    expect(log.before).toMatchObject({ balance: "100000" });
+    expect(log.after).toMatchObject({ balance: "70000", amount: "30000" });
+  });
+
+  it("writes no audit row when a withdrawal is rejected for insufficient balance", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    const config = await createConfigAs(admin.accessToken, { type: "SUKARELA" });
+    const saving = await request(app())
+      .post("/api/savings")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, savingConfigId: config.id, initialDeposit: 10_000 });
+
+    const res = await request(app())
+      .post(`/api/savings/${saving.body.data.id}/withdraw`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: 50_000 });
+    expect(res.status).toBe(422);
+
+    const count = await db.auditLog.count({
+      where: { tenantId: admin.user.tenantId, action: "saving.withdraw", entityId: saving.body.data.id }
+    });
+    expect(count).toBe(0);
+  });
+});

@@ -50,7 +50,16 @@ export function authRoutes(): Router {
       const { email, password } = loginBody.parse(req.body);
       // The tenant comes from the Host header, never the body — a caller must
       // not be able to name the tenant it wants to authenticate against.
-      const { refreshToken, ...session } = await login(req.workspace?.slug ?? slugFromHost(req.headers.host), email, password);
+      const { refreshToken, ...session } = await login(
+        req.workspace?.slug ?? slugFromHost(req.headers.host),
+        email,
+        password,
+        {
+          requestId: res.locals.meta?.requestId as string | undefined,
+          ip: req.ip ?? null,
+          userAgent: req.headers["user-agent"] ?? null
+        }
+      );
       assertWorkspaceTenant(req, session.user.tenantId, session.user.isPlatformAdmin);
       setRefreshCookie(res, refreshToken);
       res.json({ success: true, data: session, meta: res.locals.meta });

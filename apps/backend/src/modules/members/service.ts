@@ -3,6 +3,7 @@ import { ErrorCode } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { generateAccountNumber, generateMemberId } from "../../lib/id-generator.js";
+import { recordAudit } from "../audit-log/service.js";
 import { getDefaultUnitId } from "../../lib/units.js";
 import type { CreateMemberInput, ListMembersQueryInput, UpdateMemberInput } from "./schema.js";
 
@@ -114,40 +115,88 @@ export async function createMember(tenantId: string, data: CreateMemberInput) {
     // (CLAUDE.md rule 2b / merge plan "unit scoping").
     await tx.unitMembership.create({ data: { memberId: member.id, unitId } });
 
+    await recordAudit(tx, {
+      action: "member.create",
+      entityType: "Member",
+      entityId: member.id,
+      after: { fullName: member.fullName, nik: member.nik, memberId: member.memberId }
+    });
+
     return member;
   });
 }
 
+const memberEditableFields = (m: {
+  fullName: string;
+  nik: string;
+  address: string;
+  birthPlace: string;
+  birthDate: Date;
+  occupation: string;
+  isPengurus: boolean;
+  isPengawas: boolean;
+}) => ({
+  fullName: m.fullName,
+  nik: m.nik,
+  address: m.address,
+  birthPlace: m.birthPlace,
+  birthDate: m.birthDate,
+  occupation: m.occupation,
+  isPengurus: m.isPengurus,
+  isPengawas: m.isPengawas
+});
+
 export async function updateMember(tenantId: string, id: string, data: UpdateMemberInput) {
-  const member = await db.member.findFirst({ where: { id, tenantId } });
-  if (!member) throw notFound("Anggota tidak ditemukan");
+  return db.$transaction(async (tx) => {
+    const member = await tx.member.findFirst({ where: { id, tenantId } });
+    if (!member) throw notFound("Anggota tidak ditemukan");
 
-  if (data.nik && data.nik !== member.nik) {
-    const duplicateNik = await db.member.findFirst({ where: { tenantId, nik: data.nik } });
-    if (duplicateNik) throw new AppError(ErrorCode.NIK_EXISTS, "NIK sudah terdaftar di koperasi ini");
-  }
+    if (data.nik && data.nik !== member.nik) {
+      const duplicateNik = await tx.member.findFirst({ where: { tenantId, nik: data.nik } });
+      if (duplicateNik) throw new AppError(ErrorCode.NIK_EXISTS, "NIK sudah terdaftar di koperasi ini");
+    }
 
-  return db.member.update({
-    where: { id, tenantId },
-    data: {
-      ...(data.fullName && { fullName: data.fullName }),
-      ...(data.nik && { nik: data.nik }),
-      ...(data.address && { address: data.address }),
-      ...(data.birthPlace && { birthPlace: data.birthPlace }),
-      ...(data.birthDate && { birthDate: new Date(data.birthDate) }),
-      ...(data.occupation && { occupation: data.occupation }),
-      ...(data.isPengurus !== undefined && { isPengurus: data.isPengurus }),
-      ...(data.isPengawas !== undefined && { isPengawas: data.isPengawas })
-    },
-    select: memberSelect
+    const updated = await tx.member.update({
+      where: { id, tenantId },
+      data: {
+        ...(data.fullName && { fullName: data.fullName }),
+        ...(data.nik && { nik: data.nik }),
+        ...(data.address && { address: data.address }),
+        ...(data.birthPlace && { birthPlace: data.birthPlace }),
+        ...(data.birthDate && { birthDate: new Date(data.birthDate) }),
+        ...(data.occupation && { occupation: data.occupation }),
+        ...(data.isPengurus !== undefined && { isPengurus: data.isPengurus }),
+        ...(data.isPengawas !== undefined && { isPengawas: data.isPengawas })
+      },
+      select: memberSelect
+    });
+
+    await recordAudit(tx, {
+      action: "member.update",
+      entityType: "Member",
+      entityId: id,
+      before: memberEditableFields(member),
+      after: memberEditableFields(updated)
+    });
+
+    return updated;
   });
 }
 
 export async function deactivateMember(tenantId: string, id: string): Promise<void> {
-  const member = await db.member.findFirst({ where: { id, tenantId } });
-  if (!member) throw notFound("Anggota tidak ditemukan");
+  await db.$transaction(async (tx) => {
+    const member = await tx.member.findFirst({ where: { id, tenantId } });
+    if (!member) throw notFound("Anggota tidak ditemukan");
 
-  await db.member.update({ where: { id, tenantId }, data: { isActive: false } });
+    await tx.member.update({ where: { id, tenantId }, data: { isActive: false } });
+    await recordAudit(tx, {
+      action: "member.deactivate",
+      entityType: "Member",
+      entityId: id,
+      before: { isActive: member.isActive },
+      after: { isActive: false }
+    });
+  });
 }
 
 export async function uploadMemberKtp(tenantId: string, id: string, filePath: string) {

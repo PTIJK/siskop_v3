@@ -79,6 +79,41 @@ describe("GET/POST/PUT /api/config/units", () => {
     expect(res.status).toBe(200);
   });
 
+  it("audits a unit deactivation with before/after isActive", async () => {
+    const admin = await setupTenant();
+    const unit = await db.cooperativeUnit.findFirstOrThrow({ where: { tenantId: admin.user.tenantId } });
+    await request(app())
+      .post("/api/config/units")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ type: "KONSUMEN", name: "Unit Konsumen" });
+
+    await request(app())
+      .put(`/api/config/units/${unit.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ isActive: false });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "unit.update", entityId: unit.id }
+    });
+    expect(log.actorUserId).toBe(admin.user.id);
+    expect(log.before).toMatchObject({ isActive: true });
+    expect(log.after).toMatchObject({ isActive: false });
+  });
+
+  it("writes no audit row when a unit update fails validation (rolled back atomically)", async () => {
+    const admin = await setupTenant();
+    const unit = await db.cooperativeUnit.findFirstOrThrow({ where: { tenantId: admin.user.tenantId } });
+
+    const res = await request(app())
+      .put(`/api/config/units/${unit.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ isActive: false });
+    expect(res.status).toBe(409);
+
+    const count = await db.auditLog.count({ where: { tenantId: admin.user.tenantId, action: "unit.update" } });
+    expect(count).toBe(0);
+  });
+
   it("rejects a viewer — config.update is not granted to that role", async () => {
     const admin = await setupTenant();
     const viewer = await createStaffSession(admin.user.tenantId, "demo", "Viewer", "viewer@demo.test");
@@ -153,6 +188,44 @@ describe("GET/POST/PUT/DELETE /api/config/roles", () => {
     expect(res.body.data.permissions.loans.read).toBe(true);
   });
 
+  it("audits role creation and updates with before/after permissions", async () => {
+    const admin = await setupTenant();
+    const created = await request(app())
+      .post("/api/config/roles")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send(CUSTOM_ROLE);
+
+    const createLog = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "role.create", entityId: created.body.data.id }
+    });
+    expect(createLog.actorUserId).toBe(admin.user.id);
+    expect(createLog.after).toMatchObject({ name: "Frontliner" });
+
+    await request(app())
+      .put(`/api/config/roles/${created.body.data.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ permissions: { ...CUSTOM_ROLE.permissions, loans: { read: true } } });
+
+    const updateLog = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "role.update", entityId: created.body.data.id }
+    });
+    expect((updateLog.before as { permissions: { loans: unknown } }).permissions.loans).toEqual({});
+    expect((updateLog.after as { permissions: { loans: unknown } }).permissions.loans).toEqual({ read: true });
+  });
+
+  it("writes no audit row when a role update 404s (rolled back atomically)", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .put("/api/config/roles/does-not-exist")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ name: "Ghost" });
+    expect(res.status).toBe(404);
+
+    const count = await db.auditLog.count({ where: { tenantId: admin.user.tenantId, action: "role.update" } });
+    expect(count).toBe(0);
+  });
+
   it("rejects deleting a role that still has a user assigned", async () => {
     const admin = await setupTenant();
     const tellerRole = await db.role.findFirstOrThrow({ where: { tenantId: admin.user.tenantId, name: "Teller" } });
@@ -177,6 +250,25 @@ describe("GET/POST/PUT/DELETE /api/config/roles", () => {
       .set("Authorization", `Bearer ${admin.accessToken}`);
 
     expect(res.status).toBe(200);
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "role.delete", entityId: created.body.data.id }
+    });
+    expect(log.before).toMatchObject({ name: "Frontliner" });
+  });
+
+  it("writes no audit row when a role deletion is blocked by an assigned user", async () => {
+    const admin = await setupTenant();
+    const tellerRole = await db.role.findFirstOrThrow({ where: { tenantId: admin.user.tenantId, name: "Teller" } });
+    await createStaffSession(admin.user.tenantId, "demo", "Teller", "teller@demo.test");
+
+    const res = await request(app())
+      .delete(`/api/config/roles/${tellerRole.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(res.status).toBe(409);
+
+    const count = await db.auditLog.count({ where: { tenantId: admin.user.tenantId, action: "role.delete" } });
+    expect(count).toBe(0);
   });
 
   it("lets a Manager list roles but not create one — Manager only has roles.read", async () => {

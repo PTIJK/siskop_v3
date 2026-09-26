@@ -10,6 +10,7 @@ import { postLoanDisbursement, postLoanPayment, splitPrincipalAndInterest } from
 import { resolveUnitId } from "../../lib/units.js";
 import { getModalSendiri } from "../reports/capital-service.js";
 import { hasPokokSaving } from "../savings/service.js";
+import { recordAudit } from "../audit-log/service.js";
 import type {
   BmppHeadroomQueryInput,
   CreateLoanConfigInput,
@@ -290,6 +291,13 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
       description: "Pencairan pinjaman"
     });
 
+    await recordAudit(tx, {
+      action: "loan.create",
+      entityType: "Loan",
+      entityId: loan.id,
+      after: { memberId: loan.memberId, principalAmount: loan.principalAmount, termMonths: loan.termMonths }
+    });
+
     return loan;
   });
 }
@@ -348,6 +356,14 @@ export async function recordLoanPayment(
     await tx.loan.update({
       where: { id: loanId, tenantId },
       data: { remainingAmount: newRemaining, status: newStatus }
+    });
+
+    await recordAudit(tx, {
+      action: "loan.payment",
+      entityType: "Loan",
+      entityId: loanId,
+      before: { remainingAmount: loan.remainingAmount, status: loan.status },
+      after: { amount: new Prisma.Decimal(data.amount), remainingAmount: new Prisma.Decimal(newRemaining), status: newStatus }
     });
 
     return { loanId, newRemaining, status: newStatus };

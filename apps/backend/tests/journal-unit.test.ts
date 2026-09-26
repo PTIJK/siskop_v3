@@ -9,7 +9,6 @@ import { app, createMemberAs, createStaffSession, setupTenant } from "./helpers.
 import { createProduct, recordStockMovement } from "../src/modules/konsumen/product.service.js";
 import { createSale } from "../src/modules/konsumen/sale.service.js";
 import { recordCreditRepayment } from "../src/modules/konsumen/credit.service.js";
-import { recordLoanPayment } from "../src/modules/loans/service.js";
 import { runDailySavingInterestAccrual } from "../src/modules/savings/daily-interest.js";
 
 /**
@@ -73,12 +72,10 @@ async function buildLedger() {
     .set(bearer(admin.accessToken))
     .send({ memberId: member.id, loanConfigId: loanConfig.body.data.id, principalAmount: 5_000_000, termMonths: 12, unitId: unitB.id });
   expect(loan.status).toBe(201);
-  await recordLoanPayment(
-    tenantId,
-    loan.body.data.id,
-    { amount: 100_000, penalty: 0, paidAt: today(), dueDate: today() },
-    admin.user.id
-  );
+  await request(app())
+    .post(`/api/loans/${loan.body.data.id}/pay`)
+    .set(bearer(admin.accessToken))
+    .send({ amount: 100_000, penalty: 0, paidAt: today(), dueDate: today() });
 
   const product = await createProduct(
     tenantId,

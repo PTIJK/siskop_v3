@@ -116,6 +116,33 @@ describe("POST /api/auth/login", () => {
     expect(res.body.error.code).toBe("UNAUTHORIZED");
   });
 
+  it("audits a successful login with the real actor", async () => {
+    const res = await request(app())
+      .post("/api/auth/login")
+      .set("Host", "demo.localhost")
+      .send({ email: "admin@demo.test", password: "rahasia123" });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: res.body.data.user.tenantId, action: "auth.login_success" }
+    });
+    expect(log.actorUserId).toBe(res.body.data.user.id);
+    expect(log.requestId).toBe(res.body.meta.requestId);
+  });
+
+  it("audits a failed login with no actor — never reveals whether the email exists", async () => {
+    const tenant = await db.tenant.findFirstOrThrow({ where: { slug: "demo" } });
+
+    await request(app())
+      .post("/api/auth/login")
+      .set("Host", "demo.localhost")
+      .send({ email: "admin@demo.test", password: "salah" });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: tenant.id, action: "auth.login_failed" }
+    });
+    expect(log.actorUserId).toBeNull();
+  });
+
   it("tells the caller when no cooperative subdomain was supplied", async () => {
     const res = await request(app())
       .post("/api/auth/login")
