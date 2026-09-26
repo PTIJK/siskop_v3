@@ -143,6 +143,14 @@ enum MappingTransactionKind {
   // side to Kas di Kolektor. Tenant-wide SYSTEM mapping, always generated
   // (not Toko-gated) — see lib/journal.ts#substituteCollectorCash.
   COLLECTOR_CASH
+  // Koperasi pasar plan F5 — a Charge's accrual (Dr Piutang Sewa & Retribusi
+  // / Cr Pendapatan Sewa Kios or Pendapatan Retribusi, split by ChargeKind
+  // since D5 keeps retribusi income visibly separate) and its payment
+  // (Dr Kas or Kas di Kolektor / Cr Piutang). Tenant-wide SYSTEM mappings,
+  // generated only for a tenant with an active Market (unitType: "JASA").
+  CHARGE_ACCRUAL_SEWA
+  CHARGE_ACCRUAL_RETRIBUSI
+  CHARGE_PAYMENT
 }
 
 enum JournalSourceType {
@@ -163,6 +171,10 @@ enum JournalSourceType {
   // Kolektor / Cr Selisih Kas/Kas di Kolektor entry. unitId is always null
   // (tenant-level — one batch can span several units' transactions, rule 2b).
   COLLECTION_BATCH
+  // Koperasi pasar plan F5 — a Charge's accrual and a ChargePayment's
+  // settlement, both stamped with the pasar unit (unitType: "JASA").
+  CHARGE_ACCRUAL
+  CHARGE_PAYMENT
 }
 
 enum JournalEntryStatus {
@@ -324,6 +336,10 @@ model Tenant {
   stalls                  Stall[]
   collectorAssignments    CollectorAssignment[]
   collectionBatches       CollectionBatch[]
+  stallContracts          StallContract[]
+  levyRates               LevyRate[]
+  charges                 Charge[]
+  chargePayments          ChargePayment[]
 }
 
 // A tenant's own non-collection day (public holiday, market closure). Loan
@@ -389,6 +405,7 @@ model CooperativeUnit {
   journalEntries          JournalEntry[]
   modalSendiriAdjustments ModalSendiriAdjustment[]
   markets                 Market[]
+  charges                 Charge[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
@@ -459,6 +476,7 @@ model User {
   tenantNotificationReads       TenantNotificationRead[]
   collectorAssignments          CollectorAssignment[]
   collectionBatches             CollectionBatch[]
+  chargePaymentsCreated         ChargePayment[]
 
   @@unique([tenantId, email])
   @@unique([identityId, tenantId])
@@ -591,6 +609,8 @@ model Member {
   // CollectorAssignment) — plural because Prisma requires a bare `@unique`
   // on memberId itself to model this as a true one-to-one relation.
   collectorAssignments CollectorAssignment[]
+  stallContracts       StallContract[]
+  charges              Charge[]
 
   @@unique([tenantId, nik])
   @@index([tenantId])
@@ -1304,7 +1324,8 @@ model Market {
   isActive  Boolean         @default(true)
   createdAt DateTime        @default(now())
 
-  stalls Stall[]
+  stalls    Stall[]
+  levyRates LevyRate[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -1321,6 +1342,9 @@ model Stall {
   kind     StallKind
   areaM2   Decimal?    @db.Decimal(8, 2)
   status   StallStatus @default(AVAILABLE)
+
+  contracts StallContract[]
+  charges   Charge[]
 
   @@unique([tenantId, marketId, code])
   @@index([tenantId, marketId, block])
@@ -1375,7 +1399,117 @@ model CollectionBatch {
 
   savingTransactions SavingTransaction[]
   loanPayments       LoanPayment[]
+  chargePayments     ChargePayment[]
 
   @@unique([tenantId, collectorId, businessDate])
   @@index([tenantId, status])
+}
+
+// ── SEWA & RETRIBUSI (koperasi pasar) ────────────────────────────────────────
+// Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F5.
+
+enum ChargeKind {
+  SEWA
+  RETRIBUSI
+}
+
+enum ChargePeriod {
+  DAILY
+  MONTHLY
+  YEARLY
+}
+
+// A trader occupying a Stall. Creating one sets Stall.status = OCCUPIED;
+// ending it (isActive: false, endDate set) sets it back to AVAILABLE — see
+// modules/market/contracts.service.ts. "Satu kios hanya punya satu kontrak
+// aktif" (F5 plan) is enforced there, not by a DB constraint: two INACTIVE
+// historical contracts for the same stall are perfectly valid.
+model StallContract {
+  id         String       @id @default(cuid())
+  tenantId   String
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stallId    String
+  stall      Stall        @relation(fields: [stallId], references: [id])
+  memberId   String
+  member     Member       @relation(fields: [memberId], references: [id])
+  startDate  DateTime     @db.Date
+  endDate    DateTime?    @db.Date
+  rentAmount Decimal      @db.Decimal(15, 2)
+  rentPeriod ChargePeriod
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+
+  @@index([tenantId, stallId, isActive])
+}
+
+// Retribusi tariff per pasar & stall kind — "Kebersihan", "Keamanan", etc.
+// One market+kind can have several active rates; the daily generator bills
+// every active StallContract on that stall kind once per active LevyRate.
+model LevyRate {
+  id        String       @id @default(cuid())
+  tenantId  String
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  marketId  String
+  market    Market       @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  stallKind StallKind
+  name      String
+  amount    Decimal      @db.Decimal(15, 2)
+  period    ChargePeriod @default(DAILY)
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+
+  @@index([tenantId, marketId, stallKind])
+}
+
+// One billed line — a SEWA charge from a StallContract's rent period, or a
+// RETRIBUSI charge from one LevyRate on one operating day. sourceId is
+// whichever produced it (contractId or levyRateId); the pair
+// (sourceId, periodStart) is what makes the daily generator idempotent.
+model Charge {
+  id          String            @id @default(cuid())
+  tenantId    String
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId      String
+  unit        CooperativeUnit   @relation(fields: [unitId], references: [id])
+  memberId    String
+  member      Member            @relation(fields: [memberId], references: [id])
+  stallId     String
+  stall       Stall             @relation(fields: [stallId], references: [id])
+  kind        ChargeKind
+  // The StallContract (SEWA) or LevyRate (RETRIBUSI) this was generated
+  // from — deliberately not a Prisma `@relation`: a single column can't be a
+  // real FK to two different tables. Resolved in service code by `kind`,
+  // same as AccountMapping.sourceId's polymorphic SAVING_CONFIG/LOAN_CONFIG
+  // reference elsewhere in this schema.
+  sourceId    String
+  periodStart DateTime          @db.Date
+  dueDate     DateTime          @db.Date
+  amount      Decimal           @db.Decimal(15, 2)
+  paidAmount  Decimal           @default(0) @db.Decimal(15, 2)
+  status      InstallmentStatus @default(UNPAID)
+  createdAt   DateTime          @default(now())
+
+  payments ChargePayment[]
+
+  @@unique([sourceId, periodStart])
+  @@index([tenantId, memberId, status])
+  @@index([tenantId, stallId])
+}
+
+model ChargePayment {
+  id                String           @id @default(cuid())
+  tenantId          String
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  chargeId          String
+  charge            Charge           @relation(fields: [chargeId], references: [id])
+  amount            Decimal          @db.Decimal(15, 2)
+  paidAt            DateTime
+  createdBy         String
+  createdByUser     User             @relation(fields: [createdBy], references: [id])
+  collectionBatchId String?
+  collectionBatch   CollectionBatch? @relation(fields: [collectionBatchId], references: [id])
+  createdAt         DateTime         @default(now())
+
+  @@index([chargeId])
+  @@index([tenantId])
 }
