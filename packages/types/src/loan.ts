@@ -3,6 +3,9 @@ import type { RateType } from "./savings";
 export type LoanType = "SYARIAH" | "KONVENSIONAL";
 export type LoanStatus = "PENDING" | "ACTIVE" | "COMPLETED" | "DEFAULTED";
 export type KOLCategory = "LANCAR" | "DALAM_PERHATIAN" | "KURANG_LANCAR" | "DIRAGUKAN" | "MACET";
+/** Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F2. */
+export type InstallmentFrequency = "DAILY" | "WEEKLY" | "MONTHLY";
+export type InstallmentStatus = "UNPAID" | "PARTIAL" | "PAID";
 
 export interface LoanConfig {
   id: string;
@@ -13,6 +16,9 @@ export interface LoanConfig {
   /** Decimal(8,4), serialized as a string over the wire. */
   rate: string;
   maxTermMonths: number;
+  installmentFrequency: InstallmentFrequency;
+  /** Cap on installment count for DAILY/WEEKLY — maxTermMonths still caps MONTHLY. */
+  maxInstallments: number | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -23,6 +29,8 @@ export interface CreateLoanConfigRequest {
   rateType: RateType;
   rate: number;
   maxTermMonths: number;
+  installmentFrequency?: InstallmentFrequency;
+  maxInstallments?: number;
 }
 
 export type UpdateLoanConfigRequest = Partial<CreateLoanConfigRequest>;
@@ -43,15 +51,43 @@ export interface Loan {
   kolCategory: KOLCategory;
   daysOverdue: number;
   disbursedAt?: string | null;
+  installmentFrequency: InstallmentFrequency;
+  installmentCount: number | null;
+  installmentAmount: string | null;
+  /** Effective annual rate %, snapshotted at creation (D3) — may differ from loanConfig.rate. */
+  rate: string | null;
+  /** Required when `rate` was overridden away from the product's rate. */
+  rateNote: string | null;
+  maturityDate?: string | null;
+  installments?: LoanInstallment[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LoanInstallment {
+  id: string;
+  loanId: string;
+  seq: number;
+  dueDate: string;
+  principalDue: string;
+  interestDue: string;
+  principalPaid: string;
+  interestPaid: string;
+  status: InstallmentStatus;
+  paidOffAt?: string | null;
 }
 
 export interface CreateLoanRequest {
   memberId: string;
   loanConfigId: string;
   principalAmount: number;
-  termMonths: number;
+  /** Required when the loan config's frequency is MONTHLY. */
+  termMonths?: number;
+  /** Required when the loan config's frequency is DAILY/WEEKLY. */
+  installmentCount?: number;
+  /** Employee override of the product's rate — requires `rateNote` (D3), capped at 24%/year. */
+  rate?: number;
+  rateNote?: string;
   /** Resubmit with `force: true` to create a second loan after seeing `hasExistingLoan`. */
   force?: boolean;
   /** Resubmit with `acknowledgeBmpp: true` to proceed after seeing `bmppExceeded`. */
@@ -59,6 +95,21 @@ export interface CreateLoanRequest {
   disbursedAt?: string;
   /** KSU only: the lending unit; omitted = the tenant's default unit. */
   unitId?: string;
+}
+
+export interface PreviewScheduleRequest {
+  loanConfigId: string;
+  principalAmount: number;
+  termMonths?: number;
+  installmentCount?: number;
+  rate?: number;
+  disbursedAt?: string;
+}
+
+export interface PreviewScheduleResult {
+  totalAmount: string;
+  totalInterest: string;
+  installments: Array<{ seq: number; dueDate: string; principalDue: string; interestDue: string }>;
 }
 
 /**
@@ -100,7 +151,6 @@ export interface LoanPaymentRequest {
   amount: number;
   penalty?: number;
   paidAt: string;
-  dueDate: string;
   note?: string;
 }
 
@@ -109,6 +159,8 @@ export interface LoanPaymentResult {
   newRemaining: string;
   status: LoanStatus;
   kolCategory: KOLCategory;
+  /** Installments this payment closed or partially covered, oldest first. */
+  allocations: Array<{ installmentId: string; seq: number; principal: string; interest: string }>;
 }
 
 export interface LoanPayment {

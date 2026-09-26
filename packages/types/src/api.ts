@@ -28,6 +28,9 @@ export const ErrorCode = {
   // Regulatory guardrails (Permenkop UKM 8/2023) — see lib/regulatory-config.ts.
   RATE_EXCEEDS_REGULATORY_CAP: "RATE_EXCEEDS_REGULATORY_CAP",
   RELATED_PARTY_LIMIT_EXCEEDED: "RELATED_PARTY_LIMIT_EXCEEDED",
+  // Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F2 — installment schedule.
+  RATE_NOTE_REQUIRED: "RATE_NOTE_REQUIRED",
+  PAYMENT_EXCEEDS_REMAINING: "PAYMENT_EXCEEDS_REMAINING",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
