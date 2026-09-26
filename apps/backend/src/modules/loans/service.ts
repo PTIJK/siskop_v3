@@ -1,14 +1,15 @@
 import { Prisma } from "@prisma/client";
 import { addMonths, differenceInCalendarDays } from "date-fns";
 import { ErrorCode, type BmppHeadroom, type InstallmentFrequency, type LoanType, type RateType } from "@siskop/types";
-import { db, type TxClient } from "../../lib/db.js";
+import { db } from "../../lib/db.js";
 import { AppError, notFound, validationError } from "../../lib/errors.js";
 import { calculateLoan } from "../../lib/loan-calc.js";
 import { buildSchedule } from "../../lib/installment-schedule.js";
 import { loadOperatingCalendar } from "../../lib/operating-calendar.js";
+import { allocatePayment } from "../../lib/loan-allocation.js";
 import { REGULATORY_CAPS, validateRegulatoryRate, validateRelatedPartyLoanLimit } from "../../lib/regulatory-config.js";
 import { recalculateKOL } from "../../lib/kol.js";
-import { postLoanDisbursement, postLoanPayment, splitLoanPayment } from "../../lib/journal.js";
+import { postLoanDisbursement, postLoanPayment } from "../../lib/journal.js";
 import { resolveUnitId } from "../../lib/units.js";
 import { getModalSendiri } from "../reports/capital-service.js";
 import { hasPokokSaving } from "../savings/service.js";
@@ -466,72 +467,6 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
 
     return loan;
   });
-}
-
-/**
- * Applies a payment to the oldest UNPAID/PARTIAL installment(s) first,
- * interest before principal within each one (D3/F2 plan), until the amount
- * is exhausted. A loan with no schedule yet (created before F2's migration,
- * not backfilled) falls back to the old whole-loan flat-ratio split — it has
- * no installments to allocate against.
- */
-async function allocatePayment(
-  tx: TxClient,
-  params: {
-    tenantId: string;
-    loan: { installments: { id: string; seq: number; principalDue: Prisma.Decimal; interestDue: Prisma.Decimal; principalPaid: Prisma.Decimal; interestPaid: Prisma.Decimal }[]; principalAmount: Prisma.Decimal; totalAmount: Prisma.Decimal };
-    paymentId: string;
-    amount: Prisma.Decimal;
-    paidAt: Date;
-  }
-): Promise<{ principal: Prisma.Decimal; interest: Prisma.Decimal; allocations: { installmentId: string; seq: number; principal: string; interest: string }[] }> {
-  if (params.loan.installments.length === 0) {
-    const split = splitLoanPayment(params.amount, params.loan.principalAmount, params.loan.totalAmount);
-    return { principal: split.principal, interest: split.interest, allocations: [] };
-  }
-
-  let remaining = params.amount;
-  let principal = new Prisma.Decimal(0);
-  let interest = new Prisma.Decimal(0);
-  const allocations: { installmentId: string; seq: number; principal: string; interest: string }[] = [];
-
-  for (const inst of params.loan.installments) {
-    if (remaining.lte(0)) break;
-
-    const dueTotal = inst.principalDue.plus(inst.interestDue);
-    const instRemaining = dueTotal.sub(inst.principalPaid.plus(inst.interestPaid));
-    if (instRemaining.lte(0)) continue; // already PAID
-
-    const applied = Prisma.Decimal.min(remaining, instRemaining);
-    const interestRemaining = inst.interestDue.sub(inst.interestPaid);
-    const interestApplied = Prisma.Decimal.min(applied, interestRemaining);
-    const principalApplied = applied.sub(interestApplied);
-
-    const newPrincipalPaid = inst.principalPaid.plus(principalApplied);
-    const newInterestPaid = inst.interestPaid.plus(interestApplied);
-    const isPaid = newPrincipalPaid.plus(newInterestPaid).gte(dueTotal);
-
-    await tx.loanInstallment.update({
-      where: { id: inst.id, tenantId: params.tenantId },
-      data: {
-        principalPaid: newPrincipalPaid,
-        interestPaid: newInterestPaid,
-        status: isPaid ? "PAID" : "PARTIAL",
-        paidOffAt: isPaid ? params.paidAt : null
-      }
-    });
-
-    await tx.loanPaymentAllocation.create({
-      data: { paymentId: params.paymentId, installmentId: inst.id, principal: principalApplied, interest: interestApplied }
-    });
-
-    allocations.push({ installmentId: inst.id, seq: inst.seq, principal: principalApplied.toString(), interest: interestApplied.toString() });
-    principal = principal.plus(principalApplied);
-    interest = interest.plus(interestApplied);
-    remaining = remaining.sub(applied);
-  }
-
-  return { principal, interest, allocations };
 }
 
 export async function recordLoanPayment(
