@@ -12,6 +12,7 @@ import { ShuConfigTab } from "./ShuConfigTab";
 import { WhitelabelConfigTab } from "./WhitelabelConfigTab";
 import { ModalDisetorConfigTab } from "./ModalDisetorConfigTab";
 import { SelfRegistrationConfigTab } from "./SelfRegistrationConfigTab";
+import { OperatingCalendarTab } from "./OperatingCalendarTab";
 import { AuditTrailTab } from "./AuditTrailTab";
 import { WorkspaceDomainSettings } from "@/features/workspace-domain/WorkspaceDomainSettings";
 
@@ -22,6 +23,7 @@ export function ConfigPage() {
     { value: "savings", label: "Simpanan", show: can("config", "read") || can("savings", "read"), content: <SavingConfigsTab /> },
     { value: "loans", label: "Pinjaman", show: can("config", "read") || can("loans", "read"), content: <LoanConfigsTab /> },
     { value: "units", label: "Unit Koperasi", show: can("config", "read"), content: <UnitsTab /> },
+    { value: "calendar", label: "Hari Libur", show: can("config", "read"), content: <OperatingCalendarTab /> },
     { value: "roles", label: "Role & Izin", show: can("roles", "read"), content: <RolesTab /> },
     { value: "users", label: "Pengguna", show: can("users", "read"), content: <UsersTab /> },
     { value: "accounts", label: "Chart of Accounts", show: can("accounting", "read"), content: <AccountsTab /> },

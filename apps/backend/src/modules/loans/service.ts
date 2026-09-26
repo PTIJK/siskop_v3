@@ -6,7 +6,7 @@ import { AppError, notFound } from "../../lib/errors.js";
 import { calculateLoan } from "../../lib/loan-calc.js";
 import { REGULATORY_CAPS, validateRegulatoryRate, validateRelatedPartyLoanLimit } from "../../lib/regulatory-config.js";
 import { recalculateKOL } from "../../lib/kol.js";
-import { postLoanDisbursement, postLoanPayment, splitPrincipalAndInterest } from "../../lib/journal.js";
+import { postLoanDisbursement, postLoanPayment, splitLoanPayment } from "../../lib/journal.js";
 import { resolveUnitId } from "../../lib/units.js";
 import { getModalSendiri } from "../reports/capital-service.js";
 import { hasPokokSaving } from "../savings/service.js";
@@ -251,7 +251,7 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
       : undefined;
 
   const calc = calculateLoan(
-    data.principalAmount,
+    data.principalAmount.toNumber(),
     Number(loanConfig.rate),
     data.termMonths,
     loanConfig.type,
@@ -332,11 +332,7 @@ export async function recordLoanPayment(
 
     // No per-installment amortization schedule exists — the split is a
     // documented flat-ratio approximation (see lib/journal.ts).
-    const { principal, interest } = splitPrincipalAndInterest(
-      data.amount,
-      Number(loan.principalAmount),
-      Number(loan.totalAmount)
-    );
+    const { principal, interest } = splitLoanPayment(data.amount, loan.principalAmount, loan.totalAmount);
 
     await postLoanPayment(tx, {
       tenantId,
@@ -350,8 +346,8 @@ export async function recordLoanPayment(
       description: "Pembayaran cicilan pinjaman"
     });
 
-    const newRemaining = Math.max(0, Number(loan.remainingAmount) - data.amount);
-    const newStatus = newRemaining <= 0 ? ("COMPLETED" as const) : ("ACTIVE" as const);
+    const newRemaining = Prisma.Decimal.max(0, loan.remainingAmount.sub(data.amount));
+    const newStatus = newRemaining.lte(0) ? ("COMPLETED" as const) : ("ACTIVE" as const);
 
     await tx.loan.update({
       where: { id: loanId, tenantId },
@@ -363,10 +359,10 @@ export async function recordLoanPayment(
       entityType: "Loan",
       entityId: loanId,
       before: { remainingAmount: loan.remainingAmount, status: loan.status },
-      after: { amount: new Prisma.Decimal(data.amount), remainingAmount: new Prisma.Decimal(newRemaining), status: newStatus }
+      after: { amount: data.amount, remainingAmount: newRemaining, status: newStatus }
     });
 
-    return { loanId, newRemaining, status: newStatus };
+    return { loanId, newRemaining: newRemaining.toString(), status: newStatus };
   });
 
   // Recalculated outside the transaction — recalculateKOL does its own read/write.

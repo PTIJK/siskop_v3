@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import request from "supertest";
 import { db } from "../src/lib/db.js";
+import { Prisma } from "@prisma/client";
 import { app, createMemberAs, createMemberWithPokokSaving, postEquity, setupTenant } from "./helpers.js";
 
 beforeAll(() => {
@@ -671,6 +672,78 @@ describe("POST /api/loans/:id/pay", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe("COMPLETED");
     expect(Number(res.body.data.newRemaining)).toBe(0);
+  });
+
+  it("keeps remainingAmount exact to the cent across payments that don't divide evenly", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken, { rate: 0 });
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: "100000", termMonths: 3 });
+    const loanId = created.body.data.id as string;
+
+    let res = await request(app()).get(`/api/loans/${loanId}`).set("Authorization", `Bearer ${admin.accessToken}`);
+    for (let i = 0; i < 3; i++) {
+      res = await request(app())
+        .post(`/api/loans/${loanId}/pay`)
+        .set("Authorization", `Bearer ${admin.accessToken}`)
+        .send({ amount: "33333.33", paidAt: "2026-01-25", dueDate: "2026-01-25" });
+      expect(res.status).toBe(200);
+    }
+
+    // 100000 − 3 × 33333.33 = 0.01 exactly; float subtraction drifts to 0.0100000000…
+    expect(res.body.data.newRemaining).toBe("0.01");
+    expect(res.body.data.status).toBe("ACTIVE");
+    const loan = await db.loan.findFirstOrThrow({ where: { id: loanId, tenantId: created.body.data.tenantId } });
+    expect(loan.remainingAmount.toString()).toBe("0.01");
+  });
+
+  it("rejects a payment amount with more than 2 decimal places", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 6 });
+
+    const res = await request(app())
+      .post(`/api/loans/${created.body.data.id}/pay`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: "1000.005", paidAt: "2026-01-25", dueDate: "2026-01-25" });
+
+    expect(res.status).toBe(422);
+  });
+
+  it("splits principal and interest to the cent so the journal entry balances exactly", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+    // "Buat COA Standar" wires the loan config's PAYMENT_* mappings so the payment actually journals.
+    await request(app())
+      .post("/api/config/accounts/generate-standard")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 6 });
+
+    const res = await request(app())
+      .post(`/api/loans/${created.body.data.id}/pay`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: "33333.33", paidAt: "2026-01-25", dueDate: "2026-01-25" });
+    expect(res.status).toBe(200);
+
+    const tenantId = created.body.data.tenantId as string;
+    const payment = await db.loanPayment.findFirstOrThrow({ where: { tenantId, loanId: created.body.data.id } });
+    const entry = await db.journalEntry.findFirstOrThrow({
+      where: { tenantId, sourceType: "LOAN_PAYMENT", sourceId: payment.id },
+      include: { lines: true }
+    });
+    const credits = entry.lines.reduce((s, l) => s.plus(l.credit), new Prisma.Decimal(0));
+    expect(credits.toString()).toBe("33333.33");
   });
 
   it("rejects a payment on an already-completed loan", async () => {

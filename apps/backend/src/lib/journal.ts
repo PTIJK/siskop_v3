@@ -9,10 +9,6 @@ interface JournalLineInput {
   credit?: number | Prisma.Decimal;
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
 type MappingSource = "SAVING_CONFIG" | "LOAN_CONFIG" | "SYSTEM";
 
 type MappingKind =
@@ -168,7 +164,7 @@ export async function postLoanDisbursement(
     unitId: string | null;
     loanId: string;
     loanConfigId: string;
-    amount: number;
+    amount: number | Prisma.Decimal;
     entryDate: Date;
     description: string;
   }
@@ -200,9 +196,9 @@ export async function postLoanPayment(
     unitId: string | null;
     loanPaymentId: string;
     loanConfigId: string;
-    principalAmount: number;
-    interestAmount: number;
-    penaltyAmount: number;
+    principalAmount: number | Prisma.Decimal;
+    interestAmount: number | Prisma.Decimal;
+    penaltyAmount: number | Prisma.Decimal;
     entryDate: Date;
     description: string;
   }
@@ -228,18 +224,30 @@ export async function postLoanPayment(
  * No per-installment amortization schedule exists, so a payment's principal/
  * interest split is approximated by applying the loan's overall interest
  * ratio to each payment — a documented approximation, not a precision bug.
- * Ported as-is from the pre-rescaffold system.
+ * Ported as-is from the pre-rescaffold system. Computed in Decimal so the two
+ * halves always add back up to the payment to the cent.
  */
+export function splitLoanPayment(
+  paymentAmount: Prisma.Decimal.Value,
+  loanPrincipalAmount: Prisma.Decimal.Value,
+  loanTotalAmount: Prisma.Decimal.Value
+): { principal: Prisma.Decimal; interest: Prisma.Decimal } {
+  const payment = new Prisma.Decimal(paymentAmount);
+  const total = new Prisma.Decimal(loanTotalAmount);
+  const interest = total.gt(0)
+    ? payment.mul(total.sub(loanPrincipalAmount)).div(total).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
+    : new Prisma.Decimal(0);
+  return { principal: payment.sub(interest), interest };
+}
+
+/** Number-typed wrapper kept for the report aggregations that still sum in `number`. */
 export function splitPrincipalAndInterest(
   paymentAmount: number,
   loanPrincipalAmount: number,
   loanTotalAmount: number
 ): { principal: number; interest: number } {
-  const totalInterest = loanTotalAmount - loanPrincipalAmount;
-  const interestRatio = loanTotalAmount > 0 ? totalInterest / loanTotalAmount : 0;
-  const interest = round2(paymentAmount * interestRatio);
-  const principal = round2(paymentAmount - interest);
-  return { principal, interest };
+  const { principal, interest } = splitLoanPayment(paymentAmount, loanPrincipalAmount, loanTotalAmount);
+  return { principal: principal.toNumber(), interest: interest.toNumber() };
 }
 
 export type PosPaymentMethod = "CASH" | "TRANSFER" | "MEMBER_CREDIT";
