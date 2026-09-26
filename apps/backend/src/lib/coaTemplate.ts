@@ -42,6 +42,14 @@ export const COA_TEMPLATE: AccountSeed[] = [
     normalBalance: "KREDIT" // contra-asset — credit-normal, reduces Piutang Pinjaman Anggota
   },
   { key: "aset_tetap", code: "1-2000", name: "Aset Tetap", category: "ASET", normalBalance: "DEBIT", isHeader: true },
+  // Koperasi pasar plan F4 — always generated (not Toko-gated, unlike the
+  // Konsumen accounts below): a collector-initiated transaction's Kas side
+  // redirects here (lib/journal.ts#substituteCollectorCash), and a batch
+  // verification's shortfall/surplus land in the next two. Cash physically
+  // held by a collector before it's counted in is still the koperasi's cash.
+  { key: "kas_di_kolektor", code: "1-1200", name: "Kas di Kolektor", category: "ASET", normalBalance: "DEBIT", isCashEquivalent: true },
+  { key: "piutang_kolektor", code: "1-1210", name: "Piutang Kolektor", category: "ASET", normalBalance: "DEBIT" },
+  { key: "selisih_kas", code: "4-9100", name: "Selisih Kas", category: "PENDAPATAN", normalBalance: "KREDIT" },
   { key: "simpanan_sukarela", code: "2-1000", name: "Simpanan Sukarela — Anggota", category: "KEWAJIBAN", normalBalance: "KREDIT" },
   { key: "utang_usaha", code: "2-1100", name: "Utang Usaha", category: "KEWAJIBAN", normalBalance: "KREDIT" },
   // Equity lines follow Permenkop UKM 2/2024 lampiran (Akuntansi Ekuitas). Modal
@@ -115,10 +123,23 @@ export const COA_TEMPLATE: AccountSeed[] = [
 ];
 
 export interface SystemMappingSeed {
-  transactionKind: "SALE_REVENUE" | "SALE_COGS" | "SALE_RECEIVABLE" | "MEMBER_CREDIT_REPAYMENT" | "STOCK_PURCHASE";
+  transactionKind:
+    | "SALE_REVENUE"
+    | "SALE_COGS"
+    | "SALE_RECEIVABLE"
+    | "MEMBER_CREDIT_REPAYMENT"
+    | "STOCK_PURCHASE"
+    | "COLLECTOR_CASH";
   /** `COA_TEMPLATE` keys. */
   debitKey: string;
   creditKey: string;
+}
+
+/** Throws if `key` isn't in COA_TEMPLATE — same guard generateStandardCoa's accountIdFor uses. */
+export function templateCode(key: string): string {
+  const code = COA_TEMPLATE.find((t) => t.key === key)?.code;
+  if (!code) throw new Error(`Standard COA template is missing required account "${key}"`);
+  return code;
 }
 
 // Tenant-wide SYSTEM mappings (sourceType "SYSTEM", no sourceId) that

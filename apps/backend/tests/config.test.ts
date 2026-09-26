@@ -462,16 +462,26 @@ describe("POST /api/config/accounts/generate-standard", () => {
 
     expect(res.status).toBe(201);
     // 2 mappings per saving config (deposit/withdrawal) + 4 per loan config
-    // (disbursement/principal/interest/penalty).
-    expect(res.body.data.mappingsCreated).toBe(2 + 4);
+    // (disbursement/principal/interest/penalty) + 1 tenant-wide SYSTEM/
+    // COLLECTOR_CASH (koperasi pasar F4 — generated for every tenant, not
+    // just ones with a Toko unit).
+    expect(res.body.data.mappingsCreated).toBe(2 + 4 + 1);
 
     const mappings = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(mappings.body.data).toHaveLength(6);
+    expect(mappings.body.data).toHaveLength(7);
     const kinds = mappings.body.data.map((m: { transactionKind: string }) => m.transactionKind).sort();
     expect(kinds).toEqual(
-      ["DEPOSIT", "DISBURSEMENT", "PAYMENT_INTEREST", "PAYMENT_PENALTY", "PAYMENT_PRINCIPAL", "WITHDRAWAL"].sort()
+      [
+        "DEPOSIT",
+        "DISBURSEMENT",
+        "PAYMENT_INTEREST",
+        "PAYMENT_PENALTY",
+        "PAYMENT_PRINCIPAL",
+        "WITHDRAWAL",
+        "COLLECTOR_CASH"
+      ].sort()
     );
   });
 
@@ -551,7 +561,16 @@ describe("POST /api/config/accounts/generate-standard", () => {
 // UNPOSTED_MISSING_MAPPING and never reaches Neraca/Laba Rugi for any tenant
 // that didn't get them from prisma/seed-ksu-demo.ts.
 
-const TOKO_MAPPING_KINDS = ["MEMBER_CREDIT_REPAYMENT", "SALE_COGS", "SALE_RECEIVABLE", "SALE_REVENUE", "STOCK_PURCHASE"];
+// COLLECTOR_CASH (koperasi pasar F4) is generated for every tenant, Toko or
+// not, alongside these five Toko-only SYSTEM mappings.
+const TOKO_MAPPING_KINDS = [
+  "COLLECTOR_CASH",
+  "MEMBER_CREDIT_REPAYMENT",
+  "SALE_COGS",
+  "SALE_RECEIVABLE",
+  "SALE_REVENUE",
+  "STOCK_PURCHASE"
+];
 
 async function createKonsumenUnit(accessToken: string) {
   await request(app())
@@ -587,7 +606,7 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     const res = await generateStandard(admin.accessToken);
 
     expect(res.status).toBe(201);
-    expect(res.body.data.mappingsCreated).toBe(5);
+    expect(res.body.data.mappingsCreated).toBe(6);
     expect(await listAccountCodes(admin.accessToken)).toEqual(
       expect.arrayContaining(["1-1150", "1-1300", "4-3000", "5-4000"])
     );
@@ -615,23 +634,26 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     });
   });
 
-  it("adds no Toko accounts or SYSTEM mappings for a tenant that only has a KSP unit", async () => {
+  it("adds no Toko accounts or SYSTEM mappings for a tenant that only has a KSP unit (but does get COLLECTOR_CASH)", async () => {
     const admin = await setupTenant();
 
     const res = await generateStandard(admin.accessToken);
 
-    expect(res.body.data.mappingsCreated).toBe(0);
+    // COLLECTOR_CASH (koperasi pasar F4) is the one SYSTEM mapping generated
+    // regardless of unit type — see the TOKO_MAPPING_KINDS comment above.
+    expect(res.body.data.mappingsCreated).toBe(1);
     const codes = await listAccountCodes(admin.accessToken);
     for (const tokoCode of ["1-1150", "1-1300", "4-3000", "5-4000"]) {
       expect(codes).not.toContain(tokoCode);
     }
-    expect(await listSystemMappings(admin.accessToken)).toHaveLength(0);
+    const system = await listSystemMappings(admin.accessToken);
+    expect(system.map((m) => m.transactionKind)).toEqual(["COLLECTOR_CASH"]);
   });
 
   it("picks Toko up on a re-run once a KONSUMEN unit is added later", async () => {
     const admin = await setupTenant();
     const first = await generateStandard(admin.accessToken);
-    expect(first.body.data.mappingsCreated).toBe(0);
+    expect(first.body.data.mappingsCreated).toBe(1); // COLLECTOR_CASH only, no Toko unit yet
 
     await createKonsumenUnit(admin.accessToken);
     const second = await generateStandard(admin.accessToken);
@@ -639,7 +661,7 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     expect(second.status).toBe(201);
     // The four Toko accounts, plus Modal Tetap USP now that the koperasi is multi-unit.
     expect(second.body.data.accountsCreated).toBe(5);
-    expect(second.body.data.mappingsCreated).toBe(5);
+    expect(second.body.data.mappingsCreated).toBe(5); // the 5 Toko mappings — COLLECTOR_CASH already exists
   });
 
   it("is idempotent — a second run creates nothing", async () => {
@@ -652,7 +674,7 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     expect(second.status).toBe(200);
     expect(second.body.data.accountsCreated).toBe(0);
     expect(second.body.data.mappingsCreated).toBe(0);
-    expect(second.body.data.mappingsSkipped).toBe(5);
+    expect(second.body.data.mappingsSkipped).toBe(6); // 5 Toko + COLLECTOR_CASH
   });
 
   it("does not create duplicate Toko accounts when the SYSTEM sale mappings were already set up by hand", async () => {
@@ -703,7 +725,9 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
 
     const res = await generateStandard(admin.accessToken);
 
-    expect(res.body.data.mappingsCreated).toBe(0);
+    // COLLECTOR_CASH (koperasi pasar F4) wasn't hand-made above, so it's the
+    // one mapping this run does create; the 5 Toko ones are skipped.
+    expect(res.body.data.mappingsCreated).toBe(1);
     expect(res.body.data.mappingsSkipped).toBeGreaterThanOrEqual(5);
     const codes = await listAccountCodes(admin.accessToken);
     expect(codes).not.toContain("4-3000");

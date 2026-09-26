@@ -55,7 +55,10 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   "LoanInstallment",
   // Koperasi pasar plan F3 — Market/Stall.
   "Market",
-  "Stall"
+  "Stall",
+  // Koperasi pasar plan F4 — Kolektor & setoran.
+  "CollectorAssignment",
+  "CollectionBatch"
 ]);
 
 const WHERE_REQUIRED_ACTIONS = new Set([

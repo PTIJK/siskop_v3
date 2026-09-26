@@ -342,6 +342,31 @@ export async function generateStandardCoaInTx(tx: TxClient, tenantId: string): P
     await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PENALTY", kas, pendapatanLain);
   }
 
+  // Koperasi pasar plan F4 — always generated, unlike the Toko SYSTEM
+  // mappings below: every tenant can potentially run a Kolektor, not just
+  // ones with a Toko unit. Redirects a collector transaction's Kas side to
+  // Kas di Kolektor (lib/journal.ts#substituteCollectorCash).
+  {
+    const existing = await tx.accountMapping.findFirst({
+      where: { tenantId, sourceType: "SYSTEM", sourceId: null, transactionKind: "COLLECTOR_CASH" }
+    });
+    if (existing) {
+      mappingsSkipped += 1;
+    } else {
+      await tx.accountMapping.create({
+        data: {
+          tenantId,
+          sourceType: "SYSTEM",
+          sourceId: null,
+          transactionKind: "COLLECTOR_CASH",
+          debitAccountId: kas,
+          creditAccountId: accountIdFor("kas_di_kolektor")
+        }
+      });
+      mappingsCreated += 1;
+    }
+  }
+
   // Toko: only for a tenant that has an active KONSUMEN unit. Lazy per
   // mapping — a tenant that already wired a SYSTEM/SALE_* mapping by hand (to
   // its own accounts) must not get a second, unused set of Toko accounts, so
