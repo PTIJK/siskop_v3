@@ -473,7 +473,9 @@ export async function recordLoanPayment(
   tenantId: string,
   loanId: string,
   data: LoanPaymentInput,
-  createdBy: string
+  createdBy: string,
+  /** Recorded by a Kolektor (koperasi pasar F4) — see modules/collections/service.ts. */
+  collector?: { batchId: string }
 ) {
   const result = await db.$transaction(async (tx) => {
     const loan = await tx.loan.findUnique({
@@ -500,7 +502,8 @@ export async function recordLoanPayment(
         penalty: data.penalty,
         paidAt,
         note: data.note,
-        createdBy
+        createdBy,
+        collectionBatchId: collector?.batchId ?? null
       }
     });
 
@@ -521,7 +524,8 @@ export async function recordLoanPayment(
       interestAmount: interest,
       penaltyAmount: data.penalty,
       entryDate: paidAt,
-      description: "Pembayaran cicilan pinjaman"
+      description: "Pembayaran cicilan pinjaman",
+      viaCollector: !!collector
     });
 
     const newRemaining = Prisma.Decimal.max(0, loan.remainingAmount.sub(data.amount));
