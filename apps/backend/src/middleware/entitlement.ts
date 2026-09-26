@@ -41,3 +41,22 @@ export async function requireWhitelabelEntitlement(req: Request, _res: Response,
     next(err);
   }
 }
+
+/**
+ * Gates the koperasi pasar add-on (Market/Stall and Kolektor & setoran —
+ * F3/F4-F7 of the koperasi pasar plan) on the package's "pasar" module.
+ * Decision D6: F0-F2 (loan installment schedule) stay in the base package
+ * since they fix the core loan module (correct KOL for monthly loans too),
+ * but the pasar-specific modules are a paid add-on like "accounting".
+ */
+export async function requirePasarEntitlement(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  try {
+    const pkg = await tenantPackage(authClaims(req).tenantId);
+    if (!pkg?.modules?.includes("pasar")) {
+      throw featureNotEntitled("Paket langganan Anda tidak mengaktifkan modul pasar");
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+}

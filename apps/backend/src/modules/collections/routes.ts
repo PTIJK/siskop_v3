@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
+import { requirePasarEntitlement } from "../../middleware/entitlement.js";
 import { requireParam } from "../../lib/http.js";
 import {
   collectorDepositSchema,
@@ -29,6 +30,8 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
 export function collectionsRoutes(): Router {
   const router = Router();
   router.use(requireAuth);
+  // Kolektor & setoran is koperasi pasar's D6 add-on, same as Market above.
+  router.use(requirePasarEntitlement);
 
   router.put(
     "/assignments",

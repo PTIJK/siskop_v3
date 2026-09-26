@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
+import { requirePasarEntitlement } from "../../middleware/entitlement.js";
 import { requireParam } from "../../lib/http.js";
 import { createMarketSchema, createStallSchema, listStallsQuerySchema, updateMarketSchema, updateStallSchema } from "./schema.js";
 import { createMarket, createStall, listMarkets, listStalls, updateMarket, updateStall } from "./service.js";
@@ -15,6 +16,10 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
 export function marketRoutes(): Router {
   const router = Router();
   router.use(requireAuth);
+  // Every route here is koperasi pasar (D6 add-on), unlike config/reports/ksu
+  // routers which mix gated and ungated routes — one whole-router gate
+  // instead of repeating it on each route.
+  router.use(requirePasarEntitlement);
 
   router.get(
     "/markets",
