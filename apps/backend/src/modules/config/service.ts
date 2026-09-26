@@ -3,6 +3,7 @@ import type { RepostUnpostedResult, UnpostedJournalSummary } from "@siskop/types
 import { db, type TxClient } from "../../lib/db.js";
 import { conflict, notFound, validationError } from "../../lib/errors.js";
 import { isRepostableSourceType, repostUnpostedEntries } from "../../lib/journal.js";
+import { recordAudit } from "../audit-log/service.js";
 import { isModalDisetorAuditRequired, MODAL_DISETOR_AUDIT_THRESHOLD_RP } from "../../lib/regulatory-config.js";
 import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import { COA_TEMPLATE, SYSTEM_MAPPING_TEMPLATE, type AccountSeed } from "../../lib/coaTemplate.js";
@@ -33,16 +34,26 @@ export async function createUnit(tenantId: string, data: CreateUnitInput) {
 }
 
 export async function updateUnit(tenantId: string, id: string, data: UpdateUnitInput) {
-  const unit = await db.cooperativeUnit.findFirst({ where: { id, tenantId } });
-  if (!unit) throw notFound("Unit koperasi tidak ditemukan");
+  return db.$transaction(async (tx) => {
+    const unit = await tx.cooperativeUnit.findFirst({ where: { id, tenantId } });
+    if (!unit) throw notFound("Unit koperasi tidak ditemukan");
 
-  // CLAUDE.md rule 2b: every tenant has >=1 CooperativeUnit at all times.
-  if (data.isActive === false && unit.isActive) {
-    const activeCount = await db.cooperativeUnit.count({ where: { tenantId, isActive: true } });
-    if (activeCount <= 1) throw conflict("Koperasi harus memiliki minimal 1 unit aktif");
-  }
+    // CLAUDE.md rule 2b: every tenant has >=1 CooperativeUnit at all times.
+    if (data.isActive === false && unit.isActive) {
+      const activeCount = await tx.cooperativeUnit.count({ where: { tenantId, isActive: true } });
+      if (activeCount <= 1) throw conflict("Koperasi harus memiliki minimal 1 unit aktif");
+    }
 
-  return db.cooperativeUnit.update({ where: { id, tenantId }, data });
+    const updated = await tx.cooperativeUnit.update({ where: { id, tenantId }, data });
+    await recordAudit(tx, {
+      action: "unit.update",
+      entityType: "CooperativeUnit",
+      entityId: id,
+      before: { name: unit.name, type: unit.type, isActive: unit.isActive },
+      after: { name: updated.name, type: updated.type, isActive: updated.isActive }
+    });
+    return updated;
+  });
 }
 
 // ── Roles ────────────────────────────────────────────────────────────────────
@@ -52,36 +63,65 @@ export async function listRoles(tenantId: string) {
 }
 
 export async function createRole(tenantId: string, data: CreateRoleInput) {
-  return db.role.create({
-    data: { tenantId, name: data.name, permissions: data.permissions as unknown as Prisma.InputJsonValue }
+  return db.$transaction(async (tx) => {
+    const role = await tx.role.create({
+      data: { tenantId, name: data.name, permissions: data.permissions as unknown as Prisma.InputJsonValue }
+    });
+    await recordAudit(tx, {
+      action: "role.create",
+      entityType: "Role",
+      entityId: role.id,
+      after: { name: role.name, permissions: role.permissions }
+    });
+    return role;
   });
 }
 
 export async function updateRole(tenantId: string, id: string, data: UpdateRoleInput) {
-  const role = await db.role.findFirst({ where: { id, tenantId } });
-  if (!role) throw notFound("Role tidak ditemukan");
+  return db.$transaction(async (tx) => {
+    const role = await tx.role.findFirst({ where: { id, tenantId } });
+    if (!role) throw notFound("Role tidak ditemukan");
 
-  return db.role.update({
-    where: { id, tenantId },
-    data: {
-      ...(data.name !== undefined ? { name: data.name } : {}),
-      ...(data.permissions !== undefined
-        ? { permissions: data.permissions as unknown as Prisma.InputJsonValue }
-        : {})
-    }
+    const updated = await tx.role.update({
+      where: { id, tenantId },
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.permissions !== undefined
+          ? { permissions: data.permissions as unknown as Prisma.InputJsonValue }
+          : {})
+      }
+    });
+
+    await recordAudit(tx, {
+      action: "role.update",
+      entityType: "Role",
+      entityId: id,
+      before: { name: role.name, permissions: role.permissions },
+      after: { name: updated.name, permissions: updated.permissions }
+    });
+
+    return updated;
   });
 }
 
 export async function deleteRole(tenantId: string, id: string): Promise<void> {
-  const role = await db.role.findFirst({ where: { id, tenantId } });
-  if (!role) throw notFound("Role tidak ditemukan");
+  await db.$transaction(async (tx) => {
+    const role = await tx.role.findFirst({ where: { id, tenantId } });
+    if (!role) throw notFound("Role tidak ditemukan");
 
-  const usersCount = await db.user.count({ where: { tenantId, roleId: id } });
-  if (usersCount > 0) {
-    throw conflict("Role masih digunakan oleh pengguna aktif — pindahkan pengguna ke role lain terlebih dahulu");
-  }
+    const usersCount = await tx.user.count({ where: { tenantId, roleId: id } });
+    if (usersCount > 0) {
+      throw conflict("Role masih digunakan oleh pengguna aktif — pindahkan pengguna ke role lain terlebih dahulu");
+    }
 
-  await db.role.delete({ where: { id, tenantId } });
+    await tx.role.delete({ where: { id, tenantId } });
+    await recordAudit(tx, {
+      action: "role.delete",
+      entityType: "Role",
+      entityId: id,
+      before: { name: role.name, permissions: role.permissions }
+    });
+  });
 }
 
 // ── Accounts (Chart of Accounts) ───────────────────────────────────────────────

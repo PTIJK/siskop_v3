@@ -4,6 +4,7 @@ import { ErrorCode, type MemberSavingsSummary, type SavingStatement } from "@sis
 import { db } from "../../lib/db.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { postSavingTransaction } from "../../lib/journal.js";
+import { recordAudit } from "../audit-log/service.js";
 import { getDefaultUnitId } from "../../lib/units.js";
 import { validateRegulatoryRate } from "../../lib/regulatory-config.js";
 import type {
@@ -220,6 +221,13 @@ export async function createSaving(tenantId: string, data: CreateSavingInput, cr
       });
     }
 
+    await recordAudit(tx, {
+      action: "saving.create",
+      entityType: "Saving",
+      entityId: saving.id,
+      after: { memberId: saving.memberId, savingConfigId: saving.savingConfigId, balance: saving.balance }
+    });
+
     return saving;
   });
 }
@@ -360,6 +368,14 @@ export async function depositToSaving(
       description: "Setoran simpanan"
     });
 
+    await recordAudit(tx, {
+      action: "saving.deposit",
+      entityType: "Saving",
+      entityId: savingId,
+      before: { balance: saving.balance },
+      after: { balance: saving.balance.add(data.amount), amount: new Prisma.Decimal(data.amount) }
+    });
+
     return transaction;
   });
 }
@@ -410,6 +426,14 @@ export async function withdrawFromSaving(
       amount: data.amount,
       entryDate: transaction.createdAt,
       description: "Penarikan simpanan"
+    });
+
+    await recordAudit(tx, {
+      action: "saving.withdraw",
+      entityType: "Saving",
+      entityId: savingId,
+      before: { balance: saving.balance },
+      after: { balance: saving.balance.sub(data.amount), amount: new Prisma.Decimal(data.amount) }
     });
 
     return transaction;

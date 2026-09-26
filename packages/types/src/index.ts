@@ -17,3 +17,4 @@ export * from "./tenant-domain.js";
 export * from "./scheduler.js";
 export * from "./tenant-access.js";
 export * from "./notification.js";
+export * from "./audit-log.js";

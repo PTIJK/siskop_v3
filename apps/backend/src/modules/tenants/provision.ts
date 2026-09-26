@@ -59,7 +59,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       users: FULL,
       roles: FULL,
       accounting: FULL,
-      konsumen: FULL
+      konsumen: FULL,
+      auditLog: READ_ONLY
     }
   },
   {
@@ -74,7 +75,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       users: { create: false, read: true, update: false, delete: false },
       roles: { read: true },
       accounting: { create: false, read: false, update: false, delete: false },
-      konsumen: FULL
+      konsumen: FULL,
+      auditLog: READ_ONLY
     }
   },
   {
@@ -90,7 +92,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       roles: {},
       // Front-counter staff record stock movements and ring up POS sales
       // (create) but don't add/remove SKUs — that's Manager territory.
-      konsumen: { create: true, read: true, update: true }
+      konsumen: { create: true, read: true, update: true },
+      auditLog: {}
     }
   },
   {
@@ -104,15 +107,16 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       config: {},
       users: {},
       roles: {},
-      konsumen: READ_ONLY
+      konsumen: READ_ONLY,
+      auditLog: {}
     }
   },
   {
     name: "Kasir",
     permissions: {
       // Toko-only: konsumen access and nothing else. No members/savings/loans/
-      // reports/config/users/roles/accounting — a Kasir cannot reach any
-      // other module's data even before unit scoping is considered.
+      // reports/config/users/roles/accounting/auditLog — a Kasir cannot
+      // reach any other module's data even before unit scoping is considered.
       dashboard: READ_ONLY,
       members: {},
       savings: {},
@@ -121,7 +125,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       config: {},
       users: {},
       roles: {},
-      konsumen: { create: true, read: true, update: true }
+      konsumen: { create: true, read: true, update: true },
+      auditLog: {}
     }
   }
 ];

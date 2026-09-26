@@ -730,3 +730,68 @@ describe("GET /api/loans/overdue", () => {
     expect(res.body.data[0].lastPaymentAt).toBeNull();
   });
 });
+
+describe("Loans audit trail", () => {
+  it("audits loan disbursement", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 3_000_000, termMonths: 12 });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "loan.create", entityId: created.body.data.id }
+    });
+    expect(log.actorUserId).toBe(admin.user.id);
+    expect(log.after).toMatchObject({ memberId: member.id, principalAmount: "3000000" });
+  });
+
+  it("audits a loan payment with before/after remaining balance", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 6 });
+    const totalAmount = created.body.data.totalAmount as string;
+
+    await request(app())
+      .post(`/api/loans/${created.body.data.id}/pay`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: 100_000, paidAt: "2026-01-25", dueDate: "2026-01-25" });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "loan.payment", entityId: created.body.data.id }
+    });
+    expect(log.before).toMatchObject({ remainingAmount: totalAmount, status: "ACTIVE" });
+    expect(log.after).toMatchObject({ amount: "100000" });
+  });
+
+  it("writes no audit row when a payment is rejected for a non-active loan", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 6 });
+    // Pay it off fully so its status flips to COMPLETED.
+    await request(app())
+      .post(`/api/loans/${created.body.data.id}/pay`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: created.body.data.totalAmount, paidAt: "2026-01-25", dueDate: "2026-01-25" });
+
+    const res = await request(app())
+      .post(`/api/loans/${created.body.data.id}/pay`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: 10_000, paidAt: "2026-02-25", dueDate: "2026-02-25" });
+    expect(res.status).toBe(422);
+
+    const count = await db.auditLog.count({ where: { tenantId: admin.user.tenantId, action: "loan.payment" } });
+    expect(count).toBe(1); // only the successful first payment
+  });
+});

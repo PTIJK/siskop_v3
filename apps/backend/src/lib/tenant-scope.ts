@@ -44,7 +44,11 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   // is deliberately NOT added: like POSSaleLine above, it carries no tenantId
   // column of its own (only notificationId/userId).
   "MemberRegistrationRequest",
-  "TenantNotification"
+  "TenantNotification",
+  // User-activity audit trail — every row belongs to exactly one tenant;
+  // the 90-day retention purge crosses tenants deliberately and goes through
+  // withoutTenantScope() (see modules/audit-log/service.ts#purgeStaleAuditLogs).
+  "AuditLog"
 ]);
 
 const WHERE_REQUIRED_ACTIONS = new Set([
