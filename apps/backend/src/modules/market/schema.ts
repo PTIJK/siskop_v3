@@ -1,8 +1,26 @@
 import { z } from "zod";
 
+// A blank optional text input submits "" (react-hook-form's uncontrolled
+// register), not an absent field — treat that the same as "not provided"
+// instead of failing a `.min(1)` that would only ever reject the empty form
+// default, never a real "cleared" intent.
+const optionalText = () =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v === "" ? undefined : v));
+
+// Same issue as optionalText above, but z.coerce.number() coerces "" to 0
+// *before* `.optional()` ever sees it — an empty area field would fail
+// `.positive()` instead of being treated as "not provided". Strip "" (and
+// null, which JSON.stringify(undefined) never produces but a client could
+// still send) to undefined first, so coercion only ever runs on a real value.
+const optionalPositiveNumber = () =>
+  z.preprocess((v) => (v === "" || v === null ? undefined : v), z.coerce.number().positive().optional());
+
 export const createMarketSchema = z.object({
   name: z.string().min(2, "Nama pasar minimal 2 karakter"),
-  address: z.string().min(1).optional()
+  address: optionalText()
 });
 
 export const updateMarketSchema = createMarketSchema.partial().extend({
@@ -15,9 +33,9 @@ const stallStatusSchema = z.enum(["AVAILABLE", "OCCUPIED", "INACTIVE"]);
 export const createStallSchema = z.object({
   marketId: z.string().cuid("Market ID tidak valid"),
   code: z.string().min(1, "Kode kios wajib diisi"),
-  block: z.string().min(1).optional(),
+  block: optionalText(),
   kind: stallKindSchema,
-  areaM2: z.coerce.number().positive().optional()
+  areaM2: optionalPositiveNumber()
 });
 
 export const updateStallSchema = createStallSchema.omit({ marketId: true }).partial().extend({

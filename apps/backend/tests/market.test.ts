@@ -21,6 +21,15 @@ async function createMarketAs(accessToken: string, overrides: Record<string, unk
 }
 
 describe("POST /api/market/markets", () => {
+  it("accepts a blank address (react-hook-form submits '' for an empty optional field, not undefined)", async () => {
+    const admin = await setupTenant();
+
+    const res = await createMarketAs(admin.accessToken, { address: "" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.address).toBeNull();
+  });
+
   it("creates a market and auto-creates a JASA unit for it", async () => {
     const admin = await setupTenant();
 
@@ -121,6 +130,32 @@ describe("POST /api/market/stalls", () => {
     expect(res.status).toBe(201);
     expect(res.body.data.status).toBe("AVAILABLE");
     expect(res.body.data.areaM2).toBe("4.5");
+  });
+
+  it("accepts a blank block (react-hook-form submits '' for an empty optional field, not undefined)", async () => {
+    const admin = await setupTenant();
+    const market = await createMarketAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/market/stalls")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ marketId: market.body.data.id, code: "A-01", block: "", kind: "LAPAK" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.block).toBeNull();
+  });
+
+  it("accepts a blank areaM2 (z.coerce.number() turns '' into 0 before .optional() can see it)", async () => {
+    const admin = await setupTenant();
+    const market = await createMarketAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/market/stalls")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ marketId: market.body.data.id, code: "A-01", kind: "LAPAK", areaM2: "" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.areaM2).toBeNull();
   });
 
   it("rejects a duplicate stall code within the same market", async () => {

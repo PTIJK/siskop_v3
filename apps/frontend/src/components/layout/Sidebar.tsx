@@ -20,7 +20,8 @@ import {
   Layers,
   PieChart,
   Receipt,
-  Wallet
+  Wallet,
+  Warehouse
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -182,9 +183,18 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
     konsumenChildren.push({ label: "Toko", href: "/ksu/toko" });
   }
 
+  // Koperasi pasar plan F3 — gated on market:read like every other Unit Usaha
+  // sub-group, not on isMultiUnit (its JASA unit is auto-resolved, never
+  // client-chosen, so there's nothing multi-unit-specific about this page).
+  const pasarChildren: NavNode[] = [];
+  if (can("market", "read")) {
+    pasarChildren.push({ label: "Pasar", href: "/market" });
+  }
+
   const unitUsahaChildren: NavNode[] = [];
   if (kspChildren.length > 0) unitUsahaChildren.push({ label: "KSP", icon: Landmark, children: kspChildren });
   if (konsumenChildren.length > 0) unitUsahaChildren.push({ label: "Konsumen", icon: Store, children: konsumenChildren });
+  if (pasarChildren.length > 0) unitUsahaChildren.push({ label: "Pasar", icon: Warehouse, children: pasarChildren });
 
   return (
     <div className="flex h-full flex-col bg-slate-900">
