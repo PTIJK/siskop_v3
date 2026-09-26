@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import request from "supertest";
 import { db } from "../src/lib/db.js";
 import * as journal from "../src/lib/journal.js";
+import * as auditLogService from "../src/modules/audit-log/service.js";
 import { app, createMemberAs, createMemberWithPokokSaving, setupTenant } from "./helpers.js";
 
 beforeAll(() => {
@@ -227,5 +228,38 @@ describe("POST /api/scheduler/run-daily", () => {
     const updated = await db.loan.findUnique({ where: { id: loan.body.data.id } });
     expect(updated?.kolCategory).not.toBe("LANCAR");
     expect(updated?.daysOverdue).toBeGreaterThan(180);
+  });
+
+  it("purges audit logs older than 90 days as part of the daily run", async () => {
+    const admin = await setupTenant();
+    await db.auditLog.create({
+      data: {
+        tenantId: admin.user.tenantId,
+        actorUserId: admin.user.id,
+        action: "old.event",
+        requestId: "r1",
+        createdAt: new Date(Date.now() - 91 * 24 * 60 * 60 * 1000)
+      }
+    });
+
+    const res = await request(app()).post("/api/scheduler/run-daily").set(TOKEN_HEADER, TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.data.auditLogPurge.deleted).toBeGreaterThanOrEqual(1);
+    expect(res.body.data.auditLogPurge.failed).toBe(0);
+  });
+
+  it("reports an auditLogPurge failure as a 503 without blocking the other daily jobs", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    await createDailySavingAs(admin.accessToken, member.id, 9, 1_000_000);
+    const purge = vi.spyOn(auditLogService, "purgeStaleAuditLogs").mockRejectedValueOnce(new Error("purge boom"));
+    try {
+      const res = await request(app()).post("/api/scheduler/run-daily").set(TOKEN_HEADER, TOKEN);
+      expect(res.status).toBe(503);
+      expect(res.body.data.auditLogPurge).toMatchObject({ deleted: 0, failed: 1 });
+      expect(res.body.data.savingsInterest).toMatchObject({ posted: 1, failed: 0 });
+    } finally {
+      purge.mockRestore();
+    }
   });
 });

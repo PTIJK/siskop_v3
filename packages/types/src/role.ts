@@ -28,6 +28,9 @@ export interface Permissions {
   // Phase 2 (KSU Konsumen/Toko) — optional like `accounting` above, so a role
   // permissions blob seeded before this module existed still parses.
   konsumen?: ModulePermissions;
+  // User-activity audit trail — optional like `accounting`/`konsumen` above.
+  // Only `read` is ever seeded (AuditLog rows are never user-editable).
+  auditLog?: ModulePermissions;
 }
 
 export type PermissionModule = keyof Permissions;

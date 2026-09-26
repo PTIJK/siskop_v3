@@ -7,6 +7,7 @@ import type { Request, Response, NextFunction } from "express";
 import { ErrorCode, type AuthClaims } from "@siskop/types";
 import { unauthorized as unauthorizedError } from "../lib/errors.js";
 import { assertWorkspaceTenant } from "../modules/tenant-domains/middleware.js";
+import { runWithRequestContext } from "../lib/request-context.js";
 
 // Every action is optional: a role's permissions blob only sets the actions it
 // actually grants (see the SEED_ROLES default permission sets in
@@ -33,7 +34,8 @@ const permissionsSchema = z.object({
   // Phase 2 (KSU Konsumen/Toko) — optional like `accounting`: a token signed
   // before this module existed still parses, `permissions.konsumen` just
   // comes back undefined (requirePermission("konsumen", ...) then denies).
-  konsumen: permissionActions.optional()
+  konsumen: permissionActions.optional(),
+  auditLog: permissionActions.optional()
 });
 
 const claimsSchema = z.object({
@@ -105,13 +107,38 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return;
   }
 
+  let auth: AuthClaims;
   try {
-    req.auth = verifyAccessToken(token, process.env.JWT_SECRET ?? "");
+    auth = verifyAccessToken(token, process.env.JWT_SECRET ?? "");
+    req.auth = auth;
   } catch {
     unauthorized(res, "Invalid or expired token");
     return;
   }
-  try {
-    if (selectionEnabled() && !req.workspace && req.auth.role !== "super_admin") throw forbidden("Buka dashboard melalui alamat koperasi Anda.");
-    assertWorkspaceTenant(req, req.auth.tenantId, req.auth.role === "super_admin"); next(); } catch (error) { next(error); }
+
+  // Seeds the ambient actor context every downstream mutation's recordAudit()
+  // call reads (lib/request-context.ts) — the same requestId already handed
+  // back to the client in this response's envelope (res.locals.meta, set in
+  // app.ts before any router runs). Safe to wrap a synchronous next() call:
+  // AsyncLocalStorage propagates the store to everything scheduled during
+  // this synchronous call, which covers every downstream middleware, the
+  // route handler, and every `await db.xxx()` inside it.
+  runWithRequestContext(
+    {
+      tenantId: auth.tenantId,
+      actorUserId: auth.userId,
+      requestId: (res.locals.meta?.requestId as string | undefined) ?? randomUUID(),
+      ip: req.ip ?? null,
+      userAgent: req.headers["user-agent"] ?? null
+    },
+    () => {
+      try {
+        if (selectionEnabled() && !req.workspace && auth.role !== "super_admin") throw forbidden("Buka dashboard melalui alamat koperasi Anda.");
+        assertWorkspaceTenant(req, auth.tenantId, auth.role === "super_admin");
+        next();
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
 }
