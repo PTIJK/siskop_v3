@@ -101,7 +101,7 @@ export async function setupTenant(
 export async function createStaffSession(
   tenantId: string,
   slug: string,
-  roleName: "Super Admin" | "Manager" | "Teller" | "Viewer" | "Kasir",
+  roleName: "Super Admin" | "Manager" | "Teller" | "Viewer" | "Kasir" | "Kolektor",
   email: string
 ) {
   const role = await db.role.findFirstOrThrow({ where: { tenantId, name: roleName } });

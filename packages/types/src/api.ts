@@ -31,6 +31,9 @@ export const ErrorCode = {
   // Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F2 — installment schedule.
   RATE_NOTE_REQUIRED: "RATE_NOTE_REQUIRED",
   PAYMENT_EXCEEDS_REMAINING: "PAYMENT_EXCEEDS_REMAINING",
+  // Koperasi pasar plan F4 — Kolektor & setoran.
+  NOT_ASSIGNED_COLLECTOR: "NOT_ASSIGNED_COLLECTOR",
+  BATCH_NOT_OPEN: "BATCH_NOT_OPEN",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
