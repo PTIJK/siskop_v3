@@ -16,7 +16,11 @@ sampai jurnal, serta sewa kios/los dan retribusi harian pedagang.
 |---|---|---|
 | D1 | Hari Minggu dan hari libur **tidak ada penagihan** | Jadwal angsuran & tagihan retribusi dibuat **per hari operasional**: skip Minggu + daftar hari libur per tenant (`TenantHoliday`). Jatuh tempo yang jatuh di hari libur digeser ke hari operasional berikutnya. |
 | D2 | KOL **sesuai saat ini** | `getKOLCategory` (≤30/90/120/180 hari) **tidak diubah**. Yang diubah hanya cara menghitung `daysOverdue`: dari cicilan tertua yang belum lunas di jadwal, bukan tebakan per bulan. |
-| D3 | Bunga **fleksibel** | *Interpretasi yang dipakai (mohon dikonfirmasi):* metode hitung dipilih per produk (FLAT / ANUITAS / HARIAN yang sudah ada) dan frekuensi angsuran dipilih per produk; **rate boleh di-override per pinjaman** dalam batas produk. Cap 24%/tahun Permenkop 8/2023 **tetap berlaku** karena regulasi — override yang melewatinya ditolak. |
+| D3 | Bunga **diatur pegawai** per pinjaman, **wajib catatan**, maks 24%/tahun | `Loan.rate` (snapshot) + `Loan.rateNote`. Rate default dari produk; bila pegawai mengubahnya, `rateNote` wajib diisi. `validateRegulatoryRate` (≤24%) tetap berlaku. Perubahan tercatat di audit log. |
+| D5 | Retribusi = **pendapatan koperasi** | Kredit ke akun Pendapatan Retribusi (bukan utang titipan). |
+| D6 | Modul pasar & kolektor = **add-on berbayar** | Gate package module `pasar` (pola `requireAccountingEntitlement`) untuk F3–F7. F0–F2 tetap di paket dasar karena memperbaiki modul pinjaman inti (KOL bulanan juga ikut benar). |
+| D7 | Denda keterlambatan **input manual** | Field `penalty` pada pembayaran tetap seperti sekarang; tidak ada denda otomatis. |
+| D8 | Pembulatan cicilan **Rp500** | Nominal cicilan dibulatkan **ke atas** ke kelipatan Rp500; cicilan terakhir = sisa, sehingga Σ cicilan = total persis. |
 | D4 | Koperasi **mengelola pasar** | Modul kios/los, sewa, dan retribusi **masuk MVP** (sebelumnya P2). |
 
 ### Prinsip yang dipegang (CLAUDE.md)
@@ -120,8 +124,6 @@ model LoanConfig {
   // + tambahan
   installmentFrequency InstallmentFrequency @default(MONTHLY)
   maxInstallments      Int?                  // pengganti maxTermMonths untuk DAILY/WEEKLY
-  minRate              Decimal? @db.Decimal(8, 4)   // batas override (D3)
-  maxRate              Decimal? @db.Decimal(8, 4)
 }
 
 model Loan {
@@ -129,7 +131,8 @@ model Loan {
   installmentFrequency InstallmentFrequency @default(MONTHLY)
   installmentCount     Int?
   installmentAmount    Decimal? @db.Decimal(15, 2)
-  rate                 Decimal? @db.Decimal(8, 4)   // rate efektif pinjaman ini (snapshot)
+  rate                 Decimal? @db.Decimal(8, 4)   // rate efektif pinjaman ini (snapshot, D3)
+  rateNote             String?                      // wajib bila rate ≠ rate produk (D3)
   maturityDate         DateTime?
   installments         LoanInstallment[]
 }
@@ -170,12 +173,13 @@ count, disbursedAt, calendar })` → daftar `{ seq, dueDate, principalDue, inter
 - MONTHLY: +1 bulan, digeser bila libur.
 - FLAT: bunga total = pokok × rate × durasi; dibagi rata. HARIAN: sesuai `loan-calc.ts`
   (hari riil / 360). ANNUITY: hanya MONTHLY (DAILY/WEEKLY + ANNUITY ditolak di validasi config).
-- Pembulatan: tiap cicilan dibulatkan ke rupiah (konfigurasi `roundTo`, default 1); selisih
-  pembulatan dibebankan ke cicilan terakhir sehingga Σ = total persis.
+- Pembulatan (D8): nominal cicilan = total/jumlah cicilan dibulatkan **ke atas** ke kelipatan
+  Rp500; cicilan terakhir = sisa (bisa lebih kecil), sehingga Σ = total persis. Porsi pokok/bunga
+  per cicilan mengikuti rasio pokok:bunga, dengan selisih pembulatan juga diserap cicilan terakhir.
 
 ### Service
 - `createLoan`: input baru `installmentCount` (wajib untuk DAILY/WEEKLY) dan `rate` opsional
-  (override; divalidasi `minRate ≤ rate ≤ maxRate` dan `validateRegulatoryRate`). Membuat jadwal
+  (override oleh pegawai; bila berbeda dari rate produk `rateNote` wajib → `ErrorCode.RATE_NOTE_REQUIRED`; tetap `validateRegulatoryRate` ≤ 24%). Membuat jadwal
   dalam transaksi yang sama dengan `Loan`.
 - `recordLoanPayment`: **tidak lagi menerima `dueDate`** dari klien (field diabaikan, dihapus dari
   schema setelah frontend diperbarui). Alokasi: cicilan tertua dulu, **bunga dulu lalu pokok**
@@ -203,7 +207,8 @@ khusus.
 - Σ(principalDue) = pokok, Σ(interestDue) = total bunga, persis.
 - Bayar 2,5× cicilan → 2 PAID + 1 PARTIAL; jurnal pokok/bunga = jumlah alokasi.
 - Bolong 31 hari kalender → DALAM_PERHATIAN; lunasi tunggakan → LANCAR.
-- Rate override di luar rentang / di atas 24% → 422.
+- Rate override tanpa `rateNote` → 422; di atas 24% → 422; rate & catatan tersimpan + audit log.
+- Pembulatan: pokok 1.000.000 + bunga 100.000, 30 cicilan → 29 × Rp37.000 + 1 × Rp27.000.
 - Pinjaman bulanan lama tetap berperilaku sama (regresi `loans.test.ts`, `kol.test.ts`).
 
 ---
@@ -386,8 +391,7 @@ Scheduler harian (pola `modules/scheduler`) membuat `Charge`:
 - Saat dibayar: `Dr Kas` (atau Kas di Kolektor via F4) / `Cr Piutang`.
 - Akun baru di `coaTemplate.ts` dengan `unitType: "JASA"` (pola yang sama dengan akun Toko
   `unitType: "KONSUMEN"`).
-- **Pertanyaan terbuka Q2:** retribusi milik koperasi atau pungutan titipan Pemda? Jika titipan,
-  kreditnya ke **Utang Retribusi** (kewajiban), bukan pendapatan.
+- Retribusi adalah **pendapatan koperasi** (D5).
 
 ### API (`/api/market`)
 Kontrak: `POST/GET /contracts`, `POST /contracts/:id/end`. Tarif: CRUD `/levy-rates`.
@@ -436,7 +440,7 @@ idempotency.
 - [ ] Migration Prisma + `prisma generate`; tidak mengubah kolom lama secara destruktif.
 - [ ] Tipe baru di `packages/types` (`InstallmentFrequency`, `LoanInstallment`, `Market`,
       `Stall`, `CollectionBatch`, `Charge`, ...).
-- [ ] `ErrorCode` baru: `PAYMENT_EXCEEDS_REMAINING`, `RATE_OUT_OF_PRODUCT_RANGE`,
+- [ ] `ErrorCode` baru: `PAYMENT_EXCEEDS_REMAINING`, `RATE_NOTE_REQUIRED`,
       `NOT_ASSIGNED_COLLECTOR`, `BATCH_NOT_OPEN`, `STALL_ALREADY_OCCUPIED`, `HOLIDAY_DUPLICATE`.
 - [ ] Permission modul baru (`market`, `collections`) di seed roles + backfill tenant lama
       (pola `20260926012609_backfill_auditlog_role_permissions`).
@@ -444,14 +448,6 @@ idempotency.
 - [ ] Coverage backend ≥ 80% lines; `pnpm run lint`, `pnpm run typecheck`, `pnpm run test`.
 - [ ] Update `docs/02-System-Requirements-SISKOP.md` (FR baru) dan `docs/05-DB-Schema-SISKOP.md`.
 
-## Pertanyaan terbuka
+## Keputusan terbuka
 
-1. **Q1 — Bunga fleksibel (D3):** apakah interpretasi di atas benar (metode & frekuensi per
-   produk + override rate per pinjaman dalam rentang, tetap ≤ 24%/tahun)? Atau yang dimaksud
-   rate boleh melebihi 24%?
-2. **Q2 — Retribusi:** pendapatan koperasi, atau dipungut atas nama Pemda (titipan)?
-3. **Q3 — Paket langganan:** modul pasar & kolektor termasuk base atau add-on berbayar (gate
-   lewat `middleware/entitlement.ts` seperti modul akuntansi)?
-4. **Q4 — Denda keterlambatan:** tetap manual di MVP (asumsi plan ini), atau otomatis per hari?
-5. **Q5 — Pembulatan cicilan:** ke Rp1, Rp100, atau Rp500 (praktik lapangan umumnya kelipatan
-   Rp500/Rp1.000 untuk tagihan harian)?
+Semua pertanyaan (Q1–Q5) sudah dijawab user pada 2026-09-26 → D3, D5–D8 di atas.
