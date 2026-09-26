@@ -8,6 +8,7 @@ import {
   createLoanSchema,
   listLoansQuerySchema,
   loanPaymentSchema,
+  previewScheduleSchema,
   updateLoanConfigSchema
 } from "./schema.js";
 import {
@@ -15,9 +16,11 @@ import {
   createLoanConfig,
   getBmppHeadroom,
   getLoanById,
+  getLoanSchedule,
   getOverdueLoans,
   listLoanConfigs,
   listLoans,
+  previewSchedule,
   recordLoanPayment,
   updateLoanConfig
 } from "./service.js";
@@ -59,6 +62,16 @@ export function loansRoutes(): Router {
       const data = updateLoanConfigSchema.parse(req.body);
       const config = await updateLoanConfig(authClaims(req).tenantId, requireParam(req, "id"), data);
       res.json({ success: true, data: config, meta: res.locals.meta });
+    })
+  );
+
+  router.post(
+    "/configs/preview-schedule",
+    requirePermission("loans", "create"),
+    handle(async (req, res) => {
+      const data = previewScheduleSchema.parse(req.body);
+      const result = await previewSchedule(authClaims(req).tenantId, data);
+      res.json({ success: true, data: result, meta: res.locals.meta });
     })
   );
 
@@ -115,6 +128,15 @@ export function loansRoutes(): Router {
     handle(async (req, res) => {
       const loan = await getLoanById(authClaims(req).tenantId, requireParam(req, "id"));
       res.json({ success: true, data: loan, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/:id/schedule",
+    requirePermission("loans", "read"),
+    handle(async (req, res) => {
+      const schedule = await getLoanSchedule(authClaims(req).tenantId, requireParam(req, "id"));
+      res.json({ success: true, data: schedule, meta: res.locals.meta });
     })
   );
 

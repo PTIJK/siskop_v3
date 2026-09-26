@@ -1,9 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { addMonths, differenceInCalendarDays } from "date-fns";
-import { ErrorCode, type BmppHeadroom } from "@siskop/types";
-import { db } from "../../lib/db.js";
-import { AppError, notFound } from "../../lib/errors.js";
+import { ErrorCode, type BmppHeadroom, type InstallmentFrequency, type LoanType, type RateType } from "@siskop/types";
+import { db, type TxClient } from "../../lib/db.js";
+import { AppError, notFound, validationError } from "../../lib/errors.js";
 import { calculateLoan } from "../../lib/loan-calc.js";
+import { buildSchedule } from "../../lib/installment-schedule.js";
+import { loadOperatingCalendar } from "../../lib/operating-calendar.js";
 import { REGULATORY_CAPS, validateRegulatoryRate, validateRelatedPartyLoanLimit } from "../../lib/regulatory-config.js";
 import { recalculateKOL } from "../../lib/kol.js";
 import { postLoanDisbursement, postLoanPayment, splitLoanPayment } from "../../lib/journal.js";
@@ -17,10 +19,29 @@ import type {
   CreateLoanInput,
   ListLoansQueryInput,
   LoanPaymentInput,
+  PreviewScheduleInput,
   UpdateLoanConfigInput
 } from "./schema.js";
 
 // ── Config ────────────────────────────────────────────────────────────────
+
+/**
+ * ANNUITY (plain BUNGA+KONVENSIONAL) only amortizes cleanly month-by-month —
+ * a DAILY/WEEKLY frequency for it has no defined formula (D3/D8's schedule
+ * spec only covers FLAT/HARIAN there). HARIAN and FLAT margin (SYARIAH or
+ * MARGIN rateType) are real-day based and work at any frequency.
+ */
+function assertFrequencyMethodCompatible(input: {
+  type: LoanType;
+  rateType: RateType;
+  installmentFrequency: InstallmentFrequency;
+}): void {
+  if (input.installmentFrequency === "MONTHLY") return;
+  const isAnnuity = input.rateType !== "HARIAN" && input.type !== "SYARIAH" && input.rateType !== "MARGIN";
+  if (isAnnuity) {
+    throw validationError("Anuitas hanya tersedia untuk frekuensi cicilan bulanan");
+  }
+}
 
 export async function listLoanConfigs(tenantId: string) {
   return db.loanConfig.findMany({ where: { tenantId, isActive: true }, orderBy: { createdAt: "asc" } });
@@ -28,6 +49,7 @@ export async function listLoanConfigs(tenantId: string) {
 
 export async function createLoanConfig(tenantId: string, data: CreateLoanConfigInput) {
   validateRegulatoryRate("LOAN", data.rate);
+  assertFrequencyMethodCompatible(data);
   return db.loanConfig.create({
     data: {
       tenantId,
@@ -36,6 +58,8 @@ export async function createLoanConfig(tenantId: string, data: CreateLoanConfigI
       rateType: data.rateType,
       rate: data.rate,
       maxTermMonths: data.maxTermMonths,
+      installmentFrequency: data.installmentFrequency,
+      maxInstallments: data.maxInstallments,
       isActive: true
     }
   });
@@ -45,6 +69,11 @@ export async function updateLoanConfig(tenantId: string, id: string, data: Updat
   const config = await db.loanConfig.findFirst({ where: { id, tenantId } });
   if (!config) throw notFound("Konfigurasi pinjaman tidak ditemukan");
   if (data.rate !== undefined) validateRegulatoryRate("LOAN", data.rate);
+  assertFrequencyMethodCompatible({
+    type: data.type ?? config.type,
+    rateType: data.rateType ?? config.rateType,
+    installmentFrequency: data.installmentFrequency ?? config.installmentFrequency
+  });
   return db.loanConfig.update({ where: { id, tenantId }, data });
 }
 
@@ -93,11 +122,76 @@ export async function getLoanById(tenantId: string, id: string) {
     include: {
       member: { select: { memberId: true, fullName: true, accountNumber: true } },
       loanConfig: true,
-      payments: { include: { createdByUser: { select: { name: true } } }, orderBy: { paidAt: "desc" } }
+      payments: { include: { createdByUser: { select: { name: true } } }, orderBy: { paidAt: "desc" } },
+      installments: { orderBy: { seq: "asc" } }
     }
   });
   if (!loan) throw notFound("Pinjaman tidak ditemukan");
   return loan;
+}
+
+export async function getLoanSchedule(tenantId: string, id: string) {
+  const loan = await db.loan.findFirst({ where: { id, tenantId } });
+  if (!loan) throw notFound("Pinjaman tidak ditemukan");
+  return db.loanInstallment.findMany({ where: { loanId: id, tenantId }, orderBy: { seq: "asc" } });
+}
+
+/**
+ * Simulates the schedule createLoan would produce for the given inputs,
+ * without writing anything — the frontend's "pratinjau jadwal" (F2 plan).
+ */
+export async function previewSchedule(tenantId: string, data: PreviewScheduleInput) {
+  const loanConfig = await db.loanConfig.findFirst({ where: { id: data.loanConfigId, tenantId, isActive: true } });
+  if (!loanConfig) throw notFound("Jenis pembiayaan tidak ditemukan");
+
+  const frequency = loanConfig.installmentFrequency;
+  const count = frequency === "MONTHLY" ? data.termMonths : data.installmentCount;
+  if (!count) {
+    throw validationError(
+      frequency === "MONTHLY"
+        ? "Tenor (termMonths) wajib diisi untuk pinjaman bulanan"
+        : "Jumlah cicilan (installmentCount) wajib diisi untuk pinjaman harian/mingguan"
+    );
+  }
+
+  const productRate = Number(loanConfig.rate);
+  const effectiveRate = data.rate ?? productRate;
+  const disbursedAt = data.disbursedAt ? new Date(data.disbursedAt) : new Date();
+  const termMonthsForLoan = frequency === "MONTHLY" ? count : Math.max(1, Math.ceil((frequency === "DAILY" ? count : count * 7) / 30));
+  const termDays =
+    loanConfig.rateType === "HARIAN"
+      ? frequency === "MONTHLY"
+        ? differenceInCalendarDays(addMonths(disbursedAt, termMonthsForLoan), disbursedAt)
+        : frequency === "DAILY"
+          ? count
+          : count * 7
+      : undefined;
+
+  const calc = calculateLoan(data.principalAmount.toNumber(), effectiveRate, termMonthsForLoan, loanConfig.type, loanConfig.rateType, {
+    termDays
+  });
+
+  const calendar = await loadOperatingCalendar(db, tenantId);
+  const schedule = buildSchedule({
+    principal: data.principalAmount,
+    totalAmount: calc.totalAmount,
+    frequency,
+    count,
+    disbursedAt,
+    calendar,
+    roundToRp500: frequency !== "MONTHLY"
+  });
+
+  return {
+    totalAmount: calc.totalAmount.toString(),
+    totalInterest: new Prisma.Decimal(calc.totalInterest).toString(),
+    installments: schedule.map((s) => ({
+      seq: s.seq,
+      dueDate: s.dueDate.toISOString().slice(0, 10),
+      principalDue: s.principalDue.toString(),
+      interestDue: s.interestDue.toString()
+    }))
+  };
 }
 
 // ── BMPP (Permenkop UKM 8/2023 Pasal 44-45) ─────────────────────────────────
@@ -234,11 +328,44 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
   });
   if (!loanConfig) throw notFound("Jenis pembiayaan tidak ditemukan");
 
-  if (data.termMonths > loanConfig.maxTermMonths) {
-    throw new AppError(
-      ErrorCode.TERM_EXCEEDS_MAX,
-      `Tenor maksimal adalah ${loanConfig.maxTermMonths} bulan`
-    );
+  const frequency = loanConfig.installmentFrequency;
+  let count: number;
+  let termMonthsForLoan: number;
+  let termDaysOverride: number | undefined;
+
+  if (frequency === "MONTHLY") {
+    if (!data.termMonths) throw validationError("Tenor (termMonths) wajib diisi untuk pinjaman bulanan");
+    if (data.termMonths > loanConfig.maxTermMonths) {
+      throw new AppError(ErrorCode.TERM_EXCEEDS_MAX, `Tenor maksimal adalah ${loanConfig.maxTermMonths} bulan`);
+    }
+    count = data.termMonths;
+    termMonthsForLoan = data.termMonths;
+  } else {
+    if (!data.installmentCount) {
+      throw validationError("Jumlah cicilan (installmentCount) wajib diisi untuk pinjaman harian/mingguan");
+    }
+    if (loanConfig.maxInstallments && data.installmentCount > loanConfig.maxInstallments) {
+      throw new AppError(ErrorCode.TERM_EXCEEDS_MAX, `Jumlah cicilan maksimal adalah ${loanConfig.maxInstallments}`);
+    }
+    count = data.installmentCount;
+    termDaysOverride = frequency === "DAILY" ? count : count * 7;
+    // Kept filled for backward-compat dashboards/reports (CLAUDE.md rule 2b
+    // predates F2, but the field itself does too) — not authoritative for a
+    // DAILY/WEEKLY loan, whose real schedule is LoanInstallment.
+    termMonthsForLoan = Math.max(1, Math.ceil(termDaysOverride / 30));
+  }
+
+  // D3: an employee may override the product's rate, but must say why, and
+  // the override is re-validated against the regulatory cap same as the
+  // product rate was at config-creation time.
+  const productRate = Number(loanConfig.rate);
+  let effectiveRate = productRate;
+  if (data.rate !== undefined && data.rate !== productRate) {
+    if (!data.rateNote) {
+      throw new AppError(ErrorCode.RATE_NOTE_REQUIRED, "Catatan wajib diisi saat mengubah rate dari rate produk");
+    }
+    validateRegulatoryRate("LOAN", data.rate);
+    effectiveRate = data.rate;
   }
 
   const disbursedAt = data.disbursedAt ? new Date(data.disbursedAt) : new Date();
@@ -247,19 +374,35 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
   // fallback calculateLoan uses when no disbursement date is known yet.
   const termDays =
     loanConfig.rateType === "HARIAN"
-      ? differenceInCalendarDays(addMonths(disbursedAt, data.termMonths), disbursedAt)
+      ? frequency === "MONTHLY"
+        ? differenceInCalendarDays(addMonths(disbursedAt, termMonthsForLoan), disbursedAt)
+        : termDaysOverride
       : undefined;
 
   const calc = calculateLoan(
     data.principalAmount.toNumber(),
-    Number(loanConfig.rate),
-    data.termMonths,
+    effectiveRate,
+    termMonthsForLoan,
     loanConfig.type,
     loanConfig.rateType,
     { termDays }
   );
 
   return db.$transaction(async (tx) => {
+    const calendar = await loadOperatingCalendar(tx, tenantId);
+    const schedule = buildSchedule({
+      principal: data.principalAmount,
+      totalAmount: calc.totalAmount,
+      frequency,
+      count,
+      disbursedAt,
+      calendar,
+      roundToRp500: frequency !== "MONTHLY"
+    });
+    // count >= 1 is enforced above, so buildSchedule always returns at least one installment.
+    const lastInstallment = schedule[schedule.length - 1]!;
+    const firstInstallment = schedule[0]!;
+
     const loan = await tx.loan.create({
       data: {
         tenantId,
@@ -268,17 +411,34 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
         loanConfigId: data.loanConfigId,
         principalAmount: data.principalAmount,
         totalAmount: calc.totalAmount,
-        termMonths: data.termMonths,
+        termMonths: termMonthsForLoan,
         monthlyPayment: calc.monthlyPayment,
         remainingAmount: calc.totalAmount,
         status: "ACTIVE",
         kolCategory: "LANCAR",
-        disbursedAt
+        disbursedAt,
+        installmentFrequency: frequency,
+        installmentCount: frequency === "MONTHLY" ? null : count,
+        installmentAmount: firstInstallment.principalDue.plus(firstInstallment.interestDue),
+        rate: effectiveRate,
+        rateNote: data.rateNote ?? null,
+        maturityDate: lastInstallment.dueDate
       },
       include: {
         loanConfig: true,
         member: { select: { memberId: true, fullName: true, accountNumber: true } }
       }
+    });
+
+    await tx.loanInstallment.createMany({
+      data: schedule.map((s) => ({
+        tenantId,
+        loanId: loan.id,
+        seq: s.seq,
+        dueDate: s.dueDate,
+        principalDue: s.principalDue,
+        interestDue: s.interestDue
+      }))
     });
 
     await postLoanDisbursement(tx, {
@@ -295,11 +455,83 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
       action: "loan.create",
       entityType: "Loan",
       entityId: loan.id,
-      after: { memberId: loan.memberId, principalAmount: loan.principalAmount, termMonths: loan.termMonths }
+      after: {
+        memberId: loan.memberId,
+        principalAmount: loan.principalAmount,
+        termMonths: loan.termMonths,
+        rate: loan.rate,
+        rateNote: loan.rateNote
+      }
     });
 
     return loan;
   });
+}
+
+/**
+ * Applies a payment to the oldest UNPAID/PARTIAL installment(s) first,
+ * interest before principal within each one (D3/F2 plan), until the amount
+ * is exhausted. A loan with no schedule yet (created before F2's migration,
+ * not backfilled) falls back to the old whole-loan flat-ratio split — it has
+ * no installments to allocate against.
+ */
+async function allocatePayment(
+  tx: TxClient,
+  params: {
+    tenantId: string;
+    loan: { installments: { id: string; seq: number; principalDue: Prisma.Decimal; interestDue: Prisma.Decimal; principalPaid: Prisma.Decimal; interestPaid: Prisma.Decimal }[]; principalAmount: Prisma.Decimal; totalAmount: Prisma.Decimal };
+    paymentId: string;
+    amount: Prisma.Decimal;
+    paidAt: Date;
+  }
+): Promise<{ principal: Prisma.Decimal; interest: Prisma.Decimal; allocations: { installmentId: string; seq: number; principal: string; interest: string }[] }> {
+  if (params.loan.installments.length === 0) {
+    const split = splitLoanPayment(params.amount, params.loan.principalAmount, params.loan.totalAmount);
+    return { principal: split.principal, interest: split.interest, allocations: [] };
+  }
+
+  let remaining = params.amount;
+  let principal = new Prisma.Decimal(0);
+  let interest = new Prisma.Decimal(0);
+  const allocations: { installmentId: string; seq: number; principal: string; interest: string }[] = [];
+
+  for (const inst of params.loan.installments) {
+    if (remaining.lte(0)) break;
+
+    const dueTotal = inst.principalDue.plus(inst.interestDue);
+    const instRemaining = dueTotal.sub(inst.principalPaid.plus(inst.interestPaid));
+    if (instRemaining.lte(0)) continue; // already PAID
+
+    const applied = Prisma.Decimal.min(remaining, instRemaining);
+    const interestRemaining = inst.interestDue.sub(inst.interestPaid);
+    const interestApplied = Prisma.Decimal.min(applied, interestRemaining);
+    const principalApplied = applied.sub(interestApplied);
+
+    const newPrincipalPaid = inst.principalPaid.plus(principalApplied);
+    const newInterestPaid = inst.interestPaid.plus(interestApplied);
+    const isPaid = newPrincipalPaid.plus(newInterestPaid).gte(dueTotal);
+
+    await tx.loanInstallment.update({
+      where: { id: inst.id, tenantId: params.tenantId },
+      data: {
+        principalPaid: newPrincipalPaid,
+        interestPaid: newInterestPaid,
+        status: isPaid ? "PAID" : "PARTIAL",
+        paidOffAt: isPaid ? params.paidAt : null
+      }
+    });
+
+    await tx.loanPaymentAllocation.create({
+      data: { paymentId: params.paymentId, installmentId: inst.id, principal: principalApplied, interest: interestApplied }
+    });
+
+    allocations.push({ installmentId: inst.id, seq: inst.seq, principal: principalApplied.toString(), interest: interestApplied.toString() });
+    principal = principal.plus(principalApplied);
+    interest = interest.plus(interestApplied);
+    remaining = remaining.sub(applied);
+  }
+
+  return { principal, interest, allocations };
 }
 
 export async function recordLoanPayment(
@@ -309,10 +541,18 @@ export async function recordLoanPayment(
   createdBy: string
 ) {
   const result = await db.$transaction(async (tx) => {
-    const loan = await tx.loan.findUnique({ where: { id: loanId } });
+    const loan = await tx.loan.findUnique({
+      where: { id: loanId },
+      include: { installments: { orderBy: { seq: "asc" } } }
+    });
     if (!loan || loan.tenantId !== tenantId) throw notFound("Pinjaman tidak ditemukan");
     if (loan.status !== "ACTIVE") {
       throw new AppError(ErrorCode.LOAN_NOT_ACTIVE, "Pinjaman tidak dalam status aktif");
+    }
+
+    const amount = new Prisma.Decimal(data.amount);
+    if (amount.gt(loan.remainingAmount)) {
+      throw new AppError(ErrorCode.PAYMENT_EXCEEDS_REMAINING, "Nominal bayar melebihi sisa pinjaman");
     }
 
     const paidAt = new Date(data.paidAt);
@@ -324,15 +564,18 @@ export async function recordLoanPayment(
         amount: data.amount,
         penalty: data.penalty,
         paidAt,
-        dueDate: new Date(data.dueDate),
         note: data.note,
         createdBy
       }
     });
 
-    // No per-installment amortization schedule exists — the split is a
-    // documented flat-ratio approximation (see lib/journal.ts).
-    const { principal, interest } = splitLoanPayment(data.amount, loan.principalAmount, loan.totalAmount);
+    const { principal, interest, allocations } = await allocatePayment(tx, {
+      tenantId,
+      loan,
+      paymentId: payment.id,
+      amount,
+      paidAt
+    });
 
     await postLoanPayment(tx, {
       tenantId,
@@ -362,7 +605,7 @@ export async function recordLoanPayment(
       after: { amount: data.amount, remainingAmount: newRemaining, status: newStatus }
     });
 
-    return { loanId, newRemaining: newRemaining.toString(), status: newStatus };
+    return { loanId, newRemaining: newRemaining.toString(), status: newStatus, allocations };
   });
 
   // Recalculated outside the transaction — recalculateKOL does its own read/write.
