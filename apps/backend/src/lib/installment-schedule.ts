@@ -21,11 +21,17 @@ function dueDateFor(seq: number, frequency: InstallmentFrequency, disbursedAt: D
 /**
  * Splits `totalAmount` (principal + total interest, already computed by the
  * caller — see modules/loans/service.ts) into `count` installments due on
- * `frequency`-spaced operating days. Each installment is rounded UP to the
- * nearest Rp500 (D8); the last one absorbs the remainder so the sum is exact
- * to the cent. Principal/interest within an installment follow the loan's
- * overall principal:total ratio, same "plug the last one" rounding so both
- * columns also sum exactly.
+ * `frequency`-spaced operating days. The last installment absorbs whatever
+ * remainder the split leaves, so the sum is always exact to the cent.
+ * Principal/interest within an installment follow the loan's overall
+ * principal:total ratio, same "plug the last one" rounding so both columns
+ * also sum exactly.
+ *
+ * `roundToRp500` (D8) rounds every installment but the last UP to the
+ * nearest Rp500 — for the koperasi pasar collector, who deals in physical
+ * cash. Existing MONTHLY loans have no such constraint (bank-transfer-style
+ * repayment) and must keep splitting to the exact cent, unchanged from
+ * before F2, so this defaults to false.
  */
 export function buildSchedule(input: {
   principal: Prisma.Decimal.Value;
@@ -34,10 +40,14 @@ export function buildSchedule(input: {
   count: number;
   disbursedAt: Date;
   calendar: OperatingCalendar;
+  roundToRp500?: boolean;
 }): ScheduleInstallment[] {
   const principal = new Prisma.Decimal(input.principal);
   const total = new Prisma.Decimal(input.totalAmount);
-  const installmentAmount = total.div(input.count).div(ROUNDING_UNIT).toDecimalPlaces(0, Prisma.Decimal.ROUND_UP).mul(ROUNDING_UNIT);
+  const evenShare = total.div(input.count);
+  const installmentAmount = input.roundToRp500
+    ? evenShare.div(ROUNDING_UNIT).toDecimalPlaces(0, Prisma.Decimal.ROUND_UP).mul(ROUNDING_UNIT)
+    : evenShare.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 
   const schedule: ScheduleInstallment[] = [];
   let principalSoFar = new Prisma.Decimal(0);

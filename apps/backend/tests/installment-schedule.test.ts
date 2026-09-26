@@ -101,17 +101,32 @@ describe("buildSchedule", () => {
     expect(sumInterest.toString()).toBe("234567.89");
   });
 
-  it("rounds each installment up to the nearest Rp500, plugging the remainder into the last one", () => {
+  it("rounds each installment up to the nearest Rp500 when roundToRp500 is set, plugging the remainder into the last one", () => {
     const schedule = buildSchedule({
       principal: "1000000",
       totalAmount: "1100000",
       frequency: "MONTHLY",
       count: 30,
       disbursedAt: parseDateKey("2026-10-03"),
-      calendar: cal
+      calendar: cal,
+      roundToRp500: true
     });
     const amounts = schedule.map((i) => i.principalDue.plus(i.interestDue).toString());
     expect(amounts.slice(0, 29)).toEqual(Array(29).fill("37000"));
     expect(amounts[29]).toBe("27000");
+  });
+
+  it("without roundToRp500, splits evenly to the cent (existing MONTHLY behavior, unrounded)", () => {
+    const schedule = buildSchedule({
+      principal: "1000000",
+      totalAmount: "1100000",
+      frequency: "MONTHLY",
+      count: 3,
+      disbursedAt: parseDateKey("2026-10-03"),
+      calendar: cal
+    });
+    // 1100000 / 3 = 366666.67 (2dp, half-up); last installment absorbs the remainder.
+    const amounts = schedule.map((i) => i.principalDue.plus(i.interestDue).toString());
+    expect(amounts).toEqual(["366666.67", "366666.67", "366666.66"]);
   });
 });
