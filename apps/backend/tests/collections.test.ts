@@ -161,6 +161,89 @@ describe("GET /api/collections/today", () => {
       memberNoStall.id
     ]);
   });
+
+  it("includes a binaan's open sewa/retribusi charges (koperasi pasar F6)", async () => {
+    const { admin, collector } = await setupTenantWithCollector();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    await assign(admin.accessToken, member.id, collector.user.id);
+    const market = await request(app()).post("/api/market/markets").set(bearer(admin.accessToken)).send({ name: "Pasar Today" });
+    const stall = await request(app())
+      .post("/api/market/stalls")
+      .set(bearer(admin.accessToken))
+      .send({ marketId: market.body.data.id, code: "A-01", kind: "KIOS" });
+    const charge = await db.charge.create({
+      data: {
+        tenantId: admin.user.tenantId,
+        unitId: market.body.data.unitId,
+        memberId: member.id,
+        stallId: stall.body.data.id,
+        kind: "RETRIBUSI",
+        sourceId: "test-today-source",
+        periodStart: new Date("2026-09-27"),
+        dueDate: new Date("2026-09-27"),
+        amount: 5000,
+        paidAmount: 2000,
+        status: "PARTIAL"
+      }
+    });
+
+    const res = await request(app()).get("/api/collections/today").set(bearer(collector.accessToken));
+
+    expect(res.status).toBe(200);
+    const item = res.body.data.find((i: { memberId: string }) => i.memberId === member.id);
+    expect(item.charges).toHaveLength(1);
+    expect(item.charges[0]).toMatchObject({ chargeId: charge.id, kind: "RETRIBUSI", amountDue: "3000" });
+  });
+
+  it("does not include a fully paid charge", async () => {
+    const { admin, collector } = await setupTenantWithCollector();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    await assign(admin.accessToken, member.id, collector.user.id);
+    const market = await request(app()).post("/api/market/markets").set(bearer(admin.accessToken)).send({ name: "Pasar Today 2" });
+    const stall = await request(app())
+      .post("/api/market/stalls")
+      .set(bearer(admin.accessToken))
+      .send({ marketId: market.body.data.id, code: "A-01", kind: "KIOS" });
+    await db.charge.create({
+      data: {
+        tenantId: admin.user.tenantId,
+        unitId: market.body.data.unitId,
+        memberId: member.id,
+        stallId: stall.body.data.id,
+        kind: "RETRIBUSI",
+        sourceId: "test-today-paid",
+        periodStart: new Date("2026-09-27"),
+        dueDate: new Date("2026-09-27"),
+        amount: 5000,
+        paidAmount: 5000,
+        status: "PAID"
+      }
+    });
+
+    const res = await request(app()).get("/api/collections/today").set(bearer(collector.accessToken));
+
+    const item = res.body.data.find((i: { memberId: string }) => i.memberId === member.id);
+    expect(item.charges).toHaveLength(0);
+  });
+
+  it("includes the id of a binaan's active daily saving account, and null when they have none", async () => {
+    const { admin, collector } = await setupTenantWithCollector();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    await assign(admin.accessToken, member.id, collector.user.id);
+    const dailyConfig = await request(app())
+      .post("/api/savings/configs")
+      .set(bearer(admin.accessToken))
+      .send({ name: "Tabungan Harian", type: "SUKARELA", rateType: "BUNGA", rate: 0, periodUnit: "DAILY" });
+    const dailySaving = await request(app())
+      .post("/api/savings")
+      .set(bearer(admin.accessToken))
+      .send({ memberId: member.id, savingConfigId: dailyConfig.body.data.id, initialDeposit: 0 });
+
+    const res = await request(app()).get("/api/collections/today").set(bearer(collector.accessToken));
+
+    const item = res.body.data.find((i: { memberId: string }) => i.memberId === member.id);
+    expect(item.dailySavingId).toBe(dailySaving.body.data.id);
+  });
 });
 
 describe("POST /api/collections/savings-deposit and /loan-payment", () => {
@@ -456,5 +539,56 @@ describe("POST /api/collections/charge-payment", () => {
       .send({ chargeId: ctx.chargeId, amount: 5000 });
 
     expect(res.status).toBe(404);
+  });
+});
+
+describe("Idempotency-Key on collector writes (koperasi pasar F6)", () => {
+  it("replays the first response and does not double-book a deposit sent twice with the same key", async () => {
+    const ctx = await setupTenantWithCollector();
+    const member = await createMemberWithPokokSaving(ctx.admin.accessToken);
+    await assign(ctx.admin.accessToken, member.id, ctx.collector.user.id);
+    const saving = await db.saving.findFirstOrThrow({ where: { tenantId: ctx.admin.user.tenantId, memberId: member.id } });
+
+    const first = await request(app())
+      .post("/api/collections/savings-deposit")
+      .set(bearer(ctx.collector.accessToken))
+      .set("Idempotency-Key", "mobile-retry-1")
+      .send({ savingId: saving.id, amount: 50_000 });
+    const second = await request(app())
+      .post("/api/collections/savings-deposit")
+      .set(bearer(ctx.collector.accessToken))
+      .set("Idempotency-Key", "mobile-retry-1")
+      .send({ savingId: saving.id, amount: 50_000 });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.data.id).toBe(first.body.data.id);
+
+    // 2, not 1: createMemberWithPokokSaving's own initial deposit plus this one real collector
+    // deposit — the replayed second request must not add a third.
+    const count = await db.savingTransaction.count({ where: { tenantId: ctx.admin.user.tenantId, savingId: saving.id, type: "DEPOSIT" } });
+    expect(count).toBe(2);
+    const batch = await db.collectionBatch.findFirstOrThrow({ where: { tenantId: ctx.admin.user.tenantId, collectorId: ctx.collector.user.id } });
+    expect(batch.expectedTotal.toString()).toBe("50000");
+  });
+
+  it("books a second deposit when no key is sent", async () => {
+    const ctx = await setupTenantWithCollector();
+    const member = await createMemberWithPokokSaving(ctx.admin.accessToken);
+    await assign(ctx.admin.accessToken, member.id, ctx.collector.user.id);
+    const saving = await db.saving.findFirstOrThrow({ where: { tenantId: ctx.admin.user.tenantId, memberId: member.id } });
+
+    await request(app())
+      .post("/api/collections/savings-deposit")
+      .set(bearer(ctx.collector.accessToken))
+      .send({ savingId: saving.id, amount: 50_000 });
+    await request(app())
+      .post("/api/collections/savings-deposit")
+      .set(bearer(ctx.collector.accessToken))
+      .send({ savingId: saving.id, amount: 50_000 });
+
+    // 3: createMemberWithPokokSaving's own initial deposit plus these 2 real collector deposits.
+    const count = await db.savingTransaction.count({ where: { tenantId: ctx.admin.user.tenantId, savingId: saving.id, type: "DEPOSIT" } });
+    expect(count).toBe(3);
   });
 });

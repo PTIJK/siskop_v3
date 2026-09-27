@@ -94,7 +94,11 @@ function compareByLocation(
 
 /**
  * The collector's binaan members plus their oldest UNPAID/PARTIAL loan
- * installment, if any. Sorted by pasar → blok → kode kios via each member's
+ * installment (if any), every open (UNPAID/PARTIAL) sewa/retribusi Charge
+ * (koperasi pasar F6), and their active daily-saving account id (if any, for
+ * the mobile "tabungan harian" quick-deposit slot — a voluntary deposit has
+ * no fixed due amount, so unlike the other two this is just a pointer, not a
+ * due-amount line). Sorted by pasar → blok → kode kios via each member's
  * active StallContract (F5 plan); a binaan with no stall contract sorts last,
  * by name.
  */
@@ -124,6 +128,16 @@ export async function getTodayForCollector(tenantId: string, collectorUserId: st
               }
             },
             take: 1
+          },
+          charges: {
+            where: { status: { not: "PAID" } },
+            orderBy: { dueDate: "asc" },
+            select: { id: true, kind: true, dueDate: true, amount: true, paidAmount: true }
+          },
+          savings: {
+            where: { isActive: true, savingConfig: { periodUnit: "DAILY" } },
+            take: 1,
+            select: { id: true }
           }
         }
       }
@@ -152,7 +166,15 @@ export async function getTodayForCollector(tenantId: string, collectorUserId: st
         installmentSeq: installment?.seq ?? null,
         dueDate: installment ? installment.dueDate.toISOString().slice(0, 10) : null,
         amountDue: amountDue ? amountDue.toString() : null,
-        daysOverdue
+        daysOverdue,
+        charges: member.charges.map((c) => ({
+          chargeId: c.id,
+          kind: c.kind,
+          dueDate: c.dueDate.toISOString().slice(0, 10),
+          amountDue: c.amount.sub(c.paidAmount).toString(),
+          daysOverdue: c.dueDate < today ? Math.floor((today.getTime() - c.dueDate.getTime()) / 86_400_000) : 0
+        })),
+        dailySavingId: member.savings[0]?.id ?? null
       };
     })
     .sort(compareByLocation)

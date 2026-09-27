@@ -31,7 +31,19 @@ export interface CollectionBatch {
   createdAt: string;
 }
 
-/** One binaan member's outstanding loan installment on the collector's "today" list. */
+/** One open sewa/retribusi Charge on a binaan's "today" list (koperasi pasar F6). */
+export interface CollectorTodayCharge {
+  chargeId: string;
+  kind: "SEWA" | "RETRIBUSI";
+  dueDate: string;
+  amountDue: string;
+  daysOverdue: number;
+}
+
+/**
+ * One binaan member's outstanding loan installment, open sewa/retribusi
+ * charges, and daily-saving account (if any) on the collector's "today" list.
+ */
 export interface CollectorTodayItem {
   memberId: string;
   memberCode: string;
@@ -41,6 +53,9 @@ export interface CollectorTodayItem {
   dueDate: string | null;
   amountDue: string | null;
   daysOverdue: number;
+  charges: CollectorTodayCharge[];
+  /** Their active DAILY-periodUnit saving account, if any — a voluntary deposit slot, not a due amount. */
+  dailySavingId: string | null;
 }
 
 export interface CollectorDepositRequest {
