@@ -135,6 +135,10 @@ enum JournalSourceType {
   POS_SALE
   MEMBER_CREDIT_REPAYMENT
   MANUAL
+  // Beban Umum (general expense entry) — see modules/expenses. Kept distinct
+  // from MANUAL so its list/delete endpoints own exactly the entries this
+  // feature created, without touching other ad-hoc manual entries.
+  MANUAL_EXPENSE
   // A restock (StockMovement IN). ADJUSTMENT movements are not journaled: they *set* the
   // count and the previous quantity isn't stored, so the delta can't be recovered.
   STOCK_MOVEMENT

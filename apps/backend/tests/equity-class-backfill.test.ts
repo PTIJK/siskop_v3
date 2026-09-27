@@ -34,14 +34,6 @@ async function runBackfill() {
   for (const statement of backfillStatements()) await db.$executeRawUnsafe(statement);
 }
 
-type Category = "ASET" | "EKUITAS";
-
-async function account(tenantId: string, code: string, name: string, category: Category = "EKUITAS") {
-  return db.account.create({
-    data: { tenantId, code, name, category, normalBalance: category === "ASET" ? "DEBIT" : "KREDIT" }
-  });
-}
-
 /** Posts Kas (debit) against `creditAccountId` for `amount`. */
 async function postCredit(tenantId: string, kasId: string, creditAccountId: string, amount: number) {
   await db.journalEntry.create({
@@ -68,11 +60,18 @@ describe("the migration's equity-class backfill", () => {
   it("classifies the standard equity accounts by code and renames the old combined cadangan account", async () => {
     const admin = await setupTenant();
     const tenantId = admin.user.tenantId;
-    await account(tenantId, "3-1000", "Simpanan Pokok");
-    await account(tenantId, "3-1100", "Simpanan Wajib");
-    await account(tenantId, "3-2000", "Cadangan / Modal Penyertaan");
-    await account(tenantId, "3-3000", "SHU Tahun Berjalan");
-    await account(tenantId, "3-3100", "SHU Tahun Lalu Belum Dibagi");
+    // Provisioning already created these with their equityClass set — reset
+    // each to its pre-backfill (unclassified) state so the migration has
+    // something to do. 3-2000 also carries the old combined name; the
+    // migration's job is to rename it to "Cadangan Umum".
+    await db.account.updateMany({ where: { tenantId, code: "3-1000" }, data: { equityClass: null } });
+    await db.account.updateMany({ where: { tenantId, code: "3-1100" }, data: { equityClass: null } });
+    await db.account.updateMany({
+      where: { tenantId, code: "3-2000" },
+      data: { name: "Cadangan / Modal Penyertaan", equityClass: null }
+    });
+    await db.account.updateMany({ where: { tenantId, code: "3-3000" }, data: { equityClass: null } });
+    await db.account.updateMany({ where: { tenantId, code: "3-3100" }, data: { equityClass: null } });
 
     await runBackfill();
 
@@ -89,23 +88,34 @@ describe("the migration's equity-class backfill", () => {
   it("leaves template-coded accounts whose name differs from the template unclassified", async () => {
     const admin = await setupTenant();
     const tenantId = admin.user.tenantId;
-    // prisma/seed-ksu-demo.ts's layout: same codes, different meaning.
-    await account(tenantId, "3-1000", "Modal Kerja");
-    await account(tenantId, "3-2000", "Simpanan Pokok");
+    // prisma/seed-ksu-demo.ts's layout: same codes, different meaning. Reset
+    // the already-provisioned rows to simulate a tenant whose accounts hold
+    // something other than what the template code implies.
+    await db.account.updateMany({ where: { tenantId, code: "3-1000" }, data: { name: "Modal Kerja", equityClass: null } });
+    await db.account.updateMany({ where: { tenantId, code: "3-2000" }, data: { name: "Simpanan Pokok", equityClass: null } });
 
     await runBackfill();
 
-    const accounts = await db.account.findMany({ where: { tenantId } });
-    expect(accounts.map((a) => a.equityClass)).toEqual([null, null]);
-    expect(accounts.find((a) => a.code === "3-2000")?.name).toBe("Simpanan Pokok");
+    const account3_1000 = await db.account.findFirstOrThrow({ where: { tenantId, code: "3-1000" } });
+    const account3_2000 = await db.account.findFirstOrThrow({ where: { tenantId, code: "3-2000" } });
+    expect(account3_1000.equityClass).toBeNull();
+    expect(account3_2000.equityClass).toBeNull();
+    expect(account3_2000.name).toBe("Simpanan Pokok");
   });
 
   it("keeps a tenant's own name and equity class, and ignores non-EKUITAS accounts sharing a template code", async () => {
     const admin = await setupTenant();
     const tenantId = admin.user.tenantId;
-    const cadangan = await account(tenantId, "3-2000", "Dana Cadangan Koperasi");
-    await db.account.update({ where: { id: cadangan.id, tenantId }, data: { equityClass: "CADANGAN_RISIKO" } });
-    await account(tenantId, "3-1000", "Kas Kecil", "ASET");
+    await db.account.updateMany({
+      where: { tenantId, code: "3-2000" },
+      data: { name: "Dana Cadangan Koperasi", equityClass: "CADANGAN_RISIKO" }
+    });
+    // Simulate 3-1000 (provisioned as "Simpanan Pokok") actually holding
+    // something non-EKUITAS at this tenant — the backfill must ignore it.
+    await db.account.updateMany({
+      where: { tenantId, code: "3-1000" },
+      data: { name: "Kas Kecil", category: "ASET", normalBalance: "DEBIT", equityClass: null }
+    });
 
     await runBackfill();
 
@@ -120,10 +130,19 @@ describe("the migration's equity-class backfill", () => {
   it("asks for a reclass review only where the old combined account holds a balance, once", async () => {
     const withBalance = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
     const empty = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
-    const kasA = await account(withBalance.user.tenantId, "1-1000", "Kas", "ASET");
-    const cadanganA = await account(withBalance.user.tenantId, "3-2000", "Cadangan / Modal Penyertaan");
+    // 1-1000 (Kas) and 3-2000 (Cadangan) already exist from provisioning —
+    // reuse Kas as-is and reset 3-2000 to its pre-backfill combined name.
+    const kasA = await db.account.findFirstOrThrow({ where: { tenantId: withBalance.user.tenantId, code: "1-1000" } });
+    await db.account.updateMany({
+      where: { tenantId: withBalance.user.tenantId, code: "3-2000" },
+      data: { name: "Cadangan / Modal Penyertaan", equityClass: null }
+    });
+    const cadanganA = await db.account.findFirstOrThrow({ where: { tenantId: withBalance.user.tenantId, code: "3-2000" } });
     await postCredit(withBalance.user.tenantId, kasA.id, cadanganA.id, 2_500_000);
-    await account(empty.user.tenantId, "3-2000", "Cadangan / Modal Penyertaan");
+    await db.account.updateMany({
+      where: { tenantId: empty.user.tenantId, code: "3-2000" },
+      data: { name: "Cadangan / Modal Penyertaan", equityClass: null }
+    });
 
     await runBackfill();
     await runBackfill();

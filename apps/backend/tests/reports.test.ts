@@ -12,16 +12,16 @@ beforeEach(async () => {
   await db.tenant.deleteMany({});
 });
 
-const KAS = { code: "1-1000", name: "Kas", category: "ASET" as const, normalBalance: "DEBIT" as const, isCashEquivalent: true };
+const KAS = { code: "9-1000", name: "Kas", category: "ASET" as const, normalBalance: "DEBIT" as const, isCashEquivalent: true };
 const SIMPANAN_SUKARELA_ACC = {
-  code: "2-1000",
+  code: "9-2000",
   name: "Simpanan Sukarela",
   category: "KEWAJIBAN" as const,
   normalBalance: "KREDIT" as const,
   isCashEquivalent: false
 };
 const PENDAPATAN_BUNGA = {
-  code: "4-1000",
+  code: "9-4000",
   name: "Pendapatan Bunga",
   category: "PENDAPATAN" as const,
   normalBalance: "KREDIT" as const,
@@ -150,6 +150,11 @@ describe("GET /api/reports/regulatory/neraca", () => {
 describe("GET /api/reports/regulatory/arus-kas", () => {
   it("returns a catatan when no account is marked as cash-equivalent", async () => {
     const admin = await setupTenant();
+    // Provisioning already marks Kas/Bank as cash-equivalent — clear that on
+    // every account to simulate the "nothing configured" state this test
+    // exercises.
+    await db.account.updateMany({ where: { tenantId: admin.user.tenantId }, data: { isCashEquivalent: false } });
+
     const res = await request(app())
       .get("/api/reports/regulatory/arus-kas")
       .set("Authorization", `Bearer ${admin.accessToken}`);
@@ -264,7 +269,7 @@ describe("GET /api/reports/regulatory/shu-distribution", () => {
     const kas = await createAccountAs(admin.accessToken);
 
     const pokokAcc = await createAccountAs(admin.accessToken, {
-      code: "3-1000",
+      code: "9-3000",
       name: "Simpanan Pokok",
       category: "EKUITAS",
       normalBalance: "KREDIT",

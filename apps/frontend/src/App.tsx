@@ -53,6 +53,9 @@ const PiutangAnggotaPage = lazy(() =>
 const ConfigPage = lazy(() =>
   import("@/pages/config/ConfigPage").then((module) => ({ default: module.ConfigPage }))
 );
+const ExpensesPage = lazy(() =>
+  import("@/pages/expenses/ExpensesPage").then((module) => ({ default: module.ExpensesPage }))
+);
 const ProfilePage = lazy(() =>
   import("@/pages/profile/ProfilePage").then((module) => ({ default: module.ProfilePage }))
 );
@@ -154,6 +157,8 @@ export default function App() {
 
               <Route path='/reports' element={<ReportsPage />} />
               <Route path='/reports/regulatory' element={<RegulatoryReportsPage />} />
+
+              <Route path='/expenses' element={<ExpensesPage />} />
 
               <Route path='/config' element={<ConfigPage />} />
               <Route path='/profile' element={<ProfilePage />} />

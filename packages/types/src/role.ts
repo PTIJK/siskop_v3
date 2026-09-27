@@ -31,6 +31,11 @@ export interface Permissions {
   // User-activity audit trail — optional like `accounting`/`konsumen` above.
   // Only `read` is ever seeded (AuditLog rows are never user-editable).
   auditLog?: ModulePermissions;
+  // Beban Umum (general expense entry) — optional like the modules above,
+  // and deliberately NOT gated by the "accounting" package entitlement: see
+  // docs/2026-09-27-beban-umum-design.md. `update` is never seeded — an
+  // entry is deleted and re-entered, not edited in place.
+  expenses?: ModulePermissions;
 }
 
 export type PermissionModule = keyof Permissions;

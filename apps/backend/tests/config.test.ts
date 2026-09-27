@@ -407,23 +407,24 @@ const KUR_MIKRO = {
 };
 
 describe("POST /api/config/accounts/generate-standard", () => {
-  it("creates the full standard COA template for a fresh tenant with no configs", async () => {
+  it("a fresh tenant already has the standard COA from provisioning, and the button is then a no-op", async () => {
     const admin = await setupTenant();
+
+    const accounts = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(accounts.body.data.length).toBeGreaterThan(0);
+    expect(accounts.body.data.some((a: { code: string }) => a.code === "1-1000")).toBe(true);
+    const provisionedCount = accounts.body.data.length;
 
     const res = await request(app())
       .post("/api/config/accounts/generate-standard")
       .set("Authorization", `Bearer ${admin.accessToken}`);
 
-    expect(res.status).toBe(201);
-    expect(res.body.data.accountsCreated).toBeGreaterThan(0);
-    expect(res.body.data.accountsSkipped).toBe(0);
+    expect(res.status).toBe(200);
+    expect(res.body.data.accountsCreated).toBe(0);
+    expect(res.body.data.accountsSkipped).toBe(provisionedCount);
     expect(res.body.data.mappingsCreated).toBe(0);
-
-    const accounts = await request(app())
-      .get("/api/config/accounts")
-      .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(accounts.body.data.length).toBe(res.body.data.accountsCreated);
-    expect(accounts.body.data.some((a: { code: string }) => a.code === "1-1000")).toBe(true);
   });
 
   it("is idempotent — calling it again creates nothing new", async () => {
@@ -436,9 +437,11 @@ describe("POST /api/config/accounts/generate-standard", () => {
       .post("/api/config/accounts/generate-standard")
       .set("Authorization", `Bearer ${admin.accessToken}`);
 
+    expect(first.status).toBe(200);
     expect(second.status).toBe(200);
+    expect(first.body.data.accountsCreated).toBe(0);
     expect(second.body.data.accountsCreated).toBe(0);
-    expect(second.body.data.accountsSkipped).toBe(first.body.data.accountsCreated);
+    expect(second.body.data.accountsSkipped).toBe(first.body.data.accountsSkipped);
     expect(second.body.data.mappingsCreated).toBe(0);
   });
 
@@ -472,16 +475,24 @@ describe("POST /api/config/accounts/generate-standard", () => {
     );
   });
 
-  it("skips an account that was already created manually, without conflicting", async () => {
+  it("skips an account that was already customized, without conflicting", async () => {
     const admin = await setupTenant();
-    await createAccountAs(admin.accessToken, { code: "1-1000", name: "Kas Lama" });
+    const before = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    const kas = before.body.data.find((a: { code: string }) => a.code === "1-1000");
+
+    await request(app())
+      .put(`/api/config/accounts/${kas.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ name: "Kas Lama" });
 
     const res = await request(app())
       .post("/api/config/accounts/generate-standard")
       .set("Authorization", `Bearer ${admin.accessToken}`);
 
-    expect(res.status).toBe(201);
-    expect(res.body.data.accountsSkipped).toBe(1);
+    expect(res.status).toBe(200);
+    expect(res.body.data.accountsCreated).toBe(0);
 
     const accounts = await request(app())
       .get("/api/config/accounts")
@@ -517,14 +528,21 @@ describe("POST /api/config/accounts/generate-standard", () => {
     const tenantA = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
     const tenantB = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
 
+    const before = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${tenantB.accessToken}`);
+
     await request(app())
       .post("/api/config/accounts/generate-standard")
       .set("Authorization", `Bearer ${tenantA.accessToken}`);
 
-    const accountsB = await request(app())
+    const after = await request(app())
       .get("/api/config/accounts")
       .set("Authorization", `Bearer ${tenantB.accessToken}`);
-    expect(accountsB.body.data).toHaveLength(0);
+    expect(after.body.data).toHaveLength(before.body.data.length);
+    expect(after.body.data.map((a: { code: string }) => a.code).sort()).toEqual(
+      before.body.data.map((a: { code: string }) => a.code).sort()
+    );
   });
 });
 
@@ -640,16 +658,16 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
   it("does not create duplicate Toko accounts when the SYSTEM sale mappings were already set up by hand", async () => {
     const admin = await setupTenant();
     await createKonsumenUnit(admin.accessToken);
-    const kas = await createAccountAs(admin.accessToken, { code: "1-1000", name: "Kas" });
+    const kas = await createAccountAs(admin.accessToken, { code: "9-1000", name: "Kas" });
     const penjualan = await createAccountAs(admin.accessToken, {
-      code: "4-2000",
+      code: "9-4200",
       name: "Penjualan Toko",
       category: "PENDAPATAN",
       normalBalance: "KREDIT",
       isCashEquivalent: false
     });
     const hpp = await createAccountAs(admin.accessToken, {
-      code: "5-1000",
+      code: "9-5000",
       name: "HPP",
       category: "BEBAN",
       normalBalance: "DEBIT",
@@ -748,11 +766,11 @@ describe("Account.equityClass", () => {
 
   it("classifies an existing unclassified template equity account on re-generate", async () => {
     const admin = await setupTenant();
-    await createAccountAs(admin.accessToken, {
-      code: "3-1000",
-      name: "Simpanan Pokok",
-      category: "EKUITAS",
-      normalBalance: "KREDIT"
+    // Provisioning already created 3-1000 with its equityClass set — null it
+    // out to recreate the pre-equityClass-column state this test exercises.
+    await db.account.updateMany({
+      where: { tenantId: admin.user.tenantId, code: "3-1000" },
+      data: { equityClass: null }
     });
 
     await generateStandard(admin.accessToken);
@@ -763,11 +781,11 @@ describe("Account.equityClass", () => {
 
   it("leaves a template-coded account with a different name unclassified — the code alone can't say what it holds", async () => {
     const admin = await setupTenant();
-    await createAccountAs(admin.accessToken, {
-      code: "3-1000",
-      name: "Modal Kerja",
-      category: "EKUITAS",
-      normalBalance: "KREDIT"
+    // Simulate a tenant that put something else entirely at the template's
+    // 3-1000 code — the classify-on-regenerate logic must match on name too.
+    await db.account.updateMany({
+      where: { tenantId: admin.user.tenantId, code: "3-1000" },
+      data: { name: "Modal Kerja", equityClass: null }
     });
 
     await generateStandard(admin.accessToken);
@@ -778,12 +796,11 @@ describe("Account.equityClass", () => {
 
   it("does not overwrite an equity class the tenant already chose", async () => {
     const admin = await setupTenant();
-    await createAccountAs(admin.accessToken, {
-      code: "3-2000",
-      name: "Cadangan / Modal Penyertaan",
-      category: "EKUITAS",
-      normalBalance: "KREDIT",
-      equityClass: "MODAL_PENYERTAAN"
+    // Provisioning created 3-2000 as "Cadangan Umum" / CADANGAN_UMUM — simulate
+    // the tenant having reclassified it before re-running the button.
+    await db.account.updateMany({
+      where: { tenantId: admin.user.tenantId, code: "3-2000" },
+      data: { name: "Cadangan / Modal Penyertaan", equityClass: "MODAL_PENYERTAAN" }
     });
 
     await generateStandard(admin.accessToken);
@@ -818,7 +835,7 @@ describe("Account.equityClass", () => {
   it("updates an account's equity class and can clear it", async () => {
     const admin = await setupTenant();
     const account = await createAccountAs(admin.accessToken, {
-      code: "3-2000",
+      code: "9-3200",
       name: "Cadangan",
       category: "EKUITAS",
       normalBalance: "KREDIT"
@@ -854,7 +871,7 @@ describe("Account.equityClass", () => {
   it("clears the equity class when an account moves out of EKUITAS", async () => {
     const admin = await setupTenant();
     const account = await createAccountAs(admin.accessToken, {
-      code: "3-2000",
+      code: "9-3200",
       name: "Cadangan",
       category: "EKUITAS",
       normalBalance: "KREDIT",

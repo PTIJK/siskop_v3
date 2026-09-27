@@ -232,167 +232,170 @@ export interface GenerateStandardCoaResult {
  * Laba Rugi instead of posting as UNPOSTED_MISSING_MAPPING. Re-running after a
  * Toko unit is added later picks these up the same way.
  */
-export async function generateStandardCoa(tenantId: string): Promise<GenerateStandardCoaResult> {
-  return db.$transaction(async (tx: TxClient) => {
-    const existingAccounts = await tx.account.findMany({ where: { tenantId } });
-    const idByCode = new Map(existingAccounts.map((a) => [a.code, a.id]));
+export async function generateStandardCoaInTx(tx: TxClient, tenantId: string): Promise<GenerateStandardCoaResult> {
+  const existingAccounts = await tx.account.findMany({ where: { tenantId } });
+  const idByCode = new Map(existingAccounts.map((a) => [a.code, a.id]));
 
-    // Classify a pre-existing template EKUITAS account the tenant left
-    // unclassified (created before equityClass existed). Matched on code AND
-    // name: the same code can hold something else entirely (seed-ksu-demo.ts's
-    // 3-1000 is "Modal Kerja"), and a wrong class would silently skew Modal
-    // Sendiri — an unclassified account is left for an admin instead. Never
-    // overrides a class the tenant chose.
-    for (const account of existingAccounts) {
-      if (account.category !== "EKUITAS" || account.equityClass !== null) continue;
-      const seed = COA_TEMPLATE.find((t) => t.code === account.code && t.name === account.name);
-      if (!seed?.equityClass) continue;
-      await tx.account.update({ where: { id: account.id, tenantId }, data: { equityClass: seed.equityClass } });
-    }
+  // Classify a pre-existing template EKUITAS account the tenant left
+  // unclassified (created before equityClass existed). Matched on code AND
+  // name: the same code can hold something else entirely (seed-ksu-demo.ts's
+  // 3-1000 is "Modal Kerja"), and a wrong class would silently skew Modal
+  // Sendiri — an unclassified account is left for an admin instead. Never
+  // overrides a class the tenant chose.
+  for (const account of existingAccounts) {
+    if (account.category !== "EKUITAS" || account.equityClass !== null) continue;
+    const seed = COA_TEMPLATE.find((t) => t.code === account.code && t.name === account.name);
+    if (!seed?.equityClass) continue;
+    await tx.account.update({ where: { id: account.id, tenantId }, data: { equityClass: seed.equityClass } });
+  }
 
-    let accountsCreated = 0;
-    let accountsSkipped = 0;
+  let accountsCreated = 0;
+  let accountsSkipped = 0;
 
-    async function createTemplateAccount(acc: AccountSeed): Promise<string> {
-      const parentCode = acc.parentKey ? COA_TEMPLATE.find((t) => t.key === acc.parentKey)?.code : undefined;
-      const parentId = parentCode ? idByCode.get(parentCode) : undefined;
-      const created = await tx.account.create({
-        data: {
-          tenantId,
-          code: acc.code,
-          name: acc.name,
-          category: acc.category,
-          normalBalance: acc.normalBalance,
-          isHeader: acc.isHeader ?? false,
-          isCashEquivalent: acc.isCashEquivalent ?? false,
-          equityClass: acc.equityClass ?? null,
-          isDefault: true,
-          isActive: true,
-          ...(parentId ? { parentId } : {})
-        }
-      });
-      idByCode.set(acc.code, created.id);
-      return created.id;
-    }
-
-    const isMultiUnit = (await tx.cooperativeUnit.count({ where: { tenantId, isActive: true } })) > 1;
-    for (const acc of COA_TEMPLATE) {
-      // Unit-specific (Toko) accounts are handled below, only when the tenant has such a unit.
-      if (acc.unitType) continue;
-      if (acc.multiUnitOnly && !isMultiUnit) continue;
-      if (idByCode.has(acc.code)) {
-        accountsSkipped += 1;
-        continue;
+  async function createTemplateAccount(acc: AccountSeed): Promise<string> {
+    const parentCode = acc.parentKey ? COA_TEMPLATE.find((t) => t.key === acc.parentKey)?.code : undefined;
+    const parentId = parentCode ? idByCode.get(parentCode) : undefined;
+    const created = await tx.account.create({
+      data: {
+        tenantId,
+        code: acc.code,
+        name: acc.name,
+        category: acc.category,
+        normalBalance: acc.normalBalance,
+        isHeader: acc.isHeader ?? false,
+        isCashEquivalent: acc.isCashEquivalent ?? false,
+        equityClass: acc.equityClass ?? null,
+        isDefault: true,
+        isActive: true,
+        ...(parentId ? { parentId } : {})
       }
-      await createTemplateAccount(acc);
-      accountsCreated += 1;
-    }
+    });
+    idByCode.set(acc.code, created.id);
+    return created.id;
+  }
 
-    const accountIdFor = (key: string): string => {
-      const code = COA_TEMPLATE.find((t) => t.key === key)?.code;
-      const id = code && idByCode.get(code);
-      if (!id) throw new Error(`Standard COA template is missing required account "${key}"`);
+  const isMultiUnit = (await tx.cooperativeUnit.count({ where: { tenantId, isActive: true } })) > 1;
+  for (const acc of COA_TEMPLATE) {
+    // Unit-specific (Toko) accounts are handled below, only when the tenant has such a unit.
+    if (acc.unitType) continue;
+    if (acc.multiUnitOnly && !isMultiUnit) continue;
+    if (idByCode.has(acc.code)) {
+      accountsSkipped += 1;
+      continue;
+    }
+    await createTemplateAccount(acc);
+    accountsCreated += 1;
+  }
+
+  const accountIdFor = (key: string): string => {
+    const code = COA_TEMPLATE.find((t) => t.key === key)?.code;
+    const id = code && idByCode.get(code);
+    if (!id) throw new Error(`Standard COA template is missing required account "${key}"`);
+    return id;
+  };
+
+  const kas = accountIdFor("kas");
+  const piutang = accountIdFor("piutang_pinjaman");
+  const pendapatanBunga = accountIdFor("pendapatan_bunga");
+  const pendapatanLain = accountIdFor("pendapatan_lain");
+  const equityOrLiabilityBySavingType: Record<string, string> = {
+    POKOK: accountIdFor("simpanan_pokok"),
+    WAJIB: accountIdFor("simpanan_wajib"),
+    SUKARELA: accountIdFor("simpanan_sukarela")
+  };
+
+  const [savingConfigs, loanConfigs] = await Promise.all([
+    tx.savingConfig.findMany({ where: { tenantId }, select: { id: true, type: true } }),
+    tx.loanConfig.findMany({ where: { tenantId }, select: { id: true } })
+  ]);
+
+  let mappingsCreated = 0;
+  let mappingsSkipped = 0;
+
+  async function ensureMapping(
+    sourceType: "SAVING_CONFIG" | "LOAN_CONFIG",
+    sourceId: string,
+    transactionKind: "DEPOSIT" | "WITHDRAWAL" | "DISBURSEMENT" | "PAYMENT_PRINCIPAL" | "PAYMENT_INTEREST" | "PAYMENT_PENALTY",
+    debitAccountId: string,
+    creditAccountId: string
+  ) {
+    const existing = await tx.accountMapping.findFirst({ where: { tenantId, sourceType, sourceId, transactionKind } });
+    if (existing) {
+      mappingsSkipped += 1;
+      return;
+    }
+    await tx.accountMapping.create({ data: { tenantId, sourceType, sourceId, transactionKind, debitAccountId, creditAccountId } });
+    mappingsCreated += 1;
+  }
+
+  for (const config of savingConfigs) {
+    const equityOrLiability = equityOrLiabilityBySavingType[config.type];
+    if (!equityOrLiability) continue;
+    await ensureMapping("SAVING_CONFIG", config.id, "DEPOSIT", kas, equityOrLiability);
+    await ensureMapping("SAVING_CONFIG", config.id, "WITHDRAWAL", equityOrLiability, kas);
+  }
+
+  for (const config of loanConfigs) {
+    await ensureMapping("LOAN_CONFIG", config.id, "DISBURSEMENT", piutang, kas);
+    await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PRINCIPAL", kas, piutang);
+    await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_INTEREST", kas, pendapatanBunga);
+    await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PENALTY", kas, pendapatanLain);
+  }
+
+  // Toko: only for a tenant that has an active KONSUMEN unit. Lazy per
+  // mapping — a tenant that already wired a SYSTEM/SALE_* mapping by hand (to
+  // its own accounts) must not get a second, unused set of Toko accounts, so
+  // accounts are only created for a mapping that doesn't exist yet.
+  const hasKonsumenUnit = (await tx.cooperativeUnit.count({ where: { tenantId, type: "KONSUMEN", isActive: true } })) > 0;
+  if (hasKonsumenUnit) {
+    const tokoAccountIds = new Map<string, string>();
+    const resolveAccount = async (key: string): Promise<string> => {
+      const seed = COA_TEMPLATE.find((t) => t.key === key);
+      if (!seed?.unitType) return accountIdFor(key);
+
+      const known = tokoAccountIds.get(key);
+      if (known) return known;
+      let id = idByCode.get(seed.code);
+      if (id) {
+        accountsSkipped += 1;
+      } else {
+        id = await createTemplateAccount(seed);
+        accountsCreated += 1;
+      }
+      tokoAccountIds.set(key, id);
       return id;
     };
 
-    const kas = accountIdFor("kas");
-    const piutang = accountIdFor("piutang_pinjaman");
-    const pendapatanBunga = accountIdFor("pendapatan_bunga");
-    const pendapatanLain = accountIdFor("pendapatan_lain");
-    const equityOrLiabilityBySavingType: Record<string, string> = {
-      POKOK: accountIdFor("simpanan_pokok"),
-      WAJIB: accountIdFor("simpanan_wajib"),
-      SUKARELA: accountIdFor("simpanan_sukarela")
-    };
-
-    const [savingConfigs, loanConfigs] = await Promise.all([
-      tx.savingConfig.findMany({ where: { tenantId }, select: { id: true, type: true } }),
-      tx.loanConfig.findMany({ where: { tenantId }, select: { id: true } })
-    ]);
-
-    let mappingsCreated = 0;
-    let mappingsSkipped = 0;
-
-    async function ensureMapping(
-      sourceType: "SAVING_CONFIG" | "LOAN_CONFIG",
-      sourceId: string,
-      transactionKind: "DEPOSIT" | "WITHDRAWAL" | "DISBURSEMENT" | "PAYMENT_PRINCIPAL" | "PAYMENT_INTEREST" | "PAYMENT_PENALTY",
-      debitAccountId: string,
-      creditAccountId: string
-    ) {
-      const existing = await tx.accountMapping.findFirst({ where: { tenantId, sourceType, sourceId, transactionKind } });
+    for (const template of SYSTEM_MAPPING_TEMPLATE) {
+      const existing = await tx.accountMapping.findFirst({
+        where: { tenantId, sourceType: "SYSTEM", sourceId: null, transactionKind: template.transactionKind }
+      });
       if (existing) {
         mappingsSkipped += 1;
-        return;
+        continue;
       }
-      await tx.accountMapping.create({ data: { tenantId, sourceType, sourceId, transactionKind, debitAccountId, creditAccountId } });
+      const debitAccountId = await resolveAccount(template.debitKey);
+      const creditAccountId = await resolveAccount(template.creditKey);
+      await tx.accountMapping.create({
+        data: {
+          tenantId,
+          sourceType: "SYSTEM",
+          sourceId: null,
+          transactionKind: template.transactionKind,
+          debitAccountId,
+          creditAccountId
+        }
+      });
       mappingsCreated += 1;
     }
+  }
 
-    for (const config of savingConfigs) {
-      const equityOrLiability = equityOrLiabilityBySavingType[config.type];
-      if (!equityOrLiability) continue;
-      await ensureMapping("SAVING_CONFIG", config.id, "DEPOSIT", kas, equityOrLiability);
-      await ensureMapping("SAVING_CONFIG", config.id, "WITHDRAWAL", equityOrLiability, kas);
-    }
+  return { accountsCreated, accountsSkipped, mappingsCreated, mappingsSkipped };
+}
 
-    for (const config of loanConfigs) {
-      await ensureMapping("LOAN_CONFIG", config.id, "DISBURSEMENT", piutang, kas);
-      await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PRINCIPAL", kas, piutang);
-      await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_INTEREST", kas, pendapatanBunga);
-      await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PENALTY", kas, pendapatanLain);
-    }
-
-    // Toko: only for a tenant that has an active KONSUMEN unit. Lazy per
-    // mapping — a tenant that already wired a SYSTEM/SALE_* mapping by hand (to
-    // its own accounts) must not get a second, unused set of Toko accounts, so
-    // accounts are only created for a mapping that doesn't exist yet.
-    const hasKonsumenUnit = (await tx.cooperativeUnit.count({ where: { tenantId, type: "KONSUMEN", isActive: true } })) > 0;
-    if (hasKonsumenUnit) {
-      const tokoAccountIds = new Map<string, string>();
-      const resolveAccount = async (key: string): Promise<string> => {
-        const seed = COA_TEMPLATE.find((t) => t.key === key);
-        if (!seed?.unitType) return accountIdFor(key);
-
-        const known = tokoAccountIds.get(key);
-        if (known) return known;
-        let id = idByCode.get(seed.code);
-        if (id) {
-          accountsSkipped += 1;
-        } else {
-          id = await createTemplateAccount(seed);
-          accountsCreated += 1;
-        }
-        tokoAccountIds.set(key, id);
-        return id;
-      };
-
-      for (const template of SYSTEM_MAPPING_TEMPLATE) {
-        const existing = await tx.accountMapping.findFirst({
-          where: { tenantId, sourceType: "SYSTEM", sourceId: null, transactionKind: template.transactionKind }
-        });
-        if (existing) {
-          mappingsSkipped += 1;
-          continue;
-        }
-        const debitAccountId = await resolveAccount(template.debitKey);
-        const creditAccountId = await resolveAccount(template.creditKey);
-        await tx.accountMapping.create({
-          data: {
-            tenantId,
-            sourceType: "SYSTEM",
-            sourceId: null,
-            transactionKind: template.transactionKind,
-            debitAccountId,
-            creditAccountId
-          }
-        });
-        mappingsCreated += 1;
-      }
-    }
-
-    return { accountsCreated, accountsSkipped, mappingsCreated, mappingsSkipped };
-  });
+/** Thin wrapper for the HTTP route (`POST /config/accounts/generate-standard`), which has no transaction of its own to join. */
+export async function generateStandardCoa(tenantId: string): Promise<GenerateStandardCoaResult> {
+  return db.$transaction((tx) => generateStandardCoaInTx(tx, tenantId));
 }
 
 // ── Account Mappings ─────────────────────────────────────────────────────────

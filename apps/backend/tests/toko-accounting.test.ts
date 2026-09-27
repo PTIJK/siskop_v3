@@ -158,9 +158,9 @@ describe("Half-mapped Toko sale (all-or-nothing posting)", () => {
   it("stays UNPOSTED with no lines when only the revenue mapping exists, and posts once COGS is mapped and reposted", async () => {
     const admin = await setupTenant();
     const { unit, product } = await seedToko(admin);
-    const kas = await createAccount(admin.accessToken, { code: "1-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT" });
+    const kas = await createAccount(admin.accessToken, { code: "9-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT" });
     const penjualan = await createAccount(admin.accessToken, {
-      code: "4-1000",
+      code: "9-4000",
       name: "Penjualan",
       category: "PENDAPATAN",
       normalBalance: "KREDIT"
@@ -173,7 +173,7 @@ describe("Half-mapped Toko sale (all-or-nothing posting)", () => {
     expect(lopsided.status).toBe("UNPOSTED_MISSING_MAPPING");
     expect(lopsided.lines).toEqual([]);
 
-    const hpp = await createAccount(admin.accessToken, { code: "5-1000", name: "HPP", category: "BEBAN", normalBalance: "DEBIT" });
+    const hpp = await createAccount(admin.accessToken, { code: "9-5000", name: "HPP", category: "BEBAN", normalBalance: "DEBIT" });
     const persediaan = await createAccount(admin.accessToken, {
       code: "1-1300",
       name: "Persediaan Barang Dagang",
