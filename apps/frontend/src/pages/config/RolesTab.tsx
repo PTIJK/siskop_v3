@@ -25,7 +25,8 @@ const MODULES: { key: PermissionModule; label: string }[] = [
   { key: "roles", label: "Role" },
   { key: "accounting", label: "Akuntansi" },
   { key: "konsumen", label: "Toko" },
-  { key: "auditLog", label: "Jejak Audit" }
+  { key: "auditLog", label: "Jejak Audit" },
+  { key: "expenses", label: "Beban Umum" }
 ];
 const ACTIONS: { key: PermissionAction; label: string }[] = [
   { key: "create", label: "Buat" },

@@ -4,6 +4,7 @@ import type { Permissions } from "@siskop/types";
 import { db, type TxClient } from "../../lib/db.js";
 import { CooperativeType } from "@siskop/types";
 import { parseSlug } from "../tenant-domains/policy.js";
+import { generateStandardCoaInTx } from "../config/service.js";
 
 const unitInput = z.object({
   type: z.nativeEnum(CooperativeType),
@@ -60,7 +61,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       roles: FULL,
       accounting: FULL,
       konsumen: FULL,
-      auditLog: READ_ONLY
+      auditLog: READ_ONLY,
+      expenses: FULL
     }
   },
   {
@@ -76,7 +78,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       roles: { read: true },
       accounting: { create: false, read: false, update: false, delete: false },
       konsumen: FULL,
-      auditLog: READ_ONLY
+      auditLog: READ_ONLY,
+      expenses: FULL
     }
   },
   {
@@ -93,7 +96,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       // Front-counter staff record stock movements and ring up POS sales
       // (create) but don't add/remove SKUs — that's Manager territory.
       konsumen: { create: true, read: true, update: true },
-      auditLog: {}
+      auditLog: {},
+      expenses: {}
     }
   },
   {
@@ -108,7 +112,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       users: {},
       roles: {},
       konsumen: READ_ONLY,
-      auditLog: {}
+      auditLog: {},
+      expenses: READ_ONLY
     }
   },
   {
@@ -126,7 +131,8 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       users: {},
       roles: {},
       konsumen: { create: true, read: true, update: true },
-      auditLog: {}
+      auditLog: {},
+      expenses: {}
     }
   }
 ];
@@ -153,6 +159,12 @@ export async function provisionTenantInTx(tx: Tx, input: ProvisionTenantInput) {
   await tx.cooperativeUnit.createMany({
     data: units.map((u) => ({ tenantId: tenant.id, type: u.type, name: u.name }))
   });
+
+  // Every tenant gets the standard COA regardless of package — Beban Umum
+  // (general expense entry) is a base feature, not gated by the "accounting"
+  // add-on, and needs real BEBAN/Kas accounts to post against from day one.
+  // See docs/2026-09-27-beban-umum-design.md.
+  await generateStandardCoaInTx(tx, tenant.id);
 
   const roles = await Promise.all(
     SEED_ROLES.map((r) =>
