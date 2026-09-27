@@ -340,6 +340,7 @@ model Tenant {
   levyRates               LevyRate[]
   charges                 Charge[]
   chargePayments          ChargePayment[]
+  idempotencyKeys         IdempotencyKey[]
 }
 
 // A tenant's own non-collection day (public holiday, market closure). Loan
@@ -1512,4 +1513,26 @@ model ChargePayment {
 
   @@index([chargeId])
   @@index([tenantId])
+}
+
+// Deduplicates a retried write from a flaky mobile connection (koperasi pasar
+// F6 plan) — a client resends the same `Idempotency-Key` header when it never
+// saw the response to an earlier attempt. Scoped to (tenantId, userId, key):
+// the mobile Kolektor flow submits one request at a time (button disabled
+// while in flight), so a true concurrent double-claim of the same key by the
+// same user isn't a real scenario worth locking against — see
+// lib/idempotency.ts. userId is deliberately a plain column with no
+// `@relation`, same as AuditLog.actorUserId above.
+model IdempotencyKey {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId         String
+  key            String
+  responseStatus Int
+  responseBody   Json
+  createdAt      DateTime @default(now())
+
+  @@unique([tenantId, userId, key])
+  @@index([tenantId, createdAt])
 }

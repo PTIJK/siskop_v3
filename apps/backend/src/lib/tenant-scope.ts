@@ -63,7 +63,9 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   "StallContract",
   "LevyRate",
   "Charge",
-  "ChargePayment"
+  "ChargePayment",
+  // Koperasi pasar plan F6 — mobile Kolektor write dedup.
+  "IdempotencyKey"
 ]);
 
 const WHERE_REQUIRED_ACTIONS = new Set([
