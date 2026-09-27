@@ -250,9 +250,13 @@ describe("Neraca equity grouping", () => {
       .query({ asOfDate: PERIOD.to })
       .set("Authorization", `Bearer ${admin.accessToken}`);
 
-    const items = res.body.data.ekuitas.items as Array<{ equityClass: string | null; isComputed: boolean }>;
-    expect(items.map((i) => i.equityClass)).toEqual(["SIMPANAN_POKOK", "SIMPANAN_WAJIB", "HIBAH", "MODAL_PENYERTAAN", "SHU"]);
-    expect(items.at(-1)?.isComputed).toBe(true);
+    const items = res.body.data.ekuitas.items as Array<{ equityClass: string | null; isComputed: boolean; balance: string }>;
+    // A fresh tenant is auto-provisioned with the full standard COA, so every
+    // other equity-class account also appears here at a zero balance — filter
+    // down to the ones this test actually posted to (plus the computed line).
+    const nonZero = items.filter((i) => i.isComputed || Number(i.balance) !== 0);
+    expect(nonZero.map((i) => i.equityClass)).toEqual(["SIMPANAN_POKOK", "SIMPANAN_WAJIB", "HIBAH", "MODAL_PENYERTAAN", "SHU"]);
+    expect(nonZero.at(-1)?.isComputed).toBe(true);
     expect(res.body.data.modalSendiri).toBe("3100000");
     expect(res.body.data.balanced).toBe(true);
   });

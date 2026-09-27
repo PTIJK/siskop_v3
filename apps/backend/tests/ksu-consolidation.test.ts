@@ -110,14 +110,14 @@ async function disburseLoan(
  * imported since that helper is module-private to that file.
  */
 async function setupSaleMappings(accessToken: string) {
-  const kas = await createAccount(accessToken, { code: "1-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT" });
+  const kas = await createAccount(accessToken, { code: "9-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT" });
   const penjualan = await createAccount(accessToken, {
-    code: "4-1000",
+    code: "9-4000",
     name: "Penjualan",
     category: "PENDAPATAN",
     normalBalance: "KREDIT"
   });
-  const hpp = await createAccount(accessToken, { code: "5-1000", name: "HPP", category: "BEBAN", normalBalance: "DEBIT" });
+  const hpp = await createAccount(accessToken, { code: "9-5000", name: "HPP", category: "BEBAN", normalBalance: "DEBIT" });
   const persediaan = await createAccount(accessToken, {
     code: "1-1300",
     name: "Persediaan Barang Dagang",
@@ -140,13 +140,13 @@ async function setupSaleMappings(accessToken: string) {
 /** Wires up one LOAN_CONFIG/DISBURSEMENT mapping: debit an ASET receivable, credit a non-ASET account. */
 async function setupDisbursementMapping(accessToken: string, loanConfigId: string) {
   const piutang = await createAccount(accessToken, {
-    code: "1-1100",
+    code: "9-1100",
     name: "Piutang Pinjaman Anggota",
     category: "ASET",
     normalBalance: "DEBIT"
   });
   const modal = await createAccount(accessToken, {
-    code: "3-1000",
+    code: "9-3000",
     name: "Modal Kerja",
     category: "EKUITAS",
     normalBalance: "KREDIT"

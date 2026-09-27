@@ -58,7 +58,7 @@ async function createAccountMapping(
 
 /** SYSTEM/MEMBER_CREDIT_REPAYMENT mapping — Kas debit / Piutang credit, the reverse of a MEMBER_CREDIT sale. */
 async function setupRepaymentMapping(accessToken: string) {
-  const kas = await createAccount(accessToken, { code: "1-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT" });
+  const kas = await createAccount(accessToken, { code: "9-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT" });
   const piutang = await createAccount(accessToken, {
     code: "1-1400",
     name: "Piutang Anggota (Toko)",
