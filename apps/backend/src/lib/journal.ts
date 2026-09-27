@@ -88,12 +88,14 @@ async function createJournalEntry(
       | "LOAN_DISBURSEMENT"
       | "POS_SALE"
       | "MEMBER_CREDIT_REPAYMENT"
-      | "STOCK_MOVEMENT";
-    sourceId: string;
+      | "STOCK_MOVEMENT"
+      | "MANUAL_EXPENSE";
+    /** Null for MANUAL_EXPENSE — that entry has no separate source row, it IS the record. */
+    sourceId: string | null;
     description: string;
     lines: JournalLineInput[];
   }
-): Promise<void> {
+): Promise<{ id: string }> {
   const { tenantId, unitId, entryDate, sourceType, sourceId, description, lines } = params;
 
   assertBalanced(lines, `${sourceType}:${sourceId}`);
@@ -121,6 +123,8 @@ async function createJournalEntry(
       }))
     });
   }
+
+  return { id: entry.id };
 }
 
 export async function postSavingTransaction(
@@ -419,6 +423,41 @@ export async function postStockPurchase(
     sourceId: params.movementId,
     description: params.description,
     lines: stockPurchaseLinesFrom(mappings, params.amount)
+  });
+}
+
+/**
+ * Books a Beban Umum entry (salary, rent, general admin expenses) as a
+ * balanced 2-line journal entry: debit a BEBAN account, credit a
+ * cash-equivalent account. Account category/isCashEquivalent and tenant
+ * ownership are validated in modules/expenses/service.ts before this is
+ * called — this only builds and persists the balanced pair. Always exactly
+ * 2 lines, so unlike every other postX helper here this never lands as
+ * UNPOSTED_MISSING_MAPPING.
+ */
+export async function postManualExpense(
+  tx: TxClient,
+  params: {
+    tenantId: string;
+    unitId: string | null;
+    debitAccountId: string;
+    creditAccountId: string;
+    amount: number | Prisma.Decimal;
+    entryDate: Date;
+    description: string;
+  }
+): Promise<{ id: string }> {
+  return createJournalEntry(tx, {
+    tenantId: params.tenantId,
+    unitId: params.unitId,
+    entryDate: params.entryDate,
+    sourceType: "MANUAL_EXPENSE",
+    sourceId: null,
+    description: params.description,
+    lines: [
+      { accountId: params.debitAccountId, debit: params.amount },
+      { accountId: params.creditAccountId, credit: params.amount }
+    ]
   });
 }
 
