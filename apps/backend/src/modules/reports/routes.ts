@@ -2,19 +2,25 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { endOfDay } from "date-fns";
 import { resolvePeriod } from "../../lib/period.js";
 import { resolveReadableUnitId } from "../../lib/unit-access.js";
+import { businessDate, parseDateKey } from "../../lib/operating-calendar.js";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
-import { requireAccountingEntitlement } from "../../middleware/entitlement.js";
+import { requireAccountingEntitlement, requirePasarEntitlement } from "../../middleware/entitlement.js";
 import {
   financialParamsSchema,
   neracaParamsSchema,
   periodParamsSchema,
   ratParamsSchema,
+  rekapHarianKolektorParamsSchema,
+  tunggakanAngsuranParamsSchema,
+  tunggakanSewaRetribusiParamsSchema,
   unitPeriodParamsSchema,
   upsertCalkNarrativeSchema
 } from "./schema.js";
 import { getFinancialReport, getRATReport } from "./service.js";
 import { getPerubahanEkuitas } from "./capital-service.js";
+import { getRekapHarianKolektor, getTunggakanAngsuran, getTunggakanSewaRetribusi } from "./pasar-service.js";
+import { rekapHarianKolektorCsv } from "./pasar-export.js";
 import {
   assertValidPeriod,
   getArusKas,
@@ -280,6 +286,56 @@ export function reportsRoutes(): Router {
     handle(async (req, res) => {
       const { section, content } = upsertCalkNarrativeSchema.parse(req.body);
       const data = await upsertCalkNarrative(authClaims(req).tenantId, section, content);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  // ── Koperasi pasar plan F7 — Laporan ────────────────────────────────────────
+
+  router.get(
+    "/pasar/rekap-kolektor",
+    requirePasarEntitlement,
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const { date } = rekapHarianKolektorParamsSchema.parse(req.query);
+      const data = await getRekapHarianKolektor(authClaims(req).tenantId, date ? parseDateKey(date) : businessDate());
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/pasar/rekap-kolektor/csv",
+    requirePasarEntitlement,
+    requirePermission("reports", "export"),
+    handle(async (req, res) => {
+      const { date } = rekapHarianKolektorParamsSchema.parse(req.query);
+      const report = await getRekapHarianKolektor(authClaims(req).tenantId, date ? parseDateKey(date) : businessDate());
+      res.set({
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="rekap-kolektor-${report.date}.csv"`
+      });
+      res.send(String.fromCharCode(0xfeff) + rekapHarianKolektorCsv(report));
+    })
+  );
+
+  router.get(
+    "/pasar/tunggakan-angsuran",
+    requirePasarEntitlement,
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const query = tunggakanAngsuranParamsSchema.parse(req.query);
+      const data = await getTunggakanAngsuran(authClaims(req).tenantId, query);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/pasar/tunggakan-sewa-retribusi",
+    requirePasarEntitlement,
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const query = tunggakanSewaRetribusiParamsSchema.parse(req.query);
+      const data = await getTunggakanSewaRetribusi(authClaims(req).tenantId, query);
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );

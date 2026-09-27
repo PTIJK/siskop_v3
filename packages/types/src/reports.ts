@@ -227,3 +227,69 @@ export interface UpsertShuDistributionConfigRequest {
   cadanganPercent: number;
   lainnyaPercent: number;
 }
+
+// ── Koperasi pasar plan F7 — Laporan ──────────────────────────────────────────
+
+export interface RekapHarianKolektorRow {
+  collectorId: string;
+  collectorName: string;
+  /** Sum of what's due today across this kolektor's binaan (loan installments + open charges) — null for a past date, not reconstructible after the fact. */
+  target: string | null;
+  /** Today's CollectionBatch.expectedTotal — what the kolektor recorded as collected in the field. */
+  tertagih: string;
+  /** CollectionBatch.receivedTotal — what was actually counted in at verification; null until then. */
+  disetor: string | null;
+  /** disetor − tertagih (CollectionBatch.variance); null until verified. */
+  selisih: string | null;
+  status: "TIDAK_ADA_SETORAN" | "OPEN" | "SUBMITTED" | "VERIFIED";
+}
+
+export interface RekapHarianKolektor {
+  date: string;
+  rows: RekapHarianKolektorRow[];
+}
+
+export interface RekapHarianKolektorQuery {
+  /** `YYYY-MM-DD`; defaults to today. `target` is only ever computed for today. */
+  date?: string;
+}
+
+export interface TunggakanAngsuranRow {
+  loanId: string;
+  memberId: string;
+  memberName: string;
+  collectorId: string | null;
+  collectorName: string | null;
+  marketName: string | null;
+  block: string | null;
+  stallCode: string | null;
+  installmentSeq: number;
+  dueDate: string;
+  amountDue: string;
+  daysOverdue: number;
+}
+
+export interface TunggakanAngsuranQuery {
+  collectorId?: string;
+  marketId?: string;
+  block?: string;
+}
+
+export interface TunggakanSewaRetribusiRow {
+  chargeId: string;
+  memberId: string;
+  memberName: string;
+  marketName: string;
+  block: string | null;
+  stallCode: string;
+  kind: "SEWA" | "RETRIBUSI";
+  dueDate: string;
+  amountDue: string;
+  daysOverdue: number;
+}
+
+export interface TunggakanSewaRetribusiQuery {
+  marketId?: string;
+  block?: string;
+  memberId?: string;
+}

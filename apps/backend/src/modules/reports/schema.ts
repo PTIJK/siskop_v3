@@ -30,9 +30,30 @@ export const upsertCalkNarrativeSchema = z.object({
   content: z.string().max(20000)
 });
 
+// ── Koperasi pasar plan F7 — Laporan ──────────────────────────────────────────
+
+export const rekapHarianKolektorParamsSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD").optional()
+});
+
+export const tunggakanAngsuranParamsSchema = z.object({
+  collectorId: z.string().cuid("Collector ID tidak valid").optional(),
+  marketId: z.string().cuid("Market ID tidak valid").optional(),
+  block: z.string().optional()
+});
+
+export const tunggakanSewaRetribusiParamsSchema = z.object({
+  marketId: z.string().cuid("Market ID tidak valid").optional(),
+  block: z.string().optional(),
+  memberId: z.string().cuid("Member ID tidak valid").optional()
+});
+
 export type FinancialParamsInput = z.infer<typeof financialParamsSchema>;
 export type RatParamsInput = z.infer<typeof ratParamsSchema>;
 export type NeracaParamsInput = z.infer<typeof neracaParamsSchema>;
 export type PeriodParamsInput = z.infer<typeof periodParamsSchema>;
 export type UnitPeriodParamsInput = z.infer<typeof unitPeriodParamsSchema>;
 export type UpsertCalkNarrativeInput = z.infer<typeof upsertCalkNarrativeSchema>;
+export type RekapHarianKolektorParamsInput = z.infer<typeof rekapHarianKolektorParamsSchema>;
+export type TunggakanAngsuranParamsInput = z.infer<typeof tunggakanAngsuranParamsSchema>;
+export type TunggakanSewaRetribusiParamsInput = z.infer<typeof tunggakanSewaRetribusiParamsSchema>;
