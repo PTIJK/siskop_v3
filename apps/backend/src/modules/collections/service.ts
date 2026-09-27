@@ -177,8 +177,7 @@ export async function getTodayForCollector(tenantId: string, collectorUserId: st
         dailySavingId: member.savings[0]?.id ?? null
       };
     })
-    .sort(compareByLocation)
-    .map(({ location: _location, ...item }) => item);
+    .sort(compareByLocation);
 }
 
 // ── Batches ───────────────────────────────────────────────────────────────

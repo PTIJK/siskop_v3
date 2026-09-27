@@ -162,6 +162,30 @@ describe("GET /api/collections/today", () => {
     ]);
   });
 
+  it("exposes each binaan's pasar/blok/kode kios for the mobile grouping view (koperasi pasar F6), null for a stall-less binaan", async () => {
+    const { admin, collector } = await setupTenantWithCollector();
+    const memberWithStall = await createMemberWithPokokSaving(admin.accessToken, { nik: "3000000000000010" });
+    const memberNoStall = await createMemberWithPokokSaving(admin.accessToken, { nik: "3000000000000011" });
+    await assign(admin.accessToken, memberWithStall.id, collector.user.id);
+    await assign(admin.accessToken, memberNoStall.id, collector.user.id);
+    const market = await request(app()).post("/api/market/markets").set(bearer(admin.accessToken)).send({ name: "Pasar Lokasi" });
+    const stall = await request(app())
+      .post("/api/market/stalls")
+      .set(bearer(admin.accessToken))
+      .send({ marketId: market.body.data.id, code: "C-09", block: "C", kind: "KIOS" });
+    await request(app())
+      .post("/api/market/contracts")
+      .set(bearer(admin.accessToken))
+      .send({ stallId: stall.body.data.id, memberId: memberWithStall.id, startDate: "2026-09-01", rentAmount: 100000, rentPeriod: "MONTHLY" });
+
+    const res = await request(app()).get("/api/collections/today").set(bearer(collector.accessToken));
+
+    const withStall = res.body.data.find((i: { memberId: string }) => i.memberId === memberWithStall.id);
+    const withoutStall = res.body.data.find((i: { memberId: string }) => i.memberId === memberNoStall.id);
+    expect(withStall.location).toEqual({ marketName: "Pasar Lokasi", block: "C", stallCode: "C-09" });
+    expect(withoutStall.location).toBeNull();
+  });
+
   it("includes a binaan's open sewa/retribusi charges (koperasi pasar F6)", async () => {
     const { admin, collector } = await setupTenantWithCollector();
     const member = await createMemberWithPokokSaving(admin.accessToken);

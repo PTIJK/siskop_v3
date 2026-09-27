@@ -40,14 +40,24 @@ export interface CollectorTodayCharge {
   daysOverdue: number;
 }
 
+/** A binaan's pasar location from their active StallContract (F5), or null for a member who isn't a pasar trader. */
+export interface CollectorTodayLocation {
+  marketName: string;
+  block: string | null;
+  stallCode: string;
+}
+
 /**
  * One binaan member's outstanding loan installment, open sewa/retribusi
  * charges, and daily-saving account (if any) on the collector's "today" list.
+ * `location` is what the mobile app groups this list by (pasar → blok) —
+ * null for a binaan who isn't a pasar trader, sorted last in the list.
  */
 export interface CollectorTodayItem {
   memberId: string;
   memberCode: string;
   memberName: string;
+  location: CollectorTodayLocation | null;
   loanId: string | null;
   installmentSeq: number | null;
   dueDate: string | null;
