@@ -35,7 +35,12 @@ const permissionsSchema = z.object({
   // before this module existed still parses, `permissions.konsumen` just
   // comes back undefined (requirePermission("konsumen", ...) then denies).
   konsumen: permissionActions.optional(),
-  auditLog: permissionActions.optional()
+  auditLog: permissionActions.optional(),
+  // Beban Umum (general expense entry) — optional for the same reason as
+  // `accounting`/`konsumen`/`auditLog` above: a token signed before this
+  // module existed still parses, `permissions.expenses` just comes back
+  // undefined (requirePermission("expenses", ...) then denies).
+  expenses: permissionActions.optional()
 });
 
 const claimsSchema = z.object({

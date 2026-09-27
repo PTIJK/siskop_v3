@@ -35,7 +35,11 @@ const permissionsSchema = z.object({
   roles: modulePermissionsSchema,
   accounting: modulePermissionsSchema.optional(),
   // Phase 2 (KSU Konsumen/Toko) — optional like `accounting`, additive.
-  konsumen: modulePermissionsSchema.optional()
+  konsumen: modulePermissionsSchema.optional(),
+  // Beban Umum (general expense entry) — optional like `accounting`/`konsumen`,
+  // additive. Without this, RolesTab.tsx's "Beban Umum" toggle would silently
+  // fail to persist: this schema validates POST/PUT /api/config/roles bodies.
+  expenses: modulePermissionsSchema.optional()
 });
 
 export const createRoleSchema = z.object({
