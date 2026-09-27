@@ -19,7 +19,8 @@ import {
   ShieldCheck,
   Layers,
   PieChart,
-  Receipt
+  Receipt,
+  Wallet
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,11 @@ const NAV_ITEMS_TOP = [
   // Konsumen/Toko's POS) — top-level rather than nested under Unit Usaha >
   // Konsumen, which would misleadingly imply unit-scoping. Reuses the
   // konsumen permission scope, same gate credit.routes.ts already uses.
-  { label: "Piutang Anggota", href: "/piutang", icon: Receipt, module: "konsumen" as const, action: "read" as const }
+  { label: "Piutang Anggota", href: "/piutang", icon: Receipt, module: "konsumen" as const, action: "read" as const },
+  // Base feature (not gated by the "accounting" package add-on) — see
+  // docs/2026-09-27-beban-umum-design.md. Top-level, not under Konfigurasi:
+  // it's a recurring transaction, not a settings screen.
+  { label: "Beban Umum", href: "/expenses", icon: Wallet, module: "expenses" as const, action: "read" as const }
 ];
 
 const NAV_ITEMS_REPORTS = [
