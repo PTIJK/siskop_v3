@@ -58,7 +58,10 @@ const NAV_ITEMS_REPORTS = [
     action: "read" as const,
     children: [
       { label: "Laporan Keuangan", href: "/reports" },
-      { label: "Laporan Regulasi", href: "/reports/regulatory" }
+      { label: "Laporan Regulasi", href: "/reports/regulatory" },
+      // Always listed (like Laporan Regulasi above), not hidden by entitlement — a
+      // non-pasar tenant sees EntitlementNotice on the page itself, same pattern.
+      { label: "Laporan Pasar", href: "/reports/pasar" }
     ]
   },
   // Consolidated-reporting-across-units — genuinely KSU-only, unlike Unit

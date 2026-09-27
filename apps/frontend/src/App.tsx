@@ -70,6 +70,9 @@ const RegulatoryReportsPage = lazy(() =>
     default: module.RegulatoryReportsPage
   }))
 );
+const LaporanPasarPage = lazy(() =>
+  import("@/pages/reports/LaporanPasarPage").then((module) => ({ default: module.LaporanPasarPage }))
+);
 const PlatformTenantsPage = lazy(() =>
   import("@/pages/platform/PlatformTenantsPage").then((module) => ({ default: module.PlatformTenantsPage }))
 );
@@ -165,6 +168,7 @@ export default function App() {
 
               <Route path='/reports' element={<ReportsPage />} />
               <Route path='/reports/regulatory' element={<RegulatoryReportsPage />} />
+              <Route path='/reports/pasar' element={<LaporanPasarPage />} />
 
               <Route path='/expenses' element={<ExpensesPage />} />
 

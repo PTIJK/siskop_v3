@@ -23,10 +23,13 @@ import {
   Sparkles,
   AlertCircle,
   Info,
-  CheckCircle2
+  CheckCircle2,
+  Wallet,
+  ClipboardList,
+  Store
 } from "lucide-react";
-import type { CapitalDashboard, DashboardSummary, GrowthPoint, LoanQualityDashboard } from "@siskop/types";
-import { apiFetch } from "@/api/client";
+import type { CapitalDashboard, DashboardSummary, GrowthPoint, LoanQualityDashboard, PasarDashboard } from "@siskop/types";
+import { apiFetch, ApiRequestError } from "@/api/client";
 import { formatRupiah, formatRupiahSingkat } from "@/lib/format";
 import { buildAiSuggestions, type SuggestionTone } from "@/lib/aiSuggestions";
 import { ALL_UNITS } from "@/lib/unit";
@@ -120,6 +123,14 @@ export function DashboardPage() {
     queryKey: ["dashboard", "loan-quality", unitId],
     queryFn: () => apiFetch<LoanQualityDashboard>(`/dashboard/loan-quality${unitQuery}`)
   });
+  // Koperasi pasar plan F7 — silently absent (not an EntitlementNotice) for a
+  // non-pasar tenant, since Dashboard is every tenant's landing page, unlike
+  // a dedicated report page where "not entitled" is informative rather than clutter.
+  const pasarQuery = useQuery({
+    queryKey: ["dashboard", "pasar"],
+    queryFn: () => apiFetch<PasarDashboard>("/dashboard/pasar"),
+    retry: (count, err) => (err instanceof ApiRequestError && err.code === "FEATURE_NOT_ENTITLED" ? false : count < 3)
+  });
 
   const summary = summaryQuery.data;
   const isLoading = summaryQuery.isPending;
@@ -199,6 +210,34 @@ export function DashboardPage() {
           alert={(summary?.overdueCount ?? 0) > 0}
         />
       </div>
+
+      {pasarQuery.data && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCard
+            title="Setoran Hari Ini"
+            value={formatRupiah(pasarQuery.data.setoranHariIni)}
+            icon={Wallet}
+            iconColor="text-blue-600"
+            onClick={() => navigate("/reports/pasar")}
+          />
+          <StatCard
+            title="Batch Belum Diverifikasi"
+            value={pasarQuery.data.batchBelumDiverifikasi.toString()}
+            icon={ClipboardList}
+            iconColor="text-amber-600"
+            onClick={() => navigate("/reports/pasar")}
+            alert={pasarQuery.data.batchBelumDiverifikasi > 0}
+          />
+          <StatCard
+            title="Total Tunggakan Pasar"
+            value={formatRupiah(pasarQuery.data.totalTunggakan)}
+            icon={Store}
+            iconColor="text-red-600"
+            onClick={() => navigate("/reports/pasar")}
+            alert={Number(pasarQuery.data.totalTunggakan) > 0}
+          />
+        </div>
+      )}
 
       <Card>
         <CardHeader>
