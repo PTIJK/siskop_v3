@@ -3,6 +3,7 @@ import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { requirePasarEntitlement } from "../../middleware/entitlement.js";
 import { requireParam } from "../../lib/http.js";
+import { withIdempotency } from "../../lib/idempotency.js";
 import {
   collectorChargePaymentSchema,
   collectorDepositSchema,
@@ -27,6 +28,12 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
     fn(req, res).catch(next);
   };
+}
+
+/** `Idempotency-Key` (koperasi pasar F6) — a flaky mobile connection's retry signal. Absent is fine; see lib/idempotency.ts. */
+function idempotencyKey(req: Request): string | null {
+  const header = req.header("Idempotency-Key");
+  return header && header.trim() !== "" ? header : null;
 }
 
 export function collectionsRoutes(): Router {
@@ -61,8 +68,11 @@ export function collectionsRoutes(): Router {
     handle(async (req, res) => {
       const data = collectorDepositSchema.parse(req.body);
       const auth = authClaims(req);
-      const result = await depositAsCollector(auth.tenantId, auth.userId, data);
-      res.status(201).json({ success: true, data: result, meta: res.locals.meta });
+      const { status, envelope } = await withIdempotency(auth.tenantId, auth.userId, idempotencyKey(req), async () => {
+        const result = await depositAsCollector(auth.tenantId, auth.userId, data);
+        return { status: 201, envelope: { success: true, data: result, meta: res.locals.meta } };
+      });
+      res.status(status).json(envelope);
     })
   );
 
@@ -72,8 +82,11 @@ export function collectionsRoutes(): Router {
     handle(async (req, res) => {
       const data = collectorLoanPaymentSchema.parse(req.body);
       const auth = authClaims(req);
-      const result = await payLoanAsCollector(auth.tenantId, auth.userId, data);
-      res.status(201).json({ success: true, data: result, meta: res.locals.meta });
+      const { status, envelope } = await withIdempotency(auth.tenantId, auth.userId, idempotencyKey(req), async () => {
+        const result = await payLoanAsCollector(auth.tenantId, auth.userId, data);
+        return { status: 201, envelope: { success: true, data: result, meta: res.locals.meta } };
+      });
+      res.status(status).json(envelope);
     })
   );
 
@@ -83,8 +96,11 @@ export function collectionsRoutes(): Router {
     handle(async (req, res) => {
       const data = collectorChargePaymentSchema.parse(req.body);
       const auth = authClaims(req);
-      const result = await payChargeAsCollector(auth.tenantId, auth.userId, data);
-      res.status(201).json({ success: true, data: result, meta: res.locals.meta });
+      const { status, envelope } = await withIdempotency(auth.tenantId, auth.userId, idempotencyKey(req), async () => {
+        const result = await payChargeAsCollector(auth.tenantId, auth.userId, data);
+        return { status: 201, envelope: { success: true, data: result, meta: res.locals.meta } };
+      });
+      res.status(status).json(envelope);
     })
   );
 
@@ -93,8 +109,12 @@ export function collectionsRoutes(): Router {
     requirePermission("collections", "create"),
     handle(async (req, res) => {
       const auth = authClaims(req);
-      const result = await submitBatch(auth.tenantId, auth.userId, requireParam(req, "id"));
-      res.json({ success: true, data: result, meta: res.locals.meta });
+      const batchId = requireParam(req, "id");
+      const { status, envelope } = await withIdempotency(auth.tenantId, auth.userId, idempotencyKey(req), async () => {
+        const result = await submitBatch(auth.tenantId, auth.userId, batchId);
+        return { status: 200, envelope: { success: true, data: result, meta: res.locals.meta } };
+      });
+      res.status(status).json(envelope);
     })
   );
 
