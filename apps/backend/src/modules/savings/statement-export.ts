@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import type { SavingStatement, SavingTransactionType } from "@siskop/types";
+import { safeText, toCsv } from "../../lib/csv.js";
 
 export const STATEMENT_TYPE_LABEL: Record<SavingTransactionType, string> = {
   DEPOSIT: "Setoran",
@@ -7,23 +8,12 @@ export const STATEMENT_TYPE_LABEL: Record<SavingTransactionType, string> = {
   WITHDRAWAL: "Penarikan"
 };
 
-/** RFC 4180 field quoting. */
-function csvField(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
-/** Defuses spreadsheet formula injection from a free-text note: a leading
- * =, +, -, @ gets a quote prefix so Excel/Sheets treat it as text. */
-function safeText(value: string): string {
-  return /^[=+\-@]/.test(value) ? `'${value}` : value;
-}
-
 /** Dates are server-local, matching how the period filter is applied. Amounts
  * stay plain decimal strings (no thousands separators) so the file imports
  * cleanly into a spreadsheet. First line is Saldo Awal, last is Saldo Akhir
  * with the period's debit/credit totals. */
 export function savingStatementCsv(statement: SavingStatement): string {
-  const lines = [
+  return toCsv([
     ["Tanggal", "Jenis", "Keterangan", "Debit", "Kredit", "Saldo"],
     [statement.period.from, "", "Saldo Awal", "", "", statement.openingBalance],
     ...statement.rows.map((r) => [
@@ -35,8 +25,7 @@ export function savingStatementCsv(statement: SavingStatement): string {
       r.balance
     ]),
     [statement.period.to, "", "Saldo Akhir", statement.totalDebit, statement.totalCredit, statement.closingBalance]
-  ];
-  return lines.map((cols) => cols.map(csvField).join(",")).join("\r\n") + "\r\n";
+  ]);
 }
 
 export function savingStatementFilename(statement: SavingStatement, ext: "csv" | "pdf"): string {

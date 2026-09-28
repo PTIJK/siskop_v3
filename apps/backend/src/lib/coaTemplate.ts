@@ -14,9 +14,11 @@ export interface AccountSeed {
   /**
    * When set, the account only belongs to tenants that have an active
    * CooperativeUnit of this type. Left out of the base template so a pure KSP
-   * doesn't get zero-balance Toko lines cluttering its Neraca/Laba Rugi.
+   * doesn't get zero-balance Toko/Pasar lines cluttering its Neraca/Laba Rugi.
+   * "JASA" (koperasi pasar F5) is additionally gated on having an active
+   * Market, not just the unit type — see generateStandardCoa's hasMarket.
    */
-  unitType?: "KONSUMEN";
+  unitType?: "KONSUMEN" | "JASA";
   /**
    * Only for a multi-unit (KSU) koperasi — i.e. more than one active
    * CooperativeUnit (CLAUDE.md rule 2b). A single-unit koperasi has no USP
@@ -42,6 +44,14 @@ export const COA_TEMPLATE: AccountSeed[] = [
     normalBalance: "KREDIT" // contra-asset — credit-normal, reduces Piutang Pinjaman Anggota
   },
   { key: "aset_tetap", code: "1-2000", name: "Aset Tetap", category: "ASET", normalBalance: "DEBIT", isHeader: true },
+  // Koperasi pasar plan F4 — always generated (not Toko-gated, unlike the
+  // Konsumen accounts below): a collector-initiated transaction's Kas side
+  // redirects here (lib/journal.ts#substituteCollectorCash), and a batch
+  // verification's shortfall/surplus land in the next two. Cash physically
+  // held by a collector before it's counted in is still the koperasi's cash.
+  { key: "kas_di_kolektor", code: "1-1200", name: "Kas di Kolektor", category: "ASET", normalBalance: "DEBIT", isCashEquivalent: true },
+  { key: "piutang_kolektor", code: "1-1210", name: "Piutang Kolektor", category: "ASET", normalBalance: "DEBIT" },
+  { key: "selisih_kas", code: "4-9100", name: "Selisih Kas", category: "PENDAPATAN", normalBalance: "KREDIT" },
   { key: "simpanan_sukarela", code: "2-1000", name: "Simpanan Sukarela — Anggota", category: "KEWAJIBAN", normalBalance: "KREDIT" },
   { key: "utang_usaha", code: "2-1100", name: "Utang Usaha", category: "KEWAJIBAN", normalBalance: "KREDIT" },
   // Equity lines follow Permenkop UKM 2/2024 lampiran (Akuntansi Ekuitas). Modal
@@ -111,14 +121,59 @@ export const COA_TEMPLATE: AccountSeed[] = [
     category: "BEBAN",
     normalBalance: "DEBIT",
     unitType: "KONSUMEN"
+  },
+
+  // ── Pasar (JASA unit) — koperasi pasar F5, only for a tenant with an ──────
+  // active Market (see generateStandardCoa's hasMarket, not just unitType).
+  {
+    key: "piutang_sewa_retribusi",
+    code: "1-1220",
+    name: "Piutang Sewa & Retribusi",
+    category: "ASET",
+    normalBalance: "DEBIT",
+    unitType: "JASA"
+  },
+  {
+    key: "pendapatan_sewa_kios",
+    code: "4-4000",
+    name: "Pendapatan Sewa Kios",
+    category: "PENDAPATAN",
+    normalBalance: "KREDIT",
+    unitType: "JASA"
+  },
+  // Retribusi adalah pendapatan koperasi (D5), kept as its own line rather
+  // than folded into Pendapatan Sewa Kios so both are visible separately.
+  {
+    key: "pendapatan_retribusi",
+    code: "4-4100",
+    name: "Pendapatan Retribusi",
+    category: "PENDAPATAN",
+    normalBalance: "KREDIT",
+    unitType: "JASA"
   }
 ];
 
 export interface SystemMappingSeed {
-  transactionKind: "SALE_REVENUE" | "SALE_COGS" | "SALE_RECEIVABLE" | "MEMBER_CREDIT_REPAYMENT" | "STOCK_PURCHASE";
+  transactionKind:
+    | "SALE_REVENUE"
+    | "SALE_COGS"
+    | "SALE_RECEIVABLE"
+    | "MEMBER_CREDIT_REPAYMENT"
+    | "STOCK_PURCHASE"
+    | "COLLECTOR_CASH"
+    | "CHARGE_ACCRUAL_SEWA"
+    | "CHARGE_ACCRUAL_RETRIBUSI"
+    | "CHARGE_PAYMENT";
   /** `COA_TEMPLATE` keys. */
   debitKey: string;
   creditKey: string;
+}
+
+/** Throws if `key` isn't in COA_TEMPLATE — same guard generateStandardCoa's accountIdFor uses. */
+export function templateCode(key: string): string {
+  const code = COA_TEMPLATE.find((t) => t.key === key)?.code;
+  if (!code) throw new Error(`Standard COA template is missing required account "${key}"`);
+  return code;
 }
 
 // Tenant-wide SYSTEM mappings (sourceType "SYSTEM", no sourceId) that
@@ -132,4 +187,13 @@ export const SYSTEM_MAPPING_TEMPLATE: SystemMappingSeed[] = [
   // A restock: the shelf gains goods, the koperasi pays cash. A koperasi that buys on credit
   // remaps the credit side to Utang Usaha in Konfigurasi > Pemetaan Akun.
   { transactionKind: "STOCK_PURCHASE", debitKey: "persediaan", creditKey: "kas" }
+];
+
+// Koperasi pasar F5 — generated for a tenant with at least one active Market
+// (generateStandardCoa's hasMarket), same shape as SYSTEM_MAPPING_TEMPLATE
+// above but kept separate since it's gated on a different condition.
+export const PASAR_MAPPING_TEMPLATE: SystemMappingSeed[] = [
+  { transactionKind: "CHARGE_ACCRUAL_SEWA", debitKey: "piutang_sewa_retribusi", creditKey: "pendapatan_sewa_kios" },
+  { transactionKind: "CHARGE_ACCRUAL_RETRIBUSI", debitKey: "piutang_sewa_retribusi", creditKey: "pendapatan_retribusi" },
+  { transactionKind: "CHARGE_PAYMENT", debitKey: "kas", creditKey: "piutang_sewa_retribusi" }
 ];

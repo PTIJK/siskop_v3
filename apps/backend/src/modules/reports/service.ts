@@ -1,5 +1,16 @@
 import { endOfMonth, startOfMonth, startOfYear, endOfYear } from "date-fns";
 import { db } from "../../lib/db.js";
+import { businessDate, dateKey } from "../../lib/operating-calendar.js";
+
+/**
+ * Renders a period boundary as its Asia/Jakarta calendar-day string. `start`/
+ * `end` here come from `resolvePeriod`, which shifts them off UTC midnight
+ * (`startOfBusinessDay`/`endOfBusinessDay`) — a raw `toISOString().split
+ * ("T")[0]` would echo the wrong calendar day for part of the UTC day.
+ */
+function periodDate(d: Date): string {
+  return dateKey(businessDate(d));
+}
 
 export interface ReportParams {
   startDate?: Date;
@@ -49,7 +60,7 @@ export async function getFinancialReport(tenantId: string, params: ReportParams)
   }));
 
   return {
-    periode: { start: start.toISOString().split("T")[0], end: end.toISOString().split("T")[0] },
+    periode: { start: periodDate(start), end: periodDate(end) },
     simpananPerJenis,
     transaksiSimpanan: {
       deposit: { total: (depositTotal._sum.amount ?? 0).toString(), count: depositTotal._count },

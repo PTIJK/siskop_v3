@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { resolveReadableUnitId } from "../../lib/unit-access.js";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
+import { requirePasarEntitlement } from "../../middleware/entitlement.js";
 import { chartQuerySchema, dashboardUnitQuerySchema } from "./schema.js";
 import {
   getCapitalDashboard,
@@ -9,6 +10,7 @@ import {
   getGrowthDashboard,
   getLoanChart,
   getLoanQualityDashboard,
+  getPasarDashboard,
   getPaymentChart
 } from "./service.js";
 
@@ -87,6 +89,17 @@ export function dashboardRoutes(): Router {
     requirePermission("dashboard", "read"),
     handle(async (req, res) => {
       const data = await getGrowthDashboard(authClaims(req).tenantId, await dashboardUnit(req));
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  // Koperasi pasar plan F7 — setoran hari ini, batch belum diverifikasi, total tunggakan.
+  router.get(
+    "/pasar",
+    requirePasarEntitlement,
+    requirePermission("dashboard", "read"),
+    handle(async (req, res) => {
+      const data = await getPasarDashboard(authClaims(req).tenantId);
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );

@@ -159,10 +159,10 @@ const CUSTOM_ROLE = {
 };
 
 describe("GET/POST/PUT/DELETE /api/config/roles", () => {
-  it("lists the 5 seed roles and creates a new one", async () => {
+  it("lists the 6 seed roles and creates a new one", async () => {
     const admin = await setupTenant();
     const list = await request(app()).get("/api/config/roles").set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(5);
+    expect(list.body.data).toHaveLength(6);
 
     const created = await request(app())
       .post("/api/config/roles")
@@ -462,16 +462,27 @@ describe("POST /api/config/accounts/generate-standard", () => {
 
     expect(res.status).toBe(201);
     // 2 mappings per saving config (deposit/withdrawal) + 4 per loan config
-    // (disbursement/principal/interest/penalty).
+    // (disbursement/principal/interest/penalty) — not +1 for SYSTEM/
+    // COLLECTOR_CASH (koperasi pasar F4): that one is already created at
+    // provisioning, so this call just skips it.
     expect(res.body.data.mappingsCreated).toBe(2 + 4);
 
     const mappings = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(mappings.body.data).toHaveLength(6);
+    // 7 total: the 6 just created, +1 COLLECTOR_CASH from provisioning.
+    expect(mappings.body.data).toHaveLength(7);
     const kinds = mappings.body.data.map((m: { transactionKind: string }) => m.transactionKind).sort();
     expect(kinds).toEqual(
-      ["DEPOSIT", "DISBURSEMENT", "PAYMENT_INTEREST", "PAYMENT_PENALTY", "PAYMENT_PRINCIPAL", "WITHDRAWAL"].sort()
+      [
+        "DEPOSIT",
+        "DISBURSEMENT",
+        "PAYMENT_INTEREST",
+        "PAYMENT_PENALTY",
+        "PAYMENT_PRINCIPAL",
+        "WITHDRAWAL",
+        "COLLECTOR_CASH"
+      ].sort()
     );
   });
 
@@ -551,7 +562,16 @@ describe("POST /api/config/accounts/generate-standard", () => {
 // UNPOSTED_MISSING_MAPPING and never reaches Neraca/Laba Rugi for any tenant
 // that didn't get them from prisma/seed-ksu-demo.ts.
 
-const TOKO_MAPPING_KINDS = ["MEMBER_CREDIT_REPAYMENT", "SALE_COGS", "SALE_RECEIVABLE", "SALE_REVENUE", "STOCK_PURCHASE"];
+// COLLECTOR_CASH (koperasi pasar F4) is generated for every tenant, Toko or
+// not, alongside these five Toko-only SYSTEM mappings.
+const TOKO_MAPPING_KINDS = [
+  "COLLECTOR_CASH",
+  "MEMBER_CREDIT_REPAYMENT",
+  "SALE_COGS",
+  "SALE_RECEIVABLE",
+  "SALE_REVENUE",
+  "STOCK_PURCHASE"
+];
 
 async function createKonsumenUnit(accessToken: string) {
   await request(app())
@@ -587,6 +607,7 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     const res = await generateStandard(admin.accessToken);
 
     expect(res.status).toBe(201);
+    // 5, not 6: SYSTEM/COLLECTOR_CASH was already created at provisioning.
     expect(res.body.data.mappingsCreated).toBe(5);
     expect(await listAccountCodes(admin.accessToken)).toEqual(
       expect.arrayContaining(["1-1150", "1-1300", "4-3000", "5-4000"])
@@ -615,23 +636,27 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     });
   });
 
-  it("adds no Toko accounts or SYSTEM mappings for a tenant that only has a KSP unit", async () => {
+  it("adds no Toko accounts or SYSTEM mappings for a tenant that only has a KSP unit (COLLECTOR_CASH already exists from provisioning)", async () => {
     const admin = await setupTenant();
 
     const res = await generateStandard(admin.accessToken);
 
+    // 0, not 1: COLLECTOR_CASH (koperasi pasar F4) is generated regardless of
+    // unit type, but that now happens at provisioning — this call just skips it.
     expect(res.body.data.mappingsCreated).toBe(0);
+    expect(res.body.data.mappingsSkipped).toBeGreaterThanOrEqual(1);
     const codes = await listAccountCodes(admin.accessToken);
     for (const tokoCode of ["1-1150", "1-1300", "4-3000", "5-4000"]) {
       expect(codes).not.toContain(tokoCode);
     }
-    expect(await listSystemMappings(admin.accessToken)).toHaveLength(0);
+    const system = await listSystemMappings(admin.accessToken);
+    expect(system.map((m) => m.transactionKind)).toEqual(["COLLECTOR_CASH"]);
   });
 
   it("picks Toko up on a re-run once a KONSUMEN unit is added later", async () => {
     const admin = await setupTenant();
     const first = await generateStandard(admin.accessToken);
-    expect(first.body.data.mappingsCreated).toBe(0);
+    expect(first.body.data.mappingsCreated).toBe(0); // COLLECTOR_CASH already exists from provisioning, no Toko unit yet
 
     await createKonsumenUnit(admin.accessToken);
     const second = await generateStandard(admin.accessToken);
@@ -639,7 +664,7 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     expect(second.status).toBe(201);
     // The four Toko accounts, plus Modal Tetap USP now that the koperasi is multi-unit.
     expect(second.body.data.accountsCreated).toBe(5);
-    expect(second.body.data.mappingsCreated).toBe(5);
+    expect(second.body.data.mappingsCreated).toBe(5); // the 5 Toko mappings — COLLECTOR_CASH already exists
   });
 
   it("is idempotent — a second run creates nothing", async () => {
@@ -652,7 +677,7 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     expect(second.status).toBe(200);
     expect(second.body.data.accountsCreated).toBe(0);
     expect(second.body.data.mappingsCreated).toBe(0);
-    expect(second.body.data.mappingsSkipped).toBe(5);
+    expect(second.body.data.mappingsSkipped).toBe(6); // 5 Toko + COLLECTOR_CASH
   });
 
   it("does not create duplicate Toko accounts when the SYSTEM sale mappings were already set up by hand", async () => {
@@ -703,8 +728,11 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
 
     const res = await generateStandard(admin.accessToken);
 
+    // 0, not 1: COLLECTOR_CASH (koperasi pasar F4) was never hand-made above,
+    // but it already exists from provisioning — this run just skips it,
+    // along with the 5 hand-made Toko mappings.
     expect(res.body.data.mappingsCreated).toBe(0);
-    expect(res.body.data.mappingsSkipped).toBeGreaterThanOrEqual(5);
+    expect(res.body.data.mappingsSkipped).toBeGreaterThanOrEqual(6);
     const codes = await listAccountCodes(admin.accessToken);
     expect(codes).not.toContain("4-3000");
     expect(codes).not.toContain("5-4000");
@@ -914,10 +942,11 @@ describe("GET/POST/DELETE /api/config/account-mappings", () => {
     const list = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(1);
-    expect(list.body.data[0].sourceName).toBe("Simpanan Sukarela");
-    expect(list.body.data[0].debitAccountName).toBe("Kas");
-    expect(list.body.data[0].creditAccountName).toBe("Simpanan Sukarela");
+    // +1 for the tenant-wide SYSTEM/COLLECTOR_CASH mapping every tenant now
+    // gets automatically at provisioning (koperasi pasar F4).
+    expect(list.body.data).toHaveLength(2);
+    const own = list.body.data.find((m: { sourceName: string }) => m.sourceName === "Simpanan Sukarela");
+    expect(own).toMatchObject({ debitAccountName: "Kas", creditAccountName: "Simpanan Sukarela" });
   });
 
   it("updates the mapping in place when re-submitted for the same source+kind, instead of conflicting", async () => {
@@ -941,7 +970,8 @@ describe("GET/POST/DELETE /api/config/account-mappings", () => {
     const list = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(1);
+    // +1 for the tenant-wide SYSTEM/COLLECTOR_CASH mapping from provisioning — see above.
+    expect(list.body.data).toHaveLength(2);
   });
 
   it("deletes a mapping", async () => {
@@ -960,7 +990,9 @@ describe("GET/POST/DELETE /api/config/account-mappings", () => {
     const list = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(0);
+    // 1, not 0: the tenant-wide SYSTEM/COLLECTOR_CASH mapping from
+    // provisioning was never touched by this test, only the one it made.
+    expect(list.body.data).toHaveLength(1);
   });
 
   // The end-to-end proof this module closes the gap: before any mapping

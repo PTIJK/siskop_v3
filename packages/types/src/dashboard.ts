@@ -83,6 +83,18 @@ export interface LoanQualityDashboard {
   topOverdue: { loanId: string; memberName: string; kolCategory: string; outstanding: string }[];
 }
 
+// ── Koperasi pasar plan F7 — dashboard widgets ───────────────────────────────
+
+/** Only shown for a tenant with the pasar module — see middleware/entitlement.ts#requirePasarEntitlement. */
+export interface PasarDashboard {
+  /** Today's total across every kolektor's CollectionBatch.expectedTotal. */
+  setoranHariIni: string;
+  /** Count of CollectionBatch rows still SUBMITTED (handed in, not yet verified). */
+  batchBelumDiverifikasi: number;
+  /** Overdue loan installments + overdue sewa/retribusi charges, combined. */
+  totalTunggakan: string;
+}
+
 export interface GrowthPoint {
   month: string;
   newMembers: number;

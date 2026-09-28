@@ -2,11 +2,23 @@ import { Prisma, type CalkSection, type EquityClass } from "@prisma/client";
 import { db } from "../../lib/db.js";
 import { validationError } from "../../lib/errors.js";
 import { splitPrincipalAndInterest } from "../../lib/journal.js";
+import { businessDate, dateKey } from "../../lib/operating-calendar.js";
 import { MODAL_DISETOR_AUDIT_THRESHOLD_RP, MODAL_SENDIRI_CLASSES } from "../../lib/regulatory-config.js";
 import { EQUITY_CLASS_ORDER, getModalSendiri, komposisiModalSendiri } from "./capital-service.js";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Renders a period boundary as its Asia/Jakarta calendar-day string. Boundary
+ * instants here are shifted off UTC midnight (`startOfBusinessDay`,
+ * `endOfBusinessDay`, or a `-1ms` "day before") so a raw `toISOString().split
+ * ("T")[0]` would echo the wrong calendar day for part of the UTC day; this
+ * re-derives the Jakarta day the instant actually belongs to.
+ */
+function periodDate(d: Date): string {
+  return dateKey(businessDate(d));
 }
 
 export const CALK_SECTIONS: CalkSection[] = ["UMUM", "DASAR_PENYUSUNAN", "KEBIJAKAN_AKUNTANSI", "INFORMASI_TAMBAHAN"];
@@ -216,7 +228,7 @@ export async function getNeraca(tenantId: string, asOfDate: Date, unitId?: strin
   const totalKewajibanDanEkuitas = round2(kewajiban.total + ekuitasTotal);
 
   return {
-    asOfDate: asOfDate.toISOString().split("T")[0],
+    asOfDate: periodDate(asOfDate),
     aset: { items: aset.items, total: aset.total.toString() },
     kewajiban: { items: kewajiban.items, total: kewajiban.total.toString() },
     ekuitas: { items: ekuitasItems, total: ekuitasTotal.toString() },
@@ -239,7 +251,7 @@ export async function getNeraca(tenantId: string, asOfDate: Date, unitId?: strin
 export async function getArusKas(tenantId: string, from: Date, to: Date, unitId?: string) {
   const cashAccounts = await db.account.findMany({ where: { tenantId, isCashEquivalent: true } });
   const cashAccountIds = cashAccounts.map((a) => a.id);
-  const periode = { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] };
+  const periode = { from: periodDate(from), to: periodDate(to) };
 
   if (cashAccountIds.length === 0) {
     const zero = { rincian: [] as Array<{ label: string; amount: string }>, total: "0" };
@@ -380,7 +392,7 @@ export async function getLaporanHasilUsaha(tenantId: string, from: Date, to: Dat
   const shuBerjalan = round2(pendapatan.totalRaw - beban.totalRaw);
 
   return {
-    periode: { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] },
+    periode: { from: periodDate(from), to: periodDate(to) },
     pendapatan: { items: pendapatan.items, total: pendapatan.total },
     beban: { items: beban.items, total: beban.total },
     shuBerjalan: shuBerjalan.toString()
@@ -398,7 +410,7 @@ export async function getLaporanHasilUsaha(tenantId: string, from: Date, to: Dat
  * transactionKind produced a given line.
  */
 export async function getShuDistribution(tenantId: string, from: Date, to: Date) {
-  const periode = { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] };
+  const periode = { from: periodDate(from), to: periodDate(to) };
   const config = await db.shuDistributionConfig.findUnique({ where: { tenantId } });
   if (!config) {
     return {
@@ -548,7 +560,7 @@ export async function getCalk(tenantId: string, from: Date, to: Date) {
   };
 
   return {
-    periode: { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] },
+    periode: { from: periodDate(from), to: periodDate(to) },
     narasi,
     rincianAset: buildMutasi(neracaAwal.aset.items, neracaAkhir.aset.items),
     rincianKewajiban: buildMutasi(neracaAwal.kewajiban.items, neracaAkhir.kewajiban.items),

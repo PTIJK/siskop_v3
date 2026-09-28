@@ -61,12 +61,16 @@ const TEST_PACKAGE_ID = "pkg_test_full";
 async function ensureFullPackage(): Promise<string> {
   const pkg = await db.subscriptionPackage.upsert({
     where: { id: TEST_PACKAGE_ID },
-    update: {},
+    // A prior test run may have upserted this row before "pasar" existed as
+    // a module — re-apply modules/whitelabelEnabled every time so a stale
+    // row (this table survives the per-test tenant.deleteMany reset) can't
+    // silently under-entitle every test that relies on "full package".
+    update: { modules: ["accounting", "pasar"], whitelabelEnabled: true },
     create: {
       id: TEST_PACKAGE_ID,
       name: "Paket Lengkap (Test)",
       price: 0,
-      modules: ["accounting"],
+      modules: ["accounting", "pasar"],
       maxUsers: 100,
       maxMembers: 10_000,
       maxSavingConfigs: null,
@@ -101,7 +105,7 @@ export async function setupTenant(
 export async function createStaffSession(
   tenantId: string,
   slug: string,
-  roleName: "Super Admin" | "Manager" | "Teller" | "Viewer" | "Kasir",
+  roleName: "Super Admin" | "Manager" | "Teller" | "Viewer" | "Kasir" | "Kolektor",
   email: string
 ) {
   const role = await db.role.findFirstOrThrow({ where: { tenantId, name: roleName } });

@@ -6,7 +6,7 @@ import { isRepostableSourceType, repostUnpostedEntries } from "../../lib/journal
 import { recordAudit } from "../audit-log/service.js";
 import { isModalDisetorAuditRequired, MODAL_DISETOR_AUDIT_THRESHOLD_RP } from "../../lib/regulatory-config.js";
 import { withoutTenantScope } from "../../lib/tenant-scope.js";
-import { COA_TEMPLATE, SYSTEM_MAPPING_TEMPLATE, type AccountSeed } from "../../lib/coaTemplate.js";
+import { COA_TEMPLATE, PASAR_MAPPING_TEMPLATE, SYSTEM_MAPPING_TEMPLATE, type AccountSeed } from "../../lib/coaTemplate.js";
 import type {
   CreateAccountInput,
   CreateRoleInput,
@@ -342,6 +342,31 @@ export async function generateStandardCoaInTx(tx: TxClient, tenantId: string): P
     await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PENALTY", kas, pendapatanLain);
   }
 
+  // Koperasi pasar plan F4 — always generated, unlike the Toko SYSTEM
+  // mappings below: every tenant can potentially run a Kolektor, not just
+  // ones with a Toko unit. Redirects a collector transaction's Kas side to
+  // Kas di Kolektor (lib/journal.ts#substituteCollectorCash).
+  {
+    const existing = await tx.accountMapping.findFirst({
+      where: { tenantId, sourceType: "SYSTEM", sourceId: null, transactionKind: "COLLECTOR_CASH" }
+    });
+    if (existing) {
+      mappingsSkipped += 1;
+    } else {
+      await tx.accountMapping.create({
+        data: {
+          tenantId,
+          sourceType: "SYSTEM",
+          sourceId: null,
+          transactionKind: "COLLECTOR_CASH",
+          debitAccountId: kas,
+          creditAccountId: accountIdFor("kas_di_kolektor")
+        }
+      });
+      mappingsCreated += 1;
+    }
+  }
+
   // Toko: only for a tenant that has an active KONSUMEN unit. Lazy per
   // mapping — a tenant that already wired a SYSTEM/SALE_* mapping by hand (to
   // its own accounts) must not get a second, unused set of Toko accounts, so
@@ -376,6 +401,54 @@ export async function generateStandardCoaInTx(tx: TxClient, tenantId: string): P
       }
       const debitAccountId = await resolveAccount(template.debitKey);
       const creditAccountId = await resolveAccount(template.creditKey);
+      await tx.accountMapping.create({
+        data: {
+          tenantId,
+          sourceType: "SYSTEM",
+          sourceId: null,
+          transactionKind: template.transactionKind,
+          debitAccountId,
+          creditAccountId
+        }
+      });
+      mappingsCreated += 1;
+    }
+  }
+
+  // Pasar: only for a tenant with at least one active Market — not just an
+  // active JASA unit, since createMarket is the only thing that ever
+  // creates one (lib/units.ts#ensureUnitOfType), so this is the more
+  // precise signal. Same lazy-per-mapping shape as the Toko block above.
+  const hasMarket = (await tx.market.count({ where: { tenantId, isActive: true } })) > 0;
+  if (hasMarket) {
+    const pasarAccountIds = new Map<string, string>();
+    const resolvePasarAccount = async (key: string): Promise<string> => {
+      const seed = COA_TEMPLATE.find((t) => t.key === key);
+      if (!seed?.unitType) return accountIdFor(key);
+
+      const known = pasarAccountIds.get(key);
+      if (known) return known;
+      let id = idByCode.get(seed.code);
+      if (id) {
+        accountsSkipped += 1;
+      } else {
+        id = await createTemplateAccount(seed);
+        accountsCreated += 1;
+      }
+      pasarAccountIds.set(key, id);
+      return id;
+    };
+
+    for (const template of PASAR_MAPPING_TEMPLATE) {
+      const existing = await tx.accountMapping.findFirst({
+        where: { tenantId, sourceType: "SYSTEM", sourceId: null, transactionKind: template.transactionKind }
+      });
+      if (existing) {
+        mappingsSkipped += 1;
+        continue;
+      }
+      const debitAccountId = await resolvePasarAccount(template.debitKey);
+      const creditAccountId = await resolvePasarAccount(template.creditKey);
       await tx.accountMapping.create({
         data: {
           tenantId,

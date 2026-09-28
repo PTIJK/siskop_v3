@@ -345,7 +345,9 @@ export async function depositToSaving(
   tenantId: string,
   savingId: string,
   data: SavingTransactionInput,
-  createdBy: string
+  createdBy: string,
+  /** Recorded by a Kolektor (koperasi pasar F4) — see modules/collections/service.ts. */
+  collector?: { batchId: string }
 ) {
   return db.$transaction(async (tx) => {
     const saving = await tx.saving.findUnique({ where: { id: savingId } });
@@ -354,7 +356,15 @@ export async function depositToSaving(
     await tx.saving.update({ where: { id: savingId, tenantId }, data: { balance: { increment: data.amount } } });
 
     const transaction = await tx.savingTransaction.create({
-      data: { savingId, tenantId, type: "DEPOSIT", amount: data.amount, note: data.note, createdBy }
+      data: {
+        savingId,
+        tenantId,
+        type: "DEPOSIT",
+        amount: data.amount,
+        note: data.note,
+        createdBy,
+        collectionBatchId: collector?.batchId ?? null
+      }
     });
 
     await postSavingTransaction(tx, {
@@ -365,7 +375,8 @@ export async function depositToSaving(
       kind: "DEPOSIT",
       amount: data.amount,
       entryDate: transaction.createdAt,
-      description: "Setoran simpanan"
+      description: "Setoran simpanan",
+      viaCollector: !!collector
     });
 
     await recordAudit(tx, {

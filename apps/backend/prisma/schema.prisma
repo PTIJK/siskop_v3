@@ -56,6 +56,19 @@ enum KOLCategory {
   MACET
 }
 
+// Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F2.
+enum InstallmentFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum InstallmentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
 enum DomainStatus {
   PENDING
   VERIFIED
@@ -126,6 +139,18 @@ enum MappingTransactionKind {
   // A Toko restock (StockMovement IN): Dr Persediaan / Cr Kas by default (an admin can
   // remap the credit to Utang Usaha). Tenant-wide SYSTEM mapping like the SALE_* kinds.
   STOCK_PURCHASE
+  // Koperasi pasar plan F4 — redirects a collector-initiated transaction's Kas
+  // side to Kas di Kolektor. Tenant-wide SYSTEM mapping, always generated
+  // (not Toko-gated) — see lib/journal.ts#substituteCollectorCash.
+  COLLECTOR_CASH
+  // Koperasi pasar plan F5 — a Charge's accrual (Dr Piutang Sewa & Retribusi
+  // / Cr Pendapatan Sewa Kios or Pendapatan Retribusi, split by ChargeKind
+  // since D5 keeps retribusi income visibly separate) and its payment
+  // (Dr Kas or Kas di Kolektor / Cr Piutang). Tenant-wide SYSTEM mappings,
+  // generated only for a tenant with an active Market (unitType: "JASA").
+  CHARGE_ACCRUAL_SEWA
+  CHARGE_ACCRUAL_RETRIBUSI
+  CHARGE_PAYMENT
 }
 
 enum JournalSourceType {
@@ -142,6 +167,14 @@ enum JournalSourceType {
   // A restock (StockMovement IN). ADJUSTMENT movements are not journaled: they *set* the
   // count and the previous quantity isn't stored, so the delta can't be recovered.
   STOCK_MOVEMENT
+  // Koperasi pasar plan F4 — a verified CollectionBatch's Dr Kas/Piutang
+  // Kolektor / Cr Selisih Kas/Kas di Kolektor entry. unitId is always null
+  // (tenant-level — one batch can span several units' transactions, rule 2b).
+  COLLECTION_BATCH
+  // Koperasi pasar plan F5 — a Charge's accrual and a ChargePayment's
+  // settlement, both stamped with the pasar unit (unitType: "JASA").
+  CHARGE_ACCRUAL
+  CHARGE_PAYMENT
 }
 
 enum JournalEntryStatus {
@@ -298,6 +331,16 @@ model Tenant {
   slugChanges             TenantSlugChange[]
   auditLogs               AuditLog[]
   holidays                TenantHoliday[]
+  loanInstallments        LoanInstallment[]
+  markets                 Market[]
+  stalls                  Stall[]
+  collectorAssignments    CollectorAssignment[]
+  collectionBatches       CollectionBatch[]
+  stallContracts          StallContract[]
+  levyRates               LevyRate[]
+  charges                 Charge[]
+  chargePayments          ChargePayment[]
+  idempotencyKeys         IdempotencyKey[]
 }
 
 // A tenant's own non-collection day (public holiday, market closure). Loan
@@ -362,6 +405,8 @@ model CooperativeUnit {
   userAssignments         UserUnit[]
   journalEntries          JournalEntry[]
   modalSendiriAdjustments ModalSendiriAdjustment[]
+  markets                 Market[]
+  charges                 Charge[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, type])
@@ -430,6 +475,9 @@ model User {
   invitations                   MembershipInvitation[]
   reviewedRegistrationRequests  MemberRegistrationRequest[]
   tenantNotificationReads       TenantNotificationRead[]
+  collectorAssignments          CollectorAssignment[]
+  collectionBatches             CollectionBatch[]
+  chargePaymentsCreated         ChargePayment[]
 
   @@unique([tenantId, email])
   @@unique([identityId, tenantId])
@@ -547,14 +595,23 @@ model Member {
   lastLoginAt        DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  // Koperasi pasar plan F3 — a pasar trader's kind of goods, e.g. "Sayur",
+  // "Daging". Null for a member who isn't a pasar trader.
+  commodity          String?
 
-  savings             Saving[]
-  loans               Loan[]
-  memberships         UnitMembership[]
-  posSales            POSSale[]
-  creditRepayments    MemberCreditRepayment[]
-  loginGrants         MemberLoginGrant[]
-  registrationRequest MemberRegistrationRequest?
+  savings              Saving[]
+  loans                Loan[]
+  memberships          UnitMembership[]
+  posSales             POSSale[]
+  creditRepayments     MemberCreditRepayment[]
+  loginGrants          MemberLoginGrant[]
+  registrationRequest  MemberRegistrationRequest?
+  // Effectively at most one (enforced by @@unique([tenantId, memberId]) on
+  // CollectorAssignment) — plural because Prisma requires a bare `@unique`
+  // on memberId itself to model this as a true one-to-one relation.
+  collectorAssignments CollectorAssignment[]
+  stallContracts       StallContract[]
+  charges              Charge[]
 
   @@unique([tenantId, nik])
   @@index([tenantId])
@@ -770,18 +827,22 @@ model Saving {
 }
 
 model SavingTransaction {
-  id            String          @id @default(cuid())
-  savingId      String
-  saving        Saving          @relation(fields: [savingId], references: [id])
-  tenantId      String
-  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  type          TransactionType
-  amount        Decimal         @db.Decimal(15, 2)
-  note          String?
+  id                String           @id @default(cuid())
+  savingId          String
+  saving            Saving           @relation(fields: [savingId], references: [id])
+  tenantId          String
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type              TransactionType
+  amount            Decimal          @db.Decimal(15, 2)
+  note              String?
   // Null for a scheduler-posted INTEREST row — there's no acting staff user.
-  createdBy     String?
-  createdByUser User?           @relation(fields: [createdBy], references: [id])
-  createdAt     DateTime        @default(now())
+  createdBy         String?
+  createdByUser     User?            @relation(fields: [createdBy], references: [id])
+  createdAt         DateTime         @default(now())
+  // Koperasi pasar plan F4 — set when recorded by a Kolektor, null for a
+  // loket-recorded transaction.
+  collectionBatchId String?
+  collectionBatch   CollectionBatch? @relation(fields: [collectionBatchId], references: [id])
 
   @@index([savingId])
   @@index([tenantId])
@@ -791,16 +852,19 @@ model SavingTransaction {
 // ── LOANS ─────────────────────────────────────────────────────────────────────
 
 model LoanConfig {
-  id            String   @id @default(cuid())
-  tenantId      String
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name          String
-  type          LoanType
-  rateType      RateType
-  rate          Decimal  @db.Decimal(8, 4)
-  maxTermMonths Int
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
+  id                   String               @id @default(cuid())
+  tenantId             String
+  tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name                 String
+  type                 LoanType
+  rateType             RateType
+  rate                 Decimal              @db.Decimal(8, 4)
+  maxTermMonths        Int
+  installmentFrequency InstallmentFrequency @default(MONTHLY)
+  // Caps installmentCount for DAILY/WEEKLY loans; maxTermMonths still caps MONTHLY ones.
+  maxInstallments      Int?
+  isActive             Boolean              @default(true)
+  createdAt            DateTime             @default(now())
 
   loans Loan[]
 }
@@ -828,7 +892,21 @@ model Loan {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  payments LoanPayment[]
+  // Koperasi pasar plan F2 — per-installment schedule alongside the fields
+  // above, which stay filled (for DAILY/WEEKLY, termMonths/monthlyPayment
+  // are the calendar-months-to-maturity/average installment) so existing
+  // dashboards/reports keep working unchanged.
+  installmentFrequency InstallmentFrequency @default(MONTHLY)
+  installmentCount     Int?
+  installmentAmount    Decimal?             @db.Decimal(15, 2)
+  // Effective annual rate %, snapshotted at creation — may differ from loanConfig.rate (D3).
+  rate                 Decimal?             @db.Decimal(8, 4)
+  // Required when `rate` was overridden away from the product's rate.
+  rateNote             String?
+  maturityDate         DateTime?            @db.Date
+
+  payments     LoanPayment[]
+  installments LoanInstallment[]
 
   @@index([tenantId])
   @@index([tenantId, unitId])
@@ -838,23 +916,73 @@ model Loan {
 }
 
 model LoanPayment {
-  id            String   @id @default(cuid())
-  loanId        String
-  loan          Loan     @relation(fields: [loanId], references: [id])
-  tenantId      String
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  amount        Decimal  @db.Decimal(15, 2)
-  penalty       Decimal  @default(0) @db.Decimal(15, 2)
-  paidAt        DateTime
-  dueDate       DateTime
-  note          String?
-  createdBy     String
-  createdByUser User     @relation(fields: [createdBy], references: [id])
-  createdAt     DateTime @default(now())
+  id                String           @id @default(cuid())
+  loanId            String
+  loan              Loan             @relation(fields: [loanId], references: [id])
+  tenantId          String
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  amount            Decimal          @db.Decimal(15, 2)
+  penalty           Decimal          @default(0) @db.Decimal(15, 2)
+  paidAt            DateTime
+  // Nullable since F2: a payment can now span several installments (see
+  // LoanPaymentAllocation), so there is no longer one due date per payment.
+  // Historical rows keep the value the old per-loan-month matching wrote.
+  dueDate           DateTime?
+  note              String?
+  createdBy         String
+  createdByUser     User             @relation(fields: [createdBy], references: [id])
+  createdAt         DateTime         @default(now())
+  // Koperasi pasar plan F4 — set when recorded by a Kolektor, null for a
+  // loket-recorded payment.
+  collectionBatchId String?
+  collectionBatch   CollectionBatch? @relation(fields: [collectionBatchId], references: [id])
+
+  allocations LoanPaymentAllocation[]
 
   @@index([loanId])
   @@index([tenantId])
   @@index([dueDate])
+}
+
+// Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F2.
+model LoanInstallment {
+  id            String            @id @default(cuid())
+  tenantId      String
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  loanId        String
+  loan          Loan              @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  seq           Int
+  dueDate       DateTime          @db.Date
+  principalDue  Decimal           @db.Decimal(15, 2)
+  interestDue   Decimal           @db.Decimal(15, 2)
+  principalPaid Decimal           @default(0) @db.Decimal(15, 2)
+  interestPaid  Decimal           @default(0) @db.Decimal(15, 2)
+  status        InstallmentStatus @default(UNPAID)
+  paidOffAt     DateTime?
+
+  allocations LoanPaymentAllocation[]
+
+  @@unique([loanId, seq])
+  @@index([tenantId, dueDate, status])
+}
+
+// One payment can close or partially cover several installments (oldest
+// first) and one installment can be closed by several payments — hence the
+// join row rather than a column on either side. No tenantId of its own
+// (only paymentId/installmentId): same pattern as POSSaleLine/
+// TenantNotificationRead in lib/tenant-scope.ts, reached only through its
+// already tenant-scoped parents.
+model LoanPaymentAllocation {
+  id            String          @id @default(cuid())
+  paymentId     String
+  payment       LoanPayment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  installmentId String
+  installment   LoanInstallment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  principal     Decimal         @db.Decimal(15, 2)
+  interest      Decimal         @db.Decimal(15, 2)
+
+  @@index([paymentId])
+  @@index([installmentId])
 }
 
 // ── KONSUMEN (Toko/POS) ────────────────────────────────────────────────────────
@@ -1163,4 +1291,248 @@ model AuditLog {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, actorUserId])
+}
+
+// ── MARKET (koperasi pasar) ──────────────────────────────────────────────────
+// Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F3. A
+// tenant that manages a pasar gets these alongside its existing units — a
+// KSU with a Simpan-Pinjam unit and a pasar is not a new "type", just a
+// tenant with a JASA unit that has markets (rule 2b: never `if (type === ...)`).
+
+enum StallKind {
+  KIOS
+  LOS
+  LAPAK
+}
+
+enum StallStatus {
+  AVAILABLE
+  OCCUPIED
+  INACTIVE
+}
+
+// A koperasi can manage more than one pasar, all under the same JASA unit
+// (lib/units.ts#ensureUnitOfType) — auto-created on the first Market, same as
+// a KSU's units are never auto-created for it (see CooperativeUnit.type).
+model Market {
+  id        String          @id @default(cuid())
+  tenantId  String
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId    String
+  unit      CooperativeUnit @relation(fields: [unitId], references: [id])
+  name      String
+  address   String?
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+
+  stalls    Stall[]
+  levyRates LevyRate[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Stall {
+  id       String      @id @default(cuid())
+  tenantId String
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  marketId String
+  market   Market      @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  code     String // e.g. "A-12"
+  block    String?
+  kind     StallKind
+  areaM2   Decimal?    @db.Decimal(8, 2)
+  status   StallStatus @default(AVAILABLE)
+
+  contracts StallContract[]
+  charges   Charge[]
+
+  @@unique([tenantId, marketId, code])
+  @@index([tenantId, marketId, block])
+}
+
+// ── COLLECTIONS (koperasi pasar kolektor) ────────────────────────────────────
+// Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F4.
+
+// A member's assigned Kolektor — one member has at most one, a Kolektor has many.
+model CollectorAssignment {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  memberId  String
+  member    Member   @relation(fields: [memberId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, memberId])
+  @@index([tenantId, userId])
+}
+
+enum CollectionBatchStatus {
+  OPEN
+  SUBMITTED
+  VERIFIED
+}
+
+// One Kolektor's cash-in-hand for one operating day. expectedTotal accrues as
+// the collector records transactions (lib/units.ts has no equivalent — this
+// is summed directly by modules/collections/service.ts); receivedTotal is
+// what the teller actually counted at verification, never client-supplied
+// before that. unitId is deliberately absent: a batch can span several
+// units' transactions, so it belongs to no single one (rule 2b) — see
+// lib/journal.ts#postCollectionBatchVerification's unitId: null.
+model CollectionBatch {
+  id            String                @id @default(cuid())
+  tenantId      String
+  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  collectorId   String
+  collector     User                  @relation(fields: [collectorId], references: [id])
+  businessDate  DateTime              @db.Date
+  status        CollectionBatchStatus @default(OPEN)
+  expectedTotal Decimal               @default(0) @db.Decimal(15, 2)
+  receivedTotal Decimal?              @db.Decimal(15, 2)
+  variance      Decimal?              @db.Decimal(15, 2)
+  submittedAt   DateTime?
+  verifiedAt    DateTime?
+  verifiedBy    String?
+  createdAt     DateTime              @default(now())
+
+  savingTransactions SavingTransaction[]
+  loanPayments       LoanPayment[]
+  chargePayments     ChargePayment[]
+
+  @@unique([tenantId, collectorId, businessDate])
+  @@index([tenantId, status])
+}
+
+// ── SEWA & RETRIBUSI (koperasi pasar) ────────────────────────────────────────
+// Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F5.
+
+enum ChargeKind {
+  SEWA
+  RETRIBUSI
+}
+
+enum ChargePeriod {
+  DAILY
+  MONTHLY
+  YEARLY
+}
+
+// A trader occupying a Stall. Creating one sets Stall.status = OCCUPIED;
+// ending it (isActive: false, endDate set) sets it back to AVAILABLE — see
+// modules/market/contracts.service.ts. "Satu kios hanya punya satu kontrak
+// aktif" (F5 plan) is enforced there, not by a DB constraint: two INACTIVE
+// historical contracts for the same stall are perfectly valid.
+model StallContract {
+  id         String       @id @default(cuid())
+  tenantId   String
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stallId    String
+  stall      Stall        @relation(fields: [stallId], references: [id])
+  memberId   String
+  member     Member       @relation(fields: [memberId], references: [id])
+  startDate  DateTime     @db.Date
+  endDate    DateTime?    @db.Date
+  rentAmount Decimal      @db.Decimal(15, 2)
+  rentPeriod ChargePeriod
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+
+  @@index([tenantId, stallId, isActive])
+}
+
+// Retribusi tariff per pasar & stall kind — "Kebersihan", "Keamanan", etc.
+// One market+kind can have several active rates; the daily generator bills
+// every active StallContract on that stall kind once per active LevyRate.
+model LevyRate {
+  id        String       @id @default(cuid())
+  tenantId  String
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  marketId  String
+  market    Market       @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  stallKind StallKind
+  name      String
+  amount    Decimal      @db.Decimal(15, 2)
+  period    ChargePeriod @default(DAILY)
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+
+  @@index([tenantId, marketId, stallKind])
+}
+
+// One billed line — a SEWA charge from a StallContract's rent period, or a
+// RETRIBUSI charge from one LevyRate on one operating day. sourceId is
+// whichever produced it (contractId or levyRateId); the pair
+// (sourceId, periodStart) is what makes the daily generator idempotent.
+model Charge {
+  id          String            @id @default(cuid())
+  tenantId    String
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId      String
+  unit        CooperativeUnit   @relation(fields: [unitId], references: [id])
+  memberId    String
+  member      Member            @relation(fields: [memberId], references: [id])
+  stallId     String
+  stall       Stall             @relation(fields: [stallId], references: [id])
+  kind        ChargeKind
+  // The StallContract (SEWA) or LevyRate (RETRIBUSI) this was generated
+  // from — deliberately not a Prisma `@relation`: a single column can't be a
+  // real FK to two different tables. Resolved in service code by `kind`,
+  // same as AccountMapping.sourceId's polymorphic SAVING_CONFIG/LOAN_CONFIG
+  // reference elsewhere in this schema.
+  sourceId    String
+  periodStart DateTime          @db.Date
+  dueDate     DateTime          @db.Date
+  amount      Decimal           @db.Decimal(15, 2)
+  paidAmount  Decimal           @default(0) @db.Decimal(15, 2)
+  status      InstallmentStatus @default(UNPAID)
+  createdAt   DateTime          @default(now())
+
+  payments ChargePayment[]
+
+  @@unique([sourceId, periodStart])
+  @@index([tenantId, memberId, status])
+  @@index([tenantId, stallId])
+}
+
+model ChargePayment {
+  id                String           @id @default(cuid())
+  tenantId          String
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  chargeId          String
+  charge            Charge           @relation(fields: [chargeId], references: [id])
+  amount            Decimal          @db.Decimal(15, 2)
+  paidAt            DateTime
+  createdBy         String
+  createdByUser     User             @relation(fields: [createdBy], references: [id])
+  collectionBatchId String?
+  collectionBatch   CollectionBatch? @relation(fields: [collectionBatchId], references: [id])
+  createdAt         DateTime         @default(now())
+
+  @@index([chargeId])
+  @@index([tenantId])
+}
+
+// Deduplicates a retried write from a flaky mobile connection (koperasi pasar
+// F6 plan) — a client resends the same `Idempotency-Key` header when it never
+// saw the response to an earlier attempt. Scoped to (tenantId, userId, key):
+// the mobile Kolektor flow submits one request at a time (button disabled
+// while in flight), so a true concurrent double-claim of the same key by the
+// same user isn't a real scenario worth locking against — see
+// lib/idempotency.ts. userId is deliberately a plain column with no
+// `@relation`, same as AuditLog.actorUserId above.
+model IdempotencyKey {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId         String
+  key            String
+  responseStatus Int
+  responseBody   Json
+  createdAt      DateTime @default(now())
+
+  @@unique([tenantId, userId, key])
+  @@index([tenantId, createdAt])
 }

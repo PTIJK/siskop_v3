@@ -1,12 +1,34 @@
 import { ErrorCode } from "@siskop/types";
 import { Prisma, type JournalSourceType } from "@prisma/client";
-import { AppError, conflict } from "./errors.js";
+import { AppError, conflict, validationError } from "./errors.js";
+import { templateCode } from "./coaTemplate.js";
 import type { TxClient } from "./db.js";
 
 interface JournalLineInput {
   accountId: string;
   debit?: number | Prisma.Decimal;
   credit?: number | Prisma.Decimal;
+}
+
+/**
+ * Redirects whichever line points at the tenant's Kas (debitAccountId of the
+ * SYSTEM/COLLECTOR_CASH mapping) to Kas di Kolektor (its creditAccountId) —
+ * koperasi pasar plan F4. Which side Kas is on varies by transaction kind
+ * (debit for a DEPOSIT/loan payment, credit for a WITHDRAWAL/DISBURSEMENT),
+ * so this checks both rather than assuming one. A `null` mapping (Buat COA
+ * Standar hasn't been run since F4 shipped) is a no-op, not an error — the
+ * transaction still posts, just against ordinary Kas.
+ */
+export function substituteCollectorCash(
+  lines: JournalLineInput[],
+  collectorCashMapping: { debitAccountId: string; creditAccountId: string } | null
+): JournalLineInput[] {
+  if (!collectorCashMapping) return lines;
+  return lines.map((line) =>
+    line.accountId === collectorCashMapping.debitAccountId
+      ? { ...line, accountId: collectorCashMapping.creditAccountId }
+      : line
+  );
 }
 
 type MappingSource = "SAVING_CONFIG" | "LOAN_CONFIG" | "SYSTEM";
@@ -23,7 +45,10 @@ type MappingKind =
   | "SALE_COGS"
   | "SALE_RECEIVABLE"
   | "MEMBER_CREDIT_REPAYMENT"
-  | "STOCK_PURCHASE";
+  | "STOCK_PURCHASE"
+  | "CHARGE_ACCRUAL_SEWA"
+  | "CHARGE_ACCRUAL_RETRIBUSI"
+  | "CHARGE_PAYMENT";
 
 /**
  * Resolves the debit/credit accounts for one transaction kind and returns a
@@ -89,7 +114,10 @@ async function createJournalEntry(
       | "POS_SALE"
       | "MEMBER_CREDIT_REPAYMENT"
       | "STOCK_MOVEMENT"
-      | "MANUAL_EXPENSE";
+      | "MANUAL_EXPENSE"
+      | "COLLECTION_BATCH"
+      | "CHARGE_ACCRUAL"
+      | "CHARGE_PAYMENT";
     /** Null for MANUAL_EXPENSE — that entry has no separate source row, it IS the record. */
     sourceId: string | null;
     description: string;
@@ -127,6 +155,20 @@ async function createJournalEntry(
   return { id: entry.id };
 }
 
+/**
+ * The tenant's SYSTEM/COLLECTOR_CASH redirect pair (koperasi pasar F4), or
+ * null if "Buat COA Standar" hasn't been (re-)run since F4 shipped.
+ */
+async function loadCollectorCashMapping(
+  tx: TxClient,
+  tenantId: string
+): Promise<{ debitAccountId: string; creditAccountId: string } | null> {
+  return tx.accountMapping.findFirst({
+    where: { tenantId, sourceType: "SYSTEM", sourceId: null, transactionKind: "COLLECTOR_CASH" },
+    select: { debitAccountId: true, creditAccountId: true }
+  });
+}
+
 export async function postSavingTransaction(
   tx: TxClient,
   params: {
@@ -139,9 +181,11 @@ export async function postSavingTransaction(
     amount: number | Prisma.Decimal;
     entryDate: Date;
     description: string;
+    /** Recorded by a Kolektor (F4) — redirects the Kas side to Kas di Kolektor. */
+    viaCollector?: boolean;
   }
 ): Promise<void> {
-  const lines = await buildComponentLines(
+  let lines = await buildComponentLines(
     tx,
     params.tenantId,
     "SAVING_CONFIG",
@@ -149,6 +193,9 @@ export async function postSavingTransaction(
     params.kind,
     params.amount
   );
+  if (params.viaCollector) {
+    lines = substituteCollectorCash(lines, await loadCollectorCashMapping(tx, params.tenantId));
+  }
   await createJournalEntry(tx, {
     tenantId: params.tenantId,
     unitId: params.unitId,
@@ -205,6 +252,8 @@ export async function postLoanPayment(
     penaltyAmount: number | Prisma.Decimal;
     entryDate: Date;
     description: string;
+    /** Recorded by a Kolektor (F4) — redirects the Kas side to Kas di Kolektor. */
+    viaCollector?: boolean;
   }
 ): Promise<void> {
   const [principalLines, interestLines, penaltyLines] = await Promise.all([
@@ -213,6 +262,13 @@ export async function postLoanPayment(
     buildComponentLines(tx, params.tenantId, "LOAN_CONFIG", params.loanConfigId, "PAYMENT_PENALTY", params.penaltyAmount)
   ]);
 
+  const lines = params.viaCollector
+    ? substituteCollectorCash(
+        [...principalLines, ...interestLines, ...penaltyLines],
+        await loadCollectorCashMapping(tx, params.tenantId)
+      )
+    : [...principalLines, ...interestLines, ...penaltyLines];
+
   await createJournalEntry(tx, {
     tenantId: params.tenantId,
     unitId: params.unitId,
@@ -220,7 +276,128 @@ export async function postLoanPayment(
     sourceType: "LOAN_PAYMENT",
     sourceId: params.loanPaymentId,
     description: params.description,
-    lines: [...principalLines, ...interestLines, ...penaltyLines]
+    lines
+  });
+}
+
+/**
+ * A verified CollectionBatch's compound entry (koperasi pasar F4): `Dr Kas =
+ * received`, `Dr Piutang Kolektor = shortfall` (received < expected — the
+ * collector owes the difference) or `Cr Selisih Kas = surplus` (received >
+ * expected — a gain, never both), `Cr Kas di Kolektor = expected` (always,
+ * discharging what the collector was holding regardless of variance). unitId
+ * is always null: a batch can span several units' transactions (rule 2b).
+ */
+export async function postCollectionBatchVerification(
+  tx: TxClient,
+  params: {
+    tenantId: string;
+    batchId: string;
+    entryDate: Date;
+    received: Prisma.Decimal.Value;
+    expected: Prisma.Decimal.Value;
+    description: string;
+  }
+): Promise<void> {
+  const mapping = await loadCollectorCashMapping(tx, params.tenantId);
+  const [piutangKolektor, selisihKas] = mapping
+    ? await Promise.all([
+        tx.account.findFirst({ where: { tenantId: params.tenantId, code: templateCode("piutang_kolektor") } }),
+        tx.account.findFirst({ where: { tenantId: params.tenantId, code: templateCode("selisih_kas") } })
+      ])
+    : [null, null];
+  if (!mapping || !piutangKolektor || !selisihKas) {
+    throw validationError('Jalankan "Buat COA Standar" terlebih dahulu sebelum memverifikasi setoran kolektor');
+  }
+
+  const received = new Prisma.Decimal(params.received);
+  const expected = new Prisma.Decimal(params.expected);
+  const variance = received.sub(expected);
+  const shortfall = variance.isNegative() ? variance.neg() : new Prisma.Decimal(0);
+  const surplus = variance.isPositive() ? variance : new Prisma.Decimal(0);
+
+  const lines: JournalLineInput[] = [
+    { accountId: mapping.debitAccountId, debit: received },
+    ...(shortfall.gt(0) ? [{ accountId: piutangKolektor.id, debit: shortfall }] : []),
+    ...(surplus.gt(0) ? [{ accountId: selisihKas.id, credit: surplus }] : []),
+    { accountId: mapping.creditAccountId, credit: expected }
+  ];
+
+  await createJournalEntry(tx, {
+    tenantId: params.tenantId,
+    unitId: null,
+    entryDate: params.entryDate,
+    sourceType: "COLLECTION_BATCH",
+    sourceId: params.batchId,
+    description: params.description,
+    lines
+  });
+}
+
+/**
+ * A Charge's accrual (koperasi pasar F5): `Dr Piutang Sewa & Retribusi`
+ * against `Cr Pendapatan Sewa Kios` (SEWA) or `Cr Pendapatan Retribusi`
+ * (RETRIBUSI) — kept as separate revenue lines per D5 rather than folded
+ * together, mirroring PASAR_MAPPING_TEMPLATE's two accrual kinds.
+ */
+export async function postChargeAccrual(
+  tx: TxClient,
+  params: {
+    tenantId: string;
+    /** The Charge's Stall's unit. */
+    unitId: string | null;
+    chargeId: string;
+    kind: "SEWA" | "RETRIBUSI";
+    amount: number | Prisma.Decimal;
+    entryDate: Date;
+    description: string;
+  }
+): Promise<void> {
+  const transactionKind: MappingKind = params.kind === "SEWA" ? "CHARGE_ACCRUAL_SEWA" : "CHARGE_ACCRUAL_RETRIBUSI";
+  const lines = await buildComponentLines(tx, params.tenantId, "SYSTEM", null, transactionKind, params.amount);
+  await createJournalEntry(tx, {
+    tenantId: params.tenantId,
+    unitId: params.unitId,
+    entryDate: params.entryDate,
+    sourceType: "CHARGE_ACCRUAL",
+    sourceId: params.chargeId,
+    description: params.description,
+    lines
+  });
+}
+
+/**
+ * A ChargePayment (koperasi pasar F5): `Dr Kas` / `Cr Piutang Sewa &
+ * Retribusi`, discharging the receivable postChargeAccrual booked. Same
+ * viaCollector redirect as postSavingTransaction/postLoanPayment — a Kolektor
+ * collecting a levy in the field holds it as Kas di Kolektor, not Kas, until
+ * their batch is verified.
+ */
+export async function postChargePayment(
+  tx: TxClient,
+  params: {
+    tenantId: string;
+    /** The Charge's Stall's unit. */
+    unitId: string | null;
+    chargePaymentId: string;
+    amount: number | Prisma.Decimal;
+    entryDate: Date;
+    description: string;
+    viaCollector?: boolean;
+  }
+): Promise<void> {
+  let lines = await buildComponentLines(tx, params.tenantId, "SYSTEM", null, "CHARGE_PAYMENT", params.amount);
+  if (params.viaCollector) {
+    lines = substituteCollectorCash(lines, await loadCollectorCashMapping(tx, params.tenantId));
+  }
+  await createJournalEntry(tx, {
+    tenantId: params.tenantId,
+    unitId: params.unitId,
+    entryDate: params.entryDate,
+    sourceType: "CHARGE_PAYMENT",
+    sourceId: params.chargePaymentId,
+    description: params.description,
+    lines
   });
 }
 

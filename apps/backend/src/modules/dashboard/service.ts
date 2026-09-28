@@ -6,9 +6,11 @@ import type {
   ChartPoint,
   DashboardSummary,
   GrowthPoint,
-  LoanQualityDashboard
+  LoanQualityDashboard,
+  PasarDashboard
 } from "@siskop/types";
 import { db } from "../../lib/db.js";
+import { businessDate } from "../../lib/operating-calendar.js";
 import { MODAL_DISETOR_AUDIT_THRESHOLD_RP, REGULATORY_CAPS, classifyKsp } from "../../lib/regulatory-config.js";
 import { getModalSendiri, getTotalAset, komposisiModalSendiri } from "../reports/capital-service.js";
 
@@ -258,6 +260,36 @@ export async function getLoanQualityDashboard(tenantId: string, unitId?: string)
       kolCategory: l.kolCategory,
       outstanding: l.remainingAmount.toString()
     }))
+  };
+}
+
+// ── Koperasi pasar plan F7 — dashboard widgets ───────────────────────────────
+
+export async function getPasarDashboard(tenantId: string): Promise<PasarDashboard> {
+  const today = businessDate();
+  const [todayBatches, submittedCount, overdueInstallments, overdueCharges] = await Promise.all([
+    db.collectionBatch.aggregate({ where: { tenantId, businessDate: today }, _sum: { expectedTotal: true } }),
+    db.collectionBatch.count({ where: { tenantId, status: "SUBMITTED" } }),
+    db.loanInstallment.aggregate({
+      where: { tenantId, status: { not: "PAID" }, dueDate: { lt: today }, loan: { status: "ACTIVE" } },
+      _sum: { principalDue: true, interestDue: true, principalPaid: true, interestPaid: true }
+    }),
+    db.charge.aggregate({
+      where: { tenantId, status: { not: "PAID" }, dueDate: { lt: today } },
+      _sum: { amount: true, paidAmount: true }
+    })
+  ]);
+
+  const loanTunggakan = (overdueInstallments._sum.principalDue ?? ZERO)
+    .plus(overdueInstallments._sum.interestDue ?? ZERO)
+    .sub(overdueInstallments._sum.principalPaid ?? ZERO)
+    .sub(overdueInstallments._sum.interestPaid ?? ZERO);
+  const chargeTunggakan = (overdueCharges._sum.amount ?? ZERO).sub(overdueCharges._sum.paidAmount ?? ZERO);
+
+  return {
+    setoranHariIni: (todayBatches._sum.expectedTotal ?? ZERO).toString(),
+    batchBelumDiverifikasi: submittedCount,
+    totalTunggakan: loanTunggakan.add(chargeTunggakan).toString()
   };
 }
 
