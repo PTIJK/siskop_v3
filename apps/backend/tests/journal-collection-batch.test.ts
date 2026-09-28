@@ -21,6 +21,12 @@ async function accountByName(tenantId: string, name: string) {
 describe("postCollectionBatchVerification", () => {
   it("rejects when Buat COA Standar hasn't been run yet", async () => {
     const admin = await setupTenant();
+    // Provisioning now runs the standard COA (incl. SYSTEM/COLLECTOR_CASH)
+    // automatically, so a fresh tenant no longer naturally lacks it — remove
+    // the mapping to simulate a tenant that somehow still doesn't have it.
+    await db.accountMapping.deleteMany({
+      where: { tenantId: admin.user.tenantId, sourceType: "SYSTEM", transactionKind: "COLLECTOR_CASH" }
+    });
 
     await expect(
       db.$transaction((tx) =>

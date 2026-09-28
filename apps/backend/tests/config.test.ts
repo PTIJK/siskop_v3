@@ -462,14 +462,15 @@ describe("POST /api/config/accounts/generate-standard", () => {
 
     expect(res.status).toBe(201);
     // 2 mappings per saving config (deposit/withdrawal) + 4 per loan config
-    // (disbursement/principal/interest/penalty) + 1 tenant-wide SYSTEM/
-    // COLLECTOR_CASH (koperasi pasar F4 — generated for every tenant, not
-    // just ones with a Toko unit).
-    expect(res.body.data.mappingsCreated).toBe(2 + 4 + 1);
+    // (disbursement/principal/interest/penalty) — not +1 for SYSTEM/
+    // COLLECTOR_CASH (koperasi pasar F4): that one is already created at
+    // provisioning, so this call just skips it.
+    expect(res.body.data.mappingsCreated).toBe(2 + 4);
 
     const mappings = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
+    // 7 total: the 6 just created, +1 COLLECTOR_CASH from provisioning.
     expect(mappings.body.data).toHaveLength(7);
     const kinds = mappings.body.data.map((m: { transactionKind: string }) => m.transactionKind).sort();
     expect(kinds).toEqual(
@@ -606,7 +607,8 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     const res = await generateStandard(admin.accessToken);
 
     expect(res.status).toBe(201);
-    expect(res.body.data.mappingsCreated).toBe(6);
+    // 5, not 6: SYSTEM/COLLECTOR_CASH was already created at provisioning.
+    expect(res.body.data.mappingsCreated).toBe(5);
     expect(await listAccountCodes(admin.accessToken)).toEqual(
       expect.arrayContaining(["1-1150", "1-1300", "4-3000", "5-4000"])
     );
@@ -634,14 +636,15 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     });
   });
 
-  it("adds no Toko accounts or SYSTEM mappings for a tenant that only has a KSP unit (but does get COLLECTOR_CASH)", async () => {
+  it("adds no Toko accounts or SYSTEM mappings for a tenant that only has a KSP unit (COLLECTOR_CASH already exists from provisioning)", async () => {
     const admin = await setupTenant();
 
     const res = await generateStandard(admin.accessToken);
 
-    // COLLECTOR_CASH (koperasi pasar F4) is the one SYSTEM mapping generated
-    // regardless of unit type — see the TOKO_MAPPING_KINDS comment above.
-    expect(res.body.data.mappingsCreated).toBe(1);
+    // 0, not 1: COLLECTOR_CASH (koperasi pasar F4) is generated regardless of
+    // unit type, but that now happens at provisioning — this call just skips it.
+    expect(res.body.data.mappingsCreated).toBe(0);
+    expect(res.body.data.mappingsSkipped).toBeGreaterThanOrEqual(1);
     const codes = await listAccountCodes(admin.accessToken);
     for (const tokoCode of ["1-1150", "1-1300", "4-3000", "5-4000"]) {
       expect(codes).not.toContain(tokoCode);
@@ -653,7 +656,7 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
   it("picks Toko up on a re-run once a KONSUMEN unit is added later", async () => {
     const admin = await setupTenant();
     const first = await generateStandard(admin.accessToken);
-    expect(first.body.data.mappingsCreated).toBe(1); // COLLECTOR_CASH only, no Toko unit yet
+    expect(first.body.data.mappingsCreated).toBe(0); // COLLECTOR_CASH already exists from provisioning, no Toko unit yet
 
     await createKonsumenUnit(admin.accessToken);
     const second = await generateStandard(admin.accessToken);
@@ -725,10 +728,11 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
 
     const res = await generateStandard(admin.accessToken);
 
-    // COLLECTOR_CASH (koperasi pasar F4) wasn't hand-made above, so it's the
-    // one mapping this run does create; the 5 Toko ones are skipped.
-    expect(res.body.data.mappingsCreated).toBe(1);
-    expect(res.body.data.mappingsSkipped).toBeGreaterThanOrEqual(5);
+    // 0, not 1: COLLECTOR_CASH (koperasi pasar F4) was never hand-made above,
+    // but it already exists from provisioning — this run just skips it,
+    // along with the 5 hand-made Toko mappings.
+    expect(res.body.data.mappingsCreated).toBe(0);
+    expect(res.body.data.mappingsSkipped).toBeGreaterThanOrEqual(6);
     const codes = await listAccountCodes(admin.accessToken);
     expect(codes).not.toContain("4-3000");
     expect(codes).not.toContain("5-4000");
@@ -938,10 +942,11 @@ describe("GET/POST/DELETE /api/config/account-mappings", () => {
     const list = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(1);
-    expect(list.body.data[0].sourceName).toBe("Simpanan Sukarela");
-    expect(list.body.data[0].debitAccountName).toBe("Kas");
-    expect(list.body.data[0].creditAccountName).toBe("Simpanan Sukarela");
+    // +1 for the tenant-wide SYSTEM/COLLECTOR_CASH mapping every tenant now
+    // gets automatically at provisioning (koperasi pasar F4).
+    expect(list.body.data).toHaveLength(2);
+    const own = list.body.data.find((m: { sourceName: string }) => m.sourceName === "Simpanan Sukarela");
+    expect(own).toMatchObject({ debitAccountName: "Kas", creditAccountName: "Simpanan Sukarela" });
   });
 
   it("updates the mapping in place when re-submitted for the same source+kind, instead of conflicting", async () => {
@@ -965,7 +970,8 @@ describe("GET/POST/DELETE /api/config/account-mappings", () => {
     const list = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(1);
+    // +1 for the tenant-wide SYSTEM/COLLECTOR_CASH mapping from provisioning — see above.
+    expect(list.body.data).toHaveLength(2);
   });
 
   it("deletes a mapping", async () => {
@@ -984,7 +990,9 @@ describe("GET/POST/DELETE /api/config/account-mappings", () => {
     const list = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(0);
+    // 1, not 0: the tenant-wide SYSTEM/COLLECTOR_CASH mapping from
+    // provisioning was never touched by this test, only the one it made.
+    expect(list.body.data).toHaveLength(1);
   });
 
   // The end-to-end proof this module closes the gap: before any mapping
