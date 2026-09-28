@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import request from "supertest";
 import { db } from "../src/lib/db.js";
+import { businessDate, dateKey } from "../src/lib/operating-calendar.js";
 import { app, createMemberAs, createStaffSession, setupTenant } from "./helpers.js";
 
 beforeAll(() => {
@@ -131,7 +132,12 @@ describe("GET /api/reports/regulatory/neraca", () => {
     const member = await createMemberAs(admin.accessToken);
     await setupMappedDeposit(admin.accessToken, member.id, 500_000);
 
-    const today = new Date().toISOString().split("T")[0];
+    // "Today" here means today's Asia/Jakarta calendar date — same as the
+    // production asOfDate semantics (see endOfBusinessDay). A naive
+    // `new Date().toISOString().split("T")[0]` (UTC calendar date) drifts a
+    // day behind Jakarta's for part of the UTC day, which would make this
+    // test flaky rather than a regression check.
+    const today = dateKey(businessDate());
     const withParam = await request(app())
       .get("/api/reports/regulatory/neraca")
       .query({ asOfDate: today })

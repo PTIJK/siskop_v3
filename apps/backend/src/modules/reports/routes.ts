@@ -1,8 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { endOfDay } from "date-fns";
 import { resolvePeriod } from "../../lib/period.js";
 import { resolveReadableUnitId } from "../../lib/unit-access.js";
-import { businessDate, parseDateKey } from "../../lib/operating-calendar.js";
+import { businessDate, dateKey, endOfBusinessDay, parseDateKey } from "../../lib/operating-calendar.js";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { requireAccountingEntitlement, requirePasarEntitlement } from "../../middleware/entitlement.js";
@@ -122,7 +121,11 @@ export function reportsRoutes(): Router {
     requirePermission("reports", "read"),
     handle(async (req, res) => {
       const { asOfDate, unitId } = neracaParamsSchema.parse(req.query);
-      const cutoff = asOfDate ? endOfDay(new Date(asOfDate)) : new Date();
+      // endOfBusinessDay (Asia/Jakarta), not date-fns's endOfDay (server-local
+      // timezone) or a bare `new Date()`: either can put the cutoff hours
+      // behind "now" and silently exclude a same-day transaction — see that
+      // function's own doc.
+      const cutoff = asOfDate ? endOfBusinessDay(new Date(asOfDate)) : endOfBusinessDay();
       const data = await getNeraca(authClaims(req).tenantId, cutoff, await reportUnit(req, unitId));
       res.json({ success: true, data, meta: res.locals.meta });
     })
@@ -134,11 +137,15 @@ export function reportsRoutes(): Router {
     requirePermission("reports", "export"),
     handle(async (req, res) => {
       const { asOfDate, unitId } = neracaParamsSchema.parse(req.query);
-      const cutoff = asOfDate ? endOfDay(new Date(asOfDate)) : new Date();
+      // endOfBusinessDay (Asia/Jakarta), not date-fns's endOfDay (server-local
+      // timezone) or a bare `new Date()`: either can put the cutoff hours
+      // behind "now" and silently exclude a same-day transaction — see that
+      // function's own doc.
+      const cutoff = asOfDate ? endOfBusinessDay(new Date(asOfDate)) : endOfBusinessDay();
       const pdf = await generateNeracaPdf(authClaims(req).tenantId, cutoff, await reportUnit(req, unitId));
       res.set({
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="neraca-${cutoff.toISOString().split("T")[0]}.pdf"`
+        "Content-Disposition": `attachment; filename="neraca-${dateKey(businessDate(cutoff))}.pdf"`
       });
       res.send(pdf);
     })
@@ -168,7 +175,7 @@ export function reportsRoutes(): Router {
       const pdf = await generateArusKasPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
       res.set({
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="arus-kas-${start.toISOString().split("T")[0]}_${end.toISOString().split("T")[0]}.pdf"`
+        "Content-Disposition": `attachment; filename="arus-kas-${dateKey(businessDate(start))}_${dateKey(businessDate(end))}.pdf"`
       });
       res.send(pdf);
     })
@@ -198,7 +205,7 @@ export function reportsRoutes(): Router {
       const pdf = await generateLaporanHasilUsahaPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
       res.set({
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="laporan-hasil-usaha-${start.toISOString().split("T")[0]}_${end.toISOString().split("T")[0]}.pdf"`
+        "Content-Disposition": `attachment; filename="laporan-hasil-usaha-${dateKey(businessDate(start))}_${dateKey(businessDate(end))}.pdf"`
       });
       res.send(pdf);
     })
@@ -228,7 +235,7 @@ export function reportsRoutes(): Router {
       const pdf = await generatePerubahanEkuitasPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
       res.set({
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="perubahan-ekuitas-${start.toISOString().split("T")[0]}_${end.toISOString().split("T")[0]}.pdf"`
+        "Content-Disposition": `attachment; filename="perubahan-ekuitas-${dateKey(businessDate(start))}_${dateKey(businessDate(end))}.pdf"`
       });
       res.send(pdf);
     })
@@ -258,7 +265,7 @@ export function reportsRoutes(): Router {
       const pdf = await generateShuDistributionPdf(authClaims(req).tenantId, start, end);
       res.set({
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="shu-distribution-${start.toISOString().split("T")[0]}_${end.toISOString().split("T")[0]}.pdf"`
+        "Content-Disposition": `attachment; filename="shu-distribution-${dateKey(businessDate(start))}_${dateKey(businessDate(end))}.pdf"`
       });
       res.send(pdf);
     })

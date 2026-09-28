@@ -1,7 +1,18 @@
 import { EquityClass, Prisma } from "@prisma/client";
 import { EQUITY_CLASS_LABELS, type PerubahanEkuitasRowKey } from "@siskop/types";
 import { db } from "../../lib/db.js";
+import { businessDate, dateKey } from "../../lib/operating-calendar.js";
 import { MODAL_SENDIRI_CLASSES } from "../../lib/regulatory-config.js";
+
+/**
+ * Renders a period boundary as its Asia/Jakarta calendar-day string. `from`/
+ * `to` here come from `resolvePeriod`, which shifts them off UTC midnight
+ * (`startOfBusinessDay`/`endOfBusinessDay`) — a raw `toISOString().split
+ * ("T")[0]` would echo the wrong calendar day for part of the UTC day.
+ */
+function periodDate(d: Date): string {
+  return dateKey(businessDate(d));
+}
 
 const ZERO = new Prisma.Decimal(0);
 
@@ -190,7 +201,7 @@ export async function getPerubahanEkuitas(tenantId: string, from: Date, to: Date
   };
 
   return {
-    periode: { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] },
+    periode: { from: periodDate(from), to: periodDate(to) },
     columns: columnKeys.map((key) => ({
       key,
       label: key === UNCLASSIFIED ? "Belum Diklasifikasi" : EQUITY_CLASS_LABELS[key]

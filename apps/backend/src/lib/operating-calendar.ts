@@ -32,6 +32,35 @@ export function businessDate(now: Date = new Date()): Date {
   return parseDateKey(dateKey(new Date(now.getTime() + JAKARTA_OFFSET_MS)));
 }
 
+/**
+ * End of `now`'s (or a caller-supplied instant's) calendar day in Asia/
+ * Jakarta, as a real UTC instant — the upper bound a date-range query needs
+ * so "today" is never excluded just because the server's raw `new Date()`
+ * hasn't reached UTC midnight yet. `date-fns`'s `endOfDay` computes this in
+ * the *server process's* local timezone instead, which silently breaks the
+ * moment that differs from Jakarta (or even on a Jakarta box, produces the
+ * wrong cutoff for roughly 7 hours a day — see the date-range bug class in
+ * repository memory). Also correct for a caller-supplied `Date` that already
+ * represents a calendar day (e.g. `new Date(asOfDate)` from a "YYYY-MM-DD"
+ * query param): `businessDate()` re-derives the same calendar day either way.
+ */
+export function endOfBusinessDay(now: Date = new Date()): Date {
+  const day = businessDate(now);
+  return new Date(day.getTime() + DAY_MS - JAKARTA_OFFSET_MS - 1);
+}
+
+/**
+ * Start of `now`'s (or a caller-supplied instant's) calendar day in Asia/
+ * Jakarta, as a real UTC instant — the lower bound a date-range query needs
+ * so a same-day entry posted late in the UTC day (already tomorrow in UTC,
+ * still today in Jakarta) isn't excluded by a raw `new Date(dateString)`
+ * (UTC midnight) lower bound. Mirrors `endOfBusinessDay`.
+ */
+export function startOfBusinessDay(now: Date = new Date()): Date {
+  const day = businessDate(now);
+  return new Date(day.getTime() - JAKARTA_OFFSET_MS);
+}
+
 export function isOperatingDay(d: Date, cal: OperatingCalendar): boolean {
   return !cal.closedWeekdays.includes(d.getUTCDay()) && !cal.holidays.has(dateKey(d));
 }
