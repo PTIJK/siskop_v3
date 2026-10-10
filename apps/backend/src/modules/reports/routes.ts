@@ -1,3 +1,4 @@
+import type { LaporanHasilUsaha, Neraca } from "@siskop/types";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { resolvePeriod } from "../../lib/period.js";
 import { resolveReadableUnitId } from "../../lib/unit-access.js";
@@ -7,6 +8,7 @@ import { requirePermission } from "../../middleware/rbac.js";
 import { requireAccountingEntitlement, requirePasarEntitlement } from "../../middleware/entitlement.js";
 import {
   bukuBesarAccountParamsSchema,
+  comparablePeriodParamsSchema,
   financialParamsSchema,
   jurnalParamsSchema,
   trialBalanceParamsSchema,
@@ -22,6 +24,7 @@ import {
 import { getFinancialReport, getRATReport } from "./service.js";
 import { getBukuBesar, getBukuBesarAccount, getJurnal, getNeracaSaldo, type UnitScope } from "./ledger-service.js";
 import { requireParam } from "../../lib/http.js";
+import { comparisonAsOf, comparisonRange } from "../../lib/comparison.js";
 import { getPerubahanEkuitas } from "./capital-service.js";
 import { getRekapHarianKolektor, getTunggakanAngsuran, getTunggakanSewaRetribusi } from "./pasar-service.js";
 import { rekapHarianKolektorCsv } from "./pasar-export.js";
@@ -134,13 +137,19 @@ export function reportsRoutes(): Router {
     requireAccountingEntitlement,
     requirePermission("reports", "read"),
     handle(async (req, res) => {
-      const { asOfDate, unitId } = neracaParamsSchema.parse(req.query);
+      const { asOfDate, unitId, compare } = neracaParamsSchema.parse(req.query);
       // endOfBusinessDay (Asia/Jakarta), not date-fns's endOfDay (server-local
       // timezone) or a bare `new Date()`: either can put the cutoff hours
       // behind "now" and silently exclude a same-day transaction — see that
       // function's own doc.
       const cutoff = asOfDate ? endOfBusinessDay(new Date(asOfDate)) : endOfBusinessDay();
-      const data = await getNeraca(authClaims(req).tenantId, cutoff, await reportUnit(req, unitId));
+      const tenantId = authClaims(req).tenantId;
+      const unit = await reportUnit(req, unitId);
+      const data: Neraca = await getNeraca(tenantId, cutoff, unit);
+      if (compare) {
+        const earlier = endOfBusinessDay(new Date(comparisonAsOf(compare, dateKey(businessDate(cutoff)))));
+        data.comparison = await getNeraca(tenantId, earlier, unit);
+      }
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );
@@ -200,10 +209,17 @@ export function reportsRoutes(): Router {
     requireAccountingEntitlement,
     requirePermission("reports", "read"),
     handle(async (req, res) => {
-      const { from, to, unitId } = unitPeriodParamsSchema.parse(req.query);
+      const { from, to, unitId, compare } = comparablePeriodParamsSchema.parse(req.query);
       const { start, end } = resolvePeriod(from, to);
       assertValidPeriod(start, end);
-      const data = await getLaporanHasilUsaha(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
+      const tenantId = authClaims(req).tenantId;
+      const unit = await reportUnit(req, unitId);
+      const data: LaporanHasilUsaha = await getLaporanHasilUsaha(tenantId, start, end, unit);
+      if (compare) {
+        const earlier = comparisonRange(compare, dateKey(businessDate(start)), dateKey(businessDate(end)));
+        const p = resolvePeriod(earlier.from, earlier.to);
+        data.comparison = await getLaporanHasilUsaha(tenantId, p.start, p.end, unit);
+      }
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );
@@ -406,7 +422,14 @@ export function reportsRoutes(): Router {
     requirePermission("reports", "read"),
     handle(async (req, res) => {
       const q = trialBalanceParamsSchema.parse(req.query);
-      const data = await getNeracaSaldo(authClaims(req).tenantId, resolvePeriod(q.from, q.to), await bookUnit(req, q.unitId));
+      const tenantId = authClaims(req).tenantId;
+      const period = resolvePeriod(q.from, q.to);
+      const unit = await bookUnit(req, q.unitId);
+      const data = await getNeracaSaldo(tenantId, period, unit);
+      if (q.compare) {
+        const earlier = comparisonRange(q.compare, dateKey(businessDate(period.start)), dateKey(businessDate(period.end)));
+        data.comparison = await getNeracaSaldo(tenantId, resolvePeriod(earlier.from, earlier.to), unit);
+      }
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );

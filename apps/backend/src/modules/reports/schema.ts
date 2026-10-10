@@ -13,9 +13,13 @@ export const ratParamsSchema = z.object({
 // unit: they are cooperative-level statements, not something a single unit files.
 const unitIdParam = z.string().cuid("Unit ID tidak valid").optional();
 
+// Optional comparative column: the same statement for the earlier period/date (lib/comparison.ts).
+const compareParam = z.enum(["PREVIOUS_PERIOD", "PREVIOUS_YEAR"]).optional();
+
 export const neracaParamsSchema = z.object({
   asOfDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD").optional(),
-  unitId: unitIdParam
+  unitId: unitIdParam,
+  compare: compareParam
 });
 
 export const periodParamsSchema = z.object({
@@ -24,6 +28,8 @@ export const periodParamsSchema = z.object({
 });
 
 export const unitPeriodParamsSchema = periodParamsSchema.extend({ unitId: unitIdParam });
+
+export const comparablePeriodParamsSchema = unitPeriodParamsSchema.extend({ compare: compareParam });
 
 export const upsertCalkNarrativeSchema = z.object({
   section: z.enum(["UMUM", "DASAR_PENYUSUNAN", "KEBIJAKAN_AKUNTANSI", "INFORMASI_TAMBAHAN"]),
@@ -88,7 +94,7 @@ export const jurnalParamsSchema = periodParamsSchema.extend({
   ...bookPagingParams
 });
 
-export const trialBalanceParamsSchema = periodParamsSchema.extend({ unitId: bookUnitParam });
+export const trialBalanceParamsSchema = periodParamsSchema.extend({ unitId: bookUnitParam, compare: compareParam });
 
 export const bukuBesarAccountParamsSchema = periodParamsSchema.extend({ unitId: bookUnitParam, ...bookPagingParams });
 

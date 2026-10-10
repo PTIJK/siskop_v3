@@ -67,6 +67,8 @@ export interface Neraca {
    * the Neraca so it stays balanced.
    */
   modalSendiri: string;
+  /** The same report for the earlier date, when `compare` was requested. Never nested. */
+  comparison?: Neraca;
 }
 
 // ── Laporan Perubahan Ekuitas (Permenkop UKM 2/2024 lampiran) ────────────────
@@ -139,6 +141,8 @@ export interface LaporanHasilUsaha {
   pendapatan: LabaRugiSection;
   beban: LabaRugiSection;
   shuBerjalan: string;
+  /** The same report for the earlier period, when `compare` was requested. Never nested. */
+  comparison?: LaporanHasilUsaha;
 }
 
 export interface ShuAlokasiBucket {
@@ -376,6 +380,8 @@ export interface TrialBalance {
    */
   totals: { mutasiDebit: string; mutasiKredit: string; saldoAkhirDebit: string; saldoAkhirKredit: string };
   balanced: boolean;
+  /** The same trial balance for the earlier period, when `compare` was requested. Never nested. */
+  comparison?: TrialBalance;
 }
 
 export interface BukuBesarLine {
@@ -403,3 +409,8 @@ export interface BukuBesarAccount {
   totalCredit: string;
   saldoAkhir: string;
 }
+
+// ── Comparative columns ──────────────────────────────────────────────────────
+
+/** What a statement is compared against: the span/month immediately before, or the same dates a year earlier. */
+export type CompareMode = "PREVIOUS_PERIOD" | "PREVIOUS_YEAR";
