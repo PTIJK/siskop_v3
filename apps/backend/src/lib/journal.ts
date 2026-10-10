@@ -1,5 +1,5 @@
 import { ErrorCode } from "@siskop/types";
-import { Prisma, type JournalSourceType } from "@prisma/client";
+import { Prisma, type JournalEntryType, type JournalSourceType } from "@prisma/client";
 import { AppError, conflict, validationError } from "./errors.js";
 import { templateCode } from "./coaTemplate.js";
 import type { TxClient } from "./db.js";
@@ -100,7 +100,17 @@ function assertBalanced(lines: JournalLineInput[], label: string): void {
  * currently covers POS sales, member-credit repayments and restocks, not savings
  * or loan entries.
  */
-async function createJournalEntry(
+/** Next per-tenant entry number. The increment is atomic, so concurrent postings never share a number. */
+async function nextEntryNo(tx: TxClient, tenantId: string): Promise<number> {
+  const { journalSeq } = await tx.tenant.update({
+    where: { id: tenantId },
+    data: { journalSeq: { increment: 1 } },
+    select: { journalSeq: true }
+  });
+  return journalSeq;
+}
+
+export async function createJournalEntry(
   tx: TxClient,
   params: {
     tenantId: string;
@@ -117,13 +127,21 @@ async function createJournalEntry(
       | "MANUAL_EXPENSE"
       | "COLLECTION_BATCH"
       | "CHARGE_ACCRUAL"
-      | "CHARGE_PAYMENT";
+      | "CHARGE_PAYMENT"
+      | "MANUAL"
+      | "CLOSING";
     /** Null for MANUAL_EXPENSE — that entry has no separate source row, it IS the record. */
     sourceId: string | null;
     description: string;
     lines: JournalLineInput[];
+    /** Defaults to UMUM; manual period-end corrections are PENYESUAIAN. */
+    entryType?: JournalEntryType;
+    /** The user who keyed in a manual entry; omitted for system-posted ones. */
+    createdById?: string;
+    /** Set when this entry reverses another. */
+    reversalOfId?: string;
   }
-): Promise<{ id: string }> {
+): Promise<{ id: string; entryNo: number }> {
   const { tenantId, unitId, entryDate, sourceType, sourceId, description, lines } = params;
 
   assertBalanced(lines, `${sourceType}:${sourceId}`);
@@ -136,7 +154,11 @@ async function createJournalEntry(
       sourceType,
       sourceId,
       description,
-      status: lines.length > 0 ? "POSTED" : "UNPOSTED_MISSING_MAPPING"
+      status: lines.length > 0 ? "POSTED" : "UNPOSTED_MISSING_MAPPING",
+      entryType: params.entryType ?? "UMUM",
+      entryNo: await nextEntryNo(tx, tenantId),
+      createdById: params.createdById,
+      reversalOfId: params.reversalOfId
     }
   });
 
@@ -152,7 +174,7 @@ async function createJournalEntry(
     });
   }
 
-  return { id: entry.id };
+  return { id: entry.id, entryNo: entry.entryNo! };
 }
 
 /**

@@ -30,6 +30,7 @@ import { auditLogRoutes } from "./modules/audit-log/routes.js";
 import { expensesRoutes } from "./modules/expenses/routes.js";
 import { marketRoutes } from "./modules/market/routes.js";
 import { collectionsRoutes } from "./modules/collections/routes.js";
+import { journalRoutes } from "./modules/journal/routes.js";
 import { workspaceRequest } from "./modules/tenant-domains/middleware.js";
 import { tenantDomainRoutes } from "./modules/tenant-domains/routes.js";
 
@@ -109,6 +110,7 @@ export function createApp(): Express {
   app.use("/api/expenses", expensesRoutes());
   app.use("/api/market", marketRoutes());
   app.use("/api/collections", collectionsRoutes());
+  app.use("/api/journal", journalRoutes());
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({

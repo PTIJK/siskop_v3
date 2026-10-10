@@ -27,6 +27,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   "JournalLine",
   "ShuDistributionConfig",
   "CalkNarrative",
+  "FiscalYearClose",
   // Phase 2 (KSU Konsumen/Toko), Task 2 — only the two models that task's
   // service layer actually queries by tenantId.
   "Product",

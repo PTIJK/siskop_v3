@@ -164,6 +164,8 @@ enum JournalSourceType {
   // from MANUAL so its list/delete endpoints own exactly the entries this
   // feature created, without touching other ad-hoc manual entries.
   MANUAL_EXPENSE
+  // Year-end closing entries (Tutup Buku); sourceId is the FiscalYearClose id. Always entryType PENUTUP.
+  CLOSING
   // A restock (StockMovement IN). ADJUSTMENT movements are not journaled: they *set* the
   // count and the previous quantity isn't stored, so the delta can't be recovered.
   STOCK_MOVEMENT
@@ -175,6 +177,16 @@ enum JournalSourceType {
   // settlement, both stamped with the pasar unit (unitType: "JASA").
   CHARGE_ACCRUAL
   CHARGE_PAYMENT
+}
+
+// What an entry is *for*, independent of where it came from (sourceType). PENYESUAIAN
+// entries are period-end corrections; they count in every statement, but the Jurnal
+// Penyesuaian report lists only them. PENUTUP (year-end closing) is reserved for the
+// period-close feature.
+enum JournalEntryType {
+  UMUM
+  PENYESUAIAN
+  PENUTUP
 }
 
 enum JournalEntryStatus {
@@ -271,6 +283,8 @@ model CheckoutAttempt {
 
 model Tenant {
   id                         String               @id @default(cuid())
+  // Last JournalEntry.entryNo handed out; bumped atomically inside the posting transaction.
+  journalSeq                 Int                  @default(0)
   name                       String
   // Login subdomain: `demo` serves demo.localhost:3000. Resolved from the
   // request's Host header (slugFromHost) — never from the request body.
@@ -307,6 +321,7 @@ model Tenant {
   registrationRequests    MemberRegistrationRequest[]
   tenantNotifications     TenantNotification[]
   modalSendiriAdjustments ModalSendiriAdjustment[]
+  fiscalYearCloses        FiscalYearClose[]
   savingConfigs           SavingConfig[]
   loanConfigs             LoanConfig[]
   savings                 Saving[]
@@ -1185,24 +1200,37 @@ model AccountMapping {
 // SetNull rather than Restrict: a tenant delete cascades JournalEntry and
 // CooperativeUnit independently (same reasoning as the Product note below).
 model JournalEntry {
-  id          String             @id @default(cuid())
-  tenantId    String
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  unitId      String?
-  unit        CooperativeUnit?   @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  entryDate   DateTime
-  sourceType  JournalSourceType
-  sourceId    String?
-  description String
-  status      JournalEntryStatus @default(POSTED)
-  createdAt   DateTime           @default(now())
+  id           String             @id @default(cuid())
+  tenantId     String
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unitId       String?
+  unit         CooperativeUnit?   @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  entryDate    DateTime
+  sourceType   JournalSourceType
+  sourceId     String?
+  description  String
+  status       JournalEntryStatus @default(POSTED)
+  entryType    JournalEntryType   @default(UMUM)
+  // Per-tenant running number (Tenant.journalSeq), assigned in the same transaction as the
+  // entry. Nullable only because rows written straight to the table (fixtures) skip the
+  // service layer; every posting path numbers its entries.
+  entryNo      Int?
+  // Who keyed a manual entry in; null for system-posted entries.
+  createdById  String?
+  // Set on the entry that reverses another. Unique: an entry can be reversed once.
+  reversalOfId String?            @unique
+  reversalOf   JournalEntry?      @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: SetNull)
+  reversedBy   JournalEntry?      @relation("JournalReversal")
+  createdAt    DateTime           @default(now())
 
   lines JournalLine[]
 
+  @@unique([tenantId, entryNo])
   @@index([tenantId])
   @@index([tenantId, unitId])
   @@index([entryDate])
   @@index([sourceType, sourceId])
+  @@index([tenantId, entryType, entryDate])
 }
 
 // Modal Sendiri that predates the ledger (opening equity never journaled),
@@ -1239,6 +1267,23 @@ model JournalLine {
   @@index([tenantId])
   @@index([accountId])
   @@index([journalEntryId])
+}
+
+// A closed fiscal year (Tutup Buku): its closing journal entries (JournalEntry.sourceType
+// CLOSING, sourceId = this row) moved income and expense into equity. One row per year;
+// reopening posts mirror entries and sets reopenedAt, closing again clears it.
+model FiscalYearClose {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  year           Int
+  closedAt       DateTime  @default(now())
+  closedById     String
+  reopenedAt     DateTime?
+  reopenedById   String?
+
+  @@unique([tenantId, year])
+  @@index([tenantId])
 }
 
 model ShuDistributionConfig {

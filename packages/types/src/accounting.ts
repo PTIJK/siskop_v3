@@ -138,3 +138,110 @@ export interface RepostUnpostedResult {
   /** Repostable entries whose required mapping still doesn't exist, left untouched. */
   stillUnmapped: number;
 }
+
+// ── Manual journal (Jurnal Manual / Penyesuaian) ─────────────────────────────
+
+/** UMUM = ordinary entry; PENYESUAIAN = period-end correction; PENUTUP = year-end closing (system-posted). */
+export type JournalEntryType = "UMUM" | "PENYESUAIAN" | "PENUTUP";
+
+export interface ManualJournalLineInput {
+  accountId: string;
+  /** Exactly one of debit/credit is a positive amount (max 2 decimals). Money travels as number or string, never float math. */
+  debit?: number | string;
+  credit?: number | string;
+}
+
+export interface CreateManualJournalRequest {
+  /** YYYY-MM-DD */
+  entryDate: string;
+  description: string;
+  entryType: Exclude<JournalEntryType, "PENUTUP">;
+  /** Omit for the tenant-level "unallocated" bucket. */
+  unitId?: string | null;
+  lines: ManualJournalLineInput[];
+}
+
+export interface ReverseManualJournalRequest {
+  /** YYYY-MM-DD; defaults to today. */
+  entryDate?: string;
+}
+
+export interface JournalEntryLine {
+  id: string;
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  debit: string;
+  credit: string;
+}
+
+export interface JournalEntryDetail {
+  id: string;
+  entryNo: number | null;
+  entryDate: string;
+  description: string;
+  entryType: JournalEntryType;
+  sourceType: string;
+  unitId: string | null;
+  reversalOfId: string | null;
+  createdAt: string;
+  lines: JournalEntryLine[];
+}
+
+// ── Year-end close (Tutup Buku) ──────────────────────────────────────────────
+
+export type YearCloseStatus = "OPEN" | "CLOSED" | "REOPENED";
+
+export interface YearCloseListItem {
+  year: number;
+  status: YearCloseStatus;
+  closedAt: string | null;
+  reopenedAt: string | null;
+}
+
+export interface YearCloseList {
+  /** Asia/Jakarta calendar year; only earlier years can be closed. */
+  currentYear: number;
+  /** Newest first. */
+  years: YearCloseListItem[];
+}
+
+export interface YearCloseLine {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  debit: string;
+  credit: string;
+}
+
+/** One closing entry: a unit's income and expense moved into the target equity account. */
+export interface YearCloseEntryPlan {
+  /** null = the tenant-level "unallocated" bucket. */
+  unitId: string | null;
+  unitName: string | null;
+  /** Income minus expense for this scope; negative = a loss. */
+  netIncome: string;
+  lines: YearCloseLine[];
+}
+
+export interface YearClosePlan {
+  year: number;
+  targetAccount: { id: string; code: string; name: string };
+  netIncome: string;
+  entries: YearCloseEntryPlan[];
+}
+
+export interface YearCloseState {
+  year: number;
+  status: YearCloseStatus;
+  closedAt: string | null;
+  reopenedAt: string | null;
+}
+
+/** What closing a year returns: the plan that was posted plus the year's new state. */
+export interface YearCloseResult extends YearClosePlan, YearCloseState {}
+
+export interface YearCloseRequest {
+  /** Equity account that receives the net income; defaults to "SHU Tahun Lalu Belum Dibagi" (3-3100). */
+  targetAccountId?: string;
+}

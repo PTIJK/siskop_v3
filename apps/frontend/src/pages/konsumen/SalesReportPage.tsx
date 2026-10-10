@@ -12,7 +12,7 @@ import { StatCard } from "@/components/shared/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PeriodRangeControls } from "@/pages/reports/regulatory/PeriodRangeControls";
-import { defaultPeriodFrom } from "@/pages/reports/regulatory/period";
+import { defaultPeriodFrom, todayLocal } from "@/pages/reports/regulatory/period";
 
 const PAYMENT_LABEL: Record<string, string> = {
   CASH: "Tunai",
@@ -26,16 +26,9 @@ const MOVEMENT_LABEL: Record<string, string> = {
   ADJUSTMENT: "Penyesuaian"
 };
 
-/**
- * Today as a local yyyy-MM-dd. pages/reports/regulatory/period.ts#defaultPeriodTo
- * slices toISOString() (UTC), which for a Jakarta user reads as *yesterday*
- * between 00:00 and 07:00 — and this report's `to` is an inclusive end-of-day
- * bound, so it would silently drop that morning's sales.
- */
-function todayLocal(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
+// todayLocal (local yyyy-MM-dd, not UTC) lives in period.ts: this report's `to` is an
+// inclusive end-of-day bound, so a UTC date would drop the early-morning sales of a
+// Jakarta user between 00:00 and 07:00.
 
 /** "2026-09-21" -> "21/09", without going through `Date` (no timezone shift). */
 function shortDay(date: string): string {

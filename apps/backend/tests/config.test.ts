@@ -188,6 +188,30 @@ describe("GET/POST/PUT/DELETE /api/config/roles", () => {
     expect(res.body.data.permissions.loans.read).toBe(true);
   });
 
+  it("keeps every permission module when a role is saved: Pasar, Setoran Kolektor and Jejak Audit survive turning Toko on", async () => {
+    // Regression: the roles schema did not know market/collections/auditLog, so saving the role
+    // (e.g. to enable Toko) silently stripped them and the Pasar menu vanished; enabling Pasar
+    // from the UI never persisted at all.
+    const admin = await setupTenant();
+    const full = { create: true, read: true, update: true, delete: true };
+    const created = await request(app())
+      .post("/api/config/roles")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ ...CUSTOM_ROLE, permissions: { ...CUSTOM_ROLE.permissions, market: full, collections: full, auditLog: { read: true } } });
+    expect(created.status).toBe(201);
+    expect(created.body.data.permissions.market).toEqual(full);
+
+    const res = await request(app())
+      .put(`/api/config/roles/${created.body.data.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({
+        permissions: { ...CUSTOM_ROLE.permissions, market: full, collections: full, auditLog: { read: true }, konsumen: full }
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.permissions).toMatchObject({ konsumen: full, market: full, collections: full, auditLog: { read: true } });
+  });
+
   it("audits role creation and updates with before/after permissions", async () => {
     const admin = await setupTenant();
     const created = await request(app())

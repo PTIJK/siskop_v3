@@ -114,15 +114,23 @@ type ColumnKey = EquityClass | typeof UNCLASSIFIED;
 
 type Sums = { debit: Prisma.Decimal; credit: Prisma.Decimal };
 
-/** Decimal debit/credit sums per account, over entries dated in [from, to] (from omitted = since inception). */
-async function sumsByAccount(tenantId: string, accountIds: string[], to: Date, from?: Date, unitId?: string) {
+/**
+ * Decimal debit/credit sums per account, over entries dated in [from, to] (from omitted = since inception).
+ * `excludeClosing` drops year-end closing entries (PENUTUP): a period *movement* must show the year's real
+ * income rather than its transfer into equity, while a cumulative balance keeps them.
+ */
+async function sumsByAccount(tenantId: string, accountIds: string[], to: Date, from?: Date, unitId?: string, excludeClosing = false) {
   if (accountIds.length === 0) return new Map<string, Sums>();
   const rows = await db.journalLine.groupBy({
     by: ["accountId"],
     where: {
       tenantId,
       accountId: { in: accountIds },
-      journalEntry: { entryDate: { ...(from ? { gte: from } : {}), lte: to }, ...(unitId ? { unitId } : {}) }
+      journalEntry: {
+        entryDate: { ...(from ? { gte: from } : {}), lte: to },
+        ...(excludeClosing ? { entryType: { not: "PENUTUP" as const } } : {}),
+        ...(unitId ? { unitId } : {})
+      }
     },
     _sum: { debit: true, credit: true }
   });
@@ -148,7 +156,7 @@ export async function getPerubahanEkuitas(tenantId: string, from: Date, to: Date
 
   const [opening, movement, modalAwal, modalAkhir] = await Promise.all([
     sumsByAccount(tenantId, ids, dayBeforeFrom, undefined, unitId),
-    sumsByAccount(tenantId, ids, to, from, unitId),
+    sumsByAccount(tenantId, ids, to, from, unitId, true),
     getModalSendiri(tenantId, dayBeforeFrom, unitId),
     getModalSendiri(tenantId, to, unitId)
   ]);
