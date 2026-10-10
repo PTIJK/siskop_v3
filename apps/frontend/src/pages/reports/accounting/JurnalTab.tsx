@@ -80,7 +80,7 @@ export function JurnalTab({ kind }: { kind: "umum" | "penyesuaian" }) {
                     <TableRow key={r.lineId}>
                       <TableCell className="tabular-nums">{r.entryNo ?? "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{formatTanggalPendek(r.entryDate)}</TableCell>
-                      <TableCell className="font-mono text-xs">{r.accountCode}</TableCell>
+                      <TableCell className="whitespace-nowrap font-mono text-xs">{r.accountCode}</TableCell>
                       <TableCell>{r.accountName}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {r.description}

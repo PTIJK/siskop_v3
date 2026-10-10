@@ -235,7 +235,10 @@ export function ManualJournalPage() {
                 <Plus className="mr-2 h-4 w-4" />
                 Tambah baris
               </Button>
-              <BalanceChip balanced={summary.difference === 0 && summary.totalDebit > 0} difference={summary.difference / 100} />
+              {/* Only once something is typed: an empty form is not "unbalanced", just empty. */}
+              {summary.totalDebit + summary.totalCredit > 0 && (
+                <BalanceChip balanced={summary.difference === 0} difference={summary.difference / 100} />
+              )}
             </div>
             <Button onClick={submit} disabled={!ready || saving}>
               {saving ? "Menyimpan..." : "Catat Jurnal"}

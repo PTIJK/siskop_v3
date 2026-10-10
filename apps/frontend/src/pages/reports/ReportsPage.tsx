@@ -3,7 +3,7 @@ import type { FinancialReport, RATReport } from "@siskop/types";
 import { apiFetch, ApiRequestError } from "@/api/client";
 import { formatPeriode, formatRupiah, formatRupiahOrDash } from "@/lib/format";
 import { PrintButton } from "@/components/reports/PrintButton";
-import { todayLocal, validatePeriod } from "./regulatory/period";
+import { defaultPeriodFrom, defaultPeriodTo, todayLocal, validatePeriod } from "./regulatory/period";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
@@ -29,8 +29,9 @@ const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 export function ReportsPage() {
   const { toast } = useToast();
   const [periodType, setPeriodType] = useState<PeriodType>("range");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  // Start from the current month like the other reports, so the form is valid (not in an error state) on arrival.
+  const [startDate, setStartDate] = useState(defaultPeriodFrom);
+  const [endDate, setEndDate] = useState(defaultPeriodTo);
   const [month, setMonth] = useState(String(new Date().getMonth() + 1));
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [financialReport, setFinancialReport] = useState<FinancialReport | null>(null);
@@ -69,8 +70,8 @@ export function ReportsPage() {
   };
 
   const resetFilter = () => {
-    setStartDate("");
-    setEndDate("");
+    setStartDate(defaultPeriodFrom());
+    setEndDate(defaultPeriodTo());
     setMonth(String(new Date().getMonth() + 1));
     setYear(String(new Date().getFullYear()));
     setFinancialReport(null);

@@ -8,7 +8,7 @@ import { hierarchyClass } from "./hierarchy";
 export function TrialBalanceTableRow({ row, onOpen }: { row: TrialBalanceRow; onOpen?: (row: TrialBalanceRow) => void }) {
   return (
     <TableRow className={row.isHeader ? "bg-muted/30" : ""}>
-      <TableCell className="font-mono text-xs">{row.code}</TableCell>
+      <TableCell className="whitespace-nowrap font-mono text-xs">{row.code}</TableCell>
       <TableCell className={cn(hierarchyClass(row.level, row.isHeader))}>
         {onOpen && !row.isHeader ? (
           <button type="button" className="text-left text-primary hover:underline" onClick={() => onOpen(row)}>
