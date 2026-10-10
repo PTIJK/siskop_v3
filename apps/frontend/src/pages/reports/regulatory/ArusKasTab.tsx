@@ -7,7 +7,7 @@ import { Info } from "lucide-react";
 import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
 import { BalanceChip } from "@/components/reports/BalanceChip";
-import { PrintButton } from "@/components/reports/PrintButton";
+import { ExportMenu } from "@/components/reports/ExportMenu";
 import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
 import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResultCard";
 import { ReportAmount, ReportTotalRow } from "@/components/reports/ReportTable";
@@ -90,7 +90,7 @@ export function ArusKasTab() {
             data && (
               <>
                 <BalanceChip balanced={data.balanced} difference={Number(data.saldoKasAkhir) - Number(data.saldoKasAkhirAktual)} />
-                <PrintButton path={`/reports/regulatory/arus-kas/pdf?${query}`} filename={`arus-kas-${data.periode.from}_${data.periode.to}.pdf`} />
+                <ExportMenu report="arus-kas" query={query} stem={`arus-kas-${data.periode.from}_${data.periode.to}`} pdfPath={`/reports/regulatory/arus-kas/pdf?${query}`} />
               </>
             )
           }

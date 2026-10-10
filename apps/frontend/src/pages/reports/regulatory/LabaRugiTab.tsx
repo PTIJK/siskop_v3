@@ -8,7 +8,7 @@ import { UnitFilter } from "@/components/shared/UnitFilter";
 import { CompareCells, CompareHeads } from "@/components/reports/CompareCells";
 import { CompareSelect } from "@/components/reports/CompareSelect";
 import { COMPARE_NONE, compareQueryParam } from "@/components/reports/compare";
-import { PrintButton } from "@/components/reports/PrintButton";
+import { ExportMenu } from "@/components/reports/ExportMenu";
 import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
 import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResultCard";
 import { ReportAmount, ReportTotalRow } from "@/components/reports/ReportTable";
@@ -126,7 +126,7 @@ export function LabaRugiTab() {
                 .join(" · ")
             : undefined
         }
-        actions={data && <PrintButton path={`/reports/regulatory/laporan-hasil-usaha/pdf?${query}`} filename={`hasil-usaha-${data.periode.from}_${data.periode.to}.pdf`} />}
+        actions={data && <ExportMenu report="laporan-hasil-usaha" query={query} stem={`hasil-usaha-${data.periode.from}_${data.periode.to}`} pdfPath={`/reports/regulatory/laporan-hasil-usaha/pdf?${query}`} />}
         isLoading={report.isLoading}
         hasRun={report.hasRun}
         hasData={!!data && data.pendapatan.items.length + data.beban.items.length > 0}

@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
 import { BalanceChip } from "@/components/reports/BalanceChip";
+import { ExportMenu } from "@/components/reports/ExportMenu";
 import { CompareHeads } from "@/components/reports/CompareCells";
 import { CompareSelect } from "@/components/reports/CompareSelect";
 import { COMPARE_NONE, compareQueryParam } from "@/components/reports/compare";
@@ -60,7 +61,14 @@ export function NeracaSaldoTab() {
                 .join(" · ")
             : undefined
         }
-        actions={data && <BalanceChip balanced={data.balanced} difference={Number(data.totals.mutasiDebit) - Number(data.totals.mutasiKredit)} />}
+        actions={
+          data && (
+            <>
+              <BalanceChip balanced={data.balanced} difference={Number(data.totals.mutasiDebit) - Number(data.totals.mutasiKredit)} />
+              <ExportMenu report="neraca-saldo" query={`from=${f.from}&to=${f.to}${unitQueryParam(f.unitId)}`} stem={`neraca-saldo-${f.from}_${f.to}`} />
+            </>
+          )
+        }
         isLoading={report.isLoading}
         hasRun={report.hasRun}
         hasData={!!data && data.rows.some((r) => Number(r.saldoAwal) || Number(r.mutasiDebit) || Number(r.mutasiKredit) || Number(r.saldoAkhir))}

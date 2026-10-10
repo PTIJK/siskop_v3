@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
-import { PrintButton } from "@/components/reports/PrintButton";
+import { ExportMenu } from "@/components/reports/ExportMenu";
 import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
 import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResultCard";
 import { useReport } from "@/components/reports/useReport";
@@ -45,7 +45,7 @@ export function PerubahanEkuitasTab() {
         reportName="Perubahan Ekuitas"
         title="Laporan Perubahan Ekuitas"
         subtitle={data ? [formatPeriode(data.periode.from, data.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
-        actions={data && <PrintButton path={`/reports/regulatory/perubahan-ekuitas/pdf?${query}`} filename={`perubahan-ekuitas-${data.periode.from}_${data.periode.to}.pdf`} />}
+        actions={data && <ExportMenu report="perubahan-ekuitas" query={query} stem={`perubahan-ekuitas-${data.periode.from}_${data.periode.to}`} pdfPath={`/reports/regulatory/perubahan-ekuitas/pdf?${query}`} />}
         isLoading={report.isLoading}
         hasRun={report.hasRun}
         hasData={!!data && data.rows.length > 0}

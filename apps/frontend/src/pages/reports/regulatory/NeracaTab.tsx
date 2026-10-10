@@ -10,7 +10,7 @@ import { BalanceChip } from "@/components/reports/BalanceChip";
 import { CompareCells, CompareHeads } from "@/components/reports/CompareCells";
 import { CompareSelect } from "@/components/reports/CompareSelect";
 import { COMPARE_NONE, compareQueryParam } from "@/components/reports/compare";
-import { PrintButton } from "@/components/reports/PrintButton";
+import { ExportMenu } from "@/components/reports/ExportMenu";
 import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
 import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResultCard";
 import { ReportAmount, ReportTotalRow } from "@/components/reports/ReportTable";
@@ -157,7 +157,7 @@ export function NeracaTab() {
           data && (
             <>
               <BalanceChip balanced={data.balanced} difference={Number(data.aset.total) - Number(data.totalKewajibanDanEkuitas)} />
-              <PrintButton path={`/reports/regulatory/neraca/pdf?${query}`} filename={`neraca-${data.asOfDate}.pdf`} />
+              <ExportMenu report="neraca" query={query} stem={`neraca-${data.asOfDate}`} pdfPath={`/reports/regulatory/neraca/pdf?${query}`} />
             </>
           )
         }

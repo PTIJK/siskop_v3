@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
+import { ExportMenu } from "@/components/reports/ExportMenu";
 import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
 import { ReportPager } from "@/components/reports/ReportPager";
 import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResultCard";
@@ -81,10 +82,15 @@ export function BukuBesarTab({ initial }: { initial?: DrilldownTarget | null }) 
           title={detail ? `Buku Besar: ${detail.account.code} ${detail.account.name}` : "Buku Besar"}
           subtitle={detail ? [formatPeriode(detail.periode.from, detail.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
           actions={
-            <Button variant="outline" size="sm" onClick={closeLedger}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Semua akun
-            </Button>
+            <>
+              {detail && (
+                <ExportMenu report="buku-besar" query={`${query}&accountId=${openAccountId}`} stem={`buku-besar-${detail.account.code}-${f.from}_${f.to}`} />
+              )}
+              <Button variant="outline" size="sm" onClick={closeLedger}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Semua akun
+              </Button>
+            </>
           }
           isLoading={ledger.isLoading}
           hasRun={ledger.hasRun}
@@ -158,6 +164,7 @@ export function BukuBesarTab({ initial }: { initial?: DrilldownTarget | null }) 
           reportName="Buku Besar"
           title="Buku Besar"
           subtitle={data ? [formatPeriode(data.periode.from, data.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
+          actions={data && <ExportMenu report="buku-besar" query={query} stem={`buku-besar-${f.from}_${f.to}`} />}
           isLoading={overview.isLoading}
           hasRun={overview.hasRun}
           hasData={!!data && data.rows.length > 0}

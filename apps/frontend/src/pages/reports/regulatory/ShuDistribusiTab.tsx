@@ -4,7 +4,7 @@ import { formatPeriode, formatRupiah } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Info } from "lucide-react";
-import { PrintButton } from "@/components/reports/PrintButton";
+import { ExportMenu } from "@/components/reports/ExportMenu";
 import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
 import { ReportResultCard } from "@/components/reports/ReportResultCard";
 import { ReportAmount, STICKY_HEAD, STICKY_TABLE_CONTAINER } from "@/components/reports/ReportTable";
@@ -55,7 +55,7 @@ export function ShuDistribusiTab() {
           reportName="Pembagian SHU"
           title="Pembagian SHU"
           subtitle={data ? formatPeriode(data.periode.from, data.periode.to) : undefined}
-          actions={data && <PrintButton path={`/reports/regulatory/shu-distribution/pdf?${query}`} filename={`pembagian-shu-${data.periode.from}_${data.periode.to}.pdf`} />}
+          actions={data && <ExportMenu report="shu-distribution" query={query} stem={`pembagian-shu-${data.periode.from}_${data.periode.to}`} pdfPath={`/reports/regulatory/shu-distribution/pdf?${query}`} />}
           isLoading={report.isLoading}
           hasRun={report.hasRun}
           hasData={!!data && (data.anggota.length > 0 || !!data.alokasi)}

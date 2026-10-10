@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
 import { BalanceChip } from "@/components/reports/BalanceChip";
+import { ExportMenu } from "@/components/reports/ExportMenu";
 import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
 import { ReportPager } from "@/components/reports/ReportPager";
 import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResultCard";
@@ -57,7 +58,18 @@ export function JurnalTab({ kind }: { kind: "umum" | "penyesuaian" }) {
         reportName={name}
         title={name}
         subtitle={data ? [formatPeriode(data.periode.from, data.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
-        actions={data && <BalanceChip balanced={data.balanced} difference={Number(data.totalDebit) - Number(data.totalCredit)} />}
+        actions={
+          data && (
+            <>
+              <BalanceChip balanced={data.balanced} difference={Number(data.totalDebit) - Number(data.totalCredit)} />
+              <ExportMenu
+                report={isAdj ? "jurnal-penyesuaian" : "jurnal-umum"}
+                query={`from=${f.from}&to=${f.to}${unitQueryParam(f.unitId)}`}
+                stem={`${isAdj ? "jurnal-penyesuaian" : "jurnal-umum"}-${f.from}_${f.to}`}
+              />
+            </>
+          )
+        }
         isLoading={report.isLoading}
         hasRun={report.hasRun}
         hasData={!!data && (report.meta.total ?? data.rows.length) > 0}
