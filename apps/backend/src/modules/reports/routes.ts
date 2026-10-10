@@ -1,4 +1,5 @@
 import type { LaporanHasilUsaha, Neraca } from "@siskop/types";
+import { notFound, validationError } from "../../lib/errors.js";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { resolvePeriod } from "../../lib/period.js";
 import { resolveReadableUnitId } from "../../lib/unit-access.js";
@@ -9,6 +10,7 @@ import { requireAccountingEntitlement, requirePasarEntitlement } from "../../mid
 import {
   bukuBesarAccountParamsSchema,
   comparablePeriodParamsSchema,
+  exportParamsSchema,
   financialParamsSchema,
   jurnalParamsSchema,
   trialBalanceParamsSchema,
@@ -22,6 +24,8 @@ import {
   upsertCalkNarrativeSchema
 } from "./schema.js";
 import { getFinancialReport, getRATReport } from "./service.js";
+import { BOOK_REPORTS, EXPORT_REPORTS, buildExport, exportFilenameStem, type ExportReport } from "./export-builders.js";
+import { renderCsv, renderXlsx } from "./export.js";
 import { getBukuBesar, getBukuBesarAccount, getJurnal, getNeracaSaldo, type UnitScope } from "./ledger-service.js";
 import { requireParam } from "../../lib/http.js";
 import { comparisonAsOf, comparisonRange } from "../../lib/comparison.js";
@@ -460,6 +464,44 @@ export function reportsRoutes(): Router {
         q.limit
       );
       res.json({ success: true, data: report, meta: { ...res.locals.meta, page: q.page, limit: q.limit, total } });
+    })
+  );
+
+  // ── Ekspor CSV / XLSX ─────────────────────────────────────────────────────────
+  // One endpoint for every accounting report: the same period/unit/as-of parameters as the
+  // on-screen report, plus format=csv|xlsx. The accounting package and reports:export gate it.
+
+  router.get(
+    "/export/:report",
+    requireAccountingEntitlement,
+    requirePermission("reports", "export"),
+    handle(async (req, res) => {
+      const report = requireParam(req, "report");
+      if (!(EXPORT_REPORTS as readonly string[]).includes(report)) throw notFound("Laporan tidak dikenal");
+      const q = exportParamsSchema.parse(req.query);
+
+      const period = resolvePeriod(q.from, q.to);
+      assertValidPeriod(period.start, period.end);
+      // "unallocated" only means something for the ledger books; the statements have no such view.
+      if (q.unitId === "unallocated" && !BOOK_REPORTS.includes(report as ExportReport)) {
+        throw validationError("Unit \"tidak dialokasikan\" hanya tersedia untuk buku akuntansi");
+      }
+      const unit = await bookUnit(req, q.unitId);
+      const asOf = q.asOfDate ? endOfBusinessDay(new Date(q.asOfDate)) : endOfBusinessDay();
+
+      const sheet = await buildExport(report as ExportReport, { tenantId: authClaims(req).tenantId, unit, period, asOf, accountId: q.accountId });
+      const stem = exportFilenameStem(report as ExportReport, { tenantId: "", unit, period, asOf, accountId: q.accountId });
+
+      if (q.format === "csv") {
+        res.set({ "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${stem}.csv"` });
+        res.send(renderCsv(sheet));
+        return;
+      }
+      res.set({
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${stem}.xlsx"`
+      });
+      res.send(await renderXlsx(sheet));
     })
   );
 
