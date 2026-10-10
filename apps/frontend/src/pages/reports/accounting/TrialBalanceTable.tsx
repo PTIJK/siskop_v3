@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { TrialBalanceRow } from "@siskop/types";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { CompareCells } from "@/components/reports/CompareCells";
 import { ReportAmount } from "@/components/reports/ReportTable";
 import { cn } from "@/lib/utils";
 import { hierarchyClass } from "./hierarchy";
@@ -12,11 +13,14 @@ import { hierarchyClass } from "./hierarchy";
 export function TrialBalanceTableRow({
   row,
   onOpen,
-  hrefFor
+  hrefFor,
+  compare
 }: {
   row: TrialBalanceRow;
   onOpen?: (row: TrialBalanceRow) => void;
   hrefFor?: (row: TrialBalanceRow) => string;
+  /** Turns the comparison columns on: the same account's closing balance in the earlier period. */
+  compare?: { previousSaldoAkhir: string | undefined };
 }) {
   return (
     <TableRow className={row.isHeader ? "bg-muted/30" : ""}>
@@ -39,6 +43,7 @@ export function TrialBalanceTableRow({
       <ReportAmount value={row.mutasiDebit} />
       <ReportAmount value={row.mutasiKredit} />
       <ReportAmount value={row.saldoAkhir} className="font-medium" />
+      {compare && <CompareCells current={row.saldoAkhir} previous={compare.previousSaldoAkhir} />}
     </TableRow>
   );
 }

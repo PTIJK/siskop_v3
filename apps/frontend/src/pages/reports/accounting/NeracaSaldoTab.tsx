@@ -5,6 +5,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
 import { BalanceChip } from "@/components/reports/BalanceChip";
+import { CompareHeads } from "@/components/reports/CompareCells";
+import { CompareSelect } from "@/components/reports/CompareSelect";
+import { COMPARE_NONE, compareQueryParam } from "@/components/reports/compare";
 import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
 import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResultCard";
 import { ReportAmount, STICKY_HEAD, STICKY_TABLE_CONTAINER } from "@/components/reports/ReportTable";
@@ -15,11 +18,12 @@ import { bukuBesarHref } from "./drilldown";
 import { TrialBalanceTableRow } from "./TrialBalanceTable";
 
 export function NeracaSaldoTab() {
-  const filter = useReportFilter("neraca-saldo", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS }));
+  const filter = useReportFilter("neraca-saldo", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS, compare: COMPARE_NONE }));
   const { value: f } = filter;
   const report = useReport<TrialBalance>("Gagal memuat neraca saldo");
   const unitLabel = useUnitLabel(f.unitId);
   const data = report.data;
+  const previous = data?.comparison ? new Map(data.comparison.rows.map((r) => [r.accountId, r.saldoAkhir])) : null;
 
   return (
     <div className="space-y-5">
@@ -28,19 +32,34 @@ export function NeracaSaldoTab() {
         from={f.from}
         to={f.to}
         onChange={filter.update}
-        onApply={() => void report.run(`/reports/accounting/neraca-saldo?from=${f.from}&to=${f.to}${unitQueryParam(f.unitId)}`)}
+        onApply={() => void report.run(`/reports/accounting/neraca-saldo?from=${f.from}&to=${f.to}${unitQueryParam(f.unitId)}${compareQueryParam(f.compare)}`)}
         onReset={() => {
           filter.reset();
           report.clear();
         }}
         isLoading={report.isLoading}
-        extra={<UnitFilter value={f.unitId} onChange={(unitId) => filter.update({ unitId })} includeUnallocated />}
+        extra={
+          <>
+            <UnitFilter value={f.unitId} onChange={(unitId) => filter.update({ unitId })} includeUnallocated />
+            <CompareSelect value={f.compare} onChange={(compare) => filter.update({ compare })} />
+          </>
+        }
       />
 
       <ReportResultCard
         reportName="Neraca Saldo"
         title="Neraca Saldo"
-        subtitle={data ? [formatPeriode(data.periode.from, data.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
+        subtitle={
+          data
+            ? [
+                formatPeriode(data.periode.from, data.periode.to),
+                data.comparison && `dibandingkan dengan ${formatPeriode(data.comparison.periode.from, data.comparison.periode.to)}`,
+                unitLabel
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined
+        }
         actions={data && <BalanceChip balanced={data.balanced} difference={Number(data.totals.mutasiDebit) - Number(data.totals.mutasiKredit)} />}
         isLoading={report.isLoading}
         hasRun={report.hasRun}
@@ -58,17 +77,18 @@ export function NeracaSaldoTab() {
                     <TableHead className={`text-right ${STICKY_HEAD}`}>Debit</TableHead>
                     <TableHead className={`text-right ${STICKY_HEAD}`}>Kredit</TableHead>
                     <TableHead className={`text-right ${STICKY_HEAD}`}>Saldo Akhir</TableHead>
+                    {previous && <CompareHeads label="Akhir pembanding" sticky />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.rows.map((r) => (
-                    <TrialBalanceTableRow key={r.accountId} row={r} hrefFor={(row) => bukuBesarHref(row.accountId, { from: data.periode.from, to: data.periode.to, unitId: f.unitId })} />
+                    <TrialBalanceTableRow key={r.accountId} row={r} compare={previous ? { previousSaldoAkhir: previous.get(r.accountId) } : undefined} hrefFor={(row) => bukuBesarHref(row.accountId, { from: data.periode.from, to: data.periode.to, unitId: f.unitId })} />
                   ))}
                   <TableRow className="bg-muted/50 font-semibold hover:bg-muted/50">
                     <TableCell colSpan={3}>Total</TableCell>
                     <ReportAmount value={data.totals.mutasiDebit} />
                     <ReportAmount value={data.totals.mutasiKredit} />
-                    <TableCell />
+                    <TableCell colSpan={previous ? 4 : 1} />
                   </TableRow>
                 </TableBody>
               </Table>
