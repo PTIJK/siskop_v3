@@ -63,7 +63,8 @@ const NAV_ITEMS_REPORTS = [
       // Always listed (like Laporan Regulasi above), not hidden by entitlement — a
       // non-pasar tenant sees EntitlementNotice on the page itself, same pattern.
       { label: "Laporan Pasar", href: "/reports/pasar" },
-      { label: "Jurnal Manual", href: "/journal/new" }
+      { label: "Jurnal Manual", href: "/journal/new" },
+      { label: "Tutup Buku", href: "/journal/close" }
     ]
   },
   // Consolidated-reporting-across-units — genuinely KSU-only, unlike Unit

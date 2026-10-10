@@ -56,6 +56,9 @@ const MarketPage = lazy(() =>
 const ConfigPage = lazy(() =>
   import("@/pages/config/ConfigPage").then((module) => ({ default: module.ConfigPage }))
 );
+const YearClosePage = lazy(() =>
+  import("@/pages/journal/YearClosePage").then((module) => ({ default: module.YearClosePage }))
+);
 const ManualJournalPage = lazy(() =>
   import("@/pages/journal/ManualJournalPage").then((module) => ({ default: module.ManualJournalPage }))
 );
@@ -179,6 +182,7 @@ export default function App() {
 
               <Route path='/expenses' element={<ExpensesPage />} />
               <Route path='/journal/new' element={<ManualJournalPage />} />
+              <Route path='/journal/close' element={<YearClosePage />} />
 
               <Route path='/config' element={<ConfigPage />} />
               <Route path='/profile' element={<ProfilePage />} />
