@@ -61,3 +61,11 @@ export function formatPeriode(from: string, to: string): string {
     ? formatTanggalIndonesia(parse(from))
     : `${formatTanggalIndonesia(parse(from))} – ${formatTanggalIndonesia(parse(to))}`;
 }
+
+/** "12.5" -> "12,5%". Null/undefined/garbage -> "-" (a ratio that could not be computed, e.g. nothing fell due). */
+export function formatPercent(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "-";
+  const n = typeof value === "string" ? parseFloat(value) : value;
+  if (isNaN(n)) return "-";
+  return `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(n)}%`;
+}

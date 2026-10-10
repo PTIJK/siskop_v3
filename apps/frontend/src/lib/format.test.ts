@@ -27,3 +27,20 @@ describe("formatPeriode", () => {
     expect(formatPeriode("2026-10-10", "2026-10-10")).toBe("10 Oktober 2026");
   });
 });
+
+describe("formatPercent", () => {
+  it("shows a percentage string from the API in Indonesian format, up to two decimals", async () => {
+    const { formatPercent } = await import("./format");
+    expect(formatPercent("12.5")).toBe("12,5%");
+    expect(formatPercent("0")).toBe("0%");
+    expect(formatPercent("33.33")).toBe("33,33%");
+    expect(formatPercent("100")).toBe("100%");
+  });
+
+  it("is a dash for no value", async () => {
+    const { formatPercent } = await import("./format");
+    expect(formatPercent(null)).toBe("-");
+    expect(formatPercent(undefined)).toBe("-");
+    expect(formatPercent("abc")).toBe("-");
+  });
+});
