@@ -63,6 +63,7 @@ export function JurnalTab({ kind }: { kind: "umum" | "penyesuaian" }) {
             <>
               <BalanceChip balanced={data.balanced} difference={Number(data.totalDebit) - Number(data.totalCredit)} />
               <ExportMenu
+                pdfViaExport
                 report={isAdj ? "jurnal-penyesuaian" : "jurnal-umum"}
                 query={`from=${f.from}&to=${f.to}${unitQueryParam(f.unitId)}`}
                 stem={`${isAdj ? "jurnal-penyesuaian" : "jurnal-umum"}-${f.from}_${f.to}`}

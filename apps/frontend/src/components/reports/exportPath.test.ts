@@ -13,6 +13,12 @@ describe("exportPath", () => {
     expect(exportPath("neraca", "xlsx", "")).toBe("/reports/export/neraca?format=xlsx");
   });
 
+  it("also builds the PDF URL for reports without a dedicated PDF endpoint", () => {
+    expect(exportPath("neraca-saldo", "pdf", "from=2026-01-01&to=2026-10-10")).toBe(
+      "/reports/export/neraca-saldo?format=pdf&from=2026-01-01&to=2026-10-10"
+    );
+  });
+
   it("drops a leading ampersand left by a unit-only query", () => {
     expect(exportPath("neraca", "csv", "&unitId=u1")).toBe("/reports/export/neraca?format=csv&unitId=u1");
   });

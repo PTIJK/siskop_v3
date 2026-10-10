@@ -65,7 +65,7 @@ export function NeracaSaldoTab() {
           data && (
             <>
               <BalanceChip balanced={data.balanced} difference={Number(data.totals.mutasiDebit) - Number(data.totals.mutasiKredit)} />
-              <ExportMenu report="neraca-saldo" query={`from=${f.from}&to=${f.to}${unitQueryParam(f.unitId)}`} stem={`neraca-saldo-${f.from}_${f.to}`} />
+              <ExportMenu pdfViaExport report="neraca-saldo" query={`from=${f.from}&to=${f.to}${unitQueryParam(f.unitId)}`} stem={`neraca-saldo-${f.from}_${f.to}`} />
             </>
           )
         }

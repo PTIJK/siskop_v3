@@ -14,12 +14,14 @@ interface ExportMenuProps {
   query: string;
   /** Download file name without extension. */
   stem: string;
-  /** The server PDF endpoint, for reports that have one. */
+  /** The server PDF endpoint, for reports that have a dedicated one. */
   pdfPath?: string;
+  /** The report has no dedicated PDF endpoint, but the export endpoint can render it as a PDF. */
+  pdfViaExport?: boolean;
 }
 
 /** Ekspor: PDF (where the report has one), CSV and XLSX. Hidden without reports:export. */
-export function ExportMenu({ report, query, stem, pdfPath }: ExportMenuProps) {
+export function ExportMenu({ report, query, stem, pdfPath, pdfViaExport }: ExportMenuProps) {
   const { can } = usePermissions();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
@@ -29,7 +31,7 @@ export function ExportMenu({ report, query, stem, pdfPath }: ExportMenuProps) {
     setBusy(true);
     try {
       const filename = exportFilename(stem, format);
-      if (format === "pdf") await downloadPdf(pdfPath!, filename);
+      if (format === "pdf") await downloadPdf(pdfPath ?? exportPath(report, "pdf", query), filename);
       else await downloadFile(exportPath(report, format, query), filename);
     } catch (err) {
       toast({ title: "Gagal mengunduh", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
@@ -47,7 +49,7 @@ export function ExportMenu({ report, query, stem, pdfPath }: ExportMenuProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {pdfPath && (
+        {(pdfPath || pdfViaExport) && (
           <DropdownMenuItem onSelect={() => void run("pdf")}>
             <Printer className="mr-2 h-4 w-4" />
             PDF
