@@ -11,6 +11,7 @@ import { ReportAmount, STICKY_HEAD, STICKY_TABLE_CONTAINER } from "@/components/
 import { useReport } from "@/components/reports/useReport";
 import { useReportFilter } from "@/components/reports/useReportFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "../regulatory/period";
+import { bukuBesarHref } from "./drilldown";
 import { TrialBalanceTableRow } from "./TrialBalanceTable";
 
 export function NeracaSaldoTab() {
@@ -61,7 +62,7 @@ export function NeracaSaldoTab() {
                 </TableHeader>
                 <TableBody>
                   {data.rows.map((r) => (
-                    <TrialBalanceTableRow key={r.accountId} row={r} />
+                    <TrialBalanceTableRow key={r.accountId} row={r} hrefFor={(row) => bukuBesarHref(row.accountId, { from: data.periode.from, to: data.periode.to, unitId: f.unitId })} />
                   ))}
                   <TableRow className="bg-muted/50 font-semibold hover:bg-muted/50">
                     <TableCell colSpan={3}>Total</TableCell>
@@ -72,7 +73,7 @@ export function NeracaSaldoTab() {
                 </TableBody>
               </Table>
               <p className="mt-3 text-xs text-muted-foreground">
-                Saldo ditulis pada sisi normal akun; akun pengurang (kontra) tidak dinetralkan di sini. Total saldo akhir sisi debit{" "}
+                Klik nama akun untuk membuka buku besarnya. Saldo ditulis pada sisi normal akun; akun pengurang (kontra) tidak dinetralkan di sini. Total saldo akhir sisi debit{" "}
                 {data.totals.saldoAkhirDebit}, sisi kredit {data.totals.saldoAkhirKredit}.
               </p>
             </CardContent>

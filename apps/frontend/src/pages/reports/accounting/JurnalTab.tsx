@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { JurnalReport } from "@siskop/types";
 import { formatPeriode, formatTanggalPendek } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,7 @@ import { ReportAmount, STICKY_HEAD, STICKY_TABLE_CONTAINER } from "@/components/
 import { useReport } from "@/components/reports/useReport";
 import { useReportFilter } from "@/components/reports/useReportFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "../regulatory/period";
+import { sourceHref } from "./drilldown";
 
 const LIMIT = 50;
 
@@ -83,7 +85,13 @@ export function JurnalTab({ kind }: { kind: "umum" | "penyesuaian" }) {
                       <TableCell className="whitespace-nowrap font-mono text-xs">{r.accountCode}</TableCell>
                       <TableCell>{r.accountName}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {r.description}
+                        {sourceHref(r.sourceRef) ? (
+                          <Link to={sourceHref(r.sourceRef)!} className="text-primary hover:underline">
+                            {r.description}
+                          </Link>
+                        ) : (
+                          r.description
+                        )}
                         {r.entryType !== "UMUM" && !isAdj && (
                           <Badge variant="secondary" className="ml-2">
                             {r.entryType === "PENYESUAIAN" ? "Penyesuaian" : "Penutup"}

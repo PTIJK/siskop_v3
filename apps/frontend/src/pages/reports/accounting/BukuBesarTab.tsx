@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import type { BukuBesarAccount, TrialBalance, TrialBalanceRow } from "@siskop/types";
+import type { BukuBesarAccount, TrialBalance } from "@siskop/types";
 import { formatPeriode, formatTanggalPendek } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,28 +16,39 @@ import { ReportAmount, STICKY_HEAD, STICKY_TABLE_CONTAINER } from "@/components/
 import { useReport } from "@/components/reports/useReport";
 import { useReportFilter } from "@/components/reports/useReportFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "../regulatory/period";
+import { sourceHref, type DrilldownTarget } from "./drilldown";
 import { TrialBalanceTableRow } from "./TrialBalanceTable";
 
 const LIMIT = 50;
 
 /** Buku Besar: the overview of accounts with activity; clicking an account opens its ledger with a running balance. */
-export function BukuBesarTab() {
+export function BukuBesarTab({ initial }: { initial?: DrilldownTarget | null }) {
   const filter = useReportFilter("buku-besar", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS }));
   const { value: f } = filter;
   const overview = useReport<TrialBalance>("Gagal memuat buku besar");
   const ledger = useReport<BukuBesarAccount>("Gagal memuat buku besar akun");
   const unitLabel = useUnitLabel(f.unitId);
-  const [openAccount, setOpenAccount] = useState<TrialBalanceRow | null>(null);
+  // The account whose ledger is open: just its id, the name comes back with the ledger itself.
+  const [openAccountId, setOpenAccountId] = useState<string | null>(initial?.accountId ?? null);
   const [page, setPage] = useState(1);
 
   const query = `from=${f.from}&to=${f.to}${unitQueryParam(f.unitId)}`;
-  const loadLedger = (account: TrialBalanceRow, nextPage: number) => {
-    setOpenAccount(account);
+  const loadLedger = (accountId: string, nextPage: number, q: string = query) => {
+    setOpenAccountId(accountId);
     setPage(nextPage);
-    void ledger.run(`/reports/accounting/buku-besar/${account.accountId}?${query}&page=${nextPage}&limit=${LIMIT}`);
+    void ledger.run(`/reports/accounting/buku-besar/${accountId}?${q}&page=${nextPage}&limit=${LIMIT}`);
   };
+
+  // Arriving from a statement row: adopt its period and unit, then open that account straight away.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!initial || started.current) return;
+    started.current = true;
+    filter.update({ from: initial.from, to: initial.to, unitId: initial.unitId });
+    loadLedger(initial.accountId, 1, `from=${initial.from}&to=${initial.to}${unitQueryParam(initial.unitId)}`);
+  }, []);
   const closeLedger = () => {
-    setOpenAccount(null);
+    setOpenAccountId(null);
     ledger.clear();
   };
 
@@ -63,10 +75,10 @@ export function BukuBesarTab() {
         extra={<UnitFilter value={f.unitId} onChange={(unitId) => filter.update({ unitId })} includeUnallocated />}
       />
 
-      {openAccount ? (
+      {openAccountId ? (
         <ReportResultCard
           reportName="Buku Besar Akun"
-          title={`Buku Besar: ${openAccount.code} ${openAccount.name}`}
+          title={detail ? `Buku Besar: ${detail.account.code} ${detail.account.name}` : "Buku Besar"}
           subtitle={detail ? [formatPeriode(detail.periode.from, detail.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
           actions={
             <Button variant="outline" size="sm" onClick={closeLedger}>
@@ -104,7 +116,13 @@ export function BukuBesarTab() {
                         <TableCell className="tabular-nums">{l.entryNo ?? "-"}</TableCell>
                         <TableCell className="whitespace-nowrap">{formatTanggalPendek(l.entryDate)}</TableCell>
                         <TableCell className="text-muted-foreground">
-                          {l.description}
+                          {sourceHref(l.sourceRef) ? (
+                            <Link to={sourceHref(l.sourceRef)!} className="text-primary hover:underline">
+                              {l.description}
+                            </Link>
+                          ) : (
+                            l.description
+                          )}
                           {l.entryType !== "UMUM" && (
                             <Badge variant="secondary" className="ml-2">
                               {l.entryType === "PENYESUAIAN" ? "Penyesuaian" : "Penutup"}
@@ -128,7 +146,7 @@ export function BukuBesarTab() {
                   page={page}
                   limit={LIMIT}
                   total={ledger.meta.total ?? detail.lines.length}
-                  onPage={(p) => loadLedger(openAccount, p)}
+                  onPage={(p) => loadLedger(openAccountId, p)}
                   disabled={ledger.isLoading}
                 />
               </CardContent>
@@ -160,7 +178,7 @@ export function BukuBesarTab() {
                   </TableHeader>
                   <TableBody>
                     {data.rows.map((r) => (
-                      <TrialBalanceTableRow key={r.accountId} row={r} onOpen={(row) => loadLedger(row, 1)} />
+                      <TrialBalanceTableRow key={r.accountId} row={r} onOpen={(row) => loadLedger(row.accountId, 1)} />
                     ))}
                   </TableBody>
                 </Table>

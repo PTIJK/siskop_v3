@@ -1,10 +1,19 @@
+import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BukuBesarTab } from "./accounting/BukuBesarTab";
 import { JurnalTab } from "./accounting/JurnalTab";
+import { parseDrilldown } from "./accounting/drilldown";
 import { NeracaSaldoTab } from "./accounting/NeracaSaldoTab";
 
+const TABS = ["jurnal-umum", "jurnal-penyesuaian", "neraca-saldo", "buku-besar"];
+
 export function AccountingBooksPage() {
+  // The tab and a drill-down target live in the URL so a statement row can link straight to an account's ledger.
+  const [params, setParams] = useSearchParams();
+  const tab = TABS.includes(params.get("tab") ?? "") ? params.get("tab")! : "jurnal-umum";
+  const drilldown = tab === "buku-besar" ? parseDrilldown(params) : null;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -12,7 +21,7 @@ export function AccountingBooksPage() {
         description="Jurnal Umum, Jurnal Penyesuaian, Neraca Saldo, dan Buku Besar langsung dari buku besar koperasi"
       />
 
-      <Tabs defaultValue="jurnal-umum">
+      <Tabs value={tab} onValueChange={(value) => setParams({ tab: value }, { replace: true })}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="jurnal-umum">Jurnal Umum</TabsTrigger>
           <TabsTrigger value="jurnal-penyesuaian">Jurnal Penyesuaian</TabsTrigger>
@@ -30,7 +39,7 @@ export function AccountingBooksPage() {
           <NeracaSaldoTab />
         </TabsContent>
         <TabsContent value="buku-besar" className="mt-4">
-          <BukuBesarTab />
+          <BukuBesarTab key={drilldown?.accountId ?? "overview"} initial={drilldown} />
         </TabsContent>
       </Tabs>
     </div>

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { Neraca, NeracaSection } from "@siskop/types";
 import { formatRupiah, formatTanggalIndonesia } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -12,15 +13,19 @@ import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResul
 import { ReportAmount, ReportTotalRow } from "@/components/reports/ReportTable";
 import { useReport } from "@/components/reports/useReport";
 import { useReportFilter } from "@/components/reports/useReportFilter";
+import { bukuBesarHref } from "../accounting/drilldown";
 import { todayLocal } from "./period";
 
 function SectionTable({
   title,
   section,
-  subtotal
+  subtotal,
+  ledgerHref
 }: {
   title: string;
   section: NeracaSection;
+  /** Link to an account's Buku Besar for this report's date and unit. */
+  ledgerHref: (accountId: string) => string;
   /** Extra line above the section total, e.g. the Modal Sendiri subtotal under Ekuitas. */
   subtotal?: { label: string; amount: string };
 }) {
@@ -43,7 +48,13 @@ function SectionTable({
               <TableRow key={item.accountId ?? i} className={item.isHeader ? "font-semibold" : ""}>
                 <TableCell className="font-mono text-xs">{item.code ?? "—"}</TableCell>
                 <TableCell className={item.isComputed ? "italic text-muted-foreground" : ""} style={{ paddingLeft: `${1 + (item.level - 1) * 1.25}rem` }}>
-                  {item.name}
+                  {item.accountId && !item.isHeader && !item.isComputed ? (
+                    <Link to={ledgerHref(item.accountId)} className="text-primary hover:underline">
+                      {item.name}
+                    </Link>
+                  ) : (
+                    item.name
+                  )}
                   {item.isContra && <span className="ml-2 text-xs font-normal text-muted-foreground">(pengurang)</span>}
                   {item.isComputed && (
                     <Badge variant="secondary" className="ml-2">
@@ -78,6 +89,9 @@ export function NeracaTab() {
   const query = `asOfDate=${f.to}${unitQueryParam(f.unitId)}`;
   const apply = () => void report.run(`/reports/regulatory/neraca?${query}`);
   const data = report.data;
+  // A balance is cumulative; its ledger runs from the start of that year (opening balance first) to the report date.
+  const ledgerHref = (accountId: string) =>
+    bukuBesarHref(accountId, { from: `${f.to.slice(0, 4)}-01-01`, to: f.to, unitId: f.unitId });
 
   return (
     <div className="space-y-5">
@@ -114,11 +128,12 @@ export function NeracaTab() {
       >
         {data && (
           <>
-            <SectionTable title="Aset" section={data.aset} />
-            <SectionTable title="Kewajiban" section={data.kewajiban} />
+            <SectionTable title="Aset" section={data.aset} ledgerHref={ledgerHref} />
+            <SectionTable title="Kewajiban" section={data.kewajiban} ledgerHref={ledgerHref} />
             <SectionTable
               title="Ekuitas"
               section={data.ekuitas}
+              ledgerHref={ledgerHref}
               subtotal={{ label: "Modal Sendiri (pokok, wajib, modal tetap, cadangan, hibah)", amount: data.modalSendiri }}
             />
             <Card>

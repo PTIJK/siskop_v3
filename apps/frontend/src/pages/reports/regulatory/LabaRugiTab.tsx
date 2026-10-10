@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { LabaRugiSection, LaporanHasilUsaha } from "@siskop/types";
 import { formatPeriode, formatRupiah } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,9 +11,10 @@ import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResul
 import { ReportAmount, ReportTotalRow } from "@/components/reports/ReportTable";
 import { useReport } from "@/components/reports/useReport";
 import { useReportFilter } from "@/components/reports/useReportFilter";
+import { bukuBesarHref } from "../accounting/drilldown";
 import { defaultPeriodFrom, defaultPeriodTo } from "./period";
 
-function SectionTable({ title, section }: { title: string; section: LabaRugiSection }) {
+function SectionTable({ title, section, ledgerHref }: { title: string; section: LabaRugiSection; ledgerHref: (accountId: string) => string }) {
   return (
     <Card>
       <CardHeader>
@@ -31,7 +33,15 @@ function SectionTable({ title, section }: { title: string; section: LabaRugiSect
             {section.items.map((item) => (
               <TableRow key={item.accountId}>
                 <TableCell className="font-mono text-xs">{item.code}</TableCell>
-                <TableCell>{item.name}</TableCell>
+                <TableCell>
+                  {item.isHeader ? (
+                    item.name
+                  ) : (
+                    <Link to={ledgerHref(item.accountId)} className="text-primary hover:underline">
+                      {item.name}
+                    </Link>
+                  )}
+                </TableCell>
                 <ReportAmount value={item.total} />
               </TableRow>
             ))}
@@ -51,6 +61,7 @@ export function LabaRugiTab() {
 
   const query = `from=${f.from}&to=${f.to}${unitQueryParam(f.unitId)}`;
   const data = report.data;
+  const ledgerHref = (accountId: string) => bukuBesarHref(accountId, { from: f.from, to: f.to, unitId: f.unitId });
 
   return (
     <div className="space-y-5">
@@ -79,8 +90,8 @@ export function LabaRugiTab() {
       >
         {data && (
           <>
-            <SectionTable title="Pendapatan" section={data.pendapatan} />
-            <SectionTable title="Beban" section={data.beban} />
+            <SectionTable title="Pendapatan" section={data.pendapatan} ledgerHref={ledgerHref} />
+            <SectionTable title="Beban" section={data.beban} ledgerHref={ledgerHref} />
             <Card className="border-primary/30 bg-primary/5">
               <CardContent className="flex items-center justify-between py-4">
                 <p className="text-sm font-semibold">SHU Berjalan (Pendapatan − Beban)</p>
