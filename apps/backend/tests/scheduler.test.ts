@@ -45,16 +45,23 @@ async function createLoanConfigAs(accessToken: string) {
   return res.body.data as { id: string };
 }
 
-async function createDailySavingAs(accessToken: string, memberId: string, rate: number, initialDeposit: number) {
+async function createSavingAs(
+  accessToken: string, memberId: string, periodUnit: "DAILY" | "MONTHLY" | "YEARLY", rate: number, initialDeposit: number
+) {
+  const name = { DAILY: "Tabungan Harian", MONTHLY: "Tabungan Bulanan", YEARLY: "Tabungan Tahunan" }[periodUnit];
   const config = await request(app())
     .post("/api/savings/configs")
     .set("Authorization", `Bearer ${accessToken}`)
-    .send({ name: "Tabungan Harian", type: "SUKARELA", rateType: "BUNGA", rate, periodUnit: "DAILY" });
+    .send({ name, type: "SUKARELA", rateType: "BUNGA", rate, periodUnit });
   const saving = await request(app())
     .post("/api/savings")
     .set("Authorization", `Bearer ${accessToken}`)
     .send({ memberId, savingConfigId: config.body.data.id, initialDeposit });
   return { config: config.body.data as { id: string }, saving: saving.body.data as { id: string } };
+}
+
+async function createDailySavingAs(accessToken: string, memberId: string, rate: number, initialDeposit: number) {
+  return createSavingAs(accessToken, memberId, "DAILY", rate, initialDeposit);
 }
 
 describe("POST /api/scheduler/run-daily", () => {
@@ -103,30 +110,72 @@ describe("POST /api/scheduler/run-daily", () => {
     expect(transactionCount).toBe(1);
   });
 
-  it("does not accrue interest for a zero-rate or MONTHLY/YEARLY-period saving", async () => {
+  it("does not accrue interest for a zero-rate saving, or for a freshly created MONTHLY/YEARLY saving before its first period elapses", async () => {
     const admin = await setupTenant();
     const member = await createMemberAs(admin.accessToken);
     const { saving: zeroRateSaving } = await createDailySavingAs(admin.accessToken, member.id, 0, 1_000_000);
-    const monthlyConfig = await request(app())
-      .post("/api/savings/configs")
-      .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ name: "Tabungan Bulanan", type: "SUKARELA", rateType: "BUNGA", rate: 9, periodUnit: "MONTHLY" });
-    const monthlySaving = await request(app())
-      .post("/api/savings")
-      .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ memberId: member.id, savingConfigId: monthlyConfig.body.data.id, initialDeposit: 1_000_000 });
+    const { saving: monthlySaving } = await createSavingAs(admin.accessToken, member.id, "MONTHLY", 9, 1_000_000);
+    const { saving: yearlySaving } = await createSavingAs(admin.accessToken, member.id, "YEARLY", 9, 1_000_000);
 
     const res = await request(app()).post("/api/scheduler/run-daily").set(TOKEN_HEADER, TOKEN);
     expect(res.status).toBe(200);
-    // Only the zero-rate DAILY saving is checked; the MONTHLY one is out of scope entirely.
-    expect(res.body.data.savingsInterest.checked).toBe(1);
+    // All three are swept, but none has a full period elapsed since creation yet.
+    expect(res.body.data.savingsInterest.checked).toBe(3);
     expect(res.body.data.savingsInterest.posted).toBe(0);
 
     const afterZeroRate = await db.saving.findUnique({ where: { id: zeroRateSaving.id } });
     expect(Number(afterZeroRate?.balance)).toBe(1_000_000);
 
-    const afterMonthly = await db.saving.findUnique({ where: { id: monthlySaving.body.data.id } });
+    const afterMonthly = await db.saving.findUnique({ where: { id: monthlySaving.id } });
     expect(Number(afterMonthly?.balance)).toBe(1_000_000);
+    expect(afterMonthly?.lastInterestAt).toBeNull();
+
+    const afterYearly = await db.saving.findUnique({ where: { id: yearlySaving.id } });
+    expect(Number(afterYearly?.balance)).toBe(1_000_000);
+    expect(afterYearly?.lastInterestAt).toBeNull();
+  });
+
+  it("credits monthly interest once a full calendar month has elapsed, catching up missed months", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    const { saving } = await createSavingAs(admin.accessToken, member.id, "MONTHLY", 9, 1_000_000);
+
+    const now = new Date();
+    const backdated = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1));
+    await db.saving.update({ where: { id: saving.id, tenantId: admin.user.tenantId }, data: { createdAt: backdated } });
+
+    const res = await request(app()).post("/api/scheduler/run-daily").set(TOKEN_HEADER, TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.data.savingsInterest.checked).toBe(1);
+    expect(res.body.data.savingsInterest.posted).toBe(1);
+
+    // monthlyRate = 9%/12 on 1_000_000 = 7,500 x 2 missed months = 15,000
+    const updated = await db.saving.findUnique({ where: { id: saving.id } });
+    expect(Number(updated?.balance)).toBeCloseTo(1_015_000, 2);
+    expect(updated?.lastInterestAt).not.toBeNull();
+
+    const res2 = await request(app()).post("/api/scheduler/run-daily").set(TOKEN_HEADER, TOKEN);
+    expect(res2.body.data.savingsInterest.posted).toBe(0);
+    expect(res2.body.data.savingsInterest.skipped).toBe(1);
+  });
+
+  it("credits yearly interest once a full calendar year has elapsed", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    const { saving } = await createSavingAs(admin.accessToken, member.id, "YEARLY", 9, 1_000_000);
+
+    const now = new Date();
+    const backdated = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), 1));
+    await db.saving.update({ where: { id: saving.id, tenantId: admin.user.tenantId }, data: { createdAt: backdated } });
+
+    const res = await request(app()).post("/api/scheduler/run-daily").set(TOKEN_HEADER, TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.data.savingsInterest.checked).toBe(1);
+    expect(res.body.data.savingsInterest.posted).toBe(1);
+
+    // yearlyRate = 9%/1 on 1_000_000 = 90,000 for 1 elapsed year
+    const updated = await db.saving.findUnique({ where: { id: saving.id } });
+    expect(Number(updated?.balance)).toBeCloseTo(1_090_000, 2);
   });
 
   it("credits a saving only once when duplicate daily requests overlap", async () => {
