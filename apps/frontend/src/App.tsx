@@ -73,6 +73,9 @@ const RegulatoryReportsPage = lazy(() =>
     default: module.RegulatoryReportsPage
   }))
 );
+const AccountingBooksPage = lazy(() =>
+  import("@/pages/reports/AccountingBooksPage").then((module) => ({ default: module.AccountingBooksPage }))
+);
 const LaporanPasarPage = lazy(() =>
   import("@/pages/reports/LaporanPasarPage").then((module) => ({ default: module.LaporanPasarPage }))
 );
@@ -172,6 +175,7 @@ export default function App() {
               <Route path='/reports' element={<ReportsPage />} />
               <Route path='/reports/regulatory' element={<RegulatoryReportsPage />} />
               <Route path='/reports/pasar' element={<LaporanPasarPage />} />
+              <Route path='/reports/accounting' element={<AccountingBooksPage />} />
 
               <Route path='/expenses' element={<ExpensesPage />} />
               <Route path='/journal/new' element={<ManualJournalPage />} />

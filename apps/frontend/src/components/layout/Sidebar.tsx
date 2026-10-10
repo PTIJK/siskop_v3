@@ -59,6 +59,7 @@ const NAV_ITEMS_REPORTS = [
     children: [
       { label: "Laporan Keuangan", href: "/reports" },
       { label: "Laporan Regulasi", href: "/reports/regulatory" },
+      { label: "Buku Akuntansi", href: "/reports/accounting" },
       // Always listed (like Laporan Regulasi above), not hidden by entitlement — a
       // non-pasar tenant sees EntitlementNotice on the page itself, same pattern.
       { label: "Laporan Pasar", href: "/reports/pasar" },
