@@ -56,6 +56,9 @@ const MarketPage = lazy(() =>
 const ConfigPage = lazy(() =>
   import("@/pages/config/ConfigPage").then((module) => ({ default: module.ConfigPage }))
 );
+const ManualJournalPage = lazy(() =>
+  import("@/pages/journal/ManualJournalPage").then((module) => ({ default: module.ManualJournalPage }))
+);
 const ExpensesPage = lazy(() =>
   import("@/pages/expenses/ExpensesPage").then((module) => ({ default: module.ExpensesPage }))
 );
@@ -171,6 +174,7 @@ export default function App() {
               <Route path='/reports/pasar' element={<LaporanPasarPage />} />
 
               <Route path='/expenses' element={<ExpensesPage />} />
+              <Route path='/journal/new' element={<ManualJournalPage />} />
 
               <Route path='/config' element={<ConfigPage />} />
               <Route path='/profile' element={<ProfilePage />} />

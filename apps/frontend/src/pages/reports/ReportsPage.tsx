@@ -1,9 +1,9 @@
 import { useState } from "react";
 import type { FinancialReport, RATReport } from "@siskop/types";
 import { apiFetch, ApiRequestError } from "@/api/client";
-import { downloadPdf } from "@/lib/pdf";
-import { formatRupiah } from "@/lib/format";
-import { usePermissions } from "@/hooks/usePermissions";
+import { formatPeriode, formatRupiah, formatRupiahOrDash } from "@/lib/format";
+import { PrintButton } from "@/components/reports/PrintButton";
+import { todayLocal, validatePeriod } from "./regulatory/period";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { KOLBadge } from "@/components/shared/KOLBadge";
-import { Download, FileText } from "lucide-react";
+import { FileText, RotateCcw } from "lucide-react";
 
 type PeriodType = "range" | "monthly" | "yearly";
 
@@ -27,7 +27,6 @@ const MONTHS = [
 const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
 export function ReportsPage() {
-  const { can } = usePermissions();
   const { toast } = useToast();
   const [periodType, setPeriodType] = useState<PeriodType>("range");
   const [startDate, setStartDate] = useState("");
@@ -69,18 +68,23 @@ export function ReportsPage() {
     }
   };
 
-  const downloadPDF = async () => {
-    try {
-      if (activeTab === "financial") {
-        const { startDate: sd, endDate: ed } = getDateRange();
-        await downloadPdf(`/reports/financial/pdf?startDate=${sd}&endDate=${ed}`, `laporan-keuangan-${Date.now()}.pdf`);
-      } else {
-        await downloadPdf(`/reports/rat/pdf?year=${year}`, `laporan-rat-${year}.pdf`);
-      }
-    } catch {
-      toast({ title: "Gagal mengunduh PDF", variant: "destructive" });
-    }
+  const resetFilter = () => {
+    setStartDate("");
+    setEndDate("");
+    setMonth(String(new Date().getMonth() + 1));
+    setYear(String(new Date().getFullYear()));
+    setFinancialReport(null);
+    setRatReport(null);
   };
+
+  // RAT is per-year and ignores the range; month/year modes always yield a valid range.
+  const periodError = activeTab === "financial" && periodType === "range" ? validatePeriod(startDate, endDate) : null;
+
+  const pdf = (() => {
+    if (activeTab === "rat") return { path: `/reports/rat/pdf?year=${year}`, filename: `laporan-rat-${year}.pdf` };
+    const { startDate: sd, endDate: ed } = getDateRange();
+    return sd && ed ? { path: `/reports/financial/pdf?startDate=${sd}&endDate=${ed}`, filename: `laporan-keuangan-${sd}_${ed}.pdf` } : null;
+  })();
 
   const hasReport = financialReport || ratReport;
 
@@ -111,12 +115,29 @@ export function ReportsPage() {
               {periodType === "range" && (
                 <>
                   <div className="space-y-1">
-                    <Label className="text-xs">Dari</Label>
-                    <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" />
+                    <Label className="text-xs">Tanggal Awal</Label>
+                    <Input
+                      type="date"
+                      value={startDate}
+                      max={todayLocal()}
+                      onChange={(e) => {
+                        setStartDate(e.target.value);
+                        if (e.target.value && endDate && e.target.value > endDate) setEndDate(e.target.value);
+                      }}
+                      className="w-40"
+                    />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Sampai</Label>
-                    <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
+                    <Label className="text-xs">Tanggal Akhir</Label>
+                    <Input
+                      type="date"
+                      value={endDate}
+                      min={startDate || undefined}
+                      max={todayLocal()}
+                      disabled={!startDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-40"
+                    />
                   </div>
                 </>
               )}
@@ -172,16 +193,17 @@ export function ReportsPage() {
                 </div>
               )}
 
-              <Button onClick={fetchReport} disabled={isLoading}>
+              <Button onClick={fetchReport} disabled={isLoading || periodError !== null}>
                 <FileText className="mr-2 h-4 w-4" />
                 {isLoading ? "Memuat..." : "Tampilkan Laporan"}
               </Button>
-              {hasReport && can("reports", "export") && (
-                <Button variant="outline" onClick={downloadPDF}>
-                  <Download className="mr-2 h-4 w-4" /> Download PDF
-                </Button>
-              )}
+              <Button variant="outline" onClick={resetFilter} disabled={isLoading}>
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reset
+              </Button>
+              {hasReport && pdf && <PrintButton path={pdf.path} filename={pdf.filename} />}
             </div>
+            {periodError && periodType === "range" && <p className="text-xs text-destructive">{periodError}</p>}
           </div>
         </CardContent>
       </Card>
@@ -205,7 +227,7 @@ export function ReportsPage() {
           ) : financialReport ? (
             <>
               <p className="text-xs text-muted-foreground">
-                Periode: {financialReport.periode.start} s/d {financialReport.periode.end}
+                Periode: {formatPeriode(financialReport.periode.start, financialReport.periode.end)}
               </p>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -243,7 +265,7 @@ export function ReportsPage() {
                           <TableCell>{s.type}</TableCell>
                           <TableCell>{s.name}</TableCell>
                           <TableCell className="text-right">{s.count}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatRupiah(s.totalBalance)}</TableCell>
+                          <TableCell className="text-right font-semibold">{formatRupiahOrDash(s.totalBalance)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -269,14 +291,14 @@ export function ReportsPage() {
                         <TableCell>Setoran</TableCell>
                         <TableCell className="text-right">{financialReport.transaksiSimpanan.deposit.count}</TableCell>
                         <TableCell className="text-right font-semibold text-green-700">
-                          {formatRupiah(financialReport.transaksiSimpanan.deposit.total)}
+                          {formatRupiahOrDash(financialReport.transaksiSimpanan.deposit.total)}
                         </TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell>Penarikan</TableCell>
                         <TableCell className="text-right">{financialReport.transaksiSimpanan.withdrawal.count}</TableCell>
                         <TableCell className="text-right font-semibold text-orange-700">
-                          {formatRupiah(financialReport.transaksiSimpanan.withdrawal.total)}
+                          {formatRupiahOrDash(financialReport.transaksiSimpanan.withdrawal.total)}
                         </TableCell>
                       </TableRow>
                     </TableBody>
@@ -301,13 +323,13 @@ export function ReportsPage() {
                       <TableRow>
                         <TableCell>Pinjaman Dicairkan</TableCell>
                         <TableCell className="text-right">{financialReport.pinjaman.dicairkan.count}</TableCell>
-                        <TableCell className="text-right font-semibold">{formatRupiah(financialReport.pinjaman.dicairkan.total)}</TableCell>
+                        <TableCell className="text-right font-semibold">{formatRupiahOrDash(financialReport.pinjaman.dicairkan.total)}</TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell>Angsuran Diterima</TableCell>
                         <TableCell className="text-right">{financialReport.pinjaman.angsuranDiterima.count}</TableCell>
                         <TableCell className="text-right font-semibold text-green-700">
-                          {formatRupiah(financialReport.pinjaman.angsuranDiterima.total)}
+                          {formatRupiahOrDash(financialReport.pinjaman.angsuranDiterima.total)}
                         </TableCell>
                       </TableRow>
                     </TableBody>
@@ -368,7 +390,7 @@ export function ReportsPage() {
                           <TableCell>{s.type}</TableCell>
                           <TableCell>{s.jenis}</TableCell>
                           <TableCell className="text-right">{s.jumlahRekening}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatRupiah(s.totalSaldo)}</TableCell>
+                          <TableCell className="text-right font-semibold">{formatRupiahOrDash(s.totalSaldo)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

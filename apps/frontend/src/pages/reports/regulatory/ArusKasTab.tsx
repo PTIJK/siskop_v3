@@ -1,17 +1,18 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ArusKas, ArusKasSection } from "@siskop/types";
-import { apiFetch, ApiRequestError } from "@/api/client";
-import { formatRupiah } from "@/lib/format";
-import { useToast } from "@/hooks/use-toast";
-import { PageLoading } from "@/components/shared/LoadingSpinner";
+import { formatPeriode, formatRupiah } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { FileText, Info } from "lucide-react";
-import { PeriodRangeControls } from "./PeriodRangeControls";
+import { Info } from "lucide-react";
 import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
+import { BalanceChip } from "@/components/reports/BalanceChip";
+import { PrintButton } from "@/components/reports/PrintButton";
+import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
+import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResultCard";
+import { ReportAmount, ReportTotalRow } from "@/components/reports/ReportTable";
+import { useReport } from "@/components/reports/useReport";
+import { useReportFilter } from "@/components/reports/useReportFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "./period";
 
 function ActivitySection({ title, section }: { title: string; section: ArusKasSection }) {
@@ -29,13 +30,10 @@ function ActivitySection({ title, section }: { title: string; section: ArusKasSe
               {section.rincian.map((r, i) => (
                 <TableRow key={i}>
                   <TableCell>{r.label}</TableCell>
-                  <TableCell className="text-right">{formatRupiah(r.amount)}</TableCell>
+                  <ReportAmount value={r.amount} />
                 </TableRow>
               ))}
-              <TableRow className="font-semibold">
-                <TableCell>Total {title}</TableCell>
-                <TableCell className="text-right">{formatRupiah(section.total)}</TableCell>
-              </TableRow>
+              <ReportTotalRow label={`Total ${title}`} value={section.total} labelSpan={1} />
             </TableBody>
           </Table>
         )}
@@ -45,49 +43,33 @@ function ActivitySection({ title, section }: { title: string; section: ArusKasSe
 }
 
 export function ArusKasTab() {
-  const { toast } = useToast();
-  const [from, setFrom] = useState(defaultPeriodFrom());
-  const [to, setTo] = useState(defaultPeriodTo());
-  const [unitId, setUnitId] = useState(ALL_UNITS);
-  const [data, setData] = useState<ArusKas | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const filter = useReportFilter("arus-kas", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS }));
+  const { value: f } = filter;
+  const report = useReport<ArusKas>("Gagal memuat arus kas");
+  const unitLabel = useUnitLabel(f.unitId);
 
-  const fetchReport = async () => {
-    setIsLoading(true);
-    try {
-      const result = await apiFetch<ArusKas>(`/reports/regulatory/arus-kas?from=${from}&to=${to}${unitQueryParam(unitId)}`);
-      setData(result);
-    } catch (err) {
-      const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
-      toast({ title: "Gagal memuat arus kas", description: message, variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void fetchReport();
-  }, []);
+  const query = `from=${f.from}&to=${f.to}${unitQueryParam(f.unitId)}`;
+  const data = report.data;
+  const hasRows = !!data && data.aktivitasOperasi.rincian.length + data.aktivitasInvestasi.rincian.length + data.aktivitasPendanaan.rincian.length > 0;
 
   return (
     <div className="space-y-5">
-      <Card>
-        <CardContent className="pt-5">
-          <PeriodRangeControls
-            from={from}
-            to={to}
-            onFromChange={setFrom}
-            onToChange={setTo}
-            onSubmit={fetchReport}
-            isLoading={isLoading}
-            extra={<UnitFilter value={unitId} onChange={setUnitId} />}
-          />
-        </CardContent>
-      </Card>
+      <ReportFilterCard
+        reportName="arus kas"
+        from={f.from}
+        to={f.to}
+        onChange={filter.update}
+        onApply={() => void report.run(`/reports/regulatory/arus-kas?${query}`)}
+        onReset={() => {
+          filter.reset();
+          report.clear();
+        }}
+        isLoading={report.isLoading}
+        extra={<UnitFilter value={f.unitId} onChange={(unitId) => filter.update({ unitId })} />}
+      />
 
-      {isLoading ? (
-        <PageLoading />
-      ) : data?.catatan ? (
+      {/* A "catatan" response (no cash account configured) replaces the report with guidance. */}
+      {data?.catatan && !report.isLoading ? (
         <Card>
           <CardContent className="flex items-start gap-3 py-6 text-sm">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -99,41 +81,49 @@ export function ArusKasTab() {
             </div>
           </CardContent>
         </Card>
-      ) : data ? (
-        <>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Periode {data.periode.from} — {data.periode.to}
-            </p>
-            <Badge variant={data.balanced ? "default" : "destructive"}>{data.balanced ? "Seimbang" : "Tidak Seimbang"}</Badge>
-          </div>
-          <Card>
-            <CardContent className="flex items-center justify-between py-4">
-              <p className="text-sm font-semibold">Saldo Kas Awal</p>
-              <p className="text-sm font-semibold">{formatRupiah(data.saldoKasAwal)}</p>
-            </CardContent>
-          </Card>
-          <ActivitySection title="Aktivitas Operasi" section={data.aktivitasOperasi} />
-          <ActivitySection title="Aktivitas Investasi" section={data.aktivitasInvestasi} />
-          <ActivitySection title="Aktivitas Pendanaan" section={data.aktivitasPendanaan} />
-          <Card>
-            <CardContent className="space-y-1 py-4">
-              <div className="flex items-center justify-between text-sm">
-                <p>Kenaikan (Penurunan) Kas Bersih</p>
-                <p>{formatRupiah(data.kenaikanPenurunanKasBersih)}</p>
-              </div>
-              <div className="flex items-center justify-between text-sm font-semibold">
-                <p>Saldo Kas Akhir</p>
-                <p>{formatRupiah(data.saldoKasAkhir)}</p>
-              </div>
-            </CardContent>
-          </Card>
-        </>
       ) : (
-        <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-          <FileText className="h-10 w-10" />
-          <p className="text-sm">Pilih periode dan klik &quot;Tampilkan&quot;</p>
-        </div>
+        <ReportResultCard
+          reportName="Arus Kas"
+          title="Laporan Arus Kas"
+          subtitle={data ? [formatPeriode(data.periode.from, data.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
+          actions={
+            data && (
+              <>
+                <BalanceChip balanced={data.balanced} difference={Number(data.saldoKasAkhir) - Number(data.saldoKasAkhirAktual)} />
+                <PrintButton path={`/reports/regulatory/arus-kas/pdf?${query}`} filename={`arus-kas-${data.periode.from}_${data.periode.to}.pdf`} />
+              </>
+            )
+          }
+          isLoading={report.isLoading}
+          hasRun={report.hasRun}
+          hasData={hasRows || (!!data && Number(data.saldoKasAwal) !== 0)}
+        >
+          {data && (
+            <>
+              <Card>
+                <CardContent className="flex items-center justify-between py-4">
+                  <p className="text-sm font-semibold">Saldo Kas Awal</p>
+                  <p className="text-sm font-semibold tabular-nums">{formatRupiah(data.saldoKasAwal)}</p>
+                </CardContent>
+              </Card>
+              <ActivitySection title="Aktivitas Operasi" section={data.aktivitasOperasi} />
+              <ActivitySection title="Aktivitas Investasi" section={data.aktivitasInvestasi} />
+              <ActivitySection title="Aktivitas Pendanaan" section={data.aktivitasPendanaan} />
+              <Card>
+                <CardContent className="space-y-1 py-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <p>Kenaikan (Penurunan) Kas Bersih</p>
+                    <p className="tabular-nums">{formatRupiah(data.kenaikanPenurunanKasBersih)}</p>
+                  </div>
+                  <div className="flex items-center justify-between text-sm font-semibold">
+                    <p>Saldo Kas Akhir</p>
+                    <p className="tabular-nums">{formatRupiah(data.saldoKasAkhir)}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </ReportResultCard>
       )}
     </div>
   );

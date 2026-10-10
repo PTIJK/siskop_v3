@@ -40,3 +40,24 @@ export function formatRupiahRinci(amount: number | string): string {
     maximumFractionDigits: 2
   }).format(num);
 }
+
+/** Report cells: zero, empty and unparseable amounts read as "-" so a column of
+ * mostly-empty accounts stays scannable. Other screens keep using formatRupiah. */
+export function formatRupiahOrDash(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined || amount === "") return "-";
+  const num = typeof amount === "string" ? parseFloat(amount) : amount;
+  if (isNaN(num) || num === 0) return "-";
+  return formatRupiah(num);
+}
+
+/** "1 Oktober 2026 – 10 Oktober 2026", or a single date when the range is one day.
+ * Takes YYYY-MM-DD strings; parsed as local dates so the day never shifts with timezone. */
+export function formatPeriode(from: string, to: string): string {
+  const parse = (s: string) => {
+    const [y = 0, m = 1, d = 1] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+  return from === to
+    ? formatTanggalIndonesia(parse(from))
+    : `${formatTanggalIndonesia(parse(from))} – ${formatTanggalIndonesia(parse(to))}`;
+}

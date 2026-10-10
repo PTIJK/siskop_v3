@@ -1,18 +1,18 @@
-import { useEffect, useState } from "react";
 import type { Neraca, NeracaSection } from "@siskop/types";
-import { apiFetch, ApiRequestError } from "@/api/client";
-import { formatRupiah } from "@/lib/format";
-import { useToast } from "@/hooks/use-toast";
-import { PageLoading } from "@/components/shared/LoadingSpinner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatRupiah, formatTanggalIndonesia } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileText } from "lucide-react";
 import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
+import { BalanceChip } from "@/components/reports/BalanceChip";
+import { PrintButton } from "@/components/reports/PrintButton";
+import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
+import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResultCard";
+import { ReportAmount, ReportTotalRow } from "@/components/reports/ReportTable";
+import { useReport } from "@/components/reports/useReport";
+import { useReportFilter } from "@/components/reports/useReportFilter";
+import { todayLocal } from "./period";
 
 function SectionTable({
   title,
@@ -40,29 +40,27 @@ function SectionTable({
           </TableHeader>
           <TableBody>
             {section.items.map((item, i) => (
-              <TableRow key={item.accountId ?? i}>
+              <TableRow key={item.accountId ?? i} className={item.isHeader ? "font-semibold" : ""}>
                 <TableCell className="font-mono text-xs">{item.code ?? "—"}</TableCell>
-                <TableCell className={item.isComputed ? "italic text-muted-foreground" : ""}>
+                <TableCell className={item.isComputed ? "italic text-muted-foreground" : ""} style={{ paddingLeft: `${1 + (item.level - 1) * 1.25}rem` }}>
                   {item.name}
+                  {item.isContra && <span className="ml-2 text-xs font-normal text-muted-foreground">(pengurang)</span>}
                   {item.isComputed && (
                     <Badge variant="secondary" className="ml-2">
                       Otomatis
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-right">{formatRupiah(item.balance)}</TableCell>
+                <ReportAmount value={item.balance} />
               </TableRow>
             ))}
             {subtotal && (
               <TableRow className="text-muted-foreground">
                 <TableCell colSpan={2}>{subtotal.label}</TableCell>
-                <TableCell className="text-right">{formatRupiah(subtotal.amount)}</TableCell>
+                <ReportAmount value={subtotal.amount} />
               </TableRow>
             )}
-            <TableRow className="font-semibold">
-              <TableCell colSpan={2}>Total {title}</TableCell>
-              <TableCell className="text-right">{formatRupiah(section.total)}</TableCell>
-            </TableRow>
+            <ReportTotalRow label={`Total ${title}`} value={section.total} />
           </TableBody>
         </Table>
       </CardContent>
@@ -71,73 +69,67 @@ function SectionTable({
 }
 
 export function NeracaTab() {
-  const { toast } = useToast();
-  const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [unitId, setUnitId] = useState(ALL_UNITS);
-  const [data, setData] = useState<Neraca | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  // "Per tanggal" reports use only `to`; `from` is kept so the filter shape matches the range reports.
+  const filter = useReportFilter("neraca", () => ({ from: "", to: todayLocal(), unitId: ALL_UNITS }));
+  const { value: f } = filter;
+  const report = useReport<Neraca>("Gagal memuat neraca");
+  const unitLabel = useUnitLabel(f.unitId);
 
-  const fetchReport = async () => {
-    setIsLoading(true);
-    try {
-      const result = await apiFetch<Neraca>(`/reports/regulatory/neraca?asOfDate=${asOfDate}${unitQueryParam(unitId)}`);
-      setData(result);
-    } catch (err) {
-      const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
-      toast({ title: "Gagal memuat neraca", description: message, variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void fetchReport();
-  }, []);
+  const query = `asOfDate=${f.to}${unitQueryParam(f.unitId)}`;
+  const apply = () => void report.run(`/reports/regulatory/neraca?${query}`);
+  const data = report.data;
 
   return (
     <div className="space-y-5">
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 pt-5">
-          <div className="space-y-1">
-            <Label className="text-xs">Per Tanggal</Label>
-            <Input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="w-40" />
-          </div>
-          <UnitFilter value={unitId} onChange={setUnitId} />
-          <Button onClick={fetchReport} disabled={isLoading}>
-            <FileText className="mr-2 h-4 w-4" />
-            {isLoading ? "Memuat..." : "Tampilkan"}
-          </Button>
-        </CardContent>
-      </Card>
+      <ReportFilterCard
+        reportName="neraca"
+        mode="asOf"
+        from={f.from}
+        to={f.to}
+        onChange={filter.update}
+        onApply={apply}
+        onReset={() => {
+          filter.reset();
+          report.clear();
+        }}
+        isLoading={report.isLoading}
+        extra={<UnitFilter value={f.unitId} onChange={(unitId) => filter.update({ unitId })} />}
+      />
 
-      {isLoading ? (
-        <PageLoading />
-      ) : data ? (
-        <>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Neraca per {data.asOfDate}</p>
-            <Badge variant={data.balanced ? "default" : "destructive"}>{data.balanced ? "Seimbang" : "Tidak Seimbang"}</Badge>
-          </div>
-          <SectionTable title="Aset" section={data.aset} />
-          <SectionTable title="Kewajiban" section={data.kewajiban} />
-          <SectionTable
-            title="Ekuitas"
-            section={data.ekuitas}
-            subtotal={{ label: "Modal Sendiri (pokok, wajib, modal tetap, cadangan, hibah)", amount: data.modalSendiri }}
-          />
-          <Card>
-            <CardContent className="flex items-center justify-between py-4">
-              <p className="text-sm font-semibold">Total Kewajiban dan Ekuitas</p>
-              <p className="text-sm font-semibold">{formatRupiah(data.totalKewajibanDanEkuitas)}</p>
-            </CardContent>
-          </Card>
-        </>
-      ) : (
-        <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-          <FileText className="h-10 w-10" />
-          <p className="text-sm">Pilih tanggal dan klik &quot;Tampilkan&quot;</p>
-        </div>
-      )}
+      <ReportResultCard
+        reportName="Neraca"
+        title="Neraca"
+        subtitle={data ? [`Per ${formatTanggalIndonesia(data.asOfDate)}`, unitLabel].filter(Boolean).join(" · ") : undefined}
+        actions={
+          data && (
+            <>
+              <BalanceChip balanced={data.balanced} difference={Number(data.aset.total) - Number(data.totalKewajibanDanEkuitas)} />
+              <PrintButton path={`/reports/regulatory/neraca/pdf?${query}`} filename={`neraca-${data.asOfDate}.pdf`} />
+            </>
+          )
+        }
+        isLoading={report.isLoading}
+        hasRun={report.hasRun}
+        hasData={!!data && data.aset.items.length + data.kewajiban.items.length + data.ekuitas.items.length > 0}
+      >
+        {data && (
+          <>
+            <SectionTable title="Aset" section={data.aset} />
+            <SectionTable title="Kewajiban" section={data.kewajiban} />
+            <SectionTable
+              title="Ekuitas"
+              section={data.ekuitas}
+              subtotal={{ label: "Modal Sendiri (pokok, wajib, modal tetap, cadangan, hibah)", amount: data.modalSendiri }}
+            />
+            <Card>
+              <CardContent className="flex items-center justify-between py-4">
+                <p className="text-sm font-semibold">Total Kewajiban dan Ekuitas</p>
+                <p className="text-sm font-semibold tabular-nums">{formatRupiah(data.totalKewajibanDanEkuitas)}</p>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </ReportResultCard>
     </div>
   );
 }

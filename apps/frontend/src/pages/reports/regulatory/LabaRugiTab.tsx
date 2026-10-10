@@ -1,16 +1,16 @@
-import { useEffect, useState } from "react";
 import type { LabaRugiSection, LaporanHasilUsaha } from "@siskop/types";
-import { apiFetch, ApiRequestError } from "@/api/client";
-import { formatRupiah } from "@/lib/format";
-import { useToast } from "@/hooks/use-toast";
-import { PageLoading } from "@/components/shared/LoadingSpinner";
+import { formatPeriode, formatRupiah } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileText } from "lucide-react";
-import { PeriodRangeControls } from "./PeriodRangeControls";
-import { defaultPeriodFrom, defaultPeriodTo } from "./period";
 import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
+import { PrintButton } from "@/components/reports/PrintButton";
+import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
+import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResultCard";
+import { ReportAmount, ReportTotalRow } from "@/components/reports/ReportTable";
+import { useReport } from "@/components/reports/useReport";
+import { useReportFilter } from "@/components/reports/useReportFilter";
+import { defaultPeriodFrom, defaultPeriodTo } from "./period";
 
 function SectionTable({ title, section }: { title: string; section: LabaRugiSection }) {
   return (
@@ -32,13 +32,10 @@ function SectionTable({ title, section }: { title: string; section: LabaRugiSect
               <TableRow key={item.accountId}>
                 <TableCell className="font-mono text-xs">{item.code}</TableCell>
                 <TableCell>{item.name}</TableCell>
-                <TableCell className="text-right">{formatRupiah(item.total)}</TableCell>
+                <ReportAmount value={item.total} />
               </TableRow>
             ))}
-            <TableRow className="font-semibold">
-              <TableCell colSpan={2}>Total {title}</TableCell>
-              <TableCell className="text-right">{formatRupiah(section.total)}</TableCell>
-            </TableRow>
+            <ReportTotalRow label={`Total ${title}`} value={section.total} />
           </TableBody>
         </Table>
       </CardContent>
@@ -47,68 +44,52 @@ function SectionTable({ title, section }: { title: string; section: LabaRugiSect
 }
 
 export function LabaRugiTab() {
-  const { toast } = useToast();
-  const [from, setFrom] = useState(defaultPeriodFrom());
-  const [to, setTo] = useState(defaultPeriodTo());
-  const [unitId, setUnitId] = useState(ALL_UNITS);
-  const [data, setData] = useState<LaporanHasilUsaha | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const filter = useReportFilter("laba-rugi", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS }));
+  const { value: f } = filter;
+  const report = useReport<LaporanHasilUsaha>("Gagal memuat laporan hasil usaha");
+  const unitLabel = useUnitLabel(f.unitId);
 
-  const fetchReport = async () => {
-    setIsLoading(true);
-    try {
-      const result = await apiFetch<LaporanHasilUsaha>(`/reports/regulatory/laporan-hasil-usaha?from=${from}&to=${to}${unitQueryParam(unitId)}`);
-      setData(result);
-    } catch (err) {
-      const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
-      toast({ title: "Gagal memuat laporan hasil usaha", description: message, variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void fetchReport();
-  }, []);
+  const query = `from=${f.from}&to=${f.to}${unitQueryParam(f.unitId)}`;
+  const data = report.data;
 
   return (
     <div className="space-y-5">
-      <Card>
-        <CardContent className="pt-5">
-          <PeriodRangeControls
-            from={from}
-            to={to}
-            onFromChange={setFrom}
-            onToChange={setTo}
-            onSubmit={fetchReport}
-            isLoading={isLoading}
-            extra={<UnitFilter value={unitId} onChange={setUnitId} />}
-          />
-        </CardContent>
-      </Card>
+      <ReportFilterCard
+        reportName="laporan hasil usaha"
+        from={f.from}
+        to={f.to}
+        onChange={filter.update}
+        onApply={() => void report.run(`/reports/regulatory/laporan-hasil-usaha?${query}`)}
+        onReset={() => {
+          filter.reset();
+          report.clear();
+        }}
+        isLoading={report.isLoading}
+        extra={<UnitFilter value={f.unitId} onChange={(unitId) => filter.update({ unitId })} />}
+      />
 
-      {isLoading ? (
-        <PageLoading />
-      ) : data ? (
-        <>
-          <p className="text-sm text-muted-foreground">
-            Periode {data.periode.from} — {data.periode.to}
-          </p>
-          <SectionTable title="Pendapatan" section={data.pendapatan} />
-          <SectionTable title="Beban" section={data.beban} />
-          <Card>
-            <CardContent className="flex items-center justify-between py-4">
-              <p className="text-sm font-semibold">SHU Berjalan (Pendapatan − Beban)</p>
-              <p className="text-sm font-semibold">{formatRupiah(data.shuBerjalan)}</p>
-            </CardContent>
-          </Card>
-        </>
-      ) : (
-        <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-          <FileText className="h-10 w-10" />
-          <p className="text-sm">Pilih periode dan klik &quot;Tampilkan&quot;</p>
-        </div>
-      )}
+      <ReportResultCard
+        reportName="Laporan Hasil Usaha"
+        title="Laporan Hasil Usaha"
+        subtitle={data ? [formatPeriode(data.periode.from, data.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
+        actions={data && <PrintButton path={`/reports/regulatory/laporan-hasil-usaha/pdf?${query}`} filename={`hasil-usaha-${data.periode.from}_${data.periode.to}.pdf`} />}
+        isLoading={report.isLoading}
+        hasRun={report.hasRun}
+        hasData={!!data && data.pendapatan.items.length + data.beban.items.length > 0}
+      >
+        {data && (
+          <>
+            <SectionTable title="Pendapatan" section={data.pendapatan} />
+            <SectionTable title="Beban" section={data.beban} />
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="flex items-center justify-between py-4">
+                <p className="text-sm font-semibold">SHU Berjalan (Pendapatan − Beban)</p>
+                <p className="text-sm font-semibold tabular-nums">{formatRupiah(data.shuBerjalan)}</p>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </ReportResultCard>
     </div>
   );
 }
