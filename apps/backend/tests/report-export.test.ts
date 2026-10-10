@@ -210,7 +210,7 @@ describe("export access", () => {
 
     expect((await exportReq(admin.accessToken, "gaji-karyawan", { format: "csv" })).status).toBe(404);
     expect((await exportReq(admin.accessToken, "neraca", {})).status).toBe(422);
-    expect((await exportReq(admin.accessToken, "neraca", { format: "pdf" })).status).toBe(422);
+    expect((await exportReq(admin.accessToken, "neraca", { format: "docx" })).status).toBe(422);
     expect((await exportReq(admin.accessToken, "jurnal-umum", { format: "csv", from: "2026-10-31", to: "2026-09-01" })).status).toBe(422);
   });
 

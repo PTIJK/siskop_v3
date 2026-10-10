@@ -105,7 +105,7 @@ export type BukuBesarAccountParamsInput = z.infer<typeof bukuBesarAccountParamsS
 // ── Export (CSV / XLSX) ───────────────────────────────────────────────────────
 
 export const exportParamsSchema = periodParamsSchema.extend({
-  format: z.enum(["csv", "xlsx"], { errorMap: () => ({ message: "Format ekspor: csv atau xlsx" }) }),
+  format: z.enum(["csv", "xlsx", "pdf"], { errorMap: () => ({ message: "Format ekspor: csv, xlsx atau pdf" }) }),
   asOfDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD").optional(),
   unitId: bookUnitParam,
   /** Buku Besar for one account instead of the overview. */

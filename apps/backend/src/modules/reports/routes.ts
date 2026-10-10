@@ -1,6 +1,7 @@
 import type { LaporanHasilUsaha, Neraca } from "@siskop/types";
 import { notFound, validationError } from "../../lib/errors.js";
 import { Router, type Request, type Response, type NextFunction } from "express";
+import { db } from "../../lib/db.js";
 import { resolvePeriod } from "../../lib/period.js";
 import { resolveReadableUnitId } from "../../lib/unit-access.js";
 import { businessDate, dateKey, endOfBusinessDay, parseDateKey } from "../../lib/operating-calendar.js";
@@ -48,7 +49,9 @@ import {
   generateNeracaPdf,
   generatePerubahanEkuitasPdf,
   generateRatPdf,
-  generateShuDistributionPdf
+  generateSheetPdf,
+  generateShuDistributionPdf,
+  withPrintedBy
 } from "./pdf.js";
 
 /** Forwards rejected promises to the error handler; Express 4 will not. */
@@ -67,6 +70,13 @@ async function reportUnit(req: Request, unitId?: string): Promise<string | undef
   if (!unitId) return undefined;
   const auth = authClaims(req);
   return resolveReadableUnitId(auth.tenantId, auth.userId, unitId);
+}
+
+/** Name of the signed-in user, for the "Dicetak oleh" line on PDFs. */
+async function printedBy(req: Request): Promise<string> {
+  const auth = authClaims(req);
+  const user = await db.user.findFirst({ where: { id: auth.userId, tenantId: auth.tenantId }, select: { name: true } });
+  return user?.name ?? "";
 }
 
 /**
@@ -101,7 +111,7 @@ export function reportsRoutes(): Router {
     handle(async (req, res) => {
       const { startDate, endDate } = financialParamsSchema.parse(req.query);
       const { start, end } = resolvePeriod(startDate, endDate);
-      const pdf = await generateFinancialPdf(authClaims(req).tenantId, { startDate: start, endDate: end });
+      const pdf = await withPrintedBy(await printedBy(req), async () => generateFinancialPdf(authClaims(req).tenantId, { startDate: start, endDate: end }));
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="laporan-keuangan-${Date.now()}.pdf"`
@@ -125,7 +135,7 @@ export function reportsRoutes(): Router {
     requirePermission("reports", "export"),
     handle(async (req, res) => {
       const { year } = ratParamsSchema.parse(req.query);
-      const pdf = await generateRatPdf(authClaims(req).tenantId, year);
+      const pdf = await withPrintedBy(await printedBy(req), async () => generateRatPdf(authClaims(req).tenantId, year));
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="laporan-rat-${year}.pdf"`
@@ -169,7 +179,7 @@ export function reportsRoutes(): Router {
       // behind "now" and silently exclude a same-day transaction — see that
       // function's own doc.
       const cutoff = asOfDate ? endOfBusinessDay(new Date(asOfDate)) : endOfBusinessDay();
-      const pdf = await generateNeracaPdf(authClaims(req).tenantId, cutoff, await reportUnit(req, unitId));
+      const pdf = await withPrintedBy(await printedBy(req), async () => generateNeracaPdf(authClaims(req).tenantId, cutoff, await reportUnit(req, unitId)));
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="neraca-${dateKey(businessDate(cutoff))}.pdf"`
@@ -199,7 +209,7 @@ export function reportsRoutes(): Router {
       const { from, to, unitId } = unitPeriodParamsSchema.parse(req.query);
       const { start, end } = resolvePeriod(from, to);
       assertValidPeriod(start, end);
-      const pdf = await generateArusKasPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
+      const pdf = await withPrintedBy(await printedBy(req), async () => generateArusKasPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId)));
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="arus-kas-${dateKey(businessDate(start))}_${dateKey(businessDate(end))}.pdf"`
@@ -236,7 +246,7 @@ export function reportsRoutes(): Router {
       const { from, to, unitId } = unitPeriodParamsSchema.parse(req.query);
       const { start, end } = resolvePeriod(from, to);
       assertValidPeriod(start, end);
-      const pdf = await generateLaporanHasilUsahaPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
+      const pdf = await withPrintedBy(await printedBy(req), async () => generateLaporanHasilUsahaPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId)));
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="laporan-hasil-usaha-${dateKey(businessDate(start))}_${dateKey(businessDate(end))}.pdf"`
@@ -266,7 +276,7 @@ export function reportsRoutes(): Router {
       const { from, to, unitId } = unitPeriodParamsSchema.parse(req.query);
       const { start, end } = resolvePeriod(from, to);
       assertValidPeriod(start, end);
-      const pdf = await generatePerubahanEkuitasPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId));
+      const pdf = await withPrintedBy(await printedBy(req), async () => generatePerubahanEkuitasPdf(authClaims(req).tenantId, start, end, await reportUnit(req, unitId)));
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="perubahan-ekuitas-${dateKey(businessDate(start))}_${dateKey(businessDate(end))}.pdf"`
@@ -296,7 +306,7 @@ export function reportsRoutes(): Router {
       const { from, to } = periodParamsSchema.parse(req.query);
       const { start, end } = resolvePeriod(from, to);
       assertValidPeriod(start, end);
-      const pdf = await generateShuDistributionPdf(authClaims(req).tenantId, start, end);
+      const pdf = await withPrintedBy(await printedBy(req), async () => generateShuDistributionPdf(authClaims(req).tenantId, start, end));
       res.set({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="shu-distribution-${dateKey(businessDate(start))}_${dateKey(businessDate(end))}.pdf"`
@@ -492,6 +502,14 @@ export function reportsRoutes(): Router {
       const sheet = await buildExport(report as ExportReport, { tenantId: authClaims(req).tenantId, unit, period, asOf, accountId: q.accountId });
       const stem = exportFilenameStem(report as ExportReport, { tenantId: "", unit, period, asOf, accountId: q.accountId });
 
+      if (q.format === "pdf") {
+        // Wide listings (the journals) print landscape; every PDF carries the signature block.
+        const landscape = report === "jurnal-umum" || report === "jurnal-penyesuaian";
+        const pdf = await withPrintedBy(await printedBy(req), async () => generateSheetPdf(authClaims(req).tenantId, sheet, { landscape, signature: true }));
+        res.set({ "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${stem}.pdf"` });
+        res.send(pdf);
+        return;
+      }
       if (q.format === "csv") {
         res.set({ "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${stem}.csv"` });
         res.send(renderCsv(sheet));
