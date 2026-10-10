@@ -37,6 +37,16 @@ export interface NeracaItem {
   isComputed: boolean;
   /** EKUITAS lines only (the computed unclosed-SHU line is SHU); null elsewhere or when unclassified. */
   equityClass: EquityClass | null;
+  /** Depth in the chart of accounts, roots = 1. Drives indentation in the UI. */
+  level: number;
+  parentId: string | null;
+  /**
+   * A header row is a group (Aset Tetap, ...): `balance` is its descendants rolled up,
+   * and it is not added into the section total (its children already are).
+   */
+  isHeader: boolean;
+  /** Opposite-normal-balance account (e.g. Penyisihan Piutang): `balance` is negative, reducing the section. */
+  isContra: boolean;
 }
 
 export interface NeracaSection {
@@ -112,6 +122,11 @@ export interface LabaRugiItem {
   anggota: string;
   bukanAnggota: string;
   total: string;
+  level: number;
+  parentId: string | null;
+  isHeader: boolean;
+  /** Opposite-normal-balance account (e.g. Retur Penjualan): `total` is negative, reducing the section. */
+  isContra: boolean;
 }
 
 export interface LabaRugiSection {

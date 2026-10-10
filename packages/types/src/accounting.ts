@@ -138,3 +138,52 @@ export interface RepostUnpostedResult {
   /** Repostable entries whose required mapping still doesn't exist, left untouched. */
   stillUnmapped: number;
 }
+
+// ── Manual journal (Jurnal Manual / Penyesuaian) ─────────────────────────────
+
+/** UMUM = ordinary entry; PENYESUAIAN = period-end correction; PENUTUP = year-end closing (system-posted). */
+export type JournalEntryType = "UMUM" | "PENYESUAIAN" | "PENUTUP";
+
+export interface ManualJournalLineInput {
+  accountId: string;
+  /** Exactly one of debit/credit is a positive amount (max 2 decimals). Money travels as number or string, never float math. */
+  debit?: number | string;
+  credit?: number | string;
+}
+
+export interface CreateManualJournalRequest {
+  /** YYYY-MM-DD */
+  entryDate: string;
+  description: string;
+  entryType: Exclude<JournalEntryType, "PENUTUP">;
+  /** Omit for the tenant-level "unallocated" bucket. */
+  unitId?: string | null;
+  lines: ManualJournalLineInput[];
+}
+
+export interface ReverseManualJournalRequest {
+  /** YYYY-MM-DD; defaults to today. */
+  entryDate?: string;
+}
+
+export interface JournalEntryLine {
+  id: string;
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  debit: string;
+  credit: string;
+}
+
+export interface JournalEntryDetail {
+  id: string;
+  entryNo: number | null;
+  entryDate: string;
+  description: string;
+  entryType: JournalEntryType;
+  sourceType: string;
+  unitId: string | null;
+  reversalOfId: string | null;
+  createdAt: string;
+  lines: JournalEntryLine[];
+}
