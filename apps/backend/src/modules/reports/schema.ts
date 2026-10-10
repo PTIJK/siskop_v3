@@ -111,3 +111,14 @@ export const exportParamsSchema = periodParamsSchema.extend({
   /** Buku Besar for one account instead of the overview. */
   accountId: z.string().min(1).optional()
 });
+
+// ── Portfolio quality (PAR / NPL, collection efficiency) ──────────────────────
+
+export const parParamsSchema = z.object({ unitId: unitIdParam });
+
+export const parLoansParamsSchema = z.object({
+  bucket: z.enum(["CURRENT", "D1_30", "D31_60", "D61_90", "D90_PLUS"], { errorMap: () => ({ message: "Bucket tidak valid" }) }),
+  unitId: unitIdParam,
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25)
+});

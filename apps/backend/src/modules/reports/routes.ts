@@ -12,6 +12,8 @@ import {
   bukuBesarAccountParamsSchema,
   comparablePeriodParamsSchema,
   exportParamsSchema,
+  parLoansParamsSchema,
+  parParamsSchema,
   financialParamsSchema,
   jurnalParamsSchema,
   trialBalanceParamsSchema,
@@ -27,6 +29,7 @@ import {
 import { getFinancialReport, getRATReport } from "./service.js";
 import { BOOK_REPORTS, EXPORT_REPORTS, buildExport, exportFilenameStem, type ExportReport } from "./export-builders.js";
 import { renderCsv, renderXlsx } from "./export.js";
+import { getCollectionEfficiency, getPortfolioPar, listParLoans } from "./portfolio-service.js";
 import { getBukuBesar, getBukuBesarAccount, getJurnal, getNeracaSaldo, type UnitScope } from "./ledger-service.js";
 import { requireParam } from "../../lib/http.js";
 import { comparisonAsOf, comparisonRange } from "../../lib/comparison.js";
@@ -520,6 +523,39 @@ export function reportsRoutes(): Router {
         "Content-Disposition": `attachment; filename="${stem}.xlsx"`
       });
       res.send(await renderXlsx(sheet));
+    })
+  );
+
+  // ── Kualitas portofolio pinjaman (PAR / NPL, efisiensi penagihan) ─────────────
+  // The loan book is a base module, so unlike the accounting books these need only reports:read.
+
+  router.get(
+    "/portfolio/par",
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const { unitId } = parParamsSchema.parse(req.query);
+      const data = await getPortfolioPar(authClaims(req).tenantId, await reportUnit(req, unitId));
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/portfolio/par/loans",
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const q = parLoansParamsSchema.parse(req.query);
+      const { items, total } = await listParLoans(authClaims(req).tenantId, q.bucket, await reportUnit(req, q.unitId), q.page, q.limit);
+      res.json({ success: true, data: items, meta: { ...res.locals.meta, page: q.page, limit: q.limit, total } });
+    })
+  );
+
+  router.get(
+    "/portfolio/collection-efficiency",
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const { from, to, unitId } = unitPeriodParamsSchema.parse(req.query);
+      const data = await getCollectionEfficiency(authClaims(req).tenantId, resolvePeriod(from, to), await reportUnit(req, unitId));
+      res.json({ success: true, data, meta: res.locals.meta });
     })
   );
 

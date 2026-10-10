@@ -414,3 +414,78 @@ export interface BukuBesarAccount {
 
 /** What a statement is compared against: the span/month immediately before, or the same dates a year earlier. */
 export type CompareMode = "PREVIOUS_PERIOD" | "PREVIOUS_YEAR";
+
+// ── Portfolio quality (PAR / NPL, collection efficiency) ─────────────────────
+
+/** Days-past-due buckets of the loan book. CURRENT = nothing overdue. */
+export type ParBucket = "CURRENT" | "D1_30" | "D31_60" | "D61_90" | "D90_PLUS";
+
+export const PAR_BUCKETS: readonly ParBucket[] = ["CURRENT", "D1_30", "D31_60", "D61_90", "D90_PLUS"];
+
+export const PAR_BUCKET_LABEL: Record<ParBucket, string> = {
+  CURRENT: "Lancar (tidak menunggak)",
+  D1_30: "1-30 hari",
+  D31_60: "31-60 hari",
+  D61_90: "61-90 hari",
+  D90_PLUS: "Lebih dari 90 hari"
+};
+
+export interface ParBucketRow {
+  bucket: ParBucket;
+  loans: number;
+  /** Principal still owed on these loans. */
+  outstanding: string;
+  /** Share of the whole book's outstanding principal, in percent (2 decimals). */
+  share: string;
+}
+
+export interface ParProductRow {
+  loanConfigId: string;
+  name: string;
+  loans: number;
+  outstanding: string;
+  /** Outstanding principal more than 30 / 90 days past due. */
+  overdue30: string;
+  overdue90: string;
+  par30: string;
+  par90: string;
+}
+
+export interface PortfolioPar {
+  /** Asia/Jakarta calendar day the figures describe: the days-past-due the daily KOL job last wrote. */
+  asOf: string;
+  loans: number;
+  totalOutstanding: string;
+  buckets: ParBucketRow[];
+  /** Outstanding principal past due by more than 0 / 30 / 90 days, as a percent of the book. */
+  ratios: { par1: string; par30: string; par90: string };
+  /** More than 90 days past due = KOL Kurang Lancar and worse, the NPL definition used by the dashboard. */
+  nplRatio: string;
+  byProduct: ParProductRow[];
+}
+
+export interface ParLoanRow {
+  loanId: string;
+  memberName: string;
+  memberCode: string;
+  loanConfigName: string;
+  unitId: string;
+  daysOverdue: number;
+  kolCategory: string;
+  outstanding: string;
+}
+
+export interface CollectionEfficiency {
+  periode: { from: string; to: string };
+  /** Installments falling due in the period (loans with a schedule). */
+  installmentsDue: number;
+  amountDue: string;
+  /** Of what fell due in the period, how much has been paid to date. */
+  paidOnDue: string;
+  /** paidOnDue / amountDue in percent; null when nothing fell due. */
+  efficiency: string | null;
+  /** Cash received in the period on any loan, arrears and early payments included. */
+  cashCollected: string;
+  /** Active loans without an installment schedule: left out of the figures above. */
+  loansWithoutSchedule: number;
+}
