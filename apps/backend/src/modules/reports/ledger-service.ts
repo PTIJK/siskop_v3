@@ -1,5 +1,5 @@
 import { Prisma, type JournalEntryType } from "@prisma/client";
-import type { BukuBesarAccount, JurnalReport, TrialBalance } from "@siskop/types";
+import type { BukuBesarAccount, JurnalReport, SourceRef, TrialBalance } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { notFound, validationError } from "../../lib/errors.js";
 import {
@@ -38,6 +38,43 @@ const periode = (p: BookPeriod) => ({ from: day(p.start), to: day(p.end) });
 
 const unitFilter = (unit: UnitScope): Prisma.JournalEntryWhereInput => (unit === undefined ? {} : { unitId: unit });
 
+/**
+ * Which record with a detail page each ledger line came from. Loan disbursements point at the
+ * loan itself; loan payments and saving transactions only store their own id, so those are
+ * resolved to the loan / saving in one batched query per kind (never per line). Everything else
+ * (manual entries, Toko sales, charges) has no page to open and gets null.
+ */
+async function resolveSourceRefs(
+  tenantId: string,
+  entries: Array<{ sourceType: string; sourceId: string | null }>
+): Promise<(e: { sourceType: string; sourceId: string | null }) => SourceRef | null> {
+  const idsOf = (type: string) => [...new Set(entries.filter((e) => e.sourceType === type && e.sourceId).map((e) => e.sourceId!))];
+  const [payments, savingTxs] = await Promise.all([
+    idsOf("LOAN_PAYMENT").length
+      ? db.loanPayment.findMany({ where: { tenantId, id: { in: idsOf("LOAN_PAYMENT") } }, select: { id: true, loanId: true } })
+      : [],
+    idsOf("SAVING_TRANSACTION").length
+      ? db.savingTransaction.findMany({ where: { tenantId, id: { in: idsOf("SAVING_TRANSACTION") } }, select: { id: true, savingId: true } })
+      : []
+  ]);
+  const loanOfPayment = new Map(payments.map((p) => [p.id, p.loanId]));
+  const savingOfTx = new Map(savingTxs.map((t) => [t.id, t.savingId]));
+
+  return (e) => {
+    if (!e.sourceId) return null;
+    if (e.sourceType === "LOAN_DISBURSEMENT") return { kind: "LOAN", id: e.sourceId };
+    if (e.sourceType === "LOAN_PAYMENT") {
+      const id = loanOfPayment.get(e.sourceId);
+      return id ? { kind: "LOAN", id } : null;
+    }
+    if (e.sourceType === "SAVING_TRANSACTION") {
+      const id = savingOfTx.get(e.sourceId);
+      return id ? { kind: "SAVING", id } : null;
+    }
+    return null;
+  };
+}
+
 export interface JurnalFilter {
   period: BookPeriod;
   unit: UnitScope;
@@ -74,6 +111,7 @@ export async function getJurnal(
     db.journalLine.aggregate({ where, _sum: { debit: true, credit: true } })
   ]);
 
+  const refOf = await resolveSourceRefs(tenantId, lines.map((l) => l.journalEntry));
   const totalDebit = D(sums._sum.debit ?? 0);
   const totalCredit = D(sums._sum.credit ?? 0);
   return {
@@ -89,6 +127,7 @@ export async function getJurnal(
         entryType: l.journalEntry.entryType,
         sourceType: l.journalEntry.sourceType,
         sourceId: l.journalEntry.sourceId,
+        sourceRef: refOf(l.journalEntry),
         unitId: l.journalEntry.unitId,
         accountId: l.accountId,
         accountCode: l.account.code,
@@ -224,6 +263,7 @@ export async function getBukuBesarAccount(
     db.journalLine.findMany({ where: inPeriod, orderBy: [...order], skip, take: limit, include: { journalEntry: true } })
   ]);
 
+  const refOf = await resolveSourceRefs(tenantId, pageLines.map((l) => l.journalEntry));
   const saldoAwal = sign(opening._sum.debit ?? 0, opening._sum.credit ?? 0);
   let running = preceding.reduce((s, l) => s.plus(sign(l.debit, l.credit)), saldoAwal);
   const lines = pageLines.map((l) => {
@@ -237,6 +277,7 @@ export async function getBukuBesarAccount(
       entryType: l.journalEntry.entryType,
       sourceType: l.journalEntry.sourceType,
       sourceId: l.journalEntry.sourceId,
+      sourceRef: refOf(l.journalEntry),
       debit: money(D(l.debit)),
       credit: money(D(l.credit)),
       saldo: money(running)

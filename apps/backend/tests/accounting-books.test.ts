@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import request from "supertest";
 import { db } from "../src/lib/db.js";
-import { app, createStaffSession, setupTenant } from "./helpers.js";
+import { app, createMemberAs, createStaffSession, setupTenant } from "./helpers.js";
 
 beforeAll(() => {
   process.env.JWT_SECRET = "test-secret";
@@ -299,5 +299,63 @@ describe("GET /api/reports/accounting/buku-besar/:accountId", () => {
 
     expect(header.status).toBe(422);
     expect(cross.status).toBe(404);
+  });
+});
+
+describe("source links on ledger lines", () => {
+  /** A saving deposit, a loan and a payment on it: three system-posted entries pointing at records with detail pages. */
+  async function systemLedger() {
+    const admin = await setupTenant();
+    const savingConfig = await request(app())
+      .post("/api/savings/configs")
+      .set(bearer(admin.accessToken))
+      .send({ name: "Simpanan Pokok", type: "POKOK", rateType: "BUNGA", rate: 0, periodUnit: "MONTHLY" });
+    const loanConfig = await request(app())
+      .post("/api/loans/configs")
+      .set(bearer(admin.accessToken))
+      .send({ name: "KUR Mikro", type: "KONVENSIONAL", rateType: "BUNGA", rate: 12, maxTermMonths: 36 });
+    await request(app()).post("/api/config/accounts/generate-standard").set(bearer(admin.accessToken));
+    const member = await createMemberAs(admin.accessToken);
+    const saving = await request(app())
+      .post("/api/savings")
+      .set(bearer(admin.accessToken))
+      .send({ memberId: member.id, savingConfigId: savingConfig.body.data.id, initialDeposit: 500_000 });
+    const loan = await request(app())
+      .post("/api/loans")
+      .set(bearer(admin.accessToken))
+      .send({ memberId: member.id, loanConfigId: loanConfig.body.data.id, principalAmount: 50_000, termMonths: 12 });
+    expect(loan.status, JSON.stringify(loan.body)).toBe(201);
+    const today = new Date().toISOString().slice(0, 10);
+    await request(app())
+      .post(`/api/loans/${loan.body.data.id}/pay`)
+      .set(bearer(admin.accessToken))
+      .send({ amount: 5_000, penalty: 0, paidAt: today, dueDate: today });
+    return { admin, savingId: saving.body.data.id as string, loanId: loan.body.data.id as string };
+  }
+
+  it("points saving, loan disbursement and loan payment lines at the saving or loan page, manual lines at nothing", async () => {
+    const { admin, savingId, loanId } = await systemLedger();
+    const a = await accounts(admin.user.tenantId);
+    await journal(admin.accessToken, new Date().toISOString().slice(0, 10), [{ accountId: a.kas, debit: 5 }, { accountId: a.simpananPokok, credit: 5 }]);
+
+    const res = await get(admin.accessToken, "/jurnal-umum", { limit: 100 });
+
+    const refs = new Map<string, { kind: string; id: string } | null>();
+    for (const r of res.body.data.rows as Array<{ sourceType: string; sourceRef: { kind: string; id: string } | null }>) refs.set(r.sourceType, r.sourceRef);
+    expect(refs.get("SAVING_TRANSACTION")).toEqual({ kind: "SAVING", id: savingId });
+    expect(refs.get("LOAN_DISBURSEMENT")).toEqual({ kind: "LOAN", id: loanId });
+    expect(refs.get("LOAN_PAYMENT")).toEqual({ kind: "LOAN", id: loanId }); // resolved through the payment to its loan
+    expect(refs.get("MANUAL")).toBeNull();
+  });
+
+  it("carries the same link on the per-account ledger", async () => {
+    const { admin, loanId } = await systemLedger();
+    const piutang = (await db.account.findFirstOrThrow({ where: { tenantId: admin.user.tenantId, code: "1-1100" } })).id;
+
+    const res = await get(admin.accessToken, `/buku-besar/${piutang}`, { from: "2000-01-01", to: "2100-01-01" });
+
+    const loanLines = (res.body.data.lines as Array<{ sourceType: string; sourceRef: { id: string } | null }>).filter((l) => l.sourceType.startsWith("LOAN_"));
+    expect(loanLines.length).toBeGreaterThan(0);
+    expect(loanLines.every((l) => l.sourceRef?.id === loanId)).toBe(true);
   });
 });

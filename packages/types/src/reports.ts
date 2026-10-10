@@ -314,6 +314,12 @@ export interface TunggakanSewaRetribusiQuery {
 /** unitId value for the tenant-level "unallocated" bucket (entries that belong to no single unit). */
 export const UNALLOCATED_UNIT = "unallocated";
 
+/** A record with its own detail page that a ledger line came from. Other sources (manual entries, Toko sales) have none. */
+export interface SourceRef {
+  kind: "LOAN" | "SAVING";
+  id: string;
+}
+
 export interface JurnalLineRow {
   lineId: string;
   entryId: string;
@@ -324,6 +330,7 @@ export interface JurnalLineRow {
   entryType: "UMUM" | "PENYESUAIAN" | "PENUTUP";
   sourceType: string;
   sourceId: string | null;
+  sourceRef: SourceRef | null;
   unitId: string | null;
   accountId: string;
   accountCode: string;
@@ -380,6 +387,7 @@ export interface BukuBesarLine {
   entryType: "UMUM" | "PENYESUAIAN" | "PENUTUP";
   sourceType: string;
   sourceId: string | null;
+  sourceRef: SourceRef | null;
   debit: string;
   credit: string;
   /** Running balance on the account's normal side, after this line. */
