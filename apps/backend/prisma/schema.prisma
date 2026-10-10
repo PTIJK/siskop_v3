@@ -164,6 +164,8 @@ enum JournalSourceType {
   // from MANUAL so its list/delete endpoints own exactly the entries this
   // feature created, without touching other ad-hoc manual entries.
   MANUAL_EXPENSE
+  // Year-end closing entries (Tutup Buku); sourceId is the FiscalYearClose id. Always entryType PENUTUP.
+  CLOSING
   // A restock (StockMovement IN). ADJUSTMENT movements are not journaled: they *set* the
   // count and the previous quantity isn't stored, so the delta can't be recovered.
   STOCK_MOVEMENT
@@ -319,6 +321,7 @@ model Tenant {
   registrationRequests    MemberRegistrationRequest[]
   tenantNotifications     TenantNotification[]
   modalSendiriAdjustments ModalSendiriAdjustment[]
+  fiscalYearCloses        FiscalYearClose[]
   savingConfigs           SavingConfig[]
   loanConfigs             LoanConfig[]
   savings                 Saving[]
@@ -1264,6 +1267,23 @@ model JournalLine {
   @@index([tenantId])
   @@index([accountId])
   @@index([journalEntryId])
+}
+
+// A closed fiscal year (Tutup Buku): its closing journal entries (JournalEntry.sourceType
+// CLOSING, sourceId = this row) moved income and expense into equity. One row per year;
+// reopening posts mirror entries and sets reopenedAt, closing again clears it.
+model FiscalYearClose {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  year           Int
+  closedAt       DateTime  @default(now())
+  closedById     String
+  reopenedAt     DateTime?
+  reopenedById   String?
+
+  @@unique([tenantId, year])
+  @@index([tenantId])
 }
 
 model ShuDistributionConfig {

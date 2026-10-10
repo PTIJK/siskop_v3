@@ -128,7 +128,8 @@ export async function createJournalEntry(
       | "COLLECTION_BATCH"
       | "CHARGE_ACCRUAL"
       | "CHARGE_PAYMENT"
-      | "MANUAL";
+      | "MANUAL"
+      | "CLOSING";
     /** Null for MANUAL_EXPENSE — that entry has no separate source row, it IS the record. */
     sourceId: string | null;
     description: string;

@@ -33,3 +33,11 @@ export const reverseManualJournalSchema = z.object({
 
 export type CreateManualJournalInput = z.infer<typeof createManualJournalSchema>;
 export type ReverseManualJournalInput = z.infer<typeof reverseManualJournalSchema>;
+
+export const yearCloseParamsSchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100)
+});
+
+export const yearCloseBodySchema = z.object({
+  targetAccountId: z.string().min(1).optional()
+});

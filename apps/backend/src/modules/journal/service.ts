@@ -4,6 +4,7 @@ import { db } from "../../lib/db.js";
 import { conflict, notFound, validationError } from "../../lib/errors.js";
 import { createJournalEntry } from "../../lib/journal.js";
 import { assertUnitAccess } from "../../lib/unit-access.js";
+import { assertFiscalYearOpen } from "./year-close.js";
 import type { CreateManualJournalInput, ReverseManualJournalInput } from "./schema.js";
 
 const ENTRY_INCLUDE = { lines: { include: { account: true }, orderBy: { id: "asc" } } } as const satisfies Prisma.JournalEntryInclude;
@@ -78,13 +79,15 @@ export async function createManualJournal(
     throw validationError(`Akun ${unusable.code} ${unusable.name} tidak dapat dipakai (akun induk atau nonaktif)`);
   }
 
+  const entryDate = new Date(input.entryDate);
+  await assertFiscalYearOpen(tenantId, entryDate);
   const unitId = await resolveUnitId(tenantId, userId, input.unitId);
 
   const entry = await db.$transaction((tx) =>
     createJournalEntry(tx, {
       tenantId,
       unitId,
-      entryDate: new Date(input.entryDate),
+      entryDate,
       sourceType: "MANUAL",
       sourceId: null,
       description: input.description,
@@ -114,6 +117,9 @@ export async function reverseManualJournal(
   }
   if (original.reversalOfId) throw validationError("Jurnal pembalik tidak dapat dibalik lagi");
 
+  const reversalDate = input.entryDate ? new Date(input.entryDate) : new Date();
+  await assertFiscalYearOpen(tenantId, reversalDate);
+
   const reversal = await db.$transaction(async (tx) => {
     // The unique reversalOfId is the real guard against a double reversal under concurrency;
     // this pre-check just turns the common case into a clean 409.
@@ -123,7 +129,7 @@ export async function reverseManualJournal(
     return createJournalEntry(tx, {
       tenantId,
       unitId: original.unitId,
-      entryDate: input.entryDate ? new Date(input.entryDate) : new Date(),
+      entryDate: reversalDate,
       sourceType: "MANUAL",
       sourceId: null,
       description: `Pembalik: ${original.description}`,

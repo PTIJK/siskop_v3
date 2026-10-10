@@ -63,7 +63,9 @@ async function getAccountSumsInPeriod(tenantId: string, accountIds: string[], fr
     where: {
       tenantId,
       accountId: { in: accountIds },
-      journalEntry: { entryDate: { gte: from, lte: to }, ...(unitId ? { unitId } : {}) }
+      // Closing entries (Tutup Buku) move the year's result into equity; the income statement
+      // must keep showing the activity itself, so they are left out of a period movement.
+      journalEntry: { entryDate: { gte: from, lte: to }, entryType: { not: "PENUTUP" }, ...(unitId ? { unitId } : {}) }
     },
     _sum: { debit: true, credit: true }
   });
