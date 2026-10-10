@@ -6,7 +6,10 @@ import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { requireAccountingEntitlement, requirePasarEntitlement } from "../../middleware/entitlement.js";
 import {
+  bukuBesarAccountParamsSchema,
   financialParamsSchema,
+  jurnalParamsSchema,
+  trialBalanceParamsSchema,
   neracaParamsSchema,
   periodParamsSchema,
   ratParamsSchema,
@@ -17,6 +20,8 @@ import {
   upsertCalkNarrativeSchema
 } from "./schema.js";
 import { getFinancialReport, getRATReport } from "./service.js";
+import { getBukuBesar, getBukuBesarAccount, getJurnal, getNeracaSaldo, type UnitScope } from "./ledger-service.js";
+import { requireParam } from "../../lib/http.js";
 import { getPerubahanEkuitas } from "./capital-service.js";
 import { getRekapHarianKolektor, getTunggakanAngsuran, getTunggakanSewaRetribusi } from "./pasar-service.js";
 import { rekapHarianKolektorCsv } from "./pasar-export.js";
@@ -55,6 +60,15 @@ async function reportUnit(req: Request, unitId?: string): Promise<string | undef
   if (!unitId) return undefined;
   const auth = authClaims(req);
   return resolveReadableUnitId(auth.tenantId, auth.userId, unitId);
+}
+
+/**
+ * Unit scope for the accounting books: "unallocated" is the unit-less bucket, a cuid is
+ * checked like any per-unit report, omitted is the consolidated view.
+ */
+async function bookUnit(req: Request, unitId?: string): Promise<UnitScope> {
+  if (unitId === "unallocated") return null;
+  return reportUnit(req, unitId);
 }
 
 export function reportsRoutes(): Router {
@@ -344,6 +358,85 @@ export function reportsRoutes(): Router {
       const query = tunggakanSewaRetribusiParamsSchema.parse(req.query);
       const data = await getTunggakanSewaRetribusi(authClaims(req).tenantId, query);
       res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  // ── Buku akuntansi: Jurnal Umum / Penyesuaian, Neraca Saldo, Buku Besar ───────
+  // Same gate as the regulatory statements: accounting package + reports:read.
+
+  router.get(
+    "/accounting/jurnal-umum",
+    requireAccountingEntitlement,
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const q = jurnalParamsSchema.parse(req.query);
+      const { report, total } = await getJurnal(authClaims(req).tenantId, {
+        period: resolvePeriod(q.from, q.to),
+        unit: await bookUnit(req, q.unitId),
+        entryType: q.type,
+        sourceType: q.sourceType,
+        page: q.page,
+        limit: q.limit
+      });
+      res.json({ success: true, data: report, meta: { ...res.locals.meta, page: q.page, limit: q.limit, total } });
+    })
+  );
+
+  router.get(
+    "/accounting/jurnal-penyesuaian",
+    requireAccountingEntitlement,
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const q = jurnalParamsSchema.parse(req.query);
+      const { report, total } = await getJurnal(authClaims(req).tenantId, {
+        period: resolvePeriod(q.from, q.to),
+        unit: await bookUnit(req, q.unitId),
+        entryType: "PENYESUAIAN",
+        sourceType: q.sourceType,
+        page: q.page,
+        limit: q.limit
+      });
+      res.json({ success: true, data: report, meta: { ...res.locals.meta, page: q.page, limit: q.limit, total } });
+    })
+  );
+
+  router.get(
+    "/accounting/neraca-saldo",
+    requireAccountingEntitlement,
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const q = trialBalanceParamsSchema.parse(req.query);
+      const data = await getNeracaSaldo(authClaims(req).tenantId, resolvePeriod(q.from, q.to), await bookUnit(req, q.unitId));
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/accounting/buku-besar",
+    requireAccountingEntitlement,
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const q = trialBalanceParamsSchema.parse(req.query);
+      const data = await getBukuBesar(authClaims(req).tenantId, resolvePeriod(q.from, q.to), await bookUnit(req, q.unitId));
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/accounting/buku-besar/:accountId",
+    requireAccountingEntitlement,
+    requirePermission("reports", "read"),
+    handle(async (req, res) => {
+      const q = bukuBesarAccountParamsSchema.parse(req.query);
+      const { report, total } = await getBukuBesarAccount(
+        authClaims(req).tenantId,
+        requireParam(req, "accountId"),
+        resolvePeriod(q.from, q.to),
+        await bookUnit(req, q.unitId),
+        q.page,
+        q.limit
+      );
+      res.json({ success: true, data: report, meta: { ...res.locals.meta, page: q.page, limit: q.limit, total } });
     })
   );
 

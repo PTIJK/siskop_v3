@@ -308,3 +308,90 @@ export interface TunggakanSewaRetribusiQuery {
   block?: string;
   memberId?: string;
 }
+
+// ── Accounting books: Jurnal Umum / Penyesuaian, Neraca Saldo, Buku Besar ─────
+
+/** unitId value for the tenant-level "unallocated" bucket (entries that belong to no single unit). */
+export const UNALLOCATED_UNIT = "unallocated";
+
+export interface JurnalLineRow {
+  lineId: string;
+  entryId: string;
+  entryNo: number | null;
+  /** YYYY-MM-DD, Asia/Jakarta business date. */
+  entryDate: string;
+  description: string;
+  entryType: "UMUM" | "PENYESUAIAN" | "PENUTUP";
+  sourceType: string;
+  sourceId: string | null;
+  unitId: string | null;
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  debit: string;
+  credit: string;
+}
+
+/** Jurnal Umum and Jurnal Penyesuaian share this shape; rows are one page, totals cover the whole filter. */
+export interface JurnalReport {
+  periode: { from: string; to: string };
+  rows: JurnalLineRow[];
+  totalDebit: string;
+  totalCredit: string;
+  /** Σ debit = Σ credit over the whole filtered range. */
+  balanced: boolean;
+}
+
+export interface TrialBalanceRow {
+  accountId: string;
+  code: string;
+  name: string;
+  category: "ASET" | "KEWAJIBAN" | "EKUITAS" | "PENDAPATAN" | "BEBAN";
+  normalBalance: "DEBIT" | "KREDIT";
+  level: number;
+  parentId: string | null;
+  isHeader: boolean;
+  isContra: boolean;
+  /** Balance before the period, signed by the account's normal side (negative = abnormal). */
+  saldoAwal: string;
+  mutasiDebit: string;
+  mutasiKredit: string;
+  /** saldoAwal + movement on the normal side. */
+  saldoAkhir: string;
+}
+
+export interface TrialBalance {
+  periode: { from: string; to: string };
+  rows: TrialBalanceRow[];
+  /**
+   * Totals over posting accounts only (headers roll up their children and would double count).
+   * Closing balances are split by normal side: they must match for a balanced ledger.
+   */
+  totals: { mutasiDebit: string; mutasiKredit: string; saldoAkhirDebit: string; saldoAkhirKredit: string };
+  balanced: boolean;
+}
+
+export interface BukuBesarLine {
+  lineId: string;
+  entryId: string;
+  entryNo: number | null;
+  entryDate: string;
+  description: string;
+  entryType: "UMUM" | "PENYESUAIAN" | "PENUTUP";
+  sourceType: string;
+  sourceId: string | null;
+  debit: string;
+  credit: string;
+  /** Running balance on the account's normal side, after this line. */
+  saldo: string;
+}
+
+export interface BukuBesarAccount {
+  periode: { from: string; to: string };
+  account: { id: string; code: string; name: string; normalBalance: "DEBIT" | "KREDIT" };
+  saldoAwal: string;
+  lines: BukuBesarLine[];
+  totalDebit: string;
+  totalCredit: string;
+  saldoAkhir: string;
+}

@@ -57,3 +57,41 @@ export type UpsertCalkNarrativeInput = z.infer<typeof upsertCalkNarrativeSchema>
 export type RekapHarianKolektorParamsInput = z.infer<typeof rekapHarianKolektorParamsSchema>;
 export type TunggakanAngsuranParamsInput = z.infer<typeof tunggakanAngsuranParamsSchema>;
 export type TunggakanSewaRetribusiParamsInput = z.infer<typeof tunggakanSewaRetribusiParamsSchema>;
+
+// ── Accounting books (Jurnal Umum, Neraca Saldo, Buku Besar) ──────────────────
+
+const bookUnitParam = z.union([z.literal("unallocated"), z.string().cuid("Unit ID tidak valid")]).optional();
+
+const bookPagingParams = {
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(200).default(50)
+};
+
+export const jurnalParamsSchema = periodParamsSchema.extend({
+  unitId: bookUnitParam,
+  type: z.enum(["UMUM", "PENYESUAIAN", "PENUTUP"]).optional(),
+  sourceType: z
+    .enum([
+      "SAVING_TRANSACTION",
+      "LOAN_PAYMENT",
+      "LOAN_DISBURSEMENT",
+      "POS_SALE",
+      "MEMBER_CREDIT_REPAYMENT",
+      "MANUAL",
+      "MANUAL_EXPENSE",
+      "STOCK_MOVEMENT",
+      "COLLECTION_BATCH",
+      "CHARGE_ACCRUAL",
+      "CHARGE_PAYMENT"
+    ])
+    .optional(),
+  ...bookPagingParams
+});
+
+export const trialBalanceParamsSchema = periodParamsSchema.extend({ unitId: bookUnitParam });
+
+export const bukuBesarAccountParamsSchema = periodParamsSchema.extend({ unitId: bookUnitParam, ...bookPagingParams });
+
+export type JurnalParamsInput = z.infer<typeof jurnalParamsSchema>;
+export type TrialBalanceParamsInput = z.infer<typeof trialBalanceParamsSchema>;
+export type BukuBesarAccountParamsInput = z.infer<typeof bukuBesarAccountParamsSchema>;
