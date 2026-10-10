@@ -39,7 +39,13 @@ const permissionsSchema = z.object({
   // Beban Umum (general expense entry) — optional like `accounting`/`konsumen`,
   // additive. Without this, RolesTab.tsx's "Beban Umum" toggle would silently
   // fail to persist: this schema validates POST/PUT /api/config/roles bodies.
-  expenses: modulePermissionsSchema.optional()
+  expenses: modulePermissionsSchema.optional(),
+  // Every module the Permissions type knows must be listed here: zod drops unknown keys, and a
+  // role save replaces the whole permissions blob, so a missing key is silently wiped on the next
+  // save (enabling Toko used to remove Pasar). RolesTab.tsx offers all of these toggles.
+  auditLog: modulePermissionsSchema.optional(),
+  market: modulePermissionsSchema.optional(),
+  collections: modulePermissionsSchema.optional()
 });
 
 export const createRoleSchema = z.object({
