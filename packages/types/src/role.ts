@@ -28,6 +28,18 @@ export interface Permissions {
   // Phase 2 (KSU Konsumen/Toko) — optional like `accounting` above, so a role
   // permissions blob seeded before this module existed still parses.
   konsumen?: ModulePermissions;
+  // User-activity audit trail — optional like `accounting`/`konsumen` above.
+  // Only `read` is ever seeded (AuditLog rows are never user-editable).
+  auditLog?: ModulePermissions;
+  // Beban Umum (general expense entry) — optional like the modules above,
+  // and deliberately NOT gated by the "accounting" package entitlement: see
+  // docs/2026-09-27-beban-umum-design.md. `update` is never seeded — an
+  // entry is deleted and re-entered, not edited in place.
+  expenses?: ModulePermissions;
+  // Koperasi pasar plan F3 (Market/Stall) — optional like `konsumen` above.
+  market?: ModulePermissions;
+  // Koperasi pasar plan F4 (Kolektor & setoran) — optional like `market` above.
+  collections?: ModulePermissions;
 }
 
 export type PermissionModule = keyof Permissions;

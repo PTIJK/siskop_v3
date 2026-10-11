@@ -1,5 +1,7 @@
 # 01 — Product Requirements Document (PRD): SISKOP (v3)
 
+> **Superseded by [`01-PRD-SISKOP-v4.md`](01-PRD-SISKOP-v4.md) (2026-09-29).** Retained for history.
+
 Status: living document, updated **2026-09-12** against the current codebase. Owner: Product
 Manager (see `docs/claude-integration/PM-INSTRUCTIONS.md`). Engineer, QA, and Ops co-sign their
 sections per the team model in `CLAUDE.md`. **v3 of this document — kept as a separate file from

@@ -99,6 +99,6 @@ export async function apiFetchPage<T>(
   return { items: body.data as T, meta: body.meta };
 }
 
-export function apiPost<T>(path: string, payload: unknown): Promise<T> {
-  return apiFetch<T>(path, { method: "POST", body: JSON.stringify(payload) });
+export function apiPost<T>(path: string, payload: unknown, headers?: HeadersInit): Promise<T> {
+  return apiFetch<T>(path, { method: "POST", body: JSON.stringify(payload), headers });
 }

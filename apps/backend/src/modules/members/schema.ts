@@ -16,7 +16,11 @@ export const memberFieldsSchema = z.object({
 
 export const createMemberSchema = memberFieldsSchema.extend({
   isPengurus: z.boolean().default(false),
-  isPengawas: z.boolean().default(false)
+  isPengawas: z.boolean().default(false),
+  // Koperasi pasar plan F3 — a pasar trader's kind of goods. Staff-only, like
+  // isPengurus/isPengawas above, so it stays out of memberFieldsSchema (shared
+  // with public self-registration).
+  commodity: z.string().min(1).optional()
 });
 
 export const updateMemberSchema = createMemberSchema.partial();

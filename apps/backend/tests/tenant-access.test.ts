@@ -369,6 +369,8 @@ describe('tenant selection and browser-bound handoff', () => {
     expect(selected.status).toBe(403)
   })
 
+  // 20 sequential registrations, each now auto-provisioning the full standard
+  // COA (Task 4), comfortably exceed Vitest's 5000ms default test timeout.
   it('keeps an authoritative total when memberships span multiple pages', async () => {
     const { identity } = await fixtures()
     for (let i = 0; i < 20; i++) {
@@ -386,7 +388,7 @@ describe('tenant selection and browser-bound handoff', () => {
     const search = await request(app).get('/api/tenant-access/memberships?search=page-19').set('Cookie', cookie(res))
     expect(search.body.data.total).toBe(21)
     expect(search.body.data.filteredTotal).toBe(1)
-  })
+  }, 30000)
   it("creates invited staff within the administrator's role and unit scope", async () => {
     const { a, b } = await fixtures()
     const unit = await db.cooperativeUnit.findFirstOrThrow({ where: { tenantId: a.user.tenantId } })

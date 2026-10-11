@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import request from "supertest";
 import { db } from "../src/lib/db.js";
+import { businessDate, dateKey } from "../src/lib/operating-calendar.js";
 import { app, createMemberAs, createStaffSession, setupTenant } from "./helpers.js";
 
 beforeAll(() => {
@@ -12,16 +13,16 @@ beforeEach(async () => {
   await db.tenant.deleteMany({});
 });
 
-const KAS = { code: "1-1000", name: "Kas", category: "ASET" as const, normalBalance: "DEBIT" as const, isCashEquivalent: true };
+const KAS = { code: "9-1000", name: "Kas", category: "ASET" as const, normalBalance: "DEBIT" as const, isCashEquivalent: true };
 const SIMPANAN_SUKARELA_ACC = {
-  code: "2-1000",
+  code: "9-2000",
   name: "Simpanan Sukarela",
   category: "KEWAJIBAN" as const,
   normalBalance: "KREDIT" as const,
   isCashEquivalent: false
 };
 const PENDAPATAN_BUNGA = {
-  code: "4-1000",
+  code: "9-4000",
   name: "Pendapatan Bunga",
   category: "PENDAPATAN" as const,
   normalBalance: "KREDIT" as const,
@@ -124,6 +125,97 @@ describe("GET /api/reports/regulatory/neraca", () => {
     expect(res.body.data.kewajiban.total).toBe("500000");
   });
 
+  it("subtracts a contra-asset (credit-normal ASET) from Aset instead of adding it", async () => {
+    // Penyisihan Kerugian Piutang is credit-normal. Its credit balance reduces assets;
+    // the old code summed the positive normal-balance figure, overstating Aset by twice
+    // the allowance and breaking Aset = Kewajiban + Ekuitas.
+    const admin = await setupTenant();
+    const member = await createMemberAs(admin.accessToken);
+    await setupMappedDeposit(admin.accessToken, member.id, 1_000_000);
+    const penyisihan = await createAccountAs(admin.accessToken, {
+      code: "9-1190",
+      name: "Penyisihan Kerugian Piutang",
+      category: "ASET",
+      normalBalance: "KREDIT",
+      isCashEquivalent: false
+    });
+    const beban = await createAccountAs(admin.accessToken, {
+      code: "9-5000",
+      name: "Beban Penyisihan",
+      category: "BEBAN",
+      normalBalance: "DEBIT",
+      isCashEquivalent: false
+    });
+    await db.journalEntry.create({
+      data: {
+        tenantId: admin.user.tenantId,
+        entryDate: new Date(),
+        sourceType: "MANUAL",
+        description: "Pembentukan penyisihan",
+        lines: {
+          create: [
+            { tenantId: admin.user.tenantId, accountId: beban.id, debit: 100_000, credit: 0 },
+            { tenantId: admin.user.tenantId, accountId: penyisihan.id, debit: 0, credit: 100_000 }
+          ]
+        }
+      }
+    });
+
+    const res = await request(app()).get("/api/reports/regulatory/neraca").set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.aset.total).toBe("900000"); // 1,000,000 Kas - 100,000 allowance
+    expect(res.body.data.balanced).toBe(true);
+    const line = res.body.data.aset.items.find((i: { code: string }) => i.code === "9-1190");
+    expect(line.balance).toBe("-100000");
+  });
+
+  it("lists a header with its rolled-up balance and level, without counting it twice in the total", async () => {
+    const admin = await setupTenant();
+    const header = await createAccountAs(admin.accessToken, {
+      code: "9-1500",
+      name: "Aset Lancar",
+      isHeader: true,
+      isCashEquivalent: false
+    });
+    const kas = await createAccountAs(admin.accessToken, { code: "9-1501", name: "Kas Kecil", parentId: header.id });
+    const bank = await createAccountAs(admin.accessToken, { code: "9-1502", name: "Bank X", parentId: header.id, isCashEquivalent: false });
+    const modal = await createAccountAs(admin.accessToken, {
+      code: "9-3000",
+      name: "Simpanan Pokok",
+      category: "EKUITAS",
+      normalBalance: "KREDIT",
+      isCashEquivalent: false
+    });
+    await db.journalEntry.create({
+      data: {
+        tenantId: admin.user.tenantId,
+        entryDate: new Date(),
+        sourceType: "MANUAL",
+        description: "Setoran modal",
+        lines: {
+          create: [
+            { tenantId: admin.user.tenantId, accountId: kas.id, debit: 300_000, credit: 0 },
+            { tenantId: admin.user.tenantId, accountId: bank.id, debit: 200_000, credit: 0 },
+            { tenantId: admin.user.tenantId, accountId: modal.id, debit: 0, credit: 500_000 }
+          ]
+        }
+      }
+    });
+
+    const res = await request(app()).get("/api/reports/regulatory/neraca").set("Authorization", `Bearer ${admin.accessToken}`);
+
+    type Item = { code: string; balance: string; level: number; isHeader: boolean; parentId: string | null };
+    const items: Item[] = res.body.data.aset.items;
+    const head = items.find((i) => i.code === "9-1500")!;
+    expect(head).toMatchObject({ balance: "500000", level: 1, isHeader: true, parentId: null });
+    expect(items.find((i) => i.code === "9-1501")).toMatchObject({ level: 2, parentId: header.id, balance: "300000" });
+    // parent listed directly before its children
+    expect(items.map((i) => i.code).filter((c) => c.startsWith("9-15"))).toEqual(["9-1500", "9-1501", "9-1502"]);
+    expect(res.body.data.aset.total).toBe("500000");
+    expect(res.body.data.balanced).toBe(true);
+  });
+
   it("excludes a same-day cutoff's own transactions when asOfDate is omitted vs. explicit (endOfDay regression)", async () => {
     // Regression for the date-range bug class: an explicit `asOfDate` of today
     // must include everything posted today, same as the default (no param) path.
@@ -131,7 +223,12 @@ describe("GET /api/reports/regulatory/neraca", () => {
     const member = await createMemberAs(admin.accessToken);
     await setupMappedDeposit(admin.accessToken, member.id, 500_000);
 
-    const today = new Date().toISOString().split("T")[0];
+    // "Today" here means today's Asia/Jakarta calendar date — same as the
+    // production asOfDate semantics (see endOfBusinessDay). A naive
+    // `new Date().toISOString().split("T")[0]` (UTC calendar date) drifts a
+    // day behind Jakarta's for part of the UTC day, which would make this
+    // test flaky rather than a regression check.
+    const today = dateKey(businessDate());
     const withParam = await request(app())
       .get("/api/reports/regulatory/neraca")
       .query({ asOfDate: today })
@@ -150,6 +247,11 @@ describe("GET /api/reports/regulatory/neraca", () => {
 describe("GET /api/reports/regulatory/arus-kas", () => {
   it("returns a catatan when no account is marked as cash-equivalent", async () => {
     const admin = await setupTenant();
+    // Provisioning already marks Kas/Bank as cash-equivalent — clear that on
+    // every account to simulate the "nothing configured" state this test
+    // exercises.
+    await db.account.updateMany({ where: { tenantId: admin.user.tenantId }, data: { isCashEquivalent: false } });
+
     const res = await request(app())
       .get("/api/reports/regulatory/arus-kas")
       .set("Authorization", `Bearer ${admin.accessToken}`);
@@ -264,7 +366,7 @@ describe("GET /api/reports/regulatory/shu-distribution", () => {
     const kas = await createAccountAs(admin.accessToken);
 
     const pokokAcc = await createAccountAs(admin.accessToken, {
-      code: "3-1000",
+      code: "9-3000",
       name: "Simpanan Pokok",
       category: "EKUITAS",
       normalBalance: "KREDIT",

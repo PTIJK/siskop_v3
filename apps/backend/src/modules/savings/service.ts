@@ -1,8 +1,10 @@
-import type { Prisma } from "@prisma/client";
-import { ErrorCode } from "@siskop/types";
+import { Prisma, type TransactionType } from "@prisma/client";
+import { endOfDay, parseISO, startOfDay } from "date-fns";
+import { ErrorCode, type MemberSavingsSummary, type SavingStatement } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { postSavingTransaction } from "../../lib/journal.js";
+import { recordAudit } from "../audit-log/service.js";
 import { getDefaultUnitId } from "../../lib/units.js";
 import { validateRegulatoryRate } from "../../lib/regulatory-config.js";
 import type {
@@ -10,6 +12,7 @@ import type {
   CreateSavingInput,
   ListSavingTransactionsQueryInput,
   ListSavingsQueryInput,
+  SavingStatementQueryInput,
   SavingTransactionInput,
   UpdateSavingConfigInput
 } from "./schema.js";
@@ -86,6 +89,74 @@ export async function listSavings(tenantId: string, query: ListSavingsQueryInput
   return { items, meta: { page, limit, total } };
 }
 
+/**
+ * The Simpanan list grouped by member: paginates over members (not savings) so
+ * a member with several accounts appears exactly once per page.
+ */
+export async function listSavingsByMember(
+  tenantId: string,
+  query: ListSavingsQueryInput
+): Promise<{ items: MemberSavingsSummary[]; meta: { page: number; limit: number; total: number } }> {
+  const { page, limit, search, memberId, type } = query;
+  const skip = (page - 1) * limit;
+
+  const savingWhere: Prisma.SavingWhereInput = {
+    tenantId,
+    isActive: true,
+    ...(type ? { savingConfig: { type } } : {})
+  };
+  const where: Prisma.MemberWhereInput = {
+    tenantId,
+    savings: { some: savingWhere },
+    ...(memberId ? { id: memberId } : {}),
+    ...(search
+      ? {
+          OR: [
+            { fullName: { contains: search, mode: "insensitive" } },
+            { memberId: { contains: search, mode: "insensitive" } }
+          ]
+        }
+      : {})
+  };
+
+  const [members, total] = await Promise.all([
+    db.member.findMany({
+      where,
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        memberId: true,
+        fullName: true,
+        accountNumber: true,
+        savings: {
+          where: savingWhere,
+          select: { id: true, balance: true, savingConfig: { select: { name: true, type: true } } },
+          orderBy: [{ savingConfig: { type: "asc" } }, { createdAt: "asc" }]
+        }
+      },
+      orderBy: [{ fullName: "asc" }, { id: "asc" }]
+    }),
+    db.member.count({ where })
+  ]);
+
+  const items = members.map((m) => ({
+    memberId: m.id,
+    memberNumber: m.memberId,
+    fullName: m.fullName,
+    accountNumber: m.accountNumber,
+    totalBalance: m.savings.reduce((sum, s) => sum.add(s.balance), new Prisma.Decimal(0)).toFixed(2),
+    savings: m.savings.map((s) => ({
+      id: s.id,
+      name: s.savingConfig.name,
+      type: s.savingConfig.type,
+      balance: s.balance.toFixed(2)
+    }))
+  }));
+
+  return { items, meta: { page, limit, total } };
+}
+
 export async function getSavingById(tenantId: string, id: string) {
   const saving = await db.saving.findFirst({
     where: { id, tenantId },
@@ -150,6 +221,13 @@ export async function createSaving(tenantId: string, data: CreateSavingInput, cr
       });
     }
 
+    await recordAudit(tx, {
+      action: "saving.create",
+      entityType: "Saving",
+      entityId: saving.id,
+      after: { memberId: saving.memberId, savingConfigId: saving.savingConfigId, balance: saving.balance }
+    });
+
     return saving;
   });
 }
@@ -178,11 +256,98 @@ export async function listSavingTransactions(
   return { items, meta: { page, limit, total } };
 }
 
+// WITHDRAWAL is the only balance-decreasing type — an explicit check, not a
+// DEPOSIT one, so a future credit type defaults safely (same rule as
+// reports/regulatory-service.ts#memberSavingsBreakdownAsOf).
+function signedAmount(type: TransactionType, amount: Prisma.Decimal): Prisma.Decimal {
+  return type === "WITHDRAWAL" ? amount.neg() : amount;
+}
+
+/**
+ * Rekening Koran for one saving account. No balance snapshots are stored, so
+ * the closing balance is today's `Saving.balance` minus everything posted after
+ * the period, and each row's running balance walks forward from the opening
+ * balance. Rows are oldest first, like a printed bank statement.
+ */
+export async function getSavingStatement(
+  tenantId: string,
+  savingId: string,
+  query: SavingStatementQueryInput
+): Promise<SavingStatement> {
+  const saving = await db.saving.findFirst({
+    where: { id: savingId, tenantId },
+    select: {
+      id: true,
+      balance: true,
+      member: { select: { memberId: true, fullName: true } },
+      savingConfig: { select: { name: true, type: true } }
+    }
+  });
+  if (!saving) throw notFound("Rekening simpanan tidak ditemukan");
+
+  const start = startOfDay(parseISO(query.from));
+  const end = endOfDay(parseISO(query.to));
+  const [laterSums, transactions] = await Promise.all([
+    db.savingTransaction.groupBy({
+      by: ["type"],
+      where: { savingId, tenantId, createdAt: { gt: end } },
+      _sum: { amount: true }
+    }),
+    db.savingTransaction.findMany({
+      where: { savingId, tenantId, createdAt: { gte: start, lte: end } },
+      include: { createdByUser: { select: { name: true } } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+    })
+  ]);
+
+  const zero = new Prisma.Decimal(0);
+  const postedAfter = laterSums.reduce((sum, g) => sum.add(signedAmount(g.type, g._sum.amount ?? zero)), zero);
+  const closingBalance = saving.balance.sub(postedAfter);
+  const openingBalance = transactions.reduce((bal, t) => bal.sub(signedAmount(t.type, t.amount)), closingBalance);
+
+  let running = openingBalance;
+  let totalDebit = zero;
+  let totalCredit = zero;
+  const rows = transactions.map((t) => {
+    const isDebit = t.type === "WITHDRAWAL";
+    running = running.add(signedAmount(t.type, t.amount));
+    if (isDebit) totalDebit = totalDebit.add(t.amount);
+    else totalCredit = totalCredit.add(t.amount);
+    return {
+      id: t.id,
+      date: t.createdAt.toISOString(),
+      type: t.type,
+      note: t.note,
+      debit: (isDebit ? t.amount : zero).toString(),
+      credit: (isDebit ? zero : t.amount).toString(),
+      balance: running.toString(),
+      createdByName: t.createdByUser?.name ?? null
+    };
+  });
+
+  return {
+    saving: {
+      id: saving.id,
+      configName: saving.savingConfig.name,
+      type: saving.savingConfig.type,
+      member: saving.member
+    },
+    period: { from: query.from, to: query.to },
+    openingBalance: openingBalance.toString(),
+    totalDebit: totalDebit.toString(),
+    totalCredit: totalCredit.toString(),
+    closingBalance: closingBalance.toString(),
+    rows
+  };
+}
+
 export async function depositToSaving(
   tenantId: string,
   savingId: string,
   data: SavingTransactionInput,
-  createdBy: string
+  createdBy: string,
+  /** Recorded by a Kolektor (koperasi pasar F4) — see modules/collections/service.ts. */
+  collector?: { batchId: string }
 ) {
   return db.$transaction(async (tx) => {
     const saving = await tx.saving.findUnique({ where: { id: savingId } });
@@ -191,7 +356,15 @@ export async function depositToSaving(
     await tx.saving.update({ where: { id: savingId, tenantId }, data: { balance: { increment: data.amount } } });
 
     const transaction = await tx.savingTransaction.create({
-      data: { savingId, tenantId, type: "DEPOSIT", amount: data.amount, note: data.note, createdBy }
+      data: {
+        savingId,
+        tenantId,
+        type: "DEPOSIT",
+        amount: data.amount,
+        note: data.note,
+        createdBy,
+        collectionBatchId: collector?.batchId ?? null
+      }
     });
 
     await postSavingTransaction(tx, {
@@ -202,7 +375,16 @@ export async function depositToSaving(
       kind: "DEPOSIT",
       amount: data.amount,
       entryDate: transaction.createdAt,
-      description: "Setoran simpanan"
+      description: "Setoran simpanan",
+      viaCollector: !!collector
+    });
+
+    await recordAudit(tx, {
+      action: "saving.deposit",
+      entityType: "Saving",
+      entityId: savingId,
+      before: { balance: saving.balance },
+      after: { balance: saving.balance.add(data.amount), amount: new Prisma.Decimal(data.amount) }
     });
 
     return transaction;
@@ -255,6 +437,14 @@ export async function withdrawFromSaving(
       amount: data.amount,
       entryDate: transaction.createdAt,
       description: "Penarikan simpanan"
+    });
+
+    await recordAudit(tx, {
+      action: "saving.withdraw",
+      entityType: "Saving",
+      entityId: savingId,
+      before: { balance: saving.balance },
+      after: { balance: saving.balance.sub(data.amount), amount: new Prisma.Decimal(data.amount) }
     });
 
     return transaction;

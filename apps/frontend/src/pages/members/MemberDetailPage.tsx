@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Member, PortalAccessResponse } from "@siskop/types";
+import type { Member, PortalAccessResponse, StallContractSummary } from "@siskop/types";
 import { apiFetch, apiPost, ApiRequestError } from "@/api/client";
 import { getMemberCreditStatus } from "@/api/konsumen";
 import { formatRupiah, formatTanggalIndonesia } from "@/lib/format";
@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Edit, PiggyBank, CreditCard, ArrowDownCircle, ArrowUpCircle, Smartphone, Store } from "lucide-react";
+import { Edit, PiggyBank, CreditCard, ArrowDownCircle, ArrowUpCircle, Smartphone, Store, Building2 } from "lucide-react";
 
 interface MemberDetail extends Member {
   savings: { id: string; savingConfig: { name: string; type: string }; balance: string; isActive: boolean }[];
@@ -59,6 +59,16 @@ export function MemberDetailPage() {
     queryKey: ["konsumen", "credit", id],
     queryFn: () => getMemberCreditStatus(id as string),
     enabled: Boolean(id) && canReadCredit
+  });
+
+  // Koperasi pasar F5 — only shown for a tenant with the pasar module (the
+  // "market" permission is optional, see @siskop/types#Permissions), so this
+  // tab stays hidden for every non-pasar koperasi rather than showing empty.
+  const canReadMarket = can("market", "read");
+  const { data: stallContracts, isPending: contractsPending } = useQuery({
+    queryKey: ["market", "contracts", id],
+    queryFn: () => apiFetch<StallContractSummary[]>(`/market/contracts?memberId=${id}`),
+    enabled: Boolean(id) && canReadMarket
   });
 
   async function handleActivatePortal() {
@@ -123,6 +133,7 @@ export function MemberDetailPage() {
           <TabsTrigger value="savings">Simpanan</TabsTrigger>
           <TabsTrigger value="loans">Pinjaman</TabsTrigger>
           {canReadCredit && <TabsTrigger value="credit">Kredit Toko</TabsTrigger>}
+          {canReadMarket && <TabsTrigger value="kontrak-kios">Kontrak Kios</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="info" className="mt-4">
@@ -317,6 +328,52 @@ export function MemberDetailPage() {
                 </CardContent>
               </Card>
             ) : null}
+          </TabsContent>
+        )}
+
+        {canReadMarket && (
+          <TabsContent value="kontrak-kios" className="mt-4 space-y-4">
+            {contractsPending ? (
+              <PageLoading />
+            ) : !stallContracts || stallContracts.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <Building2 className="mx-auto mb-2 h-8 w-8" />
+                  <p className="text-sm">Belum ada kontrak sewa kios</p>
+                </CardContent>
+              </Card>
+            ) : (
+              stallContracts.map((c) => (
+                <Card key={c.id}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-base">
+                          {c.marketName} — {c.stallCode}
+                        </CardTitle>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Mulai {formatTanggalIndonesia(c.startDate)}
+                          {c.endDate ? ` · Selesai ${formatTanggalIndonesia(c.endDate)}` : ""}
+                        </p>
+                      </div>
+                      <Badge variant={c.isActive ? "default" : "secondary"}>{c.isActive ? "Aktif" : "Selesai"}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <dl className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Nilai Sewa</dt>
+                        <dd className="font-semibold">{formatRupiah(c.rentAmount)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Periode</dt>
+                        <dd className="font-semibold">{c.rentPeriod === "MONTHLY" ? "Bulanan" : "Tahunan"}</dd>
+                      </div>
+                    </dl>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </TabsContent>
         )}
       </Tabs>

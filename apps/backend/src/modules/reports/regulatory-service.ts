@@ -1,18 +1,42 @@
-import type { CalkSection } from "@prisma/client";
+import { Prisma, type CalkSection, type EquityClass } from "@prisma/client";
 import { db } from "../../lib/db.js";
 import { validationError } from "../../lib/errors.js";
 import { splitPrincipalAndInterest } from "../../lib/journal.js";
+import { businessDate, dateKey } from "../../lib/operating-calendar.js";
+import { MODAL_DISETOR_AUDIT_THRESHOLD_RP, MODAL_SENDIRI_CLASSES } from "../../lib/regulatory-config.js";
+import {
+  accountLevels,
+  isContraAccount,
+  normalBalanceAmount,
+  orderDepthFirst,
+  reportContribution,
+  rollUpSums,
+  type DebitCredit
+} from "../../lib/account-tree.js";
+import { EQUITY_CLASS_ORDER, getModalSendiri, komposisiModalSendiri } from "./capital-service.js";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * Renders a period boundary as its Asia/Jakarta calendar-day string. Boundary
+ * instants here are shifted off UTC midnight (`startOfBusinessDay`,
+ * `endOfBusinessDay`, or a `-1ms` "day before") so a raw `toISOString().split
+ * ("T")[0]` would echo the wrong calendar day for part of the UTC day; this
+ * re-derives the Jakarta day the instant actually belongs to.
+ */
+function periodDate(d: Date): string {
+  return dateKey(businessDate(d));
+}
+
 export const CALK_SECTIONS: CalkSection[] = ["UMUM", "DASAR_PENYUSUNAN", "KEBIJAKAN_AKUNTANSI", "INFORMASI_TAMBAHAN"];
 
-interface AccountSums {
-  debit: number;
-  credit: number;
-}
+type AccountSums = DebitCredit;
+
+const D = (n: Prisma.Decimal.Value) => new Prisma.Decimal(n);
+/** Decimal -> the string shape the reports have always returned ("500000", "100.5"). */
+const money = (d: Prisma.Decimal) => d.toDecimalPlaces(2).toString();
 
 /**
  * `unitId` narrows the ledger to one unit's entries; omitted = every entry of the
@@ -29,7 +53,7 @@ async function getAccountSumsAsOf(tenantId: string, accountIds: string[] | undef
     _sum: { debit: true, credit: true }
   });
   return new Map<string, AccountSums>(
-    sums.map((s) => [s.accountId, { debit: Number(s._sum.debit ?? 0), credit: Number(s._sum.credit ?? 0) }])
+    sums.map((s) => [s.accountId, { debit: D(s._sum.debit ?? 0), credit: D(s._sum.credit ?? 0) }])
   );
 }
 
@@ -39,12 +63,14 @@ async function getAccountSumsInPeriod(tenantId: string, accountIds: string[], fr
     where: {
       tenantId,
       accountId: { in: accountIds },
-      journalEntry: { entryDate: { gte: from, lte: to }, ...(unitId ? { unitId } : {}) }
+      // Closing entries (Tutup Buku) move the year's result into equity; the income statement
+      // must keep showing the activity itself, so they are left out of a period movement.
+      journalEntry: { entryDate: { gte: from, lte: to }, entryType: { not: "PENUTUP" }, ...(unitId ? { unitId } : {}) }
     },
     _sum: { debit: true, credit: true }
   });
   return new Map<string, AccountSums>(
-    sums.map((s) => [s.accountId, { debit: Number(s._sum.debit ?? 0), credit: Number(s._sum.credit ?? 0) }])
+    sums.map((s) => [s.accountId, { debit: D(s._sum.debit ?? 0), credit: D(s._sum.credit ?? 0) }])
   );
 }
 
@@ -160,21 +186,40 @@ export async function getMemberInterestPaidInPeriod(
  * balance.
  */
 export async function getNeraca(tenantId: string, asOfDate: Date, unitId?: string) {
-  const [accounts, sumsByAccount] = await Promise.all([
-    db.account.findMany({ where: { tenantId, isHeader: false }, orderBy: { code: "asc" } }),
+  const [accounts, ownSums] = await Promise.all([
+    db.account.findMany({ where: { tenantId }, orderBy: { code: "asc" } }),
     getAccountSumsAsOf(tenantId, undefined, asOfDate, unitId)
   ]);
 
-  const balanceFor = (account: (typeof accounts)[number]): number => {
-    const sums = sumsByAccount.get(account.id) ?? { debit: 0, credit: 0 };
-    return account.normalBalance === "DEBIT" ? sums.debit - sums.credit : sums.credit - sums.debit;
+  const zero: AccountSums = { debit: D(0), credit: D(0) };
+  const rolled = rollUpSums(accounts, ownSums);
+  const levels = accountLevels(accounts);
+
+  // What an account adds to its section: its own postings only, contra accounts negated.
+  // A header's children already carry their postings, so a header never adds its rolled-up
+  // figure to a total (it would count twice); it only displays it.
+  const ownContribution = (a: (typeof accounts)[number]) =>
+    reportContribution(a.category, a.normalBalance, normalBalanceAmount(a.normalBalance, ownSums.get(a.id) ?? zero));
+  const displayBalance = (a: (typeof accounts)[number]) => {
+    const sums = a.isHeader ? (rolled.get(a.id) ?? zero) : (ownSums.get(a.id) ?? zero);
+    return reportContribution(a.category, a.normalBalance, normalBalanceAmount(a.normalBalance, sums));
   };
 
   const buildSection = (category: string) => {
-    const items = accounts
-      .filter((a) => a.category === category)
-      .map((a) => ({ accountId: a.id, code: a.code, name: a.name, balance: round2(balanceFor(a)).toString(), isComputed: false }));
-    const total = round2(items.reduce((sum, i) => sum + Number(i.balance), 0));
+    const inCategory = accounts.filter((a) => a.category === category);
+    const items = orderDepthFirst(inCategory).map((a) => ({
+      accountId: a.id as string | null,
+      code: a.code as string | null,
+      name: a.name,
+      balance: money(displayBalance(a)),
+      isComputed: false,
+      equityClass: a.equityClass,
+      level: levels.get(a.id) ?? 1,
+      parentId: a.parentId,
+      isHeader: a.isHeader,
+      isContra: isContraAccount(a.category, a.normalBalance)
+    }));
+    const total = inCategory.reduce((sum, a) => sum.plus(ownContribution(a)), D(0));
     return { items, total };
   };
 
@@ -182,30 +227,42 @@ export async function getNeraca(tenantId: string, asOfDate: Date, unitId?: strin
   const kewajiban = buildSection("KEWAJIBAN");
   const ekuitas = buildSection("EKUITAS");
 
-  const totalPendapatan = accounts.filter((a) => a.category === "PENDAPATAN").reduce((sum, a) => sum + balanceFor(a), 0);
-  const totalBeban = accounts.filter((a) => a.category === "BEBAN").reduce((sum, a) => sum + balanceFor(a), 0);
-  const shuBerjalanBelumDitutup = round2(totalPendapatan - totalBeban);
+  const sumCategory = (category: string) =>
+    accounts.filter((a) => a.category === category).reduce((sum, a) => sum.plus(ownContribution(a)), D(0));
+  const shuBerjalanBelumDitutup = sumCategory("PENDAPATAN").minus(sumCategory("BEBAN")).toDecimalPlaces(2);
 
+  // Lampiran order (EQUITY_CLASS_ORDER), unclassified accounts last; stable, so
+  // accounts of one class keep their code order.
+  const classRank = (c: EquityClass | null) => (c === null ? EQUITY_CLASS_ORDER.length : EQUITY_CLASS_ORDER.indexOf(c));
   const ekuitasItems = [
-    ...ekuitas.items,
+    ...[...ekuitas.items].sort((a, b) => classRank(a.equityClass) - classRank(b.equityClass)),
     {
       accountId: null,
       code: null,
       name: "SHU Tahun Berjalan (Belum Ditutup — Dihitung Otomatis)",
-      balance: shuBerjalanBelumDitutup.toString(),
-      isComputed: true
+      balance: money(shuBerjalanBelumDitutup),
+      isComputed: true,
+      equityClass: "SHU" as EquityClass,
+      level: 1,
+      parentId: null,
+      isHeader: false,
+      isContra: false
     }
   ];
-  const ekuitasTotal = round2(ekuitas.total + shuBerjalanBelumDitutup);
-  const totalKewajibanDanEkuitas = round2(kewajiban.total + ekuitasTotal);
+  const modalSendiri = ekuitas.items
+    .filter((i) => !i.isHeader && i.equityClass !== null && MODAL_SENDIRI_CLASSES.includes(i.equityClass))
+    .reduce((sum, i) => sum.add(i.balance), new Prisma.Decimal(0));
+  const ekuitasTotal = ekuitas.total.plus(shuBerjalanBelumDitutup).toDecimalPlaces(2);
+  const totalKewajibanDanEkuitas = kewajiban.total.plus(ekuitasTotal).toDecimalPlaces(2);
 
   return {
-    asOfDate: asOfDate.toISOString().split("T")[0],
-    aset: { items: aset.items, total: aset.total.toString() },
-    kewajiban: { items: kewajiban.items, total: kewajiban.total.toString() },
-    ekuitas: { items: ekuitasItems, total: ekuitasTotal.toString() },
-    totalKewajibanDanEkuitas: totalKewajibanDanEkuitas.toString(),
-    balanced: Math.abs(aset.total - totalKewajibanDanEkuitas) < 0.01
+    asOfDate: periodDate(asOfDate),
+    aset: { items: aset.items, total: money(aset.total) },
+    kewajiban: { items: kewajiban.items, total: money(kewajiban.total) },
+    ekuitas: { items: ekuitasItems, total: money(ekuitasTotal) },
+    totalKewajibanDanEkuitas: money(totalKewajibanDanEkuitas),
+    balanced: aset.total.minus(totalKewajibanDanEkuitas).abs().lessThan(0.01),
+    modalSendiri: modalSendiri.toString()
   };
 }
 
@@ -222,7 +279,7 @@ export async function getNeraca(tenantId: string, asOfDate: Date, unitId?: strin
 export async function getArusKas(tenantId: string, from: Date, to: Date, unitId?: string) {
   const cashAccounts = await db.account.findMany({ where: { tenantId, isCashEquivalent: true } });
   const cashAccountIds = cashAccounts.map((a) => a.id);
-  const periode = { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] };
+  const periode = { from: periodDate(from), to: periodDate(to) };
 
   if (cashAccountIds.length === 0) {
     const zero = { rincian: [] as Array<{ label: string; amount: string }>, total: "0" };
@@ -256,7 +313,7 @@ export async function getArusKas(tenantId: string, from: Date, to: Date, unitId?
   ]);
 
   const sumBalances = (sums: Map<string, AccountSums>) =>
-    round2(Array.from(sums.values()).reduce((sum, s) => sum + (s.debit - s.credit), 0));
+    round2(Array.from(sums.values()).reduce((sum, s) => sum + s.debit.minus(s.credit).toNumber(), 0));
 
   const saldoKasAwal = sumBalances(openingSums);
   const saldoKasAkhirAktual = sumBalances(closingSums);
@@ -336,37 +393,49 @@ export async function getArusKas(tenantId: string, from: Date, to: Date, unitId?
  */
 export async function getLaporanHasilUsaha(tenantId: string, from: Date, to: Date, unitId?: string) {
   const accounts = await db.account.findMany({
-    where: { tenantId, isHeader: false, category: { in: ["PENDAPATAN", "BEBAN"] } },
+    where: { tenantId, category: { in: ["PENDAPATAN", "BEBAN"] } },
     orderBy: { code: "asc" }
   });
-  const accountIds = accounts.map((a) => a.id);
-  const sumsByAccount = await getAccountSumsInPeriod(tenantId, accountIds, from, to, unitId);
+  const ownSums = await getAccountSumsInPeriod(tenantId, accounts.map((a) => a.id), from, to, unitId);
 
-  const balanceFor = (account: (typeof accounts)[number]): number => {
-    const sums = sumsByAccount.get(account.id) ?? { debit: 0, credit: 0 };
-    return account.normalBalance === "DEBIT" ? sums.debit - sums.credit : sums.credit - sums.debit;
-  };
+  const zero: AccountSums = { debit: D(0), credit: D(0) };
+  const rolled = rollUpSums(accounts, ownSums);
+  const levels = accountLevels(accounts);
+
+  const contribution = (a: (typeof accounts)[number], sums: AccountSums) =>
+    reportContribution(a.category, a.normalBalance, normalBalanceAmount(a.normalBalance, sums));
 
   const buildSection = (category: "PENDAPATAN" | "BEBAN") => {
-    const items = accounts
-      .filter((a) => a.category === category)
-      .map((a) => {
-        const total = round2(balanceFor(a));
-        return { accountId: a.id, code: a.code, name: a.name, anggota: total.toString(), bukanAnggota: "0", total: total.toString() };
-      });
-    const total = round2(items.reduce((sum, i) => sum + Number(i.total), 0));
-    return { items, total: total.toString(), totalRaw: total };
+    const inCategory = accounts.filter((a) => a.category === category);
+    const items = orderDepthFirst(inCategory).map((a) => {
+      // A header displays its descendants rolled up but never adds into the section total.
+      const total = money(contribution(a, a.isHeader ? (rolled.get(a.id) ?? zero) : (ownSums.get(a.id) ?? zero)));
+      return {
+        accountId: a.id,
+        code: a.code,
+        name: a.name,
+        anggota: total,
+        bukanAnggota: "0",
+        total,
+        level: levels.get(a.id) ?? 1,
+        parentId: a.parentId,
+        isHeader: a.isHeader,
+        isContra: isContraAccount(a.category, a.normalBalance)
+      };
+    });
+    const total = inCategory.reduce((sum, a) => sum.plus(contribution(a, ownSums.get(a.id) ?? zero)), D(0));
+    return { items, total };
   };
 
   const pendapatan = buildSection("PENDAPATAN");
   const beban = buildSection("BEBAN");
-  const shuBerjalan = round2(pendapatan.totalRaw - beban.totalRaw);
+  const shuBerjalan = pendapatan.total.minus(beban.total);
 
   return {
-    periode: { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] },
-    pendapatan: { items: pendapatan.items, total: pendapatan.total },
-    beban: { items: beban.items, total: beban.total },
-    shuBerjalan: shuBerjalan.toString()
+    periode: { from: periodDate(from), to: periodDate(to) },
+    pendapatan: { items: pendapatan.items, total: money(pendapatan.total) },
+    beban: { items: beban.items, total: money(beban.total) },
+    shuBerjalan: money(shuBerjalan)
   };
 }
 
@@ -381,7 +450,7 @@ export async function getLaporanHasilUsaha(tenantId: string, from: Date, to: Dat
  * transactionKind produced a given line.
  */
 export async function getShuDistribution(tenantId: string, from: Date, to: Date) {
-  const periode = { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] };
+  const periode = { from: periodDate(from), to: periodDate(to) };
   const config = await db.shuDistributionConfig.findUnique({ where: { tenantId } });
   if (!config) {
     return {
@@ -497,11 +566,12 @@ export async function getShuDistribution(tenantId: string, from: Date, to: Date)
 export async function getCalk(tenantId: string, from: Date, to: Date) {
   const dayBeforeFrom = new Date(from.getTime() - 1);
 
-  const [neracaAwal, neracaAkhir, laporanHasilUsaha, narrativeRows] = await Promise.all([
+  const [neracaAwal, neracaAkhir, laporanHasilUsaha, narrativeRows, modalSendiri] = await Promise.all([
     getNeraca(tenantId, dayBeforeFrom),
     getNeraca(tenantId, to),
     getLaporanHasilUsaha(tenantId, from, to),
-    db.calkNarrative.findMany({ where: { tenantId } })
+    db.calkNarrative.findMany({ where: { tenantId } }),
+    getModalSendiri(tenantId, to)
   ]);
 
   const narasi = Object.fromEntries(
@@ -511,10 +581,10 @@ export async function getCalk(tenantId: string, from: Date, to: Date) {
     })
   );
 
-  type NeracaItem = { accountId: string | null; code: string | null; name: string; balance: string };
+  type NeracaItem = { accountId: string | null; code: string | null; name: string; balance: string; isHeader: boolean };
   const buildMutasi = (awalItems: NeracaItem[], akhirItems: NeracaItem[]) => {
     const awalByAccount = new Map(awalItems.map((i) => [i.accountId, i]));
-    return akhirItems.map((item) => {
+    return akhirItems.filter((i) => !i.isHeader).map((item) => {
       const awal = awalByAccount.get(item.accountId);
       const saldoAwal = awal ? Number(awal.balance) : 0;
       const saldoAkhir = Number(item.balance);
@@ -530,14 +600,23 @@ export async function getCalk(tenantId: string, from: Date, to: Date) {
   };
 
   return {
-    periode: { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] },
+    periode: { from: periodDate(from), to: periodDate(to) },
     narasi,
     rincianAset: buildMutasi(neracaAwal.aset.items, neracaAkhir.aset.items),
     rincianKewajiban: buildMutasi(neracaAwal.kewajiban.items, neracaAkhir.kewajiban.items),
     rincianEkuitas: buildMutasi(neracaAwal.ekuitas.items, neracaAkhir.ekuitas.items),
-    rincianPendapatan: laporanHasilUsaha.pendapatan.items,
-    rincianBeban: laporanHasilUsaha.beban.items,
-    shuBerjalan: laporanHasilUsaha.shuBerjalan
+    rincianPendapatan: laporanHasilUsaha.pendapatan.items.filter((i) => !i.isHeader),
+    rincianBeban: laporanHasilUsaha.beban.items.filter((i) => !i.isHeader),
+    shuBerjalan: laporanHasilUsaha.shuBerjalan,
+    // Permenkop UKM 8/2023 Modal Sendiri at the period end, and whether it
+    // reaches the Permenkop UKM 2/2024 Pasal 12 audit threshold.
+    permodalan: {
+      modalSendiri: modalSendiri.total.toString(),
+      penyesuaianSaldoAwal: modalSendiri.adjustment.toString(),
+      komposisi: komposisiModalSendiri(modalSendiri),
+      ambangAudit: MODAL_DISETOR_AUDIT_THRESHOLD_RP.toString(),
+      wajibAudit: modalSendiri.total.gte(MODAL_DISETOR_AUDIT_THRESHOLD_RP)
+    }
   };
 }
 

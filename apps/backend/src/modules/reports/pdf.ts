@@ -1,6 +1,12 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import puppeteer from "puppeteer";
+import { format } from "date-fns";
+import type { SavingStatement } from "@siskop/types";
+import { STATEMENT_TYPE_LABEL } from "../savings/statement-export.js";
 import { db } from "../../lib/db.js";
 import { getFinancialReport, getRATReport, type ReportParams } from "./service.js";
+import { getPerubahanEkuitas } from "./capital-service.js";
+import type { ExportSheet } from "./export.js";
 import {
   getArusKas,
   getLaporanHasilUsaha,
@@ -17,6 +23,17 @@ interface PdfTenant {
 
 function rp(value: string | number): string {
   return `Rp ${Number(value).toLocaleString("id-ID")}`;
+}
+
+/**
+ * Who is printing, for the "Dicetak oleh" line of the page header. Carried in async context
+ * rather than threaded through every generator: the route wraps the call once and wrapPdf
+ * reads it when it builds the page.
+ */
+const printContext = new AsyncLocalStorage<{ printedBy: string }>();
+
+export function withPrintedBy<T>(printedBy: string, run: () => Promise<T>): Promise<T> {
+  return printContext.run({ printedBy }, run);
 }
 
 /**
@@ -71,6 +88,13 @@ function cityFromAddress(address: string): string {
   return parts[1] ?? parts[0] ?? address;
 }
 
+/** "Dicetak pada <tanggal> oleh <nama>" under the title; the date alone when nobody is in context. */
+function printedLine(): string {
+  const who = printContext.getStore()?.printedBy;
+  const when = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return `<p style="text-align:center; color:#888; font-size:11px; margin-top:-8px">Dicetak pada ${escapeHtml(when)} WIB${who ? ` oleh ${escapeHtml(who)}` : ""}</p>`;
+}
+
 /** Shared page shell — header (logo+nama+alamat) and table styling, reused by
  * every report so PDFs look consistent and are print-ready for RAT handouts.
  * `signature` renders the Ketua/Wakil Ketua/Bendahara block used by RAT-family
@@ -87,9 +111,9 @@ function wrapPdf(
     <div style="display:flex; align-items:center; margin-bottom:16px; border-bottom:2px solid #1e3a5f; padding-bottom:12px">
       ${tenant.logoUrl ? `<img src="${tenant.logoUrl}" style="height:60px; margin-right:16px"/>` : ""}
       <div>
-        <h2 style="margin:0; color:#1e3a5f; font-size:18px">${tenant.name}</h2>
-        <p style="margin:2px 0; font-size:12px; color:#555">${tenant.address}</p>
-        <p style="margin:0; font-size:11px; color:#888">No. Registrasi: ${tenant.registrationNo}</p>
+        <h2 style="margin:0; color:#1e3a5f; font-size:18px">${escapeHtml(tenant.name)}</h2>
+        <p style="margin:2px 0; font-size:12px; color:#555">${escapeHtml(tenant.address)}</p>
+        <p style="margin:0; font-size:11px; color:#888">No. Registrasi: ${escapeHtml(tenant.registrationNo)}</p>
       </div>
     </div>
   `;
@@ -107,20 +131,22 @@ function wrapPdf(
 </style></head>
 <body>
 ${headerHtml}
-<h2 style="text-align:center; color:#1e3a5f">${title}</h2>
-<p style="text-align:center; color:#555">${subtitle}</p>
+<h2 style="text-align:center; color:#1e3a5f">${escapeHtml(title)}</h2>
+<p style="text-align:center; color:#555">${escapeHtml(subtitle)}</p>
+${printedLine()}
 ${bodyHtml}
 ${signature ? signatureBlockHtml(cityFromAddress(tenant.address), signature.asOfDate) : ""}
 </body></html>`;
 }
 
-async function renderToPdf(html: string): Promise<Buffer> {
+async function renderToPdf(html: string, opts: { landscape?: boolean } = {}): Promise<Buffer> {
   const browser = await puppeteer.launch({ args: ["--no-sandbox", "--disable-setuid-sandbox"] });
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });
     const pdf = await page.pdf({
       format: "A4",
+      landscape: opts.landscape ?? false,
       printBackground: true,
       margin: { top: "20mm", bottom: "25mm", left: "15mm", right: "15mm" },
       displayHeaderFooter: true,
@@ -219,10 +245,10 @@ export async function generateNeracaPdf(tenantId: string, asOfDate: Date, unitId
   const data = await getNeraca(tenantId, asOfDate, unitId);
   const unitLabel = await unitSuffix(tenantId, unitId);
 
-  const section = (label: string, s: { items: Array<{ code: string | null; name: string; balance: string; isComputed: boolean }>; total: string }) => `
+  const section = (label: string, s: { items: Array<{ code: string | null; name: string; balance: string; isComputed: boolean; level: number; isHeader: boolean }>; total: string }) => `
     <h3>${label}</h3>
     <table><tr><th>Kode</th><th>Nama Akun</th><th>Saldo</th></tr>
-    ${s.items.map((i) => `<tr><td>${i.code ?? "-"}</td><td>${i.name}${i.isComputed ? " <i>(dihitung otomatis)</i>" : ""}</td><td>${rp(i.balance)}</td></tr>`).join("")}
+    ${s.items.map((i) => `<tr style="${i.isHeader ? "font-weight:bold" : ""}"><td>${i.code ?? "-"}</td><td style="padding-left:${8 + (i.level - 1) * 14}px">${escapeHtml(i.name)}${i.isComputed ? " <i>(dihitung otomatis)</i>" : ""}</td><td>${rp(i.balance)}</td></tr>`).join("")}
     <tr class="total"><td colspan="2">Total ${label}</td><td>${rp(s.total)}</td></tr>
     </table>`;
   const body = `
@@ -234,7 +260,35 @@ export async function generateNeracaPdf(tenantId: string, asOfDate: Date, unitId
       ${data.balanced ? "Aset = Kewajiban + Ekuitas (seimbang)" : "PERINGATAN: neraca tidak seimbang"}
     </p>`;
 
-  return renderToPdf(wrapPdf(tenant, "Neraca (Laporan Posisi Keuangan)", `Per Tanggal ${data.asOfDate}${unitLabel}`, body));
+  return renderToPdf(
+    wrapPdf(tenant, "Neraca (Laporan Posisi Keuangan)", `Per Tanggal ${data.asOfDate}${unitLabel}`, body, { asOfDate: data.asOfDate })
+  );
+}
+
+export async function generatePerubahanEkuitasPdf(tenantId: string, from: Date, to: Date, unitId?: string): Promise<Buffer> {
+  const tenant = await requireTenant(tenantId);
+  const data = await getPerubahanEkuitas(tenantId, from, to, unitId);
+  const subtitle = `Periode ${data.periode.from} s/d ${data.periode.to}${await unitSuffix(tenantId, unitId)}`;
+
+  const header = data.columns.map((c) => `<th>${c.label}</th>`).join("");
+  const rows = data.rows
+    .map((r) => {
+      const cls = r.key === "SALDO_AWAL" || r.key === "SALDO_AKHIR" ? ` class="total"` : "";
+      const sign = r.key === "PENGURANGAN" ? "-" : "";
+      const cells = data.columns.map((c) => `<td>${sign}${rp(r.values[c.key] ?? "0")}</td>`).join("");
+      return `<tr${cls}><td>${r.label}</td>${cells}<td>${sign}${rp(r.total)}</td></tr>`;
+    })
+    .join("");
+  const body = `
+    <table><tr><th>Keterangan</th>${header}<th>Total</th></tr>${rows}</table>
+    <h3>Modal Sendiri (Permenkop UKM 8/2023)</h3>
+    <table>
+      <tr><td>Awal periode</td><td>${rp(data.modalSendiri.awal)}</td></tr>
+      <tr><td>Akhir periode</td><td>${rp(data.modalSendiri.akhir)}</td></tr>
+      <tr><td>Termasuk penyesuaian saldo awal di luar buku besar</td><td>${rp(data.modalSendiri.penyesuaianSaldoAwal)}</td></tr>
+    </table>`;
+
+  return renderToPdf(wrapPdf(tenant, "Laporan Perubahan Ekuitas", subtitle, body, { asOfDate: data.periode.to }));
 }
 
 export async function generateArusKasPdf(tenantId: string, from: Date, to: Date, unitId?: string): Promise<Buffer> {
@@ -265,7 +319,7 @@ export async function generateArusKasPdf(tenantId: string, from: Date, to: Date,
       ${data.balanced ? "Rekonsiliasi kas sesuai buku besar" : "PERINGATAN: saldo kas tidak sesuai buku besar"}
     </p>`;
 
-  return renderToPdf(wrapPdf(tenant, "Laporan Arus Kas", subtitle, body));
+  return renderToPdf(wrapPdf(tenant, "Laporan Arus Kas", subtitle, body, { asOfDate: data.periode.to }));
 }
 
 export async function generateLaporanHasilUsahaPdf(
@@ -278,10 +332,10 @@ export async function generateLaporanHasilUsahaPdf(
   const data = await getLaporanHasilUsaha(tenantId, from, to, unitId);
   const unitLabel = await unitSuffix(tenantId, unitId);
 
-  const section = (label: string, s: { items: Array<{ code: string | null; name: string; total: string }>; total: string }) => `
+  const section = (label: string, s: { items: Array<{ code: string | null; name: string; total: string; level: number; isHeader: boolean }>; total: string }) => `
     <h3>${label}</h3>
     <table><tr><th>Kode</th><th>Nama Akun</th><th>Nominal</th></tr>
-    ${s.items.map((i) => `<tr><td>${i.code ?? "-"}</td><td>${i.name}</td><td>${rp(i.total)}</td></tr>`).join("") || '<tr><td colspan="3">Tidak ada data</td></tr>'}
+    ${s.items.map((i) => `<tr style="${i.isHeader ? "font-weight:bold" : ""}"><td>${i.code ?? "-"}</td><td style="padding-left:${8 + (i.level - 1) * 14}px">${escapeHtml(i.name)}</td><td>${rp(i.total)}</td></tr>`).join("") || '<tr><td colspan="3">Tidak ada data</td></tr>'}
     <tr class="total"><td colspan="2">Total ${label}</td><td>${rp(s.total)}</td></tr>
     </table>`;
   const body = `
@@ -290,7 +344,9 @@ export async function generateLaporanHasilUsahaPdf(
     <table><tr class="total"><td>Sisa Hasil Usaha (SHU) Periode Berjalan</td><td>${rp(data.shuBerjalan)}</td></tr></table>`;
 
   return renderToPdf(
-    wrapPdf(tenant, "Laporan Perhitungan Hasil Usaha", `Periode ${data.periode.from} s/d ${data.periode.to}${unitLabel}`, body)
+    wrapPdf(tenant, "Laporan Perhitungan Hasil Usaha", `Periode ${data.periode.from} s/d ${data.periode.to}${unitLabel}`, body, {
+      asOfDate: data.periode.to
+    })
   );
 }
 
@@ -327,4 +383,97 @@ export async function generateShuDistributionPdf(tenantId: string, from: Date, t
     </table>`;
 
   return renderToPdf(wrapPdf(tenant, "Daftar Pembagian SHU per Anggota", subtitle, body, { asOfDate: data.periode.to }));
+}
+
+// ── Rekening Koran (savings account statement) ──────────────────────────────
+
+/** User text (tenant, unit and account names, notes, journal descriptions) is escaped before it
+ * reaches the headless browser; the report figures are numbers and need no escaping. */
+export function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+/** Takes an already-built statement so the staff and member-portal routes
+ * render the exact figures their JSON endpoints return. */
+export async function generateSavingStatementPdf(tenantId: string, statement: SavingStatement): Promise<Buffer> {
+  const tenant = await requireTenant(tenantId);
+  const { saving, period } = statement;
+  const money = (value: string) => (value === "0" ? "" : rp(value));
+  const rows = statement.rows
+    .map(
+      (r) => `<tr>
+        <td>${format(new Date(r.date), "dd/MM/yyyy")}</td>
+        <td>${STATEMENT_TYPE_LABEL[r.type]}${r.note ? ` — ${escapeHtml(r.note)}` : ""}</td>
+        <td class="num">${money(r.debit)}</td>
+        <td class="num">${money(r.credit)}</td>
+        <td class="num">${rp(r.balance)}</td>
+      </tr>`
+    )
+    .join("");
+
+  const body = `
+    <table style="width:auto">
+      <tr><td>Nama Anggota</td><td>${escapeHtml(saving.member.fullName)}</td></tr>
+      <tr><td>No. Anggota</td><td>${escapeHtml(saving.member.memberId)}</td></tr>
+      <tr><td>Produk Simpanan</td><td>${escapeHtml(saving.configName)} (${saving.type})</td></tr>
+    </table>
+    <style>td.num, th.num { text-align: right; white-space: nowrap; }</style>
+    <table>
+      <tr><th>Tanggal</th><th>Keterangan</th><th class="num">Debit</th><th class="num">Kredit</th><th class="num">Saldo</th></tr>
+      <tr><td>${period.from.split("-").reverse().join("/")}</td><td>Saldo Awal</td><td></td><td></td><td class="num">${rp(statement.openingBalance)}</td></tr>
+      ${rows || '<tr><td colspan="5">Tidak ada transaksi pada periode ini</td></tr>'}
+      <tr class="total"><td>${period.to.split("-").reverse().join("/")}</td><td>Saldo Akhir</td>
+        <td class="num">${rp(statement.totalDebit)}</td><td class="num">${rp(statement.totalCredit)}</td>
+        <td class="num">${rp(statement.closingBalance)}</td></tr>
+    </table>`;
+
+  const subtitle = `Periode ${period.from} s/d ${period.to}`;
+  return renderToPdf(wrapPdf(tenant, "Rekening Koran Simpanan", subtitle, body));
+}
+
+
+// ── Any export sheet as a PDF (Jurnal, Neraca Saldo, Buku Besar) ──────────────
+
+const sheetMoney = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined || value === "") return "";
+  const n = Number(value);
+  if (!Number.isFinite(n) || n === 0) return "-";
+  return n.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+};
+
+/** The report table of an ExportSheet as HTML: money right-aligned, "-" for zero, group and total rows bold, names indented. */
+export function sheetBodyHtml(sheet: ExportSheet): string {
+  const head = sheet.columns
+    .map((c) => `<th style="${c.kind === "money" || c.kind === "int" ? "text-align:right" : ""}">${escapeHtml(c.header)}</th>`)
+    .join("");
+  const rows = sheet.rows
+    .map((r) => {
+      const style = r.style === "total" ? ' class="total"' : r.style ? ' style="font-weight:bold"' : "";
+      let nameDone = false;
+      const cells = sheet.columns
+        .map((c, i) => {
+          const value = r.cells[c.key];
+          if (c.kind === "money") return `<td style="text-align:right; white-space:nowrap">${sheetMoney(value)}</td>`;
+          if (c.kind === "int") return `<td style="text-align:right">${value ?? ""}</td>`;
+          // indent the account-name column (the text column after the code), not the code
+          const indentHere = !nameDone && r.indent && value && sheet.columns.slice(0, i).some((x) => x.kind === "text");
+          if (indentHere) nameDone = true;
+          const pad = indentHere ? ` style="padding-left:${8 + (r.indent ?? 0) * 14}px"` : "";
+          return `<td${pad}>${escapeHtml(String(value ?? ""))}</td>`;
+        })
+        .join("");
+      return `<tr${style}>${cells}</tr>`;
+    })
+    .join("");
+  return `<table style="font-size:11px"><tr>${head}</tr>${rows}</table>`;
+}
+
+/** The full printable page for a sheet (header, title, printed-by line, table, signature block). */
+export function sheetPageHtml(tenant: PdfTenant, sheet: ExportSheet, opts: { signature?: boolean } = {}): string {
+  return wrapPdf(tenant, sheet.title, sheet.subtitle, sheetBodyHtml(sheet), opts.signature ? { asOfDate: undefined } : undefined);
+}
+
+export async function generateSheetPdf(tenantId: string, sheet: ExportSheet, opts: { landscape?: boolean; signature?: boolean } = {}): Promise<Buffer> {
+  const tenant = await requireTenant(tenantId);
+  return renderToPdf(sheetPageHtml(tenant, sheet, { signature: opts.signature }), { landscape: opts.landscape });
 }

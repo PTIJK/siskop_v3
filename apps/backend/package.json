@@ -14,7 +14,8 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "db:seed:ksu-demo": "tsx prisma/seed-ksu-demo.ts"
+    "db:seed:ksu-demo": "tsx prisma/seed-ksu-demo.ts",
+    "backfill:loan-installments": "tsx scripts/backfill-loan-installments.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.13.0",
@@ -24,6 +25,7 @@
     "cors": "^2.8.5",
     "date-fns": "^4.4.0",
     "dotenv": "^16.4.0",
+    "exceljs": "^4.4.0",
     "express": "^4.19.0",
     "express-rate-limit": "^8.7.0",
     "firebase-admin": "^14.3.0",

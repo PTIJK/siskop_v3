@@ -1,4 +1,4 @@
-import { db } from "./db.js";
+import { db, type TxClient } from "./db.js";
 import { notFound } from "./errors.js";
 
 /**
@@ -33,4 +33,22 @@ export async function resolveUnitId(tenantId: string, unitId?: string): Promise<
   const unit = await db.cooperativeUnit.findFirst({ where: { id: unitId, tenantId, isActive: true } });
   if (!unit) throw notFound("Unit tidak ditemukan");
   return unit.id;
+}
+
+/**
+ * The tenant's first active unit of `type`, creating one named `defaultName`
+ * if none exists yet — for a resource (koperasi pasar's Market, F3) whose
+ * unit is never client-chosen, only ever "the tenant's JASA unit", same as a
+ * KSU's units already aren't auto-created by any UI (CooperativeUnit.type is
+ * a free-form string, not this function's business to validate beyond `type`).
+ */
+export async function ensureUnitOfType(tx: TxClient, tenantId: string, type: string, defaultName: string): Promise<string> {
+  const existing = await tx.cooperativeUnit.findFirst({
+    where: { tenantId, type, isActive: true },
+    orderBy: { createdAt: "asc" }
+  });
+  if (existing) return existing.id;
+
+  const created = await tx.cooperativeUnit.create({ data: { tenantId, type, name: defaultName, isActive: true } });
+  return created.id;
 }

@@ -27,6 +27,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   "JournalLine",
   "ShuDistributionConfig",
   "CalkNarrative",
+  "FiscalYearClose",
   // Phase 2 (KSU Konsumen/Toko), Task 2 — only the two models that task's
   // service layer actually queries by tenantId.
   "Product",
@@ -44,7 +45,28 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   // is deliberately NOT added: like POSSaleLine above, it carries no tenantId
   // column of its own (only notificationId/userId).
   "MemberRegistrationRequest",
-  "TenantNotification"
+  "TenantNotification",
+  // User-activity audit trail — every row belongs to exactly one tenant;
+  // the 90-day retention purge crosses tenants deliberately and goes through
+  // withoutTenantScope() (see modules/audit-log/service.ts#purgeStaleAuditLogs).
+  "AuditLog",
+  "TenantHoliday",
+  // Koperasi pasar plan F2 — LoanPaymentAllocation deliberately NOT added,
+  // same reasoning as POSSaleLine above (no tenantId column of its own).
+  "LoanInstallment",
+  // Koperasi pasar plan F3 — Market/Stall.
+  "Market",
+  "Stall",
+  // Koperasi pasar plan F4 — Kolektor & setoran.
+  "CollectorAssignment",
+  "CollectionBatch",
+  // Koperasi pasar plan F5 — Sewa & retribusi.
+  "StallContract",
+  "LevyRate",
+  "Charge",
+  "ChargePayment",
+  // Koperasi pasar plan F6 — mobile Kolektor write dedup.
+  "IdempotencyKey"
 ]);
 
 const WHERE_REQUIRED_ACTIONS = new Set([

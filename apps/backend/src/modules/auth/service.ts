@@ -2,6 +2,7 @@ import { selectionEnabled } from "../tenant-access/config.js";
 import { firebaseUidFor } from "../tenant-access/identity.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import {
@@ -18,6 +19,7 @@ import { signAccessToken } from "../../middleware/auth.js";
 import { unauthorized, conflict, validationError } from "../../lib/errors.js";
 import { deriveUserRole, toPublicUser, type UserWithRole } from "../../lib/user-mapper.js";
 import { getEffectiveUnitIds } from "../../lib/unit-access.js";
+import { recordAudit } from "../audit-log/service.js";
 
 import { assertFirebaseSession } from "../onboarding/firebase.js";
 
@@ -136,10 +138,18 @@ function isUniqueViolation(err: unknown): boolean {
   );
 }
 
+/** Only the route layer has req/res, so it threads this down rather than login() reaching for ambient context that doesn't exist yet at this point in the request. */
+export interface LoginAuditContext {
+  requestId?: string;
+  ip?: string | null;
+  userAgent?: string | null;
+}
+
 export async function login(
   slug: string | null,
   email: string,
-  password: string
+  password: string,
+  auditContext: LoginAuditContext = {}
 ): Promise<Session> {
   if (!slug) {
     throw validationError("Cooperative not identified — use your cooperative's subdomain");
@@ -159,10 +169,28 @@ export async function login(
   const hash = user?.passwordHash ?? "$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinva";
   const ok = await bcrypt.compare(password, hash);
 
-  if (!user || !ok || !user.isActive) throw unauthorized();
+  const auditActor = {
+    tenantId: tenant.id,
+    requestId: auditContext.requestId ?? randomUUID(),
+    ip: auditContext.ip ?? null,
+    userAgent: auditContext.userAgent ?? null
+  };
+
+  if (!user || !ok || !user.isActive) {
+    // actorUserId is always null here — even for a wrong password on a real
+    // account — so nothing about this row (or a reader of it) can be used to
+    // enumerate which emails exist in the tenant.
+    await db.$transaction((tx) =>
+      recordAudit(tx, { action: "auth.login_failed" }, { ...auditActor, actorUserId: null })
+    );
+    throw unauthorized();
+  }
 
   const session = await sessionFor(user);
-  await db.user.update({ where: { id: user.id, tenantId: user.tenantId }, data: { lastLoginAt: new Date() } });
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: user.id, tenantId: user.tenantId }, data: { lastLoginAt: new Date() } });
+    await recordAudit(tx, { action: "auth.login_success" }, { ...auditActor, actorUserId: user.id });
+  });
   return session;
 }
 

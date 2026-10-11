@@ -22,7 +22,9 @@ const schema = z.object({
   type: z.enum(["SYARIAH", "KONVENSIONAL"]),
   rateType: z.enum(["BUNGA", "BAGI_HASIL", "MARGIN", "HARIAN"]),
   rate: z.coerce.number().min(0).max(100),
-  maxTermMonths: z.coerce.number().int().min(1).max(360)
+  maxTermMonths: z.coerce.number().int().min(1).max(360),
+  installmentFrequency: z.enum(["DAILY", "WEEKLY", "MONTHLY"]),
+  maxInstallments: z.coerce.number().int().min(1).optional()
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -51,7 +53,7 @@ export function LoanConfigsTab() {
   const openCreate = () => {
     setEditing(null);
     setApiError("");
-    reset({ name: "", type: "KONVENSIONAL", rateType: "BUNGA", rate: 0, maxTermMonths: 12 });
+    reset({ name: "", type: "KONVENSIONAL", rateType: "BUNGA", rate: 0, maxTermMonths: 12, installmentFrequency: "MONTHLY" });
     setDialogOpen(true);
   };
 
@@ -63,7 +65,9 @@ export function LoanConfigsTab() {
       type: config.type,
       rateType: config.rateType,
       rate: Number(config.rate),
-      maxTermMonths: config.maxTermMonths
+      maxTermMonths: config.maxTermMonths,
+      installmentFrequency: config.installmentFrequency,
+      maxInstallments: config.maxInstallments ?? undefined
     });
     setDialogOpen(true);
   };
@@ -90,7 +94,20 @@ export function LoanConfigsTab() {
     { header: "Jenis", cell: ({ row }) => <Badge variant="outline">{row.original.type}</Badge> },
     { header: "Tipe Imbal Hasil", accessorKey: "rateType" },
     { header: "Rate (%)", cell: ({ row }) => Number(row.original.rate).toString() },
-    { header: "Maks. Tenor (bulan)", accessorKey: "maxTermMonths" },
+    {
+      header: "Frekuensi Cicilan",
+      cell: ({ row }) =>
+        ({ DAILY: "Harian", WEEKLY: "Mingguan", MONTHLY: "Bulanan" })[row.original.installmentFrequency]
+    },
+    {
+      header: "Maks. Tenor",
+      cell: ({ row }) =>
+        row.original.installmentFrequency === "MONTHLY"
+          ? `${row.original.maxTermMonths} bulan`
+          : row.original.maxInstallments
+            ? `${row.original.maxInstallments} cicilan`
+            : "—"
+    },
     {
       header: "Status",
       cell: ({ row }) => <Badge variant={row.original.isActive ? "default" : "secondary"}>{row.original.isActive ? "Aktif" : "Nonaktif"}</Badge>
@@ -185,10 +202,40 @@ export function LoanConfigsTab() {
               </div>
 
               <div className="space-y-1.5">
-                <Label>Maks. Tenor (bulan) *</Label>
-                <Input type="number" {...register("maxTermMonths")} />
-                {errors.maxTermMonths && <p className="text-xs text-destructive">{errors.maxTermMonths.message}</p>}
+                <Label>Frekuensi Cicilan *</Label>
+                <Select
+                  value={values.installmentFrequency}
+                  onValueChange={(v: FormValues["installmentFrequency"]) => setValue("installmentFrequency", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MONTHLY">Bulanan</SelectItem>
+                    <SelectItem value="WEEKLY">Mingguan</SelectItem>
+                    <SelectItem value="DAILY">Harian</SelectItem>
+                  </SelectContent>
+                </Select>
+                {values.installmentFrequency && values.installmentFrequency !== "MONTHLY" && values.rateType === "BUNGA" && (
+                  <p className="text-xs text-destructive">
+                    Anuitas (Bunga) hanya tersedia untuk frekuensi bulanan — pilih Margin atau Bunga Harian.
+                  </p>
+                )}
               </div>
+
+              {values.installmentFrequency === "MONTHLY" ? (
+                <div className="space-y-1.5">
+                  <Label>Maks. Tenor (bulan) *</Label>
+                  <Input type="number" {...register("maxTermMonths")} />
+                  {errors.maxTermMonths && <p className="text-xs text-destructive">{errors.maxTermMonths.message}</p>}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label>Maks. Jumlah Cicilan</Label>
+                  <Input type="number" {...register("maxInstallments")} />
+                  {errors.maxInstallments && <p className="text-xs text-destructive">{errors.maxInstallments.message}</p>}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 pt-2">

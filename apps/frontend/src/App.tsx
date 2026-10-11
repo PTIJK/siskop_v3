@@ -50,8 +50,20 @@ const OverduePage = lazy(() =>
 const PiutangAnggotaPage = lazy(() =>
   import("@/pages/piutang/PiutangAnggotaPage").then((module) => ({ default: module.PiutangAnggotaPage }))
 );
+const MarketPage = lazy(() =>
+  import("@/pages/market/MarketPage").then((module) => ({ default: module.MarketPage }))
+);
 const ConfigPage = lazy(() =>
   import("@/pages/config/ConfigPage").then((module) => ({ default: module.ConfigPage }))
+);
+const YearClosePage = lazy(() =>
+  import("@/pages/journal/YearClosePage").then((module) => ({ default: module.YearClosePage }))
+);
+const ManualJournalPage = lazy(() =>
+  import("@/pages/journal/ManualJournalPage").then((module) => ({ default: module.ManualJournalPage }))
+);
+const ExpensesPage = lazy(() =>
+  import("@/pages/expenses/ExpensesPage").then((module) => ({ default: module.ExpensesPage }))
 );
 const ProfilePage = lazy(() =>
   import("@/pages/profile/ProfilePage").then((module) => ({ default: module.ProfilePage }))
@@ -63,6 +75,15 @@ const RegulatoryReportsPage = lazy(() =>
   import("@/pages/reports/RegulatoryReportsPage").then((module) => ({
     default: module.RegulatoryReportsPage
   }))
+);
+const PortfolioQualityPage = lazy(() =>
+  import("@/pages/reports/PortfolioQualityPage").then((module) => ({ default: module.PortfolioQualityPage }))
+);
+const AccountingBooksPage = lazy(() =>
+  import("@/pages/reports/AccountingBooksPage").then((module) => ({ default: module.AccountingBooksPage }))
+);
+const LaporanPasarPage = lazy(() =>
+  import("@/pages/reports/LaporanPasarPage").then((module) => ({ default: module.LaporanPasarPage }))
 );
 const PlatformTenantsPage = lazy(() =>
   import("@/pages/platform/PlatformTenantsPage").then((module) => ({ default: module.PlatformTenantsPage }))
@@ -152,8 +173,20 @@ export default function App() {
                   Konsumen/Toko unit's POS. */}
               <Route path='/piutang' element={<PiutangAnggotaPage />} />
 
+              {/* Koperasi pasar plan F3 — tenant-wide like /piutang above, not
+                  nested under /ksu/units/:unitId: a market's JASA unit is
+                  auto-resolved server-side, never chosen through a unit picker. */}
+              <Route path='/market' element={<MarketPage />} />
+
               <Route path='/reports' element={<ReportsPage />} />
               <Route path='/reports/regulatory' element={<RegulatoryReportsPage />} />
+              <Route path='/reports/pasar' element={<LaporanPasarPage />} />
+              <Route path='/reports/accounting' element={<AccountingBooksPage />} />
+              <Route path='/reports/portfolio' element={<PortfolioQualityPage />} />
+
+              <Route path='/expenses' element={<ExpensesPage />} />
+              <Route path='/journal/new' element={<ManualJournalPage />} />
+              <Route path='/journal/close' element={<YearClosePage />} />
 
               <Route path='/config' element={<ConfigPage />} />
               <Route path='/profile' element={<ProfilePage />} />

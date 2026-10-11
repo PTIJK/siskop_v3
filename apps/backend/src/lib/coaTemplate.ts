@@ -1,4 +1,4 @@
-import type { AccountCategory, NormalBalance } from "@prisma/client";
+import type { AccountCategory, EquityClass, NormalBalance } from "@prisma/client";
 
 export interface AccountSeed {
   key: string;
@@ -6,15 +6,25 @@ export interface AccountSeed {
   name: string;
   category: AccountCategory;
   normalBalance: NormalBalance;
+  /** Required in practice on every EKUITAS seed — see EquityClass in schema.prisma. */
+  equityClass?: EquityClass;
   isHeader?: boolean;
   isCashEquivalent?: boolean;
   parentKey?: string;
   /**
    * When set, the account only belongs to tenants that have an active
    * CooperativeUnit of this type. Left out of the base template so a pure KSP
-   * doesn't get zero-balance Toko lines cluttering its Neraca/Laba Rugi.
+   * doesn't get zero-balance Toko/Pasar lines cluttering its Neraca/Laba Rugi.
+   * "JASA" (koperasi pasar F5) is additionally gated on having an active
+   * Market, not just the unit type — see generateStandardCoa's hasMarket.
    */
-  unitType?: "KONSUMEN";
+  unitType?: "KONSUMEN" | "JASA";
+  /**
+   * Only for a multi-unit (KSU) koperasi — i.e. more than one active
+   * CooperativeUnit (CLAUDE.md rule 2b). A single-unit koperasi has no USP
+   * whose Modal Tetap needs its own account.
+   */
+  multiUnitOnly?: true;
 }
 
 // Standard COA template — Docs/specs/2026-07-21-konfigurasi-akun-coa-design.md §4.
@@ -34,13 +44,39 @@ export const COA_TEMPLATE: AccountSeed[] = [
     normalBalance: "KREDIT" // contra-asset — credit-normal, reduces Piutang Pinjaman Anggota
   },
   { key: "aset_tetap", code: "1-2000", name: "Aset Tetap", category: "ASET", normalBalance: "DEBIT", isHeader: true },
+  // Koperasi pasar plan F4 — always generated (not Toko-gated, unlike the
+  // Konsumen accounts below): a collector-initiated transaction's Kas side
+  // redirects here (lib/journal.ts#substituteCollectorCash), and a batch
+  // verification's shortfall/surplus land in the next two. Cash physically
+  // held by a collector before it's counted in is still the koperasi's cash.
+  { key: "kas_di_kolektor", code: "1-1200", name: "Kas di Kolektor", category: "ASET", normalBalance: "DEBIT", isCashEquivalent: true },
+  { key: "piutang_kolektor", code: "1-1210", name: "Piutang Kolektor", category: "ASET", normalBalance: "DEBIT" },
+  { key: "selisih_kas", code: "4-9100", name: "Selisih Kas", category: "PENDAPATAN", normalBalance: "KREDIT" },
   { key: "simpanan_sukarela", code: "2-1000", name: "Simpanan Sukarela — Anggota", category: "KEWAJIBAN", normalBalance: "KREDIT" },
   { key: "utang_usaha", code: "2-1100", name: "Utang Usaha", category: "KEWAJIBAN", normalBalance: "KREDIT" },
-  { key: "simpanan_pokok", code: "3-1000", name: "Simpanan Pokok", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "simpanan_wajib", code: "3-1100", name: "Simpanan Wajib", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "cadangan", code: "3-2000", name: "Cadangan / Modal Penyertaan", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "shu_berjalan", code: "3-3000", name: "SHU Tahun Berjalan", category: "EKUITAS", normalBalance: "KREDIT" },
-  { key: "shu_lalu", code: "3-3100", name: "SHU Tahun Lalu Belum Dibagi", category: "EKUITAS", normalBalance: "KREDIT" },
+  // Equity lines follow Permenkop UKM 2/2024 lampiran (Akuntansi Ekuitas). Modal
+  // Penyertaan has its own account: it is not Modal Sendiri (Permenkop UKM 8/2023
+  // Pasal 1 angka 23), so it must never share one with Cadangan.
+  { key: "simpanan_pokok", code: "3-1000", name: "Simpanan Pokok", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "SIMPANAN_POKOK" },
+  { key: "simpanan_wajib", code: "3-1100", name: "Simpanan Wajib", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "SIMPANAN_WAJIB" },
+  { key: "cadangan", code: "3-2000", name: "Cadangan Umum", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "CADANGAN_UMUM" },
+  { key: "cadangan_risiko", code: "3-2100", name: "Cadangan Risiko", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "CADANGAN_RISIKO" },
+  { key: "shu_berjalan", code: "3-3000", name: "SHU Tahun Berjalan", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "SHU" },
+  { key: "shu_lalu", code: "3-3100", name: "SHU Tahun Lalu Belum Dibagi", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "SHU" },
+  // The capital a KSU places in its simpan pinjam unit (Permenkop UKM 8/2023
+  // Pasal 1 angka 24) — journal it with that unit so the unit's BMPP basis sees it.
+  {
+    key: "modal_tetap_usp",
+    code: "3-6000",
+    name: "Modal Tetap USP",
+    category: "EKUITAS",
+    normalBalance: "KREDIT",
+    equityClass: "MODAL_TETAP",
+    multiUnitOnly: true
+  },
+  { key: "hibah", code: "3-4000", name: "Hibah", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "HIBAH" },
+  { key: "modal_penyertaan", code: "3-5000", name: "Modal Penyertaan", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "MODAL_PENYERTAAN" },
+  { key: "ekuitas_lain", code: "3-9000", name: "Ekuitas Lain", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "EKUITAS_LAIN" },
   { key: "pendapatan_bunga", code: "4-1000", name: "Pendapatan Bunga/Margin Pinjaman", category: "PENDAPATAN", normalBalance: "KREDIT" },
   { key: "pendapatan_admin", code: "4-2000", name: "Pendapatan Jasa Administrasi", category: "PENDAPATAN", normalBalance: "KREDIT" },
   { key: "pendapatan_lain", code: "4-9000", name: "Pendapatan Lain-lain", category: "PENDAPATAN", normalBalance: "KREDIT" },
@@ -85,14 +121,59 @@ export const COA_TEMPLATE: AccountSeed[] = [
     category: "BEBAN",
     normalBalance: "DEBIT",
     unitType: "KONSUMEN"
+  },
+
+  // ── Pasar (JASA unit) — koperasi pasar F5, only for a tenant with an ──────
+  // active Market (see generateStandardCoa's hasMarket, not just unitType).
+  {
+    key: "piutang_sewa_retribusi",
+    code: "1-1220",
+    name: "Piutang Sewa & Retribusi",
+    category: "ASET",
+    normalBalance: "DEBIT",
+    unitType: "JASA"
+  },
+  {
+    key: "pendapatan_sewa_kios",
+    code: "4-4000",
+    name: "Pendapatan Sewa Kios",
+    category: "PENDAPATAN",
+    normalBalance: "KREDIT",
+    unitType: "JASA"
+  },
+  // Retribusi adalah pendapatan koperasi (D5), kept as its own line rather
+  // than folded into Pendapatan Sewa Kios so both are visible separately.
+  {
+    key: "pendapatan_retribusi",
+    code: "4-4100",
+    name: "Pendapatan Retribusi",
+    category: "PENDAPATAN",
+    normalBalance: "KREDIT",
+    unitType: "JASA"
   }
 ];
 
 export interface SystemMappingSeed {
-  transactionKind: "SALE_REVENUE" | "SALE_COGS" | "SALE_RECEIVABLE" | "MEMBER_CREDIT_REPAYMENT" | "STOCK_PURCHASE";
+  transactionKind:
+    | "SALE_REVENUE"
+    | "SALE_COGS"
+    | "SALE_RECEIVABLE"
+    | "MEMBER_CREDIT_REPAYMENT"
+    | "STOCK_PURCHASE"
+    | "COLLECTOR_CASH"
+    | "CHARGE_ACCRUAL_SEWA"
+    | "CHARGE_ACCRUAL_RETRIBUSI"
+    | "CHARGE_PAYMENT";
   /** `COA_TEMPLATE` keys. */
   debitKey: string;
   creditKey: string;
+}
+
+/** Throws if `key` isn't in COA_TEMPLATE — same guard generateStandardCoa's accountIdFor uses. */
+export function templateCode(key: string): string {
+  const code = COA_TEMPLATE.find((t) => t.key === key)?.code;
+  if (!code) throw new Error(`Standard COA template is missing required account "${key}"`);
+  return code;
 }
 
 // Tenant-wide SYSTEM mappings (sourceType "SYSTEM", no sourceId) that
@@ -106,4 +187,13 @@ export const SYSTEM_MAPPING_TEMPLATE: SystemMappingSeed[] = [
   // A restock: the shelf gains goods, the koperasi pays cash. A koperasi that buys on credit
   // remaps the credit side to Utang Usaha in Konfigurasi > Pemetaan Akun.
   { transactionKind: "STOCK_PURCHASE", debitKey: "persediaan", creditKey: "kas" }
+];
+
+// Koperasi pasar F5 — generated for a tenant with at least one active Market
+// (generateStandardCoa's hasMarket), same shape as SYSTEM_MAPPING_TEMPLATE
+// above but kept separate since it's gated on a different condition.
+export const PASAR_MAPPING_TEMPLATE: SystemMappingSeed[] = [
+  { transactionKind: "CHARGE_ACCRUAL_SEWA", debitKey: "piutang_sewa_retribusi", creditKey: "pendapatan_sewa_kios" },
+  { transactionKind: "CHARGE_ACCRUAL_RETRIBUSI", debitKey: "piutang_sewa_retribusi", creditKey: "pendapatan_retribusi" },
+  { transactionKind: "CHARGE_PAYMENT", debitKey: "kas", creditKey: "piutang_sewa_retribusi" }
 ];

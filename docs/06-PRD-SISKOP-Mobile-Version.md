@@ -263,6 +263,19 @@ audit (§8.1–8.3) already exists to prevent for *layout* — this section exte
 - Any create/update/delete action from the mobile UI (§6) — Fase 2-or-later. Explicitly includes
   `ProfilePage.tsx`'s two forms (edit name/email, change password) — FR-MOB-PROFILE-01 (§7) is
   view-only.
+  **Revised 2026-09-27 — Kolektor write exception**: `docs/2026-09-26-koperasi-pasar-dev-plan.md`
+  F6 requires a field Kolektor to record deposits/payments and submit a setoran batch from their
+  phone — a genuine write flow this blanket rule would otherwise forbid. Rather than silently
+  violate the rule or silently skip F6, this is recorded as a **narrow, considered exception**: the
+  new `/kolektor` route (`apps/mobile/src/pages/kolektor/`) is the *only* write surface in
+  `apps/mobile`, gated on the `collections` permission via `RequireCollectionsAccess.tsx` (in
+  practice, only the Kolektor role has it) — every other module in this document stays read-only,
+  and this does not reopen writes generally. Its writes are online-only (no offline queue, same as
+  NFR-MOB-OFFLINE-01's existing exclusion) and deduplicated via an `Idempotency-Key` header
+  (`apps/backend/src/lib/idempotency.ts`) against a dropped-connection retry double-booking a
+  deposit/payment/submit. `BottomNav.tsx`'s "every logged-in session sees the same tabs" comment
+  (§6) is superseded for this one case — a 6th "Setoran" tab appears only for a Kolektor session,
+  the first role that needed a nav item the rest of Fase 1 doesn't show.
 - Native app / app-store distribution (§4) — conditional on director approval, not scheduled.
 - Offline support (§9, NFR-MOB-OFFLINE-01).
 - Config, Platform Admin, Users (Pengguna) modules (§6).

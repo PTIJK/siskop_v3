@@ -6,7 +6,11 @@ import { requireParam } from "../../lib/http.js";
 import { listReadableUnits } from "../../lib/unit-access.js";
 import {
   createAccountSchema,
+  createHolidaySchema,
   createRoleSchema,
+  importHolidaysSchema,
+  listHolidaysQuerySchema,
+  updateOperatingDaysSchema,
   createUnitSchema,
   updateAccountSchema,
   updateModalDisetorSchema,
@@ -43,6 +47,14 @@ import {
   upsertShuDistributionConfig,
   upsertWhitelabelConfig
 } from "./service.js";
+import {
+  createHoliday,
+  deleteHoliday,
+  getOperatingDays,
+  importHolidays,
+  listHolidays,
+  updateOperatingDays
+} from "./calendar.service.js";
 
 /** Forwards rejected promises to the error handler; Express 4 will not. */
 function handle(fn: (req: Request, res: Response) => Promise<void>) {
@@ -327,6 +339,66 @@ export function configRoutes(): Router {
     handle(async (req, res) => {
       const data = updateSelfRegistrationSchema.parse(req.body);
       const result = await updateSelfRegistrationConfig(authClaims(req).tenantId, data);
+      res.json({ success: true, data: result, meta: res.locals.meta });
+    })
+  );
+
+  // ── Operating calendar (hari libur & hari tutup) ─────────────────────────
+
+  router.get(
+    "/holidays",
+    requirePermission("config", "read"),
+    handle(async (req, res) => {
+      const query = listHolidaysQuerySchema.parse(req.query);
+      const data = await listHolidays(authClaims(req).tenantId, query);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.post(
+    "/holidays",
+    requirePermission("config", "update"),
+    handle(async (req, res) => {
+      const data = createHolidaySchema.parse(req.body);
+      const holiday = await createHoliday(authClaims(req).tenantId, data);
+      res.status(201).json({ success: true, data: holiday, meta: res.locals.meta });
+    })
+  );
+
+  router.post(
+    "/holidays/import",
+    requirePermission("config", "update"),
+    handle(async (req, res) => {
+      const data = importHolidaysSchema.parse(req.body);
+      const result = await importHolidays(authClaims(req).tenantId, data);
+      res.json({ success: true, data: result, meta: res.locals.meta });
+    })
+  );
+
+  router.delete(
+    "/holidays/:id",
+    requirePermission("config", "update"),
+    handle(async (req, res) => {
+      const result = await deleteHoliday(authClaims(req).tenantId, requireParam(req, "id"));
+      res.json({ success: true, data: result, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/operating-days",
+    requirePermission("config", "read"),
+    handle(async (req, res) => {
+      const data = await getOperatingDays(authClaims(req).tenantId);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.put(
+    "/operating-days",
+    requirePermission("config", "update"),
+    handle(async (req, res) => {
+      const data = updateOperatingDaysSchema.parse(req.body);
+      const result = await updateOperatingDays(authClaims(req).tenantId, data);
       res.json({ success: true, data: result, meta: res.locals.meta });
     })
   );

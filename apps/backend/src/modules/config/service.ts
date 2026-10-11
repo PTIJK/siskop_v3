@@ -1,10 +1,12 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { RepostUnpostedResult, UnpostedJournalSummary } from "@siskop/types";
 import { db, type TxClient } from "../../lib/db.js";
 import { conflict, notFound, validationError } from "../../lib/errors.js";
 import { isRepostableSourceType, repostUnpostedEntries } from "../../lib/journal.js";
+import { recordAudit } from "../audit-log/service.js";
+import { isModalDisetorAuditRequired, MODAL_DISETOR_AUDIT_THRESHOLD_RP } from "../../lib/regulatory-config.js";
 import { withoutTenantScope } from "../../lib/tenant-scope.js";
-import { COA_TEMPLATE, SYSTEM_MAPPING_TEMPLATE, type AccountSeed } from "../../lib/coaTemplate.js";
+import { COA_TEMPLATE, PASAR_MAPPING_TEMPLATE, SYSTEM_MAPPING_TEMPLATE, type AccountSeed } from "../../lib/coaTemplate.js";
 import type {
   CreateAccountInput,
   CreateRoleInput,
@@ -32,16 +34,26 @@ export async function createUnit(tenantId: string, data: CreateUnitInput) {
 }
 
 export async function updateUnit(tenantId: string, id: string, data: UpdateUnitInput) {
-  const unit = await db.cooperativeUnit.findFirst({ where: { id, tenantId } });
-  if (!unit) throw notFound("Unit koperasi tidak ditemukan");
+  return db.$transaction(async (tx) => {
+    const unit = await tx.cooperativeUnit.findFirst({ where: { id, tenantId } });
+    if (!unit) throw notFound("Unit koperasi tidak ditemukan");
 
-  // CLAUDE.md rule 2b: every tenant has >=1 CooperativeUnit at all times.
-  if (data.isActive === false && unit.isActive) {
-    const activeCount = await db.cooperativeUnit.count({ where: { tenantId, isActive: true } });
-    if (activeCount <= 1) throw conflict("Koperasi harus memiliki minimal 1 unit aktif");
-  }
+    // CLAUDE.md rule 2b: every tenant has >=1 CooperativeUnit at all times.
+    if (data.isActive === false && unit.isActive) {
+      const activeCount = await tx.cooperativeUnit.count({ where: { tenantId, isActive: true } });
+      if (activeCount <= 1) throw conflict("Koperasi harus memiliki minimal 1 unit aktif");
+    }
 
-  return db.cooperativeUnit.update({ where: { id, tenantId }, data });
+    const updated = await tx.cooperativeUnit.update({ where: { id, tenantId }, data });
+    await recordAudit(tx, {
+      action: "unit.update",
+      entityType: "CooperativeUnit",
+      entityId: id,
+      before: { name: unit.name, type: unit.type, isActive: unit.isActive },
+      after: { name: updated.name, type: updated.type, isActive: updated.isActive }
+    });
+    return updated;
+  });
 }
 
 // ── Roles ────────────────────────────────────────────────────────────────────
@@ -51,36 +63,65 @@ export async function listRoles(tenantId: string) {
 }
 
 export async function createRole(tenantId: string, data: CreateRoleInput) {
-  return db.role.create({
-    data: { tenantId, name: data.name, permissions: data.permissions as unknown as Prisma.InputJsonValue }
+  return db.$transaction(async (tx) => {
+    const role = await tx.role.create({
+      data: { tenantId, name: data.name, permissions: data.permissions as unknown as Prisma.InputJsonValue }
+    });
+    await recordAudit(tx, {
+      action: "role.create",
+      entityType: "Role",
+      entityId: role.id,
+      after: { name: role.name, permissions: role.permissions }
+    });
+    return role;
   });
 }
 
 export async function updateRole(tenantId: string, id: string, data: UpdateRoleInput) {
-  const role = await db.role.findFirst({ where: { id, tenantId } });
-  if (!role) throw notFound("Role tidak ditemukan");
+  return db.$transaction(async (tx) => {
+    const role = await tx.role.findFirst({ where: { id, tenantId } });
+    if (!role) throw notFound("Role tidak ditemukan");
 
-  return db.role.update({
-    where: { id, tenantId },
-    data: {
-      ...(data.name !== undefined ? { name: data.name } : {}),
-      ...(data.permissions !== undefined
-        ? { permissions: data.permissions as unknown as Prisma.InputJsonValue }
-        : {})
-    }
+    const updated = await tx.role.update({
+      where: { id, tenantId },
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.permissions !== undefined
+          ? { permissions: data.permissions as unknown as Prisma.InputJsonValue }
+          : {})
+      }
+    });
+
+    await recordAudit(tx, {
+      action: "role.update",
+      entityType: "Role",
+      entityId: id,
+      before: { name: role.name, permissions: role.permissions },
+      after: { name: updated.name, permissions: updated.permissions }
+    });
+
+    return updated;
   });
 }
 
 export async function deleteRole(tenantId: string, id: string): Promise<void> {
-  const role = await db.role.findFirst({ where: { id, tenantId } });
-  if (!role) throw notFound("Role tidak ditemukan");
+  await db.$transaction(async (tx) => {
+    const role = await tx.role.findFirst({ where: { id, tenantId } });
+    if (!role) throw notFound("Role tidak ditemukan");
 
-  const usersCount = await db.user.count({ where: { tenantId, roleId: id } });
-  if (usersCount > 0) {
-    throw conflict("Role masih digunakan oleh pengguna aktif — pindahkan pengguna ke role lain terlebih dahulu");
-  }
+    const usersCount = await tx.user.count({ where: { tenantId, roleId: id } });
+    if (usersCount > 0) {
+      throw conflict("Role masih digunakan oleh pengguna aktif — pindahkan pengguna ke role lain terlebih dahulu");
+    }
 
-  await db.role.delete({ where: { id, tenantId } });
+    await tx.role.delete({ where: { id, tenantId } });
+    await recordAudit(tx, {
+      action: "role.delete",
+      entityType: "Role",
+      entityId: id,
+      before: { name: role.name, permissions: role.permissions }
+    });
+  });
 }
 
 // ── Accounts (Chart of Accounts) ───────────────────────────────────────────────
@@ -108,6 +149,7 @@ export async function createAccount(tenantId: string, data: CreateAccountInput) 
       parentId: data.parentId ?? null,
       isHeader: data.isHeader,
       isCashEquivalent: data.isCashEquivalent,
+      equityClass: data.equityClass ?? null,
       isDefault: false,
       isActive: true
     }
@@ -127,6 +169,14 @@ export async function updateAccount(tenantId: string, id: string, data: UpdateAc
     const parent = await db.account.findFirst({ where: { id: data.parentId, tenantId } });
     if (!parent) throw notFound("Akun induk tidak ditemukan");
   }
+
+  // An equity class only means something on an EKUITAS account: reject one on
+  // any other category, and drop the stored one when the account leaves EKUITAS.
+  const nextCategory = data.category ?? account.category;
+  if (data.equityClass && nextCategory !== "EKUITAS") {
+    throw validationError("Klasifikasi ekuitas hanya untuk akun kategori EKUITAS");
+  }
+  const equityClass = nextCategory !== "EKUITAS" ? null : data.equityClass;
 
   if (data.isActive === false && account.isActive) {
     const [childCount, mappingCount, journalLineCount] = await Promise.all([
@@ -153,7 +203,8 @@ export async function updateAccount(tenantId: string, id: string, data: UpdateAc
       ...(data.parentId !== undefined ? { parentId: data.parentId } : {}),
       ...(data.isHeader !== undefined ? { isHeader: data.isHeader } : {}),
       ...(data.isCashEquivalent !== undefined ? { isCashEquivalent: data.isCashEquivalent } : {}),
-      ...(data.isActive !== undefined ? { isActive: data.isActive } : {})
+      ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+      ...(equityClass !== undefined ? { equityClass } : {})
     }
   });
 }
@@ -181,150 +232,243 @@ export interface GenerateStandardCoaResult {
  * Laba Rugi instead of posting as UNPOSTED_MISSING_MAPPING. Re-running after a
  * Toko unit is added later picks these up the same way.
  */
-export async function generateStandardCoa(tenantId: string): Promise<GenerateStandardCoaResult> {
-  return db.$transaction(async (tx: TxClient) => {
-    const idByCode = new Map((await tx.account.findMany({ where: { tenantId } })).map((a) => [a.code, a.id]));
+export async function generateStandardCoaInTx(tx: TxClient, tenantId: string): Promise<GenerateStandardCoaResult> {
+  const existingAccounts = await tx.account.findMany({ where: { tenantId } });
+  const idByCode = new Map(existingAccounts.map((a) => [a.code, a.id]));
 
-    let accountsCreated = 0;
-    let accountsSkipped = 0;
+  // Classify a pre-existing template EKUITAS account the tenant left
+  // unclassified (created before equityClass existed). Matched on code AND
+  // name: the same code can hold something else entirely (seed-ksu-demo.ts's
+  // 3-1000 is "Modal Kerja"), and a wrong class would silently skew Modal
+  // Sendiri — an unclassified account is left for an admin instead. Never
+  // overrides a class the tenant chose.
+  for (const account of existingAccounts) {
+    if (account.category !== "EKUITAS" || account.equityClass !== null) continue;
+    const seed = COA_TEMPLATE.find((t) => t.code === account.code && t.name === account.name);
+    if (!seed?.equityClass) continue;
+    await tx.account.update({ where: { id: account.id, tenantId }, data: { equityClass: seed.equityClass } });
+  }
 
-    async function createTemplateAccount(acc: AccountSeed): Promise<string> {
-      const parentCode = acc.parentKey ? COA_TEMPLATE.find((t) => t.key === acc.parentKey)?.code : undefined;
-      const parentId = parentCode ? idByCode.get(parentCode) : undefined;
-      const created = await tx.account.create({
+  let accountsCreated = 0;
+  let accountsSkipped = 0;
+
+  async function createTemplateAccount(acc: AccountSeed): Promise<string> {
+    const parentCode = acc.parentKey ? COA_TEMPLATE.find((t) => t.key === acc.parentKey)?.code : undefined;
+    const parentId = parentCode ? idByCode.get(parentCode) : undefined;
+    const created = await tx.account.create({
+      data: {
+        tenantId,
+        code: acc.code,
+        name: acc.name,
+        category: acc.category,
+        normalBalance: acc.normalBalance,
+        isHeader: acc.isHeader ?? false,
+        isCashEquivalent: acc.isCashEquivalent ?? false,
+        equityClass: acc.equityClass ?? null,
+        isDefault: true,
+        isActive: true,
+        ...(parentId ? { parentId } : {})
+      }
+    });
+    idByCode.set(acc.code, created.id);
+    return created.id;
+  }
+
+  const isMultiUnit = (await tx.cooperativeUnit.count({ where: { tenantId, isActive: true } })) > 1;
+  for (const acc of COA_TEMPLATE) {
+    // Unit-specific (Toko) accounts are handled below, only when the tenant has such a unit.
+    if (acc.unitType) continue;
+    if (acc.multiUnitOnly && !isMultiUnit) continue;
+    if (idByCode.has(acc.code)) {
+      accountsSkipped += 1;
+      continue;
+    }
+    await createTemplateAccount(acc);
+    accountsCreated += 1;
+  }
+
+  const accountIdFor = (key: string): string => {
+    const code = COA_TEMPLATE.find((t) => t.key === key)?.code;
+    const id = code && idByCode.get(code);
+    if (!id) throw new Error(`Standard COA template is missing required account "${key}"`);
+    return id;
+  };
+
+  const kas = accountIdFor("kas");
+  const piutang = accountIdFor("piutang_pinjaman");
+  const pendapatanBunga = accountIdFor("pendapatan_bunga");
+  const pendapatanLain = accountIdFor("pendapatan_lain");
+  const equityOrLiabilityBySavingType: Record<string, string> = {
+    POKOK: accountIdFor("simpanan_pokok"),
+    WAJIB: accountIdFor("simpanan_wajib"),
+    SUKARELA: accountIdFor("simpanan_sukarela")
+  };
+
+  const [savingConfigs, loanConfigs] = await Promise.all([
+    tx.savingConfig.findMany({ where: { tenantId }, select: { id: true, type: true } }),
+    tx.loanConfig.findMany({ where: { tenantId }, select: { id: true } })
+  ]);
+
+  let mappingsCreated = 0;
+  let mappingsSkipped = 0;
+
+  async function ensureMapping(
+    sourceType: "SAVING_CONFIG" | "LOAN_CONFIG",
+    sourceId: string,
+    transactionKind: "DEPOSIT" | "WITHDRAWAL" | "DISBURSEMENT" | "PAYMENT_PRINCIPAL" | "PAYMENT_INTEREST" | "PAYMENT_PENALTY",
+    debitAccountId: string,
+    creditAccountId: string
+  ) {
+    const existing = await tx.accountMapping.findFirst({ where: { tenantId, sourceType, sourceId, transactionKind } });
+    if (existing) {
+      mappingsSkipped += 1;
+      return;
+    }
+    await tx.accountMapping.create({ data: { tenantId, sourceType, sourceId, transactionKind, debitAccountId, creditAccountId } });
+    mappingsCreated += 1;
+  }
+
+  for (const config of savingConfigs) {
+    const equityOrLiability = equityOrLiabilityBySavingType[config.type];
+    if (!equityOrLiability) continue;
+    await ensureMapping("SAVING_CONFIG", config.id, "DEPOSIT", kas, equityOrLiability);
+    await ensureMapping("SAVING_CONFIG", config.id, "WITHDRAWAL", equityOrLiability, kas);
+  }
+
+  for (const config of loanConfigs) {
+    await ensureMapping("LOAN_CONFIG", config.id, "DISBURSEMENT", piutang, kas);
+    await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PRINCIPAL", kas, piutang);
+    await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_INTEREST", kas, pendapatanBunga);
+    await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PENALTY", kas, pendapatanLain);
+  }
+
+  // Koperasi pasar plan F4 — always generated, unlike the Toko SYSTEM
+  // mappings below: every tenant can potentially run a Kolektor, not just
+  // ones with a Toko unit. Redirects a collector transaction's Kas side to
+  // Kas di Kolektor (lib/journal.ts#substituteCollectorCash).
+  {
+    const existing = await tx.accountMapping.findFirst({
+      where: { tenantId, sourceType: "SYSTEM", sourceId: null, transactionKind: "COLLECTOR_CASH" }
+    });
+    if (existing) {
+      mappingsSkipped += 1;
+    } else {
+      await tx.accountMapping.create({
         data: {
           tenantId,
-          code: acc.code,
-          name: acc.name,
-          category: acc.category,
-          normalBalance: acc.normalBalance,
-          isHeader: acc.isHeader ?? false,
-          isCashEquivalent: acc.isCashEquivalent ?? false,
-          isDefault: true,
-          isActive: true,
-          ...(parentId ? { parentId } : {})
+          sourceType: "SYSTEM",
+          sourceId: null,
+          transactionKind: "COLLECTOR_CASH",
+          debitAccountId: kas,
+          creditAccountId: accountIdFor("kas_di_kolektor")
         }
       });
-      idByCode.set(acc.code, created.id);
-      return created.id;
+      mappingsCreated += 1;
     }
+  }
 
-    for (const acc of COA_TEMPLATE) {
-      // Unit-specific (Toko) accounts are handled below, only when the tenant has such a unit.
-      if (acc.unitType) continue;
-      if (idByCode.has(acc.code)) {
+  // Toko: only for a tenant that has an active KONSUMEN unit. Lazy per
+  // mapping — a tenant that already wired a SYSTEM/SALE_* mapping by hand (to
+  // its own accounts) must not get a second, unused set of Toko accounts, so
+  // accounts are only created for a mapping that doesn't exist yet.
+  const hasKonsumenUnit = (await tx.cooperativeUnit.count({ where: { tenantId, type: "KONSUMEN", isActive: true } })) > 0;
+  if (hasKonsumenUnit) {
+    const tokoAccountIds = new Map<string, string>();
+    const resolveAccount = async (key: string): Promise<string> => {
+      const seed = COA_TEMPLATE.find((t) => t.key === key);
+      if (!seed?.unitType) return accountIdFor(key);
+
+      const known = tokoAccountIds.get(key);
+      if (known) return known;
+      let id = idByCode.get(seed.code);
+      if (id) {
         accountsSkipped += 1;
-        continue;
+      } else {
+        id = await createTemplateAccount(seed);
+        accountsCreated += 1;
       }
-      await createTemplateAccount(acc);
-      accountsCreated += 1;
-    }
-
-    const accountIdFor = (key: string): string => {
-      const code = COA_TEMPLATE.find((t) => t.key === key)?.code;
-      const id = code && idByCode.get(code);
-      if (!id) throw new Error(`Standard COA template is missing required account "${key}"`);
+      tokoAccountIds.set(key, id);
       return id;
     };
 
-    const kas = accountIdFor("kas");
-    const piutang = accountIdFor("piutang_pinjaman");
-    const pendapatanBunga = accountIdFor("pendapatan_bunga");
-    const pendapatanLain = accountIdFor("pendapatan_lain");
-    const equityOrLiabilityBySavingType: Record<string, string> = {
-      POKOK: accountIdFor("simpanan_pokok"),
-      WAJIB: accountIdFor("simpanan_wajib"),
-      SUKARELA: accountIdFor("simpanan_sukarela")
-    };
-
-    const [savingConfigs, loanConfigs] = await Promise.all([
-      tx.savingConfig.findMany({ where: { tenantId }, select: { id: true, type: true } }),
-      tx.loanConfig.findMany({ where: { tenantId }, select: { id: true } })
-    ]);
-
-    let mappingsCreated = 0;
-    let mappingsSkipped = 0;
-
-    async function ensureMapping(
-      sourceType: "SAVING_CONFIG" | "LOAN_CONFIG",
-      sourceId: string,
-      transactionKind: "DEPOSIT" | "WITHDRAWAL" | "DISBURSEMENT" | "PAYMENT_PRINCIPAL" | "PAYMENT_INTEREST" | "PAYMENT_PENALTY",
-      debitAccountId: string,
-      creditAccountId: string
-    ) {
-      const existing = await tx.accountMapping.findFirst({ where: { tenantId, sourceType, sourceId, transactionKind } });
+    for (const template of SYSTEM_MAPPING_TEMPLATE) {
+      const existing = await tx.accountMapping.findFirst({
+        where: { tenantId, sourceType: "SYSTEM", sourceId: null, transactionKind: template.transactionKind }
+      });
       if (existing) {
         mappingsSkipped += 1;
-        return;
+        continue;
       }
-      await tx.accountMapping.create({ data: { tenantId, sourceType, sourceId, transactionKind, debitAccountId, creditAccountId } });
+      const debitAccountId = await resolveAccount(template.debitKey);
+      const creditAccountId = await resolveAccount(template.creditKey);
+      await tx.accountMapping.create({
+        data: {
+          tenantId,
+          sourceType: "SYSTEM",
+          sourceId: null,
+          transactionKind: template.transactionKind,
+          debitAccountId,
+          creditAccountId
+        }
+      });
       mappingsCreated += 1;
     }
+  }
 
-    for (const config of savingConfigs) {
-      const equityOrLiability = equityOrLiabilityBySavingType[config.type];
-      if (!equityOrLiability) continue;
-      await ensureMapping("SAVING_CONFIG", config.id, "DEPOSIT", kas, equityOrLiability);
-      await ensureMapping("SAVING_CONFIG", config.id, "WITHDRAWAL", equityOrLiability, kas);
-    }
+  // Pasar: only for a tenant with at least one active Market — not just an
+  // active JASA unit, since createMarket is the only thing that ever
+  // creates one (lib/units.ts#ensureUnitOfType), so this is the more
+  // precise signal. Same lazy-per-mapping shape as the Toko block above.
+  const hasMarket = (await tx.market.count({ where: { tenantId, isActive: true } })) > 0;
+  if (hasMarket) {
+    const pasarAccountIds = new Map<string, string>();
+    const resolvePasarAccount = async (key: string): Promise<string> => {
+      const seed = COA_TEMPLATE.find((t) => t.key === key);
+      if (!seed?.unitType) return accountIdFor(key);
 
-    for (const config of loanConfigs) {
-      await ensureMapping("LOAN_CONFIG", config.id, "DISBURSEMENT", piutang, kas);
-      await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PRINCIPAL", kas, piutang);
-      await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_INTEREST", kas, pendapatanBunga);
-      await ensureMapping("LOAN_CONFIG", config.id, "PAYMENT_PENALTY", kas, pendapatanLain);
-    }
-
-    // Toko: only for a tenant that has an active KONSUMEN unit. Lazy per
-    // mapping — a tenant that already wired a SYSTEM/SALE_* mapping by hand (to
-    // its own accounts) must not get a second, unused set of Toko accounts, so
-    // accounts are only created for a mapping that doesn't exist yet.
-    const hasKonsumenUnit = (await tx.cooperativeUnit.count({ where: { tenantId, type: "KONSUMEN", isActive: true } })) > 0;
-    if (hasKonsumenUnit) {
-      const tokoAccountIds = new Map<string, string>();
-      const resolveAccount = async (key: string): Promise<string> => {
-        const seed = COA_TEMPLATE.find((t) => t.key === key);
-        if (!seed?.unitType) return accountIdFor(key);
-
-        const known = tokoAccountIds.get(key);
-        if (known) return known;
-        let id = idByCode.get(seed.code);
-        if (id) {
-          accountsSkipped += 1;
-        } else {
-          id = await createTemplateAccount(seed);
-          accountsCreated += 1;
-        }
-        tokoAccountIds.set(key, id);
-        return id;
-      };
-
-      for (const template of SYSTEM_MAPPING_TEMPLATE) {
-        const existing = await tx.accountMapping.findFirst({
-          where: { tenantId, sourceType: "SYSTEM", sourceId: null, transactionKind: template.transactionKind }
-        });
-        if (existing) {
-          mappingsSkipped += 1;
-          continue;
-        }
-        const debitAccountId = await resolveAccount(template.debitKey);
-        const creditAccountId = await resolveAccount(template.creditKey);
-        await tx.accountMapping.create({
-          data: {
-            tenantId,
-            sourceType: "SYSTEM",
-            sourceId: null,
-            transactionKind: template.transactionKind,
-            debitAccountId,
-            creditAccountId
-          }
-        });
-        mappingsCreated += 1;
+      const known = pasarAccountIds.get(key);
+      if (known) return known;
+      let id = idByCode.get(seed.code);
+      if (id) {
+        accountsSkipped += 1;
+      } else {
+        id = await createTemplateAccount(seed);
+        accountsCreated += 1;
       }
-    }
+      pasarAccountIds.set(key, id);
+      return id;
+    };
 
-    return { accountsCreated, accountsSkipped, mappingsCreated, mappingsSkipped };
-  });
+    for (const template of PASAR_MAPPING_TEMPLATE) {
+      const existing = await tx.accountMapping.findFirst({
+        where: { tenantId, sourceType: "SYSTEM", sourceId: null, transactionKind: template.transactionKind }
+      });
+      if (existing) {
+        mappingsSkipped += 1;
+        continue;
+      }
+      const debitAccountId = await resolvePasarAccount(template.debitKey);
+      const creditAccountId = await resolvePasarAccount(template.creditKey);
+      await tx.accountMapping.create({
+        data: {
+          tenantId,
+          sourceType: "SYSTEM",
+          sourceId: null,
+          transactionKind: template.transactionKind,
+          debitAccountId,
+          creditAccountId
+        }
+      });
+      mappingsCreated += 1;
+    }
+  }
+
+  return { accountsCreated, accountsSkipped, mappingsCreated, mappingsSkipped };
+}
+
+/** Thin wrapper for the HTTP route (`POST /config/accounts/generate-standard`), which has no transaction of its own to join. */
+export async function generateStandardCoa(tenantId: string): Promise<GenerateStandardCoaResult> {
+  return db.$transaction((tx) => generateStandardCoaInTx(tx, tenantId));
 }
 
 // ── Account Mappings ─────────────────────────────────────────────────────────
@@ -478,12 +622,15 @@ export async function upsertWhitelabelConfig(tenantId: string, data: UpsertWhite
 }
 
 // ── Modal Disetor ────────────────────────────────────────────────────────────
-// Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp5M) compliance
-// field — a general tenant field, independent of the "accounting" entitlement.
+// Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp5 miliar)
+// compliance field — a general tenant field, independent of the "accounting"
+// entitlement. The daily reminder lives in ./audit-threshold.ts.
 
 function serializeModalDisetor(tenant: { modalDisetor: Prisma.Decimal | null; auditThresholdNotifiedAt: Date | null }) {
   return {
     modalDisetor: tenant.modalDisetor?.toString() ?? null,
+    auditThreshold: MODAL_DISETOR_AUDIT_THRESHOLD_RP.toString(),
+    auditRequired: isModalDisetorAuditRequired(tenant.modalDisetor),
     auditThresholdNotifiedAt: tenant.auditThresholdNotifiedAt
   };
 }
@@ -497,13 +644,16 @@ export async function getModalDisetor(tenantId: string) {
 }
 
 export async function updateModalDisetor(tenantId: string, data: UpdateModalDisetorInput) {
-  if (data.modalDisetor !== null && data.modalDisetor < 0) {
-    throw validationError("Modal disetor tidak boleh negatif");
-  }
+  const modalDisetor = data.modalDisetor === null ? null : new Prisma.Decimal(data.modalDisetor);
 
   const tenant = await db.tenant.update({
     where: { id: tenantId },
-    data: { modalDisetor: data.modalDisetor },
+    data: {
+      modalDisetor,
+      // Dropping below the threshold re-arms the reminder, so a later
+      // re-crossing in the same year notifies again instead of staying silent.
+      ...(isModalDisetorAuditRequired(modalDisetor) ? {} : { auditThresholdNotifiedAt: null })
+    },
     select: { modalDisetor: true, auditThresholdNotifiedAt: true }
   });
   return serializeModalDisetor(tenant);

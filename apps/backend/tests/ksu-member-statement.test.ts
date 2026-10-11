@@ -50,10 +50,10 @@ async function setShuConfig(
 
 async function postIncome(tenantId: string, amount: number) {
   const kas = await db.account.create({
-    data: { tenantId, code: "1-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT" }
+    data: { tenantId, code: "9-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT" }
   });
   const pendapatan = await db.account.create({
-    data: { tenantId, code: "4-1000", name: "Pendapatan Bunga", category: "PENDAPATAN", normalBalance: "KREDIT" }
+    data: { tenantId, code: "9-4000", name: "Pendapatan Bunga", category: "PENDAPATAN", normalBalance: "KREDIT" }
   });
   await db.journalEntry.create({
     data: {

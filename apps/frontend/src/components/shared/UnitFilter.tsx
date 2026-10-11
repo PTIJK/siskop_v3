@@ -1,17 +1,19 @@
 import { useAccessibleUnits } from "@/hooks/useAccessibleUnits";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ALL_UNITS } from "./unit";
+import { ALL_UNITS } from "@/lib/unit";
 
 interface UnitFilterProps {
   value: string;
   onChange: (unitId: string) => void;
+  /** Offer the tenant-level bucket of entries that belong to no unit (accounting books only). */
+  includeUnallocated?: boolean;
 }
 
-// Cuts Neraca / Arus Kas / Hasil Usaha to one unit, or leaves them consolidated ("Semua unit").
+// Cuts a report or the dashboard to one unit, or leaves it consolidated ("Semua unit").
 // Pembagian SHU and CALK are cooperative-level statements and have no unit filter. Renders
 // nothing for a single-unit koperasi — there is nothing to choose between.
-export function UnitFilter({ value, onChange }: UnitFilterProps) {
+export function UnitFilter({ value, onChange, includeUnallocated }: UnitFilterProps) {
   const { data: units } = useAccessibleUnits();
   if (!units || units.length <= 1) return null;
 
@@ -24,6 +26,7 @@ export function UnitFilter({ value, onChange }: UnitFilterProps) {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL_UNITS}>Semua unit (konsolidasi)</SelectItem>
+          {includeUnallocated && <SelectItem value="unallocated">Tidak dialokasikan ke unit</SelectItem>}
           {units.map((u) => (
             <SelectItem key={u.id} value={u.id}>
               {u.name}

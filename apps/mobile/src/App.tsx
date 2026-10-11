@@ -13,6 +13,8 @@ import { OverduePage } from "@/pages/loans/OverduePage";
 import { ReportsPage } from "@/pages/reports/ReportsPage";
 import { RegulatoryReportsPage } from "@/pages/reports/RegulatoryReportsPage";
 import { ProfilePage } from "@/pages/profile/ProfilePage";
+import { KolektorTodayPage } from "@/pages/kolektor/KolektorTodayPage";
+import { RequireCollectionsAccess } from "@/components/layout/RequireCollectionsAccess";
 import MemberLoginPage from "@/pages/member/MemberLoginPage";
 import { MemberChangePasswordPage } from "@/pages/member/MemberChangePasswordPage";
 import { MemberHandoffPage } from "@/pages/member/MemberHandoffPage";
@@ -63,6 +65,15 @@ export default function App() {
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/reports/regulatory" element={<RegulatoryReportsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+
+            <Route
+              path="/kolektor"
+              element={
+                <RequireCollectionsAccess>
+                  <KolektorTodayPage />
+                </RequireCollectionsAccess>
+              }
+            />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -19,7 +19,9 @@ import {
   ShieldCheck,
   Layers,
   PieChart,
-  Receipt
+  Receipt,
+  Wallet,
+  Warehouse
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -40,7 +42,11 @@ const NAV_ITEMS_TOP = [
   // Konsumen/Toko's POS) — top-level rather than nested under Unit Usaha >
   // Konsumen, which would misleadingly imply unit-scoping. Reuses the
   // konsumen permission scope, same gate credit.routes.ts already uses.
-  { label: "Piutang Anggota", href: "/piutang", icon: Receipt, module: "konsumen" as const, action: "read" as const }
+  { label: "Piutang Anggota", href: "/piutang", icon: Receipt, module: "konsumen" as const, action: "read" as const },
+  // Base feature (not gated by the "accounting" package add-on) — see
+  // docs/2026-09-27-beban-umum-design.md. Top-level, not under Konfigurasi:
+  // it's a recurring transaction, not a settings screen.
+  { label: "Beban Umum", href: "/expenses", icon: Wallet, module: "expenses" as const, action: "read" as const }
 ];
 
 const NAV_ITEMS_REPORTS = [
@@ -52,7 +58,14 @@ const NAV_ITEMS_REPORTS = [
     action: "read" as const,
     children: [
       { label: "Laporan Keuangan", href: "/reports" },
-      { label: "Laporan Regulasi", href: "/reports/regulatory" }
+      { label: "Laporan Regulasi", href: "/reports/regulatory" },
+      { label: "Buku Akuntansi", href: "/reports/accounting" },
+      { label: "Kualitas Portofolio", href: "/reports/portfolio" },
+      // Always listed (like Laporan Regulasi above), not hidden by entitlement — a
+      // non-pasar tenant sees EntitlementNotice on the page itself, same pattern.
+      { label: "Laporan Pasar", href: "/reports/pasar" },
+      { label: "Jurnal Manual", href: "/journal/new" },
+      { label: "Tutup Buku", href: "/journal/close" }
     ]
   },
   // Consolidated-reporting-across-units — genuinely KSU-only, unlike Unit
@@ -177,9 +190,18 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
     konsumenChildren.push({ label: "Toko", href: "/ksu/toko" });
   }
 
+  // Koperasi pasar plan F3 — gated on market:read like every other Unit Usaha
+  // sub-group, not on isMultiUnit (its JASA unit is auto-resolved, never
+  // client-chosen, so there's nothing multi-unit-specific about this page).
+  const pasarChildren: NavNode[] = [];
+  if (can("market", "read")) {
+    pasarChildren.push({ label: "Pasar", href: "/market" });
+  }
+
   const unitUsahaChildren: NavNode[] = [];
   if (kspChildren.length > 0) unitUsahaChildren.push({ label: "KSP", icon: Landmark, children: kspChildren });
   if (konsumenChildren.length > 0) unitUsahaChildren.push({ label: "Konsumen", icon: Store, children: konsumenChildren });
+  if (pasarChildren.length > 0) unitUsahaChildren.push({ label: "Pasar", icon: Warehouse, children: pasarChildren });
 
   return (
     <div className="flex h-full flex-col bg-slate-900">

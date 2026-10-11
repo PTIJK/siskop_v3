@@ -13,9 +13,13 @@ export const ratParamsSchema = z.object({
 // unit: they are cooperative-level statements, not something a single unit files.
 const unitIdParam = z.string().cuid("Unit ID tidak valid").optional();
 
+// Optional comparative column: the same statement for the earlier period/date (lib/comparison.ts).
+const compareParam = z.enum(["PREVIOUS_PERIOD", "PREVIOUS_YEAR"]).optional();
+
 export const neracaParamsSchema = z.object({
   asOfDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD").optional(),
-  unitId: unitIdParam
+  unitId: unitIdParam,
+  compare: compareParam
 });
 
 export const periodParamsSchema = z.object({
@@ -25,9 +29,29 @@ export const periodParamsSchema = z.object({
 
 export const unitPeriodParamsSchema = periodParamsSchema.extend({ unitId: unitIdParam });
 
+export const comparablePeriodParamsSchema = unitPeriodParamsSchema.extend({ compare: compareParam });
+
 export const upsertCalkNarrativeSchema = z.object({
   section: z.enum(["UMUM", "DASAR_PENYUSUNAN", "KEBIJAKAN_AKUNTANSI", "INFORMASI_TAMBAHAN"]),
   content: z.string().max(20000)
+});
+
+// ── Koperasi pasar plan F7 — Laporan ──────────────────────────────────────────
+
+export const rekapHarianKolektorParamsSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD").optional()
+});
+
+export const tunggakanAngsuranParamsSchema = z.object({
+  collectorId: z.string().cuid("Collector ID tidak valid").optional(),
+  marketId: z.string().cuid("Market ID tidak valid").optional(),
+  block: z.string().optional()
+});
+
+export const tunggakanSewaRetribusiParamsSchema = z.object({
+  marketId: z.string().cuid("Market ID tidak valid").optional(),
+  block: z.string().optional(),
+  memberId: z.string().cuid("Member ID tidak valid").optional()
 });
 
 export type FinancialParamsInput = z.infer<typeof financialParamsSchema>;
@@ -36,3 +60,65 @@ export type NeracaParamsInput = z.infer<typeof neracaParamsSchema>;
 export type PeriodParamsInput = z.infer<typeof periodParamsSchema>;
 export type UnitPeriodParamsInput = z.infer<typeof unitPeriodParamsSchema>;
 export type UpsertCalkNarrativeInput = z.infer<typeof upsertCalkNarrativeSchema>;
+export type RekapHarianKolektorParamsInput = z.infer<typeof rekapHarianKolektorParamsSchema>;
+export type TunggakanAngsuranParamsInput = z.infer<typeof tunggakanAngsuranParamsSchema>;
+export type TunggakanSewaRetribusiParamsInput = z.infer<typeof tunggakanSewaRetribusiParamsSchema>;
+
+// ── Accounting books (Jurnal Umum, Neraca Saldo, Buku Besar) ──────────────────
+
+const bookUnitParam = z.union([z.literal("unallocated"), z.string().cuid("Unit ID tidak valid")]).optional();
+
+const bookPagingParams = {
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(200).default(50)
+};
+
+export const jurnalParamsSchema = periodParamsSchema.extend({
+  unitId: bookUnitParam,
+  type: z.enum(["UMUM", "PENYESUAIAN", "PENUTUP"]).optional(),
+  sourceType: z
+    .enum([
+      "SAVING_TRANSACTION",
+      "LOAN_PAYMENT",
+      "LOAN_DISBURSEMENT",
+      "POS_SALE",
+      "MEMBER_CREDIT_REPAYMENT",
+      "MANUAL",
+      "MANUAL_EXPENSE",
+      "STOCK_MOVEMENT",
+      "COLLECTION_BATCH",
+      "CHARGE_ACCRUAL",
+      "CHARGE_PAYMENT"
+    ])
+    .optional(),
+  ...bookPagingParams
+});
+
+export const trialBalanceParamsSchema = periodParamsSchema.extend({ unitId: bookUnitParam, compare: compareParam });
+
+export const bukuBesarAccountParamsSchema = periodParamsSchema.extend({ unitId: bookUnitParam, ...bookPagingParams });
+
+export type JurnalParamsInput = z.infer<typeof jurnalParamsSchema>;
+export type TrialBalanceParamsInput = z.infer<typeof trialBalanceParamsSchema>;
+export type BukuBesarAccountParamsInput = z.infer<typeof bukuBesarAccountParamsSchema>;
+
+// ── Export (CSV / XLSX) ───────────────────────────────────────────────────────
+
+export const exportParamsSchema = periodParamsSchema.extend({
+  format: z.enum(["csv", "xlsx", "pdf"], { errorMap: () => ({ message: "Format ekspor: csv, xlsx atau pdf" }) }),
+  asOfDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD").optional(),
+  unitId: bookUnitParam,
+  /** Buku Besar for one account instead of the overview. */
+  accountId: z.string().min(1).optional()
+});
+
+// ── Portfolio quality (PAR / NPL, collection efficiency) ──────────────────────
+
+export const parParamsSchema = z.object({ unitId: unitIdParam });
+
+export const parLoansParamsSchema = z.object({
+  bucket: z.enum(["CURRENT", "D1_30", "D31_60", "D61_90", "D90_PLUS"], { errorMap: () => ({ message: "Bucket tidak valid" }) }),
+  unitId: unitIdParam,
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25)
+});

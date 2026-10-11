@@ -28,6 +28,15 @@ export const ErrorCode = {
   // Regulatory guardrails (Permenkop UKM 8/2023) — see lib/regulatory-config.ts.
   RATE_EXCEEDS_REGULATORY_CAP: "RATE_EXCEEDS_REGULATORY_CAP",
   RELATED_PARTY_LIMIT_EXCEEDED: "RELATED_PARTY_LIMIT_EXCEEDED",
+  // Koperasi pasar plan (docs/2026-09-26-koperasi-pasar-dev-plan.md) F2 — installment schedule.
+  RATE_NOTE_REQUIRED: "RATE_NOTE_REQUIRED",
+  PAYMENT_EXCEEDS_REMAINING: "PAYMENT_EXCEEDS_REMAINING",
+  // Koperasi pasar plan F4 — Kolektor & setoran.
+  NOT_ASSIGNED_COLLECTOR: "NOT_ASSIGNED_COLLECTOR",
+  BATCH_NOT_OPEN: "BATCH_NOT_OPEN",
+  // Koperasi pasar plan F5 — Sewa & retribusi. PAYMENT_EXCEEDS_REMAINING
+  // (above) is reused for a Charge overpay.
+  STALL_ALREADY_OCCUPIED: "STALL_ALREADY_OCCUPIED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

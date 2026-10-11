@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
-import { CALK_SECTION_LABEL, type Calk, type CalkMutasiItem, type CalkSection, type LabaRugiItem } from "@siskop/types";
-import { apiFetch, apiPut, ApiRequestError } from "@/api/client";
-import { formatRupiah, formatTanggalIndonesia } from "@/lib/format";
+import { CALK_SECTION_LABEL, EQUITY_CLASS_LABELS, type Calk, type CalkMutasiItem, type CalkSection, type LabaRugiItem } from "@siskop/types";
+import { apiPut, ApiRequestError } from "@/api/client";
+import { formatPeriode, formatRupiah, formatTanggalIndonesia } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
-import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileText } from "lucide-react";
-import { PeriodRangeControls } from "./PeriodRangeControls";
+import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
+import { ReportResultCard } from "@/components/reports/ReportResultCard";
+import { useReport } from "@/components/reports/useReport";
+import { useReportFilter } from "@/components/reports/useReportFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "./period";
 
 function MutasiTable({ title, items }: { title: string; items: CalkMutasiItem[] }) {
@@ -145,28 +146,11 @@ function NarrativeEditor({
 
 export function CalkTab() {
   const { can } = usePermissions();
-  const { toast } = useToast();
-  const [from, setFrom] = useState(defaultPeriodFrom());
-  const [to, setTo] = useState(defaultPeriodTo());
-  const [data, setData] = useState<Calk | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const fetchReport = async () => {
-    setIsLoading(true);
-    try {
-      const result = await apiFetch<Calk>(`/reports/regulatory/calk?from=${from}&to=${to}`);
-      setData(result);
-    } catch (err) {
-      const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
-      toast({ title: "Gagal memuat CALK", description: message, variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void fetchReport();
-  }, []);
+  // Cooperative-level statement: no unit filter. No PDF endpoint exists for CALK.
+  const filter = useReportFilter("calk", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo() }));
+  const { value: f } = filter;
+  const report = useReport<Calk>("Gagal memuat CALK");
+  const { data, setData } = report;
 
   const handleNarrativeSaved = (section: CalkSection, content: string, updatedAt: string) => {
     setData((prev) => (prev ? { ...prev, narasi: { ...prev.narasi, [section]: { content, updatedAt } } } : prev));
@@ -176,19 +160,29 @@ export function CalkTab() {
 
   return (
     <div className="space-y-5">
-      <Card>
-        <CardContent className="pt-5">
-          <PeriodRangeControls from={from} to={to} onFromChange={setFrom} onToChange={setTo} onSubmit={fetchReport} isLoading={isLoading} />
-        </CardContent>
-      </Card>
+      <ReportFilterCard
+        reportName="CALK"
+        from={f.from}
+        to={f.to}
+        onChange={filter.update}
+        onApply={() => void report.run(`/reports/regulatory/calk?from=${f.from}&to=${f.to}`)}
+        onReset={() => {
+          filter.reset();
+          report.clear();
+        }}
+        isLoading={report.isLoading}
+      />
 
-      {isLoading ? (
-        <PageLoading />
-      ) : data ? (
+      <ReportResultCard
+        reportName="CALK"
+        title="Catatan atas Laporan Keuangan"
+        subtitle={data ? formatPeriode(data.periode.from, data.periode.to) : undefined}
+        isLoading={report.isLoading}
+        hasRun={report.hasRun}
+        hasData={!!data}
+      >
+        {data && (
         <>
-          <p className="text-sm text-muted-foreground">
-            Periode {data.periode.from} — {data.periode.to}
-          </p>
 
           <div className="space-y-3">
             <h2 className="text-sm font-semibold">Catatan Naratif</h2>
@@ -218,13 +212,38 @@ export function CalkTab() {
               </CardContent>
             </Card>
           </div>
+
+          <div className="space-y-3">
+            <h2 className="text-sm font-semibold">Permodalan</h2>
+            <Card>
+              <CardContent className="space-y-2 pt-5 text-sm">
+                {data.permodalan.komposisi.map((k) => (
+                  <div key={k.equityClass} className="flex justify-between">
+                    <span>{EQUITY_CLASS_LABELS[k.equityClass]}</span>
+                    <span className="tabular-nums">{formatRupiah(k.amount)}</span>
+                  </div>
+                ))}
+                {Number(data.permodalan.penyesuaianSaldoAwal) !== 0 && (
+                  <div className="flex justify-between">
+                    <span>Penyesuaian saldo awal (di luar buku besar)</span>
+                    <span className="tabular-nums">{formatRupiah(data.permodalan.penyesuaianSaldoAwal)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t pt-2 font-semibold">
+                  <span>Modal Sendiri per {data.periode.to}</span>
+                  <span className="tabular-nums">{formatRupiah(data.permodalan.modalSendiri)}</span>
+                </div>
+                <p className={data.permodalan.wajibAudit ? "text-amber-600" : "text-muted-foreground"}>
+                  {data.permodalan.wajibAudit
+                    ? `Modal sendiri mencapai ambang ${formatRupiah(data.permodalan.ambangAudit)} — laporan keuangan tahunan wajib diaudit akuntan publik (Permenkop UKM No. 2/2024 Pasal 12).`
+                    : `Di bawah ambang audit wajib ${formatRupiah(data.permodalan.ambangAudit)} (Permenkop UKM No. 2/2024 Pasal 12).`}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </>
-      ) : (
-        <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-          <FileText className="h-10 w-10" />
-          <p className="text-sm">Pilih periode dan klik &quot;Tampilkan&quot;</p>
-        </div>
-      )}
+        )}
+      </ReportResultCard>
     </div>
   );
 }

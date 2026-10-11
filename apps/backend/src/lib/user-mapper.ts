@@ -11,7 +11,7 @@ export type UserWithRole = DbUser & { role: DbRole; unitAssignments: DbUserUnit[
  */
 export function deriveUserRole(user: UserWithRole): UserRole {
   if (user.isPlatformAdmin) return "super_admin";
-  if (user.role.name === "Teller" || user.role.name === "Viewer") return "accountant";
+  if (user.role.name === "Teller" || user.role.name === "Viewer" || user.role.name === "Kolektor") return "accountant";
   return "tenant_admin";
 }
 

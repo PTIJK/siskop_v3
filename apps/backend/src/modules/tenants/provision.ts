@@ -4,6 +4,7 @@ import type { Permissions } from "@siskop/types";
 import { db, type TxClient } from "../../lib/db.js";
 import { CooperativeType } from "@siskop/types";
 import { parseSlug } from "../tenant-domains/policy.js";
+import { generateStandardCoaInTx } from "../config/service.js";
 
 const unitInput = z.object({
   type: z.nativeEnum(CooperativeType),
@@ -40,11 +41,13 @@ const FULL: Permissions["members"] = { create: true, read: true, update: true, d
 const READ_ONLY = { read: true };
 
 /**
- * Every tenant is seeded with these 4 roles at provisioning time (ported
- * verbatim from the pre-rescaffold demo seed, now created for every tenant —
- * not just the demo — so RBAC works out of the box). `Role`/`Permissions` are
- * the fine-grained axis; `AuthClaims.role` (super_admin|tenant_admin|
- * accountant|member) is the separate, coarse axis — see packages/types/src/role.ts.
+ * Every tenant is seeded with these roles at provisioning time (Super Admin/
+ * Manager/Teller/Viewer ported verbatim from the pre-rescaffold demo seed,
+ * now created for every tenant — not just the demo — so RBAC works out of
+ * the box; Kasir and Kolektor added later for Toko and koperasi pasar).
+ * `Role`/`Permissions` are the fine-grained axis; `AuthClaims.role`
+ * (super_admin|tenant_admin|accountant|member) is the separate, coarse axis
+ * — see packages/types/src/role.ts.
  */
 const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
   {
@@ -59,7 +62,11 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       users: FULL,
       roles: FULL,
       accounting: FULL,
-      konsumen: FULL
+      konsumen: FULL,
+      auditLog: READ_ONLY,
+      expenses: FULL,
+      market: FULL,
+      collections: FULL
     }
   },
   {
@@ -74,7 +81,13 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       users: { create: false, read: true, update: false, delete: false },
       roles: { read: true },
       accounting: { create: false, read: false, update: false, delete: false },
-      konsumen: FULL
+      konsumen: FULL,
+      auditLog: READ_ONLY,
+      expenses: FULL,
+      market: FULL,
+      // Manages Kolektor assignments (PUT /api/collections/assignments) and
+      // verifies batches, same as Teller does for the latter.
+      collections: FULL
     }
   },
   {
@@ -90,7 +103,13 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       roles: {},
       // Front-counter staff record stock movements and ring up POS sales
       // (create) but don't add/remove SKUs — that's Manager territory.
-      konsumen: { create: true, read: true, update: true }
+      konsumen: { create: true, read: true, update: true },
+      auditLog: {},
+      expenses: {},
+      market: READ_ONLY,
+      // Verifies a Kolektor's batch (POST /api/collections/batches/:id/verify);
+      // does not create collection transactions itself.
+      collections: { read: true, update: true }
     }
   },
   {
@@ -104,15 +123,19 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       config: {},
       users: {},
       roles: {},
-      konsumen: READ_ONLY
+      konsumen: READ_ONLY,
+      auditLog: {},
+      expenses: READ_ONLY,
+      market: READ_ONLY,
+      collections: READ_ONLY
     }
   },
   {
     name: "Kasir",
     permissions: {
       // Toko-only: konsumen access and nothing else. No members/savings/loans/
-      // reports/config/users/roles/accounting — a Kasir cannot reach any
-      // other module's data even before unit scoping is considered.
+      // reports/config/users/roles/accounting/auditLog — a Kasir cannot
+      // reach any other module's data even before unit scoping is considered.
       dashboard: READ_ONLY,
       members: {},
       savings: {},
@@ -121,7 +144,33 @@ const SEED_ROLES: Array<{ name: string; permissions: Permissions }> = [
       config: {},
       users: {},
       roles: {},
-      konsumen: { create: true, read: true, update: true }
+      konsumen: { create: true, read: true, update: true },
+      auditLog: {},
+      expenses: {}
+    }
+  },
+  {
+    name: "Kolektor",
+    permissions: {
+      // Koperasi pasar plan F4: a Kolektor only records collections for
+      // their own binaan members (create) and reads their own today's list/
+      // batches (read) — no members/savings/loans/reports/config/users/
+      // roles/accounting/konsumen/auditLog/market access at all. Cannot
+      // verify their own batch (see modules/collections/service.ts) or
+      // reassign members (that's Manager's PUT /assignments, gated on
+      // collections:update, which Kolektor deliberately lacks).
+      dashboard: {},
+      members: {},
+      savings: {},
+      loans: {},
+      reports: {},
+      config: {},
+      users: {},
+      roles: {},
+      konsumen: {},
+      auditLog: {},
+      market: {},
+      collections: { create: true, read: true }
     }
   }
 ];
@@ -148,6 +197,12 @@ export async function provisionTenantInTx(tx: Tx, input: ProvisionTenantInput) {
   await tx.cooperativeUnit.createMany({
     data: units.map((u) => ({ tenantId: tenant.id, type: u.type, name: u.name }))
   });
+
+  // Every tenant gets the standard COA regardless of package — Beban Umum
+  // (general expense entry) is a base feature, not gated by the "accounting"
+  // add-on, and needs real BEBAN/Kas accounts to post against from day one.
+  // See docs/2026-09-27-beban-umum-design.md.
+  await generateStandardCoaInTx(tx, tenant.id);
 
   const roles = await Promise.all(
     SEED_ROLES.map((r) =>

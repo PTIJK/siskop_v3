@@ -1,12 +1,18 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { memberAuthClaims, requireMemberAuth } from "../../middleware/member-auth.js";
 import { requireParam } from "../../lib/http.js";
-import { listSavingsQuerySchema, listSavingTransactionsQuerySchema } from "../savings/schema.js";
+import {
+  listSavingsQuerySchema,
+  listSavingTransactionsQuerySchema,
+  savingStatementQuerySchema
+} from "../savings/schema.js";
+import { sendStatementCsv, sendStatementPdf } from "../savings/statement-response.js";
 import { listLoansQuerySchema } from "../loans/schema.js";
 import {
   getMemberDashboard,
   getMyLoan,
   getMySaving,
+  getMySavingStatement,
   listMyLoans,
   listMySavingTransactions,
   listMySavings
@@ -58,6 +64,36 @@ export function memberPortalRoutes(): Router {
       const query = listSavingTransactionsQuerySchema.parse(req.query);
       const result = await listMySavingTransactions(auth.tenantId, auth.memberId, requireParam(req, "id"), query);
       res.json({ success: true, data: result.items, meta: { ...res.locals.meta, ...result.meta } });
+    })
+  );
+
+  router.get(
+    "/savings/:id/statement",
+    handle(async (req, res) => {
+      const auth = memberAuthClaims(req);
+      const query = savingStatementQuerySchema.parse(req.query);
+      const data = await getMySavingStatement(auth.tenantId, auth.memberId, requireParam(req, "id"), query);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/savings/:id/statement/csv",
+    handle(async (req, res) => {
+      const auth = memberAuthClaims(req);
+      const query = savingStatementQuerySchema.parse(req.query);
+      const statement = await getMySavingStatement(auth.tenantId, auth.memberId, requireParam(req, "id"), query);
+      sendStatementCsv(res, statement);
+    })
+  );
+
+  router.get(
+    "/savings/:id/statement/pdf",
+    handle(async (req, res) => {
+      const auth = memberAuthClaims(req);
+      const query = savingStatementQuerySchema.parse(req.query);
+      const statement = await getMySavingStatement(auth.tenantId, auth.memberId, requireParam(req, "id"), query);
+      await sendStatementPdf(res, auth.tenantId, statement);
     })
   );
 

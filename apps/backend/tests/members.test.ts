@@ -288,3 +288,70 @@ describe("DELETE /api/members/:id", () => {
     expect(member?.isActive).toBe(false);
   });
 });
+
+describe("Members audit trail", () => {
+  it("audits member creation", async () => {
+    const admin = await setupTenant();
+
+    const created = await request(app())
+      .post("/api/members")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send(MEMBER);
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "member.create", entityId: created.body.data.id }
+    });
+    expect(log.actorUserId).toBe(admin.user.id);
+    expect(log.after).toMatchObject({ fullName: "Budi Santoso", nik: MEMBER.nik });
+  });
+
+  it("audits a member update with before/after changed fields", async () => {
+    const admin = await setupTenant();
+    const created = await request(app())
+      .post("/api/members")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send(MEMBER);
+
+    await request(app())
+      .put(`/api/members/${created.body.data.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ occupation: "Wiraswasta" });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "member.update", entityId: created.body.data.id }
+    });
+    expect(log.before).toMatchObject({ occupation: "Pedagang" });
+    expect(log.after).toMatchObject({ occupation: "Wiraswasta" });
+  });
+
+  it("writes no audit row when a member update 404s", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .put("/api/members/does-not-exist")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ occupation: "Wiraswasta" });
+    expect(res.status).toBe(404);
+
+    const count = await db.auditLog.count({ where: { tenantId: admin.user.tenantId, action: "member.update" } });
+    expect(count).toBe(0);
+  });
+
+  it("audits member deactivation", async () => {
+    const admin = await setupTenant();
+    const created = await request(app())
+      .post("/api/members")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send(MEMBER);
+
+    await request(app())
+      .delete(`/api/members/${created.body.data.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "member.deactivate", entityId: created.body.data.id }
+    });
+    expect(log.before).toMatchObject({ isActive: true });
+    expect(log.after).toMatchObject({ isActive: false });
+  });
+});

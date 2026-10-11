@@ -37,7 +37,7 @@ describe("provisionTenant", () => {
     expect(units).toHaveLength(2);
   });
 
-  it("seeds the 5 standard roles (Super Admin/Manager/Teller/Viewer/Kasir) for every tenant", async () => {
+  it("seeds the 6 standard roles (Super Admin/Manager/Teller/Viewer/Kasir/Kolektor) for every tenant", async () => {
     const { tenant, roles } = await provisionTenant({
       name: "KSP Sejahtera",
       slug: "sejahtera",
@@ -47,7 +47,7 @@ describe("provisionTenant", () => {
       firstUnit: { type: "KSP", name: "Simpan Pinjam" }
     });
 
-    expect(roles.map((r) => r.name).sort()).toEqual(["Kasir", "Manager", "Super Admin", "Teller", "Viewer"]);
+    expect(roles.map((r) => r.name).sort()).toEqual(["Kasir", "Kolektor", "Manager", "Super Admin", "Teller", "Viewer"]);
     expect(roles.every((r) => r.tenantId === tenant.id)).toBe(true);
 
     const superAdmin = roles.find((r) => r.name === "Super Admin");

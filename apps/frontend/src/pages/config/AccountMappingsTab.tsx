@@ -1,9 +1,16 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { SYSTEM_MAPPING_KINDS, type Account, type AccountMapping, type LoanConfig, type SavingConfig } from "@siskop/types";
+import {
+  SYSTEM_MAPPING_KINDS,
+  type Account,
+  type AccountMapping,
+  type GenerateStandardCoaResult,
+  type LoanConfig,
+  type SavingConfig
+} from "@siskop/types";
 import { apiFetch, apiDelete, apiPost, ApiRequestError } from "@/api/client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
@@ -16,7 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { UnpostedJournalBanner } from "./UnpostedJournalBanner";
 
 const SOURCE_TYPES = ["SAVING_CONFIG", "LOAN_CONFIG", "SYSTEM"] as const;
@@ -65,6 +72,8 @@ export function AccountMappingsTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [apiError, setApiError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<AccountMapping | null>(null);
+  const [autoMapOpen, setAutoMapOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["config", "account-mappings"],
@@ -133,6 +142,26 @@ export function AccountMappingsTab() {
     }
   };
 
+  const autoMap = async () => {
+    try {
+      const result = await apiPost<GenerateStandardCoaResult>("/config/accounts/generate-standard", {});
+      toast({
+        title:
+          result.mappingsCreated + result.accountsCreated > 0
+            ? `${result.mappingsCreated} pemetaan & ${result.accountsCreated} akun ditambahkan`
+            : "Semua pemetaan standar sudah lengkap"
+      });
+      setAutoMapOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["config"] });
+    } catch (err) {
+      toast({
+        title: "Gagal memetakan otomatis",
+        description: err instanceof ApiRequestError ? err.message : "Terjadi kesalahan",
+        variant: "destructive"
+      });
+    }
+  };
+
   const columns: ColumnDef<AccountMapping>[] = [
     { header: "Sumber", cell: ({ row }) => <Badge variant="outline">{row.original.sourceType}</Badge> },
     { header: "Konfigurasi", cell: ({ row }) => row.original.sourceName ?? "—" },
@@ -168,12 +197,27 @@ export function AccountMappingsTab() {
         emptyMessage="Belum ada pemetaan akun — transaksi akan tercatat sebagai belum terposting sampai dipetakan"
         headerActions={
           can("accounting", "create") && (
-            <Button onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Tambah Pemetaan
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setAutoMapOpen(true)}>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Petakan Otomatis
+              </Button>
+              <Button onClick={openCreate}>
+                <Plus className="mr-2 h-4 w-4" />
+                Tambah Pemetaan
+              </Button>
+            </div>
           )
         }
+      />
+
+      <ConfirmDialog
+        open={autoMapOpen}
+        onOpenChange={setAutoMapOpen}
+        title="Petakan Otomatis"
+        description="Membuat pemetaan akun default untuk setiap konfigurasi simpanan/pinjaman (dan penjualan toko bila ada unit Toko). Akun standar koperasi yang belum ada ikut ditambahkan. Pemetaan dan akun yang sudah ada tidak akan diubah — aman dijalankan lebih dari sekali."
+        confirmLabel="Petakan Otomatis"
+        onConfirm={autoMap}
       />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

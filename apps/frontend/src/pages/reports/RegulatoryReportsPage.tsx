@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NeracaTab } from "./regulatory/NeracaTab";
 import { ArusKasTab } from "./regulatory/ArusKasTab";
 import { LabaRugiTab } from "./regulatory/LabaRugiTab";
+import { PerubahanEkuitasTab } from "./regulatory/PerubahanEkuitasTab";
 import { ShuDistribusiTab } from "./regulatory/ShuDistribusiTab";
 import { CalkTab } from "./regulatory/CalkTab";
 
@@ -11,7 +12,7 @@ export function RegulatoryReportsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Laporan Regulasi"
-        description="Laporan keuangan sesuai Permenkop UKM No. 2/2024 — Neraca, Arus Kas, Laporan Hasil Usaha, Pembagian SHU, dan CALK"
+        description="Laporan keuangan sesuai Permenkop UKM No. 2/2024 — Neraca, Arus Kas, Laporan Hasil Usaha, Perubahan Ekuitas, Pembagian SHU, dan CALK"
       />
 
       <Tabs defaultValue="neraca">
@@ -19,6 +20,7 @@ export function RegulatoryReportsPage() {
           <TabsTrigger value="neraca">Neraca</TabsTrigger>
           <TabsTrigger value="arus-kas">Arus Kas</TabsTrigger>
           <TabsTrigger value="laba-rugi">Hasil Usaha</TabsTrigger>
+          <TabsTrigger value="perubahan-ekuitas">Perubahan Ekuitas</TabsTrigger>
           <TabsTrigger value="shu">Pembagian SHU</TabsTrigger>
           <TabsTrigger value="calk">CALK</TabsTrigger>
         </TabsList>
@@ -31,6 +33,9 @@ export function RegulatoryReportsPage() {
         </TabsContent>
         <TabsContent value="laba-rugi" className="mt-4">
           <LabaRugiTab />
+        </TabsContent>
+        <TabsContent value="perubahan-ekuitas" className="mt-4">
+          <PerubahanEkuitasTab />
         </TabsContent>
         <TabsContent value="shu" className="mt-4">
           <ShuDistribusiTab />

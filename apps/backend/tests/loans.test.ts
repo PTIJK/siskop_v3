@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import request from "supertest";
 import { db } from "../src/lib/db.js";
-import { app, createMemberAs, createMemberWithPokokSaving, setupTenant } from "./helpers.js";
+import { Prisma } from "@prisma/client";
+import { app, createMemberAs, createMemberWithPokokSaving, postEquity, setupTenant } from "./helpers.js";
 
 beforeAll(() => {
   process.env.JWT_SECRET = "test-secret";
@@ -224,16 +225,15 @@ describe("POST /api/loans", () => {
 });
 
 describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8/2023)", () => {
-  async function setModalDisetor(accessToken: string, amount: number) {
-    await request(app())
-      .put("/api/config/modal-disetor")
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send({ modalDisetor: amount });
+  // The cap is 10% of Modal Sendiri as booked in the ledger (Pasal 44), not a
+  // hand-typed modal disetor figure.
+  async function setModalSendiri(tenantId: string, amount: number | string) {
+    await postEquity(tenantId, "SIMPANAN_POKOK", amount, { entryDate: new Date("2020-01-01T00:00:00Z") });
   }
 
-  it("rejects a pengurus member's loan exceeding 10% of modalDisetor", async () => {
+  it("rejects a pengurus member's loan exceeding 10% of Modal Sendiri", async () => {
     const admin = await setupTenant();
-    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    await setModalSendiri(admin.user.tenantId, 10_000_000); // 10% = 1,000,000
     const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
     const config = await createLoanConfigAs(admin.accessToken);
 
@@ -248,7 +248,7 @@ describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8
 
   it("allows a pengurus member's loan under the 10% threshold", async () => {
     const admin = await setupTenant();
-    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    await setModalSendiri(admin.user.tenantId, 10_000_000); // 10% = 1,000,000
     const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
     const config = await createLoanConfigAs(admin.accessToken);
 
@@ -260,9 +260,23 @@ describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8
     expect(res.status).toBe(201);
   });
 
+  it("allows a pengurus member's loan exactly at a fractional 10% cap", async () => {
+    const admin = await setupTenant();
+    await setModalSendiri(admin.user.tenantId, "10000000.30"); // 10% = 1,000,000.03
+    const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000.03, termMonths: 12 });
+
+    expect(res.status).toBe(201);
+  });
+
   it("rejects a second loan whose combined principal with an existing active loan exceeds the threshold", async () => {
     const admin = await setupTenant();
-    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    await setModalSendiri(admin.user.tenantId, 10_000_000); // 10% = 1,000,000
     const member = await createMemberWithPokokSaving(admin.accessToken, { isPengawas: true });
     const config = await createLoanConfigAs(admin.accessToken);
 
@@ -281,9 +295,66 @@ describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8
     expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
   });
 
+  it("counts an opening-balance adjustment toward the cap", async () => {
+    const admin = await setupTenant();
+    await setModalSendiri(admin.user.tenantId, 4_000_000);
+    await db.modalSendiriAdjustment.create({
+      data: {
+        tenantId: admin.user.tenantId,
+        effectiveDate: new Date("2020-01-01T00:00:00Z"),
+        amount: 6_000_000,
+        reason: "Saldo awal sebelum SISKOP",
+        createdBy: "test"
+      }
+    }); // Modal Sendiri 10,000,000 -> cap 1,000,000
+    const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 12 });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("does not count modal penyertaan toward the cap", async () => {
+    const admin = await setupTenant();
+    await setModalSendiri(admin.user.tenantId, 1_000_000); // cap 100,000
+    await postEquity(admin.user.tenantId, "MODAL_PENYERTAAN", 50_000_000);
+    const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 100_001, termMonths: 12 });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
+  });
+
+  it("ignores the legacy manual modal disetor field", async () => {
+    const admin = await setupTenant();
+    await request(app())
+      .put("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ modalDisetor: 10_000_000 });
+    const member = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 12 });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
+  });
+
   it("allows a non-pengurus/pengawas member to borrow the same amount that would exceed the cap for a pengurus member", async () => {
     const admin = await setupTenant();
-    await setModalDisetor(admin.accessToken, 10_000_000); // 10% = 1,000,000
+    await setModalSendiri(admin.user.tenantId, 10_000_000); // 10% = 1,000,000
     const member = await createMemberWithPokokSaving(admin.accessToken);
     const config = await createLoanConfigAs(admin.accessToken);
 
@@ -293,6 +364,196 @@ describe("POST /api/loans — related-party concentration limit (Permenkop UKM 8
       .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_001, termMonths: 12 });
 
     expect(res.status).toBe(201);
+  });
+});
+
+describe("POST /api/loans — BMPP pihak tidak terkait (Permenkop UKM 8/2023 Pasal 45)", () => {
+  // A 15% concentration warning, not a block: the API asks for confirmation
+  // the same way it does for a second loan, and `acknowledgeBmpp` proceeds.
+  async function setup(modalSendiri: number) {
+    const admin = await setupTenant();
+    if (modalSendiri > 0) {
+      await postEquity(admin.user.tenantId, "SIMPANAN_WAJIB", modalSendiri, { entryDate: new Date("2020-01-01T00:00:00Z") });
+    }
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+    return { admin, member, config };
+  }
+
+  function borrow(accessToken: string, body: Record<string, unknown>) {
+    return request(app()).post("/api/loans").set("Authorization", `Bearer ${accessToken}`).send({ termMonths: 12, ...body });
+  }
+
+  it("asks for confirmation above 15% of Modal Sendiri, without creating the loan", async () => {
+    const { admin, member, config } = await setup(10_000_000); // 15% = 1,500,000
+
+    const res = await borrow(admin.accessToken, { memberId: member.id, loanConfigId: config.id, principalAmount: 1_500_001 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      bmppExceeded: true,
+      bmpp: {
+        basis: "KONSOLIDASI",
+        modalSendiri: "10000000",
+        limitPct: 15,
+        limit: "1500000",
+        existingPrincipal: "0",
+        requested: "1500001"
+      }
+    });
+    expect(await db.loan.count({ where: { tenantId: admin.user.tenantId } })).toBe(0);
+  });
+
+  it("creates the loan once the warning is acknowledged", async () => {
+    const { admin, member, config } = await setup(10_000_000);
+
+    const res = await borrow(admin.accessToken, {
+      memberId: member.id,
+      loanConfigId: config.id,
+      principalAmount: 1_500_001,
+      acknowledgeBmpp: true
+    });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("does not warn exactly at the 15% limit", async () => {
+    const { admin, member, config } = await setup(10_000_000);
+
+    const res = await borrow(admin.accessToken, { memberId: member.id, loanConfigId: config.id, principalAmount: 1_500_000 });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("counts the member's existing active loans toward the limit", async () => {
+    const { admin, member, config } = await setup(10_000_000);
+    await borrow(admin.accessToken, { memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000 });
+
+    const res = await borrow(admin.accessToken, {
+      memberId: member.id,
+      loanConfigId: config.id,
+      principalAmount: 600_000,
+      force: true
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.bmpp.existingPrincipal).toBe("1000000");
+  });
+
+  it("stays silent when there is no Modal Sendiri to judge against (tenant without a ledger)", async () => {
+    const { admin, member, config } = await setup(0);
+
+    const res = await borrow(admin.accessToken, { memberId: member.id, loanConfigId: config.id, principalAmount: 50_000_000 });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("keeps the related-party 10% cap a hard block, acknowledgement or not", async () => {
+    const admin = await setupTenant();
+    await postEquity(admin.user.tenantId, "SIMPANAN_WAJIB", 10_000_000, { entryDate: new Date("2020-01-01T00:00:00Z") });
+    const pengurus = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await borrow(admin.accessToken, {
+      memberId: pengurus.id,
+      loanConfigId: config.id,
+      principalAmount: 1_000_001,
+      acknowledgeBmpp: true
+    });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
+  });
+});
+
+describe("BMPP basis for a multi-unit (KSU) koperasi — the lending unit's own Modal Sendiri", () => {
+  async function ksu() {
+    const admin = await setupTenant();
+    const tenantId = admin.user.tenantId;
+    const ksp = await db.cooperativeUnit.findFirstOrThrow({ where: { tenantId, type: "KSP" } });
+    await db.cooperativeUnit.create({ data: { tenantId, type: "KONSUMEN", name: "Toko" } });
+    const early = new Date("2020-01-01T00:00:00Z");
+    await postEquity(tenantId, "SIMPANAN_POKOK", 10_000_000, { entryDate: early }); // unallocated
+    await postEquity(tenantId, "MODAL_TETAP", 2_000_000, { entryDate: early, unitId: ksp.id });
+    const config = await createLoanConfigAs(admin.accessToken);
+    return { admin, ksp, config };
+  }
+
+  it("caps a pengurus loan at 10% of the unit's Modal Sendiri, not the koperasi's", async () => {
+    const { admin, ksp, config } = await ksu();
+    const pengurus = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: pengurus.id, loanConfigId: config.id, principalAmount: 200_001, termMonths: 12, unitId: ksp.id });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("RELATED_PARTY_LIMIT_EXCEEDED");
+  });
+
+  it("reports the unit basis in the headroom endpoint", async () => {
+    const { admin, ksp } = await ksu();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+
+    const res = await request(app())
+      .get("/api/loans/bmpp-headroom")
+      .query({ memberId: member.id, unitId: ksp.id })
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      basis: "UNIT",
+      unitId: ksp.id,
+      modalSendiri: "2000000",
+      isRelatedParty: false,
+      limitPct: 15,
+      limit: "300000",
+      existingPrincipal: "0",
+      headroom: "300000"
+    });
+  });
+});
+
+describe("GET /api/loans/bmpp-headroom", () => {
+  it("returns a pengurus member's remaining room under the 10% cap, net of active loans", async () => {
+    const admin = await setupTenant();
+    await postEquity(admin.user.tenantId, "SIMPANAN_WAJIB", 10_000_000, { entryDate: new Date("2020-01-01T00:00:00Z") });
+    const pengurus = await createMemberWithPokokSaving(admin.accessToken, { isPengurus: true });
+    const config = await createLoanConfigAs(admin.accessToken);
+    await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: pengurus.id, loanConfigId: config.id, principalAmount: 400_000, termMonths: 12 });
+
+    const res = await request(app())
+      .get("/api/loans/bmpp-headroom")
+      .query({ memberId: pengurus.id })
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      basis: "KONSOLIDASI",
+      unitId: null,
+      isRelatedParty: true,
+      limitPct: 10,
+      limit: "1000000",
+      existingPrincipal: "400000",
+      headroom: "600000"
+    });
+  });
+
+  it("never reveals another tenant's member", async () => {
+    const tenantA = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
+    const tenantB = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
+    const memberB = await createMemberWithPokokSaving(tenantB.accessToken);
+
+    const res = await request(app())
+      .get("/api/loans/bmpp-headroom")
+      .query({ memberId: memberB.id })
+      .set("Authorization", `Bearer ${tenantA.accessToken}`);
+
+    expect(res.status).toBe(404);
   });
 });
 
@@ -413,6 +674,78 @@ describe("POST /api/loans/:id/pay", () => {
     expect(Number(res.body.data.newRemaining)).toBe(0);
   });
 
+  it("keeps remainingAmount exact to the cent across payments that don't divide evenly", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken, { rate: 0 });
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: "100000", termMonths: 3 });
+    const loanId = created.body.data.id as string;
+
+    let res = await request(app()).get(`/api/loans/${loanId}`).set("Authorization", `Bearer ${admin.accessToken}`);
+    for (let i = 0; i < 3; i++) {
+      res = await request(app())
+        .post(`/api/loans/${loanId}/pay`)
+        .set("Authorization", `Bearer ${admin.accessToken}`)
+        .send({ amount: "33333.33", paidAt: "2026-01-25", dueDate: "2026-01-25" });
+      expect(res.status).toBe(200);
+    }
+
+    // 100000 − 3 × 33333.33 = 0.01 exactly; float subtraction drifts to 0.0100000000…
+    expect(res.body.data.newRemaining).toBe("0.01");
+    expect(res.body.data.status).toBe("ACTIVE");
+    const loan = await db.loan.findFirstOrThrow({ where: { id: loanId, tenantId: created.body.data.tenantId } });
+    expect(loan.remainingAmount.toString()).toBe("0.01");
+  });
+
+  it("rejects a payment amount with more than 2 decimal places", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 6 });
+
+    const res = await request(app())
+      .post(`/api/loans/${created.body.data.id}/pay`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: "1000.005", paidAt: "2026-01-25", dueDate: "2026-01-25" });
+
+    expect(res.status).toBe(422);
+  });
+
+  it("splits principal and interest to the cent so the journal entry balances exactly", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+    // "Buat COA Standar" wires the loan config's PAYMENT_* mappings so the payment actually journals.
+    await request(app())
+      .post("/api/config/accounts/generate-standard")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 6 });
+
+    const res = await request(app())
+      .post(`/api/loans/${created.body.data.id}/pay`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: "33333.33", paidAt: "2026-01-25", dueDate: "2026-01-25" });
+    expect(res.status).toBe(200);
+
+    const tenantId = created.body.data.tenantId as string;
+    const payment = await db.loanPayment.findFirstOrThrow({ where: { tenantId, loanId: created.body.data.id } });
+    const entry = await db.journalEntry.findFirstOrThrow({
+      where: { tenantId, sourceType: "LOAN_PAYMENT", sourceId: payment.id },
+      include: { lines: true }
+    });
+    const credits = entry.lines.reduce((s, l) => s.plus(l.credit), new Prisma.Decimal(0));
+    expect(credits.toString()).toBe("33333.33");
+  });
+
   it("rejects a payment on an already-completed loan", async () => {
     const admin = await setupTenant();
     const member = await createMemberWithPokokSaving(admin.accessToken);
@@ -468,5 +801,70 @@ describe("GET /api/loans/overdue", () => {
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].kolCategory).toBe("MACET");
     expect(res.body.data[0].lastPaymentAt).toBeNull();
+  });
+});
+
+describe("Loans audit trail", () => {
+  it("audits loan disbursement", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 3_000_000, termMonths: 12 });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "loan.create", entityId: created.body.data.id }
+    });
+    expect(log.actorUserId).toBe(admin.user.id);
+    expect(log.after).toMatchObject({ memberId: member.id, principalAmount: "3000000" });
+  });
+
+  it("audits a loan payment with before/after remaining balance", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 6 });
+    const totalAmount = created.body.data.totalAmount as string;
+
+    await request(app())
+      .post(`/api/loans/${created.body.data.id}/pay`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: 100_000, paidAt: "2026-01-25", dueDate: "2026-01-25" });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "loan.payment", entityId: created.body.data.id }
+    });
+    expect(log.before).toMatchObject({ remainingAmount: totalAmount, status: "ACTIVE" });
+    expect(log.after).toMatchObject({ amount: "100000" });
+  });
+
+  it("writes no audit row when a payment is rejected for a non-active loan", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+    const created = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ memberId: member.id, loanConfigId: config.id, principalAmount: 1_000_000, termMonths: 6 });
+    // Pay it off fully so its status flips to COMPLETED.
+    await request(app())
+      .post(`/api/loans/${created.body.data.id}/pay`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: created.body.data.totalAmount, paidAt: "2026-01-25", dueDate: "2026-01-25" });
+
+    const res = await request(app())
+      .post(`/api/loans/${created.body.data.id}/pay`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ amount: 10_000, paidAt: "2026-02-25", dueDate: "2026-02-25" });
+    expect(res.status).toBe(422);
+
+    const count = await db.auditLog.count({ where: { tenantId: admin.user.tenantId, action: "loan.payment" } });
+    expect(count).toBe(1); // only the successful first payment
   });
 });

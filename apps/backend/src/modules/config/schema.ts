@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CooperativeType } from "@siskop/types";
+import { CooperativeType, EQUITY_CLASSES } from "@siskop/types";
 
 // ── Units ────────────────────────────────────────────────────────────────────
 
@@ -35,7 +35,17 @@ const permissionsSchema = z.object({
   roles: modulePermissionsSchema,
   accounting: modulePermissionsSchema.optional(),
   // Phase 2 (KSU Konsumen/Toko) — optional like `accounting`, additive.
-  konsumen: modulePermissionsSchema.optional()
+  konsumen: modulePermissionsSchema.optional(),
+  // Beban Umum (general expense entry) — optional like `accounting`/`konsumen`,
+  // additive. Without this, RolesTab.tsx's "Beban Umum" toggle would silently
+  // fail to persist: this schema validates POST/PUT /api/config/roles bodies.
+  expenses: modulePermissionsSchema.optional(),
+  // Every module the Permissions type knows must be listed here: zod drops unknown keys, and a
+  // role save replaces the whole permissions blob, so a missing key is silently wiped on the next
+  // save (enabling Toko used to remove Pasar). RolesTab.tsx offers all of these toggles.
+  auditLog: modulePermissionsSchema.optional(),
+  market: modulePermissionsSchema.optional(),
+  collections: modulePermissionsSchema.optional()
 });
 
 export const createRoleSchema = z.object({
@@ -50,16 +60,26 @@ export const updateRoleSchema = z.object({
 
 // ── Accounts (Chart of Accounts) ───────────────────────────────────────────────
 
-export const createAccountSchema = z.object({
-  code: z.string().min(1, "Kode akun wajib diisi"),
-  name: z.string().min(2, "Nama akun minimal 2 karakter"),
-  category: z.enum(["ASET", "KEWAJIBAN", "EKUITAS", "PENDAPATAN", "BEBAN"]),
-  normalBalance: z.enum(["DEBIT", "KREDIT"]),
-  parentId: z.string().cuid("Parent ID tidak valid").optional(),
-  isHeader: z.boolean().default(false),
-  isCashEquivalent: z.boolean().default(false)
-});
+const EQUITY_CLASS_ONLY_ON_EKUITAS = "Klasifikasi ekuitas hanya untuk akun kategori EKUITAS";
 
+export const createAccountSchema = z
+  .object({
+    code: z.string().min(1, "Kode akun wajib diisi"),
+    name: z.string().min(2, "Nama akun minimal 2 karakter"),
+    category: z.enum(["ASET", "KEWAJIBAN", "EKUITAS", "PENDAPATAN", "BEBAN"]),
+    normalBalance: z.enum(["DEBIT", "KREDIT"]),
+    parentId: z.string().cuid("Parent ID tidak valid").optional(),
+    isHeader: z.boolean().default(false),
+    isCashEquivalent: z.boolean().default(false),
+    equityClass: z.enum(EQUITY_CLASSES).optional()
+  })
+  .refine((data) => data.equityClass === undefined || data.category === "EKUITAS", {
+    message: EQUITY_CLASS_ONLY_ON_EKUITAS,
+    path: ["equityClass"]
+  });
+
+// Whether a non-null equityClass fits the account's (possibly unchanged)
+// category is checked in updateAccount — this schema doesn't know the stored one.
 export const updateAccountSchema = z.object({
   code: z.string().min(1).optional(),
   name: z.string().min(2).optional(),
@@ -68,7 +88,8 @@ export const updateAccountSchema = z.object({
   parentId: z.string().cuid().nullable().optional(),
   isHeader: z.boolean().optional(),
   isCashEquivalent: z.boolean().optional(),
-  isActive: z.boolean().optional()
+  isActive: z.boolean().optional(),
+  equityClass: z.enum(EQUITY_CLASSES).nullable().optional()
 });
 
 // ── Account Mappings ─────────────────────────────────────────────────────────
@@ -133,8 +154,21 @@ export const upsertWhitelabelConfigSchema = z.object({
 
 // ── Modal Disetor ────────────────────────────────────────────────────────────
 
+// Money stays a decimal string end to end (never a float). The pattern also
+// mirrors the Decimal(15,2) column: ≤13 integer digits, ≤2 decimal places, so
+// an out-of-range value is a 422 here rather than a Postgres overflow 500.
+const MODAL_DISETOR_PATTERN = /^\d{1,13}(\.\d{1,2})?$/;
+
 export const updateModalDisetorSchema = z.object({
-  modalDisetor: z.coerce.number().nonnegative("Modal disetor tidak boleh negatif").nullable()
+  modalDisetor: z
+    .union([z.string().trim(), z.number().finite()])
+    .transform((v) => String(v))
+    .refine((v) => !v.startsWith("-"), "Modal disetor tidak boleh negatif")
+    .refine(
+      (v) => MODAL_DISETOR_PATTERN.test(v),
+      "Modal disetor harus berupa angka non-negatif (maks. 13 digit, 2 desimal)"
+    )
+    .nullable()
 });
 
 // ── Self Registration ───────────────────────────────────────────────────────
@@ -143,6 +177,38 @@ export const updateSelfRegistrationSchema = z.object({
   selfRegistrationEnabled: z.boolean()
 });
 
+// ── Operating calendar (hari libur & hari tutup) ─────────────────────────────
+
+const holidayDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD")
+  // Reject dates that Date would silently roll over (2026-02-30 → March 2).
+  .refine((v) => new Date(`${v}T00:00:00.000Z`).toISOString().startsWith(v), "Tanggal tidak valid");
+
+export const createHolidaySchema = z.object({
+  date: holidayDate,
+  name: z.string().trim().min(1, "Nama hari libur wajib diisi").max(100)
+});
+
+export const importHolidaysSchema = z.object({
+  holidays: z.array(createHolidaySchema).min(1).max(100)
+});
+
+export const listHolidaysQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100).optional()
+});
+
+export const updateOperatingDaysSchema = z.object({
+  closedWeekdays: z
+    .array(z.number().int().min(0).max(6))
+    .transform((days) => [...new Set(days)].sort((a, b) => a - b))
+    .refine((days) => days.length < 7, "Minimal satu hari dalam seminggu harus buka")
+});
+
+export type CreateHolidayInput = z.infer<typeof createHolidaySchema>;
+export type ImportHolidaysInput = z.infer<typeof importHolidaysSchema>;
+export type ListHolidaysQuery = z.infer<typeof listHolidaysQuerySchema>;
+export type UpdateOperatingDaysInput = z.infer<typeof updateOperatingDaysSchema>;
 export type CreateUnitInput = z.infer<typeof createUnitSchema>;
 export type UpdateUnitInput = z.infer<typeof updateUnitSchema>;
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;

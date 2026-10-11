@@ -122,6 +122,9 @@ async function main() {
     name: "Modal Kerja",
     category: "EKUITAS",
     normalBalance: "KREDIT",
+    // Working capital the koperasi placed in its units — Modal Tetap in
+    // Permenkop UKM 8/2023 terms, so it counts toward Modal Sendiri.
+    equityClass: "MODAL_TETAP",
     isHeader: false,
     isCashEquivalent: false
   });
@@ -130,6 +133,7 @@ async function main() {
     name: "Simpanan Pokok",
     category: "EKUITAS",
     normalBalance: "KREDIT",
+    equityClass: "SIMPANAN_POKOK",
     isHeader: false,
     isCashEquivalent: false
   });

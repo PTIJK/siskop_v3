@@ -1,8 +1,13 @@
 import { db } from "../../lib/db.js";
 import { notFound } from "../../lib/errors.js";
-import { getSavingById, listSavingTransactions, listSavings } from "../savings/service.js";
+import type { SavingStatement } from "@siskop/types";
+import { getSavingById, getSavingStatement, listSavingTransactions, listSavings } from "../savings/service.js";
 import { getLoanById, listLoans } from "../loans/service.js";
-import type { ListSavingTransactionsQueryInput, ListSavingsQueryInput } from "../savings/schema.js";
+import type {
+  ListSavingTransactionsQueryInput,
+  ListSavingsQueryInput,
+  SavingStatementQueryInput
+} from "../savings/schema.js";
 import type { ListLoansQueryInput } from "../loans/schema.js";
 
 /**
@@ -66,4 +71,16 @@ export function listMyLoans(tenantId: string, memberId: string, query: ListLoans
 export async function getMyLoan(tenantId: string, memberId: string, id: string) {
   const loan = await getLoanById(tenantId, id);
   return assertOwnsMember(loan, memberId, "Pinjaman tidak ditemukan");
+}
+
+/** Staff names are internal — a member's own statement shows only amounts. */
+export async function getMySavingStatement(
+  tenantId: string,
+  memberId: string,
+  savingId: string,
+  query: SavingStatementQueryInput
+): Promise<SavingStatement> {
+  await getMySaving(tenantId, memberId, savingId);
+  const statement = await getSavingStatement(tenantId, savingId, query);
+  return { ...statement, rows: statement.rows.map((r) => ({ ...r, createdByName: null })) };
 }

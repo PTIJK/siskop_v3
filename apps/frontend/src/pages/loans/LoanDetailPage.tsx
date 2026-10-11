@@ -28,6 +28,9 @@ interface LoanDetail {
   monthlyPayment: string;
   remainingAmount: string;
   termMonths: number;
+  installmentFrequency: "DAILY" | "WEEKLY" | "MONTHLY";
+  rate?: string | null;
+  rateNote?: string | null;
   status: string;
   kolCategory: string;
   daysOverdue: number;
@@ -40,7 +43,29 @@ interface LoanDetail {
     paidAt: string;
     createdByUser?: { name: string };
   }[];
+  installments: {
+    id: string;
+    seq: number;
+    dueDate: string;
+    principalDue: string;
+    interestDue: string;
+    principalPaid: string;
+    interestPaid: string;
+    status: "UNPAID" | "PARTIAL" | "PAID";
+  }[];
 }
+
+const FREQUENCY_LABEL: Record<LoanDetail["installmentFrequency"], string> = {
+  DAILY: "Harian",
+  WEEKLY: "Mingguan",
+  MONTHLY: "Bulanan"
+};
+
+const INSTALLMENT_STATUS_VARIANT: Record<LoanDetail["installments"][number]["status"], "default" | "secondary" | "outline"> = {
+  PAID: "default",
+  PARTIAL: "secondary",
+  UNPAID: "outline"
+};
 
 export function LoanDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -60,25 +85,30 @@ export function LoanDetailPage() {
   });
 
   useEffect(() => {
-    if (loan?.monthlyPayment) setPayAmount(loan.monthlyPayment);
-  }, [loan?.monthlyPayment]);
+    if (!loan) return;
+    // Default to the oldest unpaid/partial installment's remaining amount when a
+    // schedule exists; monthlyPayment is the only thing a pre-F2, unbackfilled loan has.
+    const nextInstallment = loan.installments.find((i) => i.status !== "PAID");
+    if (nextInstallment) {
+      const remaining =
+        Number(nextInstallment.principalDue) +
+        Number(nextInstallment.interestDue) -
+        Number(nextInstallment.principalPaid) -
+        Number(nextInstallment.interestPaid);
+      setPayAmount(remaining.toFixed(2));
+    } else if (loan.monthlyPayment) {
+      setPayAmount(loan.monthlyPayment);
+    }
+  }, [loan]);
 
   const handlePayment = async () => {
     if (!loan) return;
     setIsSubmitting(true);
     try {
-      // No per-installment schedule exists; the backend infers overdue status by
-      // matching payments to expected due months (disbursedAt + N months, see
-      // lib/kol.ts), so the next unpaid installment's due month must be sent here.
-      const disbursed = new Date(loan.disbursedAt ?? payDate ?? new Date().toISOString());
-      disbursed.setMonth(disbursed.getMonth() + loan.payments.length + 1);
-      const dueDate = disbursed.toISOString().split("T")[0];
-
       await apiPost(`/loans/${id}/pay`, {
         amount: parseFloat(payAmount),
         penalty: parseFloat(penalty) || 0,
         paidAt: payDate,
-        dueDate,
         note: payNote || undefined
       });
       toast({ title: "Pembayaran berhasil dicatat" });
@@ -113,9 +143,15 @@ export function LoanDetailPage() {
               <div className="mt-2 flex flex-wrap gap-2">
                 <Badge>{loan.loanConfig.name}</Badge>
                 <Badge variant="outline">{loan.status}</Badge>
+                <Badge variant="outline">{FREQUENCY_LABEL[loan.installmentFrequency]}</Badge>
                 <KOLBadge category={loan.kolCategory} />
               </div>
               {loan.disbursedAt && <p className="mt-2 text-xs text-muted-foreground">Cair: {formatTanggalPendek(loan.disbursedAt)}</p>}
+              {loan.rateNote && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Rate diubah menjadi {loan.rate}%: {loan.rateNote}
+                </p>
+              )}
             </div>
             <div className="space-y-3">
               <dl className="grid grid-cols-3 gap-2 text-sm">
@@ -152,6 +188,44 @@ export function LoanDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {loan.installments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Jadwal Cicilan</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Jatuh Tempo</TableHead>
+                  <TableHead className="text-right">Nominal</TableHead>
+                  <TableHead className="text-right">Terbayar</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loan.installments.map((inst) => (
+                  <TableRow key={inst.id}>
+                    <TableCell>{inst.seq}</TableCell>
+                    <TableCell>{formatTanggalPendek(inst.dueDate)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatRupiah(Number(inst.principalDue) + Number(inst.interestDue))}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatRupiah(Number(inst.principalPaid) + Number(inst.interestPaid))}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={INSTALLMENT_STATUS_VARIANT[inst.status]}>{inst.status}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

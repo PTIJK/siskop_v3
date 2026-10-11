@@ -58,14 +58,14 @@ async function createAccountMapping(
 
 /** Wires up tenant-wide SYSTEM/SALE_REVENUE (Kas/Penjualan) + SYSTEM/SALE_COGS (HPP/Persediaan) mappings. */
 async function setupSaleMappings(accessToken: string) {
-  const kas = await createAccount(accessToken, { code: "1-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT" });
+  const kas = await createAccount(accessToken, { code: "9-1000", name: "Kas", category: "ASET", normalBalance: "DEBIT" });
   const penjualan = await createAccount(accessToken, {
-    code: "4-1000",
+    code: "9-4000",
     name: "Penjualan",
     category: "PENDAPATAN",
     normalBalance: "KREDIT"
   });
-  const hpp = await createAccount(accessToken, { code: "5-1000", name: "HPP", category: "BEBAN", normalBalance: "DEBIT" });
+  const hpp = await createAccount(accessToken, { code: "9-5000", name: "HPP", category: "BEBAN", normalBalance: "DEBIT" });
   const persediaan = await createAccount(accessToken, {
     code: "1-1300",
     name: "Persediaan Barang Dagang",
@@ -338,7 +338,7 @@ async function setupReceivableMapping(accessToken: string) {
     normalBalance: "DEBIT"
   });
   const penjualan = await createAccount(accessToken, {
-    code: "4-1000",
+    code: "9-4000",
     name: "Penjualan",
     category: "PENDAPATAN",
     normalBalance: "KREDIT"
@@ -359,7 +359,7 @@ async function setupReceivableMapping(accessToken: string) {
  * revenue lines to be POSTED needs the COGS side mapped too.
  */
 async function setupCogsMapping(accessToken: string) {
-  const hpp = await createAccount(accessToken, { code: "5-1000", name: "HPP", category: "BEBAN", normalBalance: "DEBIT" });
+  const hpp = await createAccount(accessToken, { code: "9-5000", name: "HPP", category: "BEBAN", normalBalance: "DEBIT" });
   const persediaan = await createAccount(accessToken, {
     code: "1-1300",
     name: "Persediaan Barang Dagang",

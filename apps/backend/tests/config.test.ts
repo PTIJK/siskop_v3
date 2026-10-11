@@ -79,6 +79,41 @@ describe("GET/POST/PUT /api/config/units", () => {
     expect(res.status).toBe(200);
   });
 
+  it("audits a unit deactivation with before/after isActive", async () => {
+    const admin = await setupTenant();
+    const unit = await db.cooperativeUnit.findFirstOrThrow({ where: { tenantId: admin.user.tenantId } });
+    await request(app())
+      .post("/api/config/units")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ type: "KONSUMEN", name: "Unit Konsumen" });
+
+    await request(app())
+      .put(`/api/config/units/${unit.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ isActive: false });
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "unit.update", entityId: unit.id }
+    });
+    expect(log.actorUserId).toBe(admin.user.id);
+    expect(log.before).toMatchObject({ isActive: true });
+    expect(log.after).toMatchObject({ isActive: false });
+  });
+
+  it("writes no audit row when a unit update fails validation (rolled back atomically)", async () => {
+    const admin = await setupTenant();
+    const unit = await db.cooperativeUnit.findFirstOrThrow({ where: { tenantId: admin.user.tenantId } });
+
+    const res = await request(app())
+      .put(`/api/config/units/${unit.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ isActive: false });
+    expect(res.status).toBe(409);
+
+    const count = await db.auditLog.count({ where: { tenantId: admin.user.tenantId, action: "unit.update" } });
+    expect(count).toBe(0);
+  });
+
   it("rejects a viewer — config.update is not granted to that role", async () => {
     const admin = await setupTenant();
     const viewer = await createStaffSession(admin.user.tenantId, "demo", "Viewer", "viewer@demo.test");
@@ -124,10 +159,10 @@ const CUSTOM_ROLE = {
 };
 
 describe("GET/POST/PUT/DELETE /api/config/roles", () => {
-  it("lists the 5 seed roles and creates a new one", async () => {
+  it("lists the 6 seed roles and creates a new one", async () => {
     const admin = await setupTenant();
     const list = await request(app()).get("/api/config/roles").set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(5);
+    expect(list.body.data).toHaveLength(6);
 
     const created = await request(app())
       .post("/api/config/roles")
@@ -151,6 +186,68 @@ describe("GET/POST/PUT/DELETE /api/config/roles", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.permissions.loans.read).toBe(true);
+  });
+
+  it("keeps every permission module when a role is saved: Pasar, Setoran Kolektor and Jejak Audit survive turning Toko on", async () => {
+    // Regression: the roles schema did not know market/collections/auditLog, so saving the role
+    // (e.g. to enable Toko) silently stripped them and the Pasar menu vanished; enabling Pasar
+    // from the UI never persisted at all.
+    const admin = await setupTenant();
+    const full = { create: true, read: true, update: true, delete: true };
+    const created = await request(app())
+      .post("/api/config/roles")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ ...CUSTOM_ROLE, permissions: { ...CUSTOM_ROLE.permissions, market: full, collections: full, auditLog: { read: true } } });
+    expect(created.status).toBe(201);
+    expect(created.body.data.permissions.market).toEqual(full);
+
+    const res = await request(app())
+      .put(`/api/config/roles/${created.body.data.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({
+        permissions: { ...CUSTOM_ROLE.permissions, market: full, collections: full, auditLog: { read: true }, konsumen: full }
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.permissions).toMatchObject({ konsumen: full, market: full, collections: full, auditLog: { read: true } });
+  });
+
+  it("audits role creation and updates with before/after permissions", async () => {
+    const admin = await setupTenant();
+    const created = await request(app())
+      .post("/api/config/roles")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send(CUSTOM_ROLE);
+
+    const createLog = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "role.create", entityId: created.body.data.id }
+    });
+    expect(createLog.actorUserId).toBe(admin.user.id);
+    expect(createLog.after).toMatchObject({ name: "Frontliner" });
+
+    await request(app())
+      .put(`/api/config/roles/${created.body.data.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ permissions: { ...CUSTOM_ROLE.permissions, loans: { read: true } } });
+
+    const updateLog = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "role.update", entityId: created.body.data.id }
+    });
+    expect((updateLog.before as { permissions: { loans: unknown } }).permissions.loans).toEqual({});
+    expect((updateLog.after as { permissions: { loans: unknown } }).permissions.loans).toEqual({ read: true });
+  });
+
+  it("writes no audit row when a role update 404s (rolled back atomically)", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .put("/api/config/roles/does-not-exist")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ name: "Ghost" });
+    expect(res.status).toBe(404);
+
+    const count = await db.auditLog.count({ where: { tenantId: admin.user.tenantId, action: "role.update" } });
+    expect(count).toBe(0);
   });
 
   it("rejects deleting a role that still has a user assigned", async () => {
@@ -177,6 +274,25 @@ describe("GET/POST/PUT/DELETE /api/config/roles", () => {
       .set("Authorization", `Bearer ${admin.accessToken}`);
 
     expect(res.status).toBe(200);
+
+    const log = await db.auditLog.findFirstOrThrow({
+      where: { tenantId: admin.user.tenantId, action: "role.delete", entityId: created.body.data.id }
+    });
+    expect(log.before).toMatchObject({ name: "Frontliner" });
+  });
+
+  it("writes no audit row when a role deletion is blocked by an assigned user", async () => {
+    const admin = await setupTenant();
+    const tellerRole = await db.role.findFirstOrThrow({ where: { tenantId: admin.user.tenantId, name: "Teller" } });
+    await createStaffSession(admin.user.tenantId, "demo", "Teller", "teller@demo.test");
+
+    const res = await request(app())
+      .delete(`/api/config/roles/${tellerRole.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(res.status).toBe(409);
+
+    const count = await db.auditLog.count({ where: { tenantId: admin.user.tenantId, action: "role.delete" } });
+    expect(count).toBe(0);
   });
 
   it("lets a Manager list roles but not create one — Manager only has roles.read", async () => {
@@ -315,23 +431,24 @@ const KUR_MIKRO = {
 };
 
 describe("POST /api/config/accounts/generate-standard", () => {
-  it("creates the full standard COA template for a fresh tenant with no configs", async () => {
+  it("a fresh tenant already has the standard COA from provisioning, and the button is then a no-op", async () => {
     const admin = await setupTenant();
+
+    const accounts = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(accounts.body.data.length).toBeGreaterThan(0);
+    expect(accounts.body.data.some((a: { code: string }) => a.code === "1-1000")).toBe(true);
+    const provisionedCount = accounts.body.data.length;
 
     const res = await request(app())
       .post("/api/config/accounts/generate-standard")
       .set("Authorization", `Bearer ${admin.accessToken}`);
 
-    expect(res.status).toBe(201);
-    expect(res.body.data.accountsCreated).toBeGreaterThan(0);
-    expect(res.body.data.accountsSkipped).toBe(0);
+    expect(res.status).toBe(200);
+    expect(res.body.data.accountsCreated).toBe(0);
+    expect(res.body.data.accountsSkipped).toBe(provisionedCount);
     expect(res.body.data.mappingsCreated).toBe(0);
-
-    const accounts = await request(app())
-      .get("/api/config/accounts")
-      .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(accounts.body.data.length).toBe(res.body.data.accountsCreated);
-    expect(accounts.body.data.some((a: { code: string }) => a.code === "1-1000")).toBe(true);
   });
 
   it("is idempotent — calling it again creates nothing new", async () => {
@@ -344,9 +461,11 @@ describe("POST /api/config/accounts/generate-standard", () => {
       .post("/api/config/accounts/generate-standard")
       .set("Authorization", `Bearer ${admin.accessToken}`);
 
+    expect(first.status).toBe(200);
     expect(second.status).toBe(200);
+    expect(first.body.data.accountsCreated).toBe(0);
     expect(second.body.data.accountsCreated).toBe(0);
-    expect(second.body.data.accountsSkipped).toBe(first.body.data.accountsCreated);
+    expect(second.body.data.accountsSkipped).toBe(first.body.data.accountsSkipped);
     expect(second.body.data.mappingsCreated).toBe(0);
   });
 
@@ -367,29 +486,48 @@ describe("POST /api/config/accounts/generate-standard", () => {
 
     expect(res.status).toBe(201);
     // 2 mappings per saving config (deposit/withdrawal) + 4 per loan config
-    // (disbursement/principal/interest/penalty).
+    // (disbursement/principal/interest/penalty) — not +1 for SYSTEM/
+    // COLLECTOR_CASH (koperasi pasar F4): that one is already created at
+    // provisioning, so this call just skips it.
     expect(res.body.data.mappingsCreated).toBe(2 + 4);
 
     const mappings = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(mappings.body.data).toHaveLength(6);
+    // 7 total: the 6 just created, +1 COLLECTOR_CASH from provisioning.
+    expect(mappings.body.data).toHaveLength(7);
     const kinds = mappings.body.data.map((m: { transactionKind: string }) => m.transactionKind).sort();
     expect(kinds).toEqual(
-      ["DEPOSIT", "DISBURSEMENT", "PAYMENT_INTEREST", "PAYMENT_PENALTY", "PAYMENT_PRINCIPAL", "WITHDRAWAL"].sort()
+      [
+        "DEPOSIT",
+        "DISBURSEMENT",
+        "PAYMENT_INTEREST",
+        "PAYMENT_PENALTY",
+        "PAYMENT_PRINCIPAL",
+        "WITHDRAWAL",
+        "COLLECTOR_CASH"
+      ].sort()
     );
   });
 
-  it("skips an account that was already created manually, without conflicting", async () => {
+  it("skips an account that was already customized, without conflicting", async () => {
     const admin = await setupTenant();
-    await createAccountAs(admin.accessToken, { code: "1-1000", name: "Kas Lama" });
+    const before = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    const kas = before.body.data.find((a: { code: string }) => a.code === "1-1000");
+
+    await request(app())
+      .put(`/api/config/accounts/${kas.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ name: "Kas Lama" });
 
     const res = await request(app())
       .post("/api/config/accounts/generate-standard")
       .set("Authorization", `Bearer ${admin.accessToken}`);
 
-    expect(res.status).toBe(201);
-    expect(res.body.data.accountsSkipped).toBe(1);
+    expect(res.status).toBe(200);
+    expect(res.body.data.accountsCreated).toBe(0);
 
     const accounts = await request(app())
       .get("/api/config/accounts")
@@ -425,14 +563,21 @@ describe("POST /api/config/accounts/generate-standard", () => {
     const tenantA = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
     const tenantB = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
 
+    const before = await request(app())
+      .get("/api/config/accounts")
+      .set("Authorization", `Bearer ${tenantB.accessToken}`);
+
     await request(app())
       .post("/api/config/accounts/generate-standard")
       .set("Authorization", `Bearer ${tenantA.accessToken}`);
 
-    const accountsB = await request(app())
+    const after = await request(app())
       .get("/api/config/accounts")
       .set("Authorization", `Bearer ${tenantB.accessToken}`);
-    expect(accountsB.body.data).toHaveLength(0);
+    expect(after.body.data).toHaveLength(before.body.data.length);
+    expect(after.body.data.map((a: { code: string }) => a.code).sort()).toEqual(
+      before.body.data.map((a: { code: string }) => a.code).sort()
+    );
   });
 });
 
@@ -441,7 +586,16 @@ describe("POST /api/config/accounts/generate-standard", () => {
 // UNPOSTED_MISSING_MAPPING and never reaches Neraca/Laba Rugi for any tenant
 // that didn't get them from prisma/seed-ksu-demo.ts.
 
-const TOKO_MAPPING_KINDS = ["MEMBER_CREDIT_REPAYMENT", "SALE_COGS", "SALE_RECEIVABLE", "SALE_REVENUE", "STOCK_PURCHASE"];
+// COLLECTOR_CASH (koperasi pasar F4) is generated for every tenant, Toko or
+// not, alongside these five Toko-only SYSTEM mappings.
+const TOKO_MAPPING_KINDS = [
+  "COLLECTOR_CASH",
+  "MEMBER_CREDIT_REPAYMENT",
+  "SALE_COGS",
+  "SALE_RECEIVABLE",
+  "SALE_REVENUE",
+  "STOCK_PURCHASE"
+];
 
 async function createKonsumenUnit(accessToken: string) {
   await request(app())
@@ -477,6 +631,7 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     const res = await generateStandard(admin.accessToken);
 
     expect(res.status).toBe(201);
+    // 5, not 6: SYSTEM/COLLECTOR_CASH was already created at provisioning.
     expect(res.body.data.mappingsCreated).toBe(5);
     expect(await listAccountCodes(admin.accessToken)).toEqual(
       expect.arrayContaining(["1-1150", "1-1300", "4-3000", "5-4000"])
@@ -505,30 +660,35 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     });
   });
 
-  it("adds no Toko accounts or SYSTEM mappings for a tenant that only has a KSP unit", async () => {
+  it("adds no Toko accounts or SYSTEM mappings for a tenant that only has a KSP unit (COLLECTOR_CASH already exists from provisioning)", async () => {
     const admin = await setupTenant();
 
     const res = await generateStandard(admin.accessToken);
 
+    // 0, not 1: COLLECTOR_CASH (koperasi pasar F4) is generated regardless of
+    // unit type, but that now happens at provisioning — this call just skips it.
     expect(res.body.data.mappingsCreated).toBe(0);
+    expect(res.body.data.mappingsSkipped).toBeGreaterThanOrEqual(1);
     const codes = await listAccountCodes(admin.accessToken);
     for (const tokoCode of ["1-1150", "1-1300", "4-3000", "5-4000"]) {
       expect(codes).not.toContain(tokoCode);
     }
-    expect(await listSystemMappings(admin.accessToken)).toHaveLength(0);
+    const system = await listSystemMappings(admin.accessToken);
+    expect(system.map((m) => m.transactionKind)).toEqual(["COLLECTOR_CASH"]);
   });
 
   it("picks Toko up on a re-run once a KONSUMEN unit is added later", async () => {
     const admin = await setupTenant();
     const first = await generateStandard(admin.accessToken);
-    expect(first.body.data.mappingsCreated).toBe(0);
+    expect(first.body.data.mappingsCreated).toBe(0); // COLLECTOR_CASH already exists from provisioning, no Toko unit yet
 
     await createKonsumenUnit(admin.accessToken);
     const second = await generateStandard(admin.accessToken);
 
     expect(second.status).toBe(201);
-    expect(second.body.data.accountsCreated).toBe(4);
-    expect(second.body.data.mappingsCreated).toBe(5);
+    // The four Toko accounts, plus Modal Tetap USP now that the koperasi is multi-unit.
+    expect(second.body.data.accountsCreated).toBe(5);
+    expect(second.body.data.mappingsCreated).toBe(5); // the 5 Toko mappings — COLLECTOR_CASH already exists
   });
 
   it("is idempotent — a second run creates nothing", async () => {
@@ -541,22 +701,22 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
     expect(second.status).toBe(200);
     expect(second.body.data.accountsCreated).toBe(0);
     expect(second.body.data.mappingsCreated).toBe(0);
-    expect(second.body.data.mappingsSkipped).toBe(5);
+    expect(second.body.data.mappingsSkipped).toBe(6); // 5 Toko + COLLECTOR_CASH
   });
 
   it("does not create duplicate Toko accounts when the SYSTEM sale mappings were already set up by hand", async () => {
     const admin = await setupTenant();
     await createKonsumenUnit(admin.accessToken);
-    const kas = await createAccountAs(admin.accessToken, { code: "1-1000", name: "Kas" });
+    const kas = await createAccountAs(admin.accessToken, { code: "9-1000", name: "Kas" });
     const penjualan = await createAccountAs(admin.accessToken, {
-      code: "4-2000",
+      code: "9-4200",
       name: "Penjualan Toko",
       category: "PENDAPATAN",
       normalBalance: "KREDIT",
       isCashEquivalent: false
     });
     const hpp = await createAccountAs(admin.accessToken, {
-      code: "5-1000",
+      code: "9-5000",
       name: "HPP",
       category: "BEBAN",
       normalBalance: "DEBIT",
@@ -592,14 +752,191 @@ describe("POST /api/config/accounts/generate-standard — Toko (KONSUMEN unit)",
 
     const res = await generateStandard(admin.accessToken);
 
+    // 0, not 1: COLLECTOR_CASH (koperasi pasar F4) was never hand-made above,
+    // but it already exists from provisioning — this run just skips it,
+    // along with the 5 hand-made Toko mappings.
     expect(res.body.data.mappingsCreated).toBe(0);
-    expect(res.body.data.mappingsSkipped).toBeGreaterThanOrEqual(5);
+    expect(res.body.data.mappingsSkipped).toBeGreaterThanOrEqual(6);
     const codes = await listAccountCodes(admin.accessToken);
     expect(codes).not.toContain("4-3000");
     expect(codes).not.toContain("5-4000");
     // The hand-made mappings still point at the hand-made accounts.
     const system = await listSystemMappings(admin.accessToken);
     expect(system.find((m) => m.transactionKind === "SALE_REVENUE")?.creditAccountName).toBe("Penjualan Toko");
+  });
+});
+
+// ── Equity classification (Permenkop UKM 8/2023 Modal Sendiri) ────────────────
+// Every EKUITAS account carries an equityClass so Modal Sendiri, the Neraca
+// equity grouping and the Laporan Perubahan Ekuitas columns are derived from
+// the ledger instead of a hand-typed "modal disetor" figure.
+
+async function listAccounts(accessToken: string) {
+  const res = await request(app()).get("/api/config/accounts").set("Authorization", `Bearer ${accessToken}`);
+  return res.body.data as Array<{ id: string; code: string; name: string; equityClass: string | null }>;
+}
+
+describe("Account.equityClass", () => {
+  it("generates the split equity accounts, each with its equity class", async () => {
+    const admin = await setupTenant();
+    await generateStandard(admin.accessToken);
+
+    const byCode = new Map((await listAccounts(admin.accessToken)).map((a) => [a.code, a]));
+    expect(byCode.get("3-1000")?.equityClass).toBe("SIMPANAN_POKOK");
+    expect(byCode.get("3-1100")?.equityClass).toBe("SIMPANAN_WAJIB");
+    expect(byCode.get("3-2000")).toMatchObject({ name: "Cadangan Umum", equityClass: "CADANGAN_UMUM" });
+    expect(byCode.get("3-2100")?.equityClass).toBe("CADANGAN_RISIKO");
+    expect(byCode.get("3-3000")?.equityClass).toBe("SHU");
+    expect(byCode.get("3-3100")?.equityClass).toBe("SHU");
+    expect(byCode.get("3-4000")?.equityClass).toBe("HIBAH");
+    expect(byCode.get("3-5000")?.equityClass).toBe("MODAL_PENYERTAAN");
+    expect(byCode.get("3-9000")?.equityClass).toBe("EKUITAS_LAIN");
+  });
+
+  it("adds a Modal Tetap USP account only for a multi-unit (KSU) koperasi", async () => {
+    const single = await setupTenant({ slug: "tenant-a", registrationNo: "KOP-A" });
+    const ksu = await setupTenant({ slug: "tenant-b", registrationNo: "KOP-B" });
+    await createKonsumenUnit(ksu.accessToken);
+
+    await generateStandard(single.accessToken);
+    await generateStandard(ksu.accessToken);
+
+    expect((await listAccounts(single.accessToken)).some((a) => a.code === "3-6000")).toBe(false);
+    expect((await listAccounts(ksu.accessToken)).find((a) => a.code === "3-6000")).toMatchObject({
+      name: "Modal Tetap USP",
+      equityClass: "MODAL_TETAP"
+    });
+  });
+
+  it("leaves non-equity template accounts unclassified", async () => {
+    const admin = await setupTenant();
+    await generateStandard(admin.accessToken);
+
+    const kas = (await listAccounts(admin.accessToken)).find((a) => a.code === "1-1000");
+    expect(kas?.equityClass).toBeNull();
+  });
+
+  it("classifies an existing unclassified template equity account on re-generate", async () => {
+    const admin = await setupTenant();
+    // Provisioning already created 3-1000 with its equityClass set — null it
+    // out to recreate the pre-equityClass-column state this test exercises.
+    await db.account.updateMany({
+      where: { tenantId: admin.user.tenantId, code: "3-1000" },
+      data: { equityClass: null }
+    });
+
+    await generateStandard(admin.accessToken);
+
+    const pokok = (await listAccounts(admin.accessToken)).find((a) => a.code === "3-1000");
+    expect(pokok?.equityClass).toBe("SIMPANAN_POKOK");
+  });
+
+  it("leaves a template-coded account with a different name unclassified — the code alone can't say what it holds", async () => {
+    const admin = await setupTenant();
+    // Simulate a tenant that put something else entirely at the template's
+    // 3-1000 code — the classify-on-regenerate logic must match on name too.
+    await db.account.updateMany({
+      where: { tenantId: admin.user.tenantId, code: "3-1000" },
+      data: { name: "Modal Kerja", equityClass: null }
+    });
+
+    await generateStandard(admin.accessToken);
+
+    const account = (await listAccounts(admin.accessToken)).find((a) => a.code === "3-1000");
+    expect(account).toMatchObject({ name: "Modal Kerja", equityClass: null });
+  });
+
+  it("does not overwrite an equity class the tenant already chose", async () => {
+    const admin = await setupTenant();
+    // Provisioning created 3-2000 as "Cadangan Umum" / CADANGAN_UMUM — simulate
+    // the tenant having reclassified it before re-running the button.
+    await db.account.updateMany({
+      where: { tenantId: admin.user.tenantId, code: "3-2000" },
+      data: { name: "Cadangan / Modal Penyertaan", equityClass: "MODAL_PENYERTAAN" }
+    });
+
+    await generateStandard(admin.accessToken);
+
+    const account = (await listAccounts(admin.accessToken)).find((a) => a.code === "3-2000");
+    expect(account?.equityClass).toBe("MODAL_PENYERTAAN");
+  });
+
+  it("creates an EKUITAS account with an equity class", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .post("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ code: "3-4100", name: "Hibah Pemda", category: "EKUITAS", normalBalance: "KREDIT", equityClass: "HIBAH" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.equityClass).toBe("HIBAH");
+  });
+
+  it("rejects an equity class on a non-EKUITAS account", async () => {
+    const admin = await setupTenant();
+
+    const res = await request(app())
+      .post("/api/config/accounts")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ ...KAS, equityClass: "HIBAH" });
+
+    expect(res.status).toBe(422);
+  });
+
+  it("updates an account's equity class and can clear it", async () => {
+    const admin = await setupTenant();
+    const account = await createAccountAs(admin.accessToken, {
+      code: "9-3200",
+      name: "Cadangan",
+      category: "EKUITAS",
+      normalBalance: "KREDIT"
+    });
+
+    const set = await request(app())
+      .put(`/api/config/accounts/${account.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ equityClass: "CADANGAN_UMUM" });
+    expect(set.status).toBe(200);
+    expect(set.body.data.equityClass).toBe("CADANGAN_UMUM");
+
+    const cleared = await request(app())
+      .put(`/api/config/accounts/${account.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ equityClass: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data.equityClass).toBeNull();
+  });
+
+  it("rejects setting an equity class on an existing non-EKUITAS account", async () => {
+    const admin = await setupTenant();
+    const kas = await createAccountAs(admin.accessToken);
+
+    const res = await request(app())
+      .put(`/api/config/accounts/${kas.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ equityClass: "CADANGAN_UMUM" });
+
+    expect(res.status).toBe(422);
+  });
+
+  it("clears the equity class when an account moves out of EKUITAS", async () => {
+    const admin = await setupTenant();
+    const account = await createAccountAs(admin.accessToken, {
+      code: "9-3200",
+      name: "Cadangan",
+      category: "EKUITAS",
+      normalBalance: "KREDIT",
+      equityClass: "CADANGAN_UMUM"
+    });
+
+    const res = await request(app())
+      .put(`/api/config/accounts/${account.id}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ category: "KEWAJIBAN" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.equityClass).toBeNull();
   });
 });
 
@@ -629,10 +966,11 @@ describe("GET/POST/DELETE /api/config/account-mappings", () => {
     const list = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(1);
-    expect(list.body.data[0].sourceName).toBe("Simpanan Sukarela");
-    expect(list.body.data[0].debitAccountName).toBe("Kas");
-    expect(list.body.data[0].creditAccountName).toBe("Simpanan Sukarela");
+    // +1 for the tenant-wide SYSTEM/COLLECTOR_CASH mapping every tenant now
+    // gets automatically at provisioning (koperasi pasar F4).
+    expect(list.body.data).toHaveLength(2);
+    const own = list.body.data.find((m: { sourceName: string }) => m.sourceName === "Simpanan Sukarela");
+    expect(own).toMatchObject({ debitAccountName: "Kas", creditAccountName: "Simpanan Sukarela" });
   });
 
   it("updates the mapping in place when re-submitted for the same source+kind, instead of conflicting", async () => {
@@ -656,7 +994,8 @@ describe("GET/POST/DELETE /api/config/account-mappings", () => {
     const list = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(1);
+    // +1 for the tenant-wide SYSTEM/COLLECTOR_CASH mapping from provisioning — see above.
+    expect(list.body.data).toHaveLength(2);
   });
 
   it("deletes a mapping", async () => {
@@ -675,7 +1014,9 @@ describe("GET/POST/DELETE /api/config/account-mappings", () => {
     const list = await request(app())
       .get("/api/config/account-mappings")
       .set("Authorization", `Bearer ${admin.accessToken}`);
-    expect(list.body.data).toHaveLength(0);
+    // 1, not 0: the tenant-wide SYSTEM/COLLECTOR_CASH mapping from
+    // provisioning was never touched by this test, only the one it made.
+    expect(list.body.data).toHaveLength(1);
   });
 
   // The end-to-end proof this module closes the gap: before any mapping
@@ -901,5 +1242,75 @@ describe("GET/PUT /api/config/modal-disetor", () => {
       .set("Authorization", `Bearer ${admin.accessToken}`)
       .send({ modalDisetor: 1_000_000 });
     expect(res.status).toBe(200);
+  });
+
+  async function putModalDisetor(accessToken: string, modalDisetor: unknown) {
+    return request(app())
+      .put("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ modalDisetor });
+  }
+
+  it("stores a decimal string exactly, without float rounding", async () => {
+    const admin = await setupTenant();
+    const res = await putModalDisetor(admin.accessToken, "1234567890123.45");
+    expect(res.status).toBe(200);
+    expect(res.body.data.modalDisetor).toBe("1234567890123.45");
+  });
+
+  it("reports the Rp5 miliar audit threshold and whether the tenant has reached it", async () => {
+    const admin = await setupTenant();
+
+    const below = await putModalDisetor(admin.accessToken, "4999999999.99");
+    expect(below.body.data.auditThreshold).toBe("5000000000");
+    expect(below.body.data.auditRequired).toBe(false);
+
+    const atThreshold = await putModalDisetor(admin.accessToken, "5000000000");
+    expect(atThreshold.body.data.auditRequired).toBe(true);
+
+    const reread = await request(app())
+      .get("/api/config/modal-disetor")
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(reread.body.data.auditRequired).toBe(true);
+
+    const cleared = await putModalDisetor(admin.accessToken, null);
+    expect(cleared.body.data.auditRequired).toBe(false);
+  });
+
+  it("does not flag Rp5 juta as reaching the audit threshold", async () => {
+    const admin = await setupTenant();
+    const res = await putModalDisetor(admin.accessToken, 5_000_000);
+    expect(res.body.data.auditRequired).toBe(false);
+  });
+
+  it("rejects a value that does not fit Decimal(15,2) with 422, not a 500", async () => {
+    const admin = await setupTenant();
+    const res = await putModalDisetor(admin.accessToken, "99999999999999");
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects more than two decimal places", async () => {
+    const admin = await setupTenant();
+    const res = await putModalDisetor(admin.accessToken, "1000.123");
+    expect(res.status).toBe(422);
+  });
+
+  it("rejects a non-numeric string", async () => {
+    const admin = await setupTenant();
+    const res = await putModalDisetor(admin.accessToken, "abc");
+    expect(res.status).toBe(422);
+  });
+
+  it("clears the audit notification stamp when the value drops below the threshold", async () => {
+    const admin = await setupTenant();
+    await putModalDisetor(admin.accessToken, "6000000000");
+    await db.tenant.update({ where: { id: admin.user.tenantId }, data: { auditThresholdNotifiedAt: new Date() } });
+
+    const stillAbove = await putModalDisetor(admin.accessToken, "7000000000");
+    expect(stillAbove.body.data.auditThresholdNotifiedAt).not.toBeNull();
+
+    const below = await putModalDisetor(admin.accessToken, "1000000");
+    expect(below.body.data.auditThresholdNotifiedAt).toBeNull();
   });
 });

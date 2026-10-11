@@ -3,19 +3,24 @@ import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { requireParam } from "../../lib/http.js";
 import {
+  bmppHeadroomQuerySchema,
   createLoanConfigSchema,
   createLoanSchema,
   listLoansQuerySchema,
   loanPaymentSchema,
+  previewScheduleSchema,
   updateLoanConfigSchema
 } from "./schema.js";
 import {
   createLoan,
   createLoanConfig,
+  getBmppHeadroom,
   getLoanById,
+  getLoanSchedule,
   getOverdueLoans,
   listLoanConfigs,
   listLoans,
+  previewSchedule,
   recordLoanPayment,
   updateLoanConfig
 } from "./service.js";
@@ -60,6 +65,16 @@ export function loansRoutes(): Router {
     })
   );
 
+  router.post(
+    "/configs/preview-schedule",
+    requirePermission("loans", "create"),
+    handle(async (req, res) => {
+      const data = previewScheduleSchema.parse(req.body);
+      const result = await previewSchedule(authClaims(req).tenantId, data);
+      res.json({ success: true, data: result, meta: res.locals.meta });
+    })
+  );
+
   // /overdue MUST be registered before /:id to avoid the route conflict.
   router.get(
     "/overdue",
@@ -91,8 +106,19 @@ export function loansRoutes(): Router {
       const data = createLoanSchema.parse(req.body);
       const auth = authClaims(req);
       const result = await createLoan(auth.tenantId, data, auth.userId);
-      const status = "hasExistingLoan" in result && result.hasExistingLoan ? 200 : 201;
+      // 200 = the API asks for confirmation (second loan, or BMPP over 15%) and nothing was created.
+      const status = "hasExistingLoan" in result || "bmppExceeded" in result ? 200 : 201;
       res.status(status).json({ success: true, data: result, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/bmpp-headroom",
+    requirePermission("loans", "read"),
+    handle(async (req, res) => {
+      const query = bmppHeadroomQuerySchema.parse(req.query);
+      const data = await getBmppHeadroom(authClaims(req).tenantId, query);
+      res.json({ success: true, data, meta: res.locals.meta });
     })
   );
 
@@ -102,6 +128,15 @@ export function loansRoutes(): Router {
     handle(async (req, res) => {
       const loan = await getLoanById(authClaims(req).tenantId, requireParam(req, "id"));
       res.json({ success: true, data: loan, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/:id/schedule",
+    requirePermission("loans", "read"),
+    handle(async (req, res) => {
+      const schedule = await getLoanSchedule(authClaims(req).tenantId, requireParam(req, "id"));
+      res.json({ success: true, data: schedule, meta: res.locals.meta });
     })
   );
 

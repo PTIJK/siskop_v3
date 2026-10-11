@@ -24,6 +24,8 @@ export interface Member {
    */
   isPengurus: boolean;
   isPengawas: boolean;
+  /** Koperasi pasar plan F3 — a pasar trader's kind of goods, e.g. "Sayur". Null otherwise. */
+  commodity?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +40,7 @@ export interface CreateMemberRequest {
   occupation: string;
   isPengurus?: boolean;
   isPengawas?: boolean;
+  commodity?: string;
 }
 
 export type UpdateMemberRequest = Partial<CreateMemberRequest>;

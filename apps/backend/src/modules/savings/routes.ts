@@ -7,6 +7,7 @@ import {
   createSavingSchema,
   listSavingTransactionsQuerySchema,
   listSavingsQuerySchema,
+  savingStatementQuerySchema,
   savingTransactionSchema,
   updateSavingConfigSchema
 } from "./schema.js";
@@ -15,12 +16,15 @@ import {
   createSavingConfig,
   depositToSaving,
   getSavingById,
+  getSavingStatement,
   listSavingConfigs,
   listSavingTransactions,
   listSavings,
+  listSavingsByMember,
   updateSavingConfig,
   withdrawFromSaving
 } from "./service.js";
+import { sendStatementCsv, sendStatementPdf } from "./statement-response.js";
 
 /** Forwards rejected promises to the error handler; Express 4 will not. */
 function handle(fn: (req: Request, res: Response) => Promise<void>) {
@@ -78,6 +82,21 @@ export function savingsRoutes(): Router {
     })
   );
 
+  // Registered before "/:id" so "by-member" is never captured as a saving id.
+  router.get(
+    "/by-member",
+    requirePermission("savings", "read"),
+    handle(async (req, res) => {
+      const query = listSavingsQuerySchema.parse(req.query);
+      const result = await listSavingsByMember(authClaims(req).tenantId, query);
+      res.json({
+        success: true,
+        data: result.items,
+        meta: { ...res.locals.meta, ...result.meta }
+      });
+    })
+  );
+
   router.post(
     "/",
     requirePermission("savings", "create"),
@@ -113,6 +132,37 @@ export function savingsRoutes(): Router {
         data: result.items,
         meta: { ...res.locals.meta, ...result.meta }
       });
+    })
+  );
+
+  router.get(
+    "/:id/statement",
+    requirePermission("savings", "read"),
+    handle(async (req, res) => {
+      const query = savingStatementQuerySchema.parse(req.query);
+      const data = await getSavingStatement(authClaims(req).tenantId, requireParam(req, "id"), query);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/:id/statement/csv",
+    requirePermission("savings", "read"),
+    handle(async (req, res) => {
+      const query = savingStatementQuerySchema.parse(req.query);
+      const statement = await getSavingStatement(authClaims(req).tenantId, requireParam(req, "id"), query);
+      sendStatementCsv(res, statement);
+    })
+  );
+
+  router.get(
+    "/:id/statement/pdf",
+    requirePermission("savings", "read"),
+    handle(async (req, res) => {
+      const tenantId = authClaims(req).tenantId;
+      const query = savingStatementQuerySchema.parse(req.query);
+      const statement = await getSavingStatement(tenantId, requireParam(req, "id"), query);
+      await sendStatementPdf(res, tenantId, statement);
     })
   );
 

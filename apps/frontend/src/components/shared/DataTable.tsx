@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { Search, ChevronLeft, ChevronRight, Inbox, AlertTriangle } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, ChevronDown, Inbox, AlertTriangle } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 export interface ColumnDef<T> {
@@ -35,6 +35,10 @@ interface DataTableProps<T> {
   rowClassName?: (row: T) => string | undefined;
   emptyMessage?: string;
   headerActions?: React.ReactNode;
+  /** Stable row identity — keeps expansion state on the right row across pages. */
+  getRowKey?: (row: T) => string;
+  /** When set, row click toggles a panel rendered below the row (instead of `onRowClick`). */
+  renderExpanded?: (row: T) => React.ReactNode;
 }
 
 export function DataTable<T>({
@@ -49,10 +53,28 @@ export function DataTable<T>({
   onRowClick,
   rowClassName,
   emptyMessage = "Tidak ada data",
-  headerActions
+  headerActions,
+  getRowKey,
+  renderExpanded
 }: DataTableProps<T>) {
   const [searchInput, setSearchInput] = useState(search?.value ?? "");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // A new page/filter replaces the rows — stale expansion keys would never match again.
+  // Returning `prev` when already empty matters: callers pass `data?.items ?? []`, a fresh
+  // array every render while loading, and a fresh Set each time would re-render forever.
+  useEffect(() => {
+    setExpanded((prev) => (prev.size === 0 ? prev : new Set()));
+  }, [data]);
+
+  const toggleExpanded = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   useEffect(() => {
     if (!search) return;
@@ -137,23 +159,46 @@ export function DataTable<T>({
                 </TableCell>
               </TableRow>
             ) : (
-              data.map((row, i) => (
-                <TableRow
-                  key={i}
-                  onClick={() => onRowClick?.(row)}
-                  className={cn(onRowClick && "cursor-pointer hover:bg-muted/50", rowClassName?.(row))}
-                >
-                  {columns.map((col, j) => (
-                    <TableCell key={j} className={col.className}>
-                      {col.cell
-                        ? col.cell({ row: { original: row } })
-                        : col.accessorKey
-                          ? String(row[col.accessorKey] ?? "")
-                          : null}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              data.map((row, i) => {
+                const key = getRowKey?.(row) ?? String(i);
+                const isExpanded = expanded.has(key);
+                return (
+                  <Fragment key={key}>
+                    <TableRow
+                      onClick={() => (renderExpanded ? toggleExpanded(key) : onRowClick?.(row))}
+                      aria-expanded={renderExpanded ? isExpanded : undefined}
+                      className={cn(
+                        (renderExpanded || onRowClick) && "cursor-pointer hover:bg-muted/50",
+                        rowClassName?.(row)
+                      )}
+                    >
+                      {columns.map((col, j) => (
+                        <TableCell key={j} className={col.className}>
+                          {renderExpanded && j === 0 ? (
+                            <div className="flex items-start gap-2">
+                              {isExpanded ? (
+                                <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                              )}
+                              <div className="min-w-0 flex-1">{renderCell(col, row)}</div>
+                            </div>
+                          ) : (
+                            renderCell(col, row)
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                    {renderExpanded && isExpanded && (
+                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        <TableCell colSpan={columns.length} className="py-2 pl-10">
+                          {renderExpanded(row)}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -204,4 +249,9 @@ export function DataTable<T>({
       )}
     </div>
   );
+}
+
+function renderCell<T>(col: ColumnDef<T>, row: T): React.ReactNode {
+  if (col.cell) return col.cell({ row: { original: row } });
+  return col.accessorKey ? String(row[col.accessorKey] ?? "") : null;
 }

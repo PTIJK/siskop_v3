@@ -113,7 +113,7 @@ Replaces the original scaffold's single flat `Transaction` model, which no code 
 | FR-CFG-02 | Tenant-level fine-grained role management (create/edit/delete custom roles with a permissions matrix). | Implemented | `Role` model; `pages/config/RolesTab.tsx` |
 | FR-CFG-03 | Tenant-level user (staff) management — create/edit/deactivate, assign a role. | Implemented | `modules/users/`; `pages/config/UsersTab.tsx` |
 | FR-CFG-04 | Whitelabel branding: custom domain, primary color, hide-branding toggle, email sender identity. | **Implemented** *(added 2026-07-29)* | `WhitelabelConfig` model; `GET/PUT /config/whitelabel`; `pages/config/WhitelabelConfigTab.tsx`. Read is ungated; writes require `whitelabelEnabled` on the tenant's package |
-| FR-CFG-05 | Modal Disetor (paid-in capital) compliance field — Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp 5,000,000). | **Implemented** *(added 2026-07-29)* | `Tenant.modalDisetor`; `GET/PUT /config/modal-disetor`; `pages/config/ModalDisetorConfigTab.tsx`. Not gated by the accounting entitlement — a general tenant compliance field |
+| FR-CFG-05 | Modal Disetor (paid-in capital) compliance field — Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp 5,000,000,000 — Rp5 miliar). Daily scheduler raises a once-per-year tenant bell notification (`config.read`) when reached. | **Implemented** *(added 2026-07-29)* | `Tenant.modalDisetor`; `GET/PUT /config/modal-disetor`; `pages/config/ModalDisetorConfigTab.tsx`. Not gated by the accounting entitlement — a general tenant compliance field |
 
 ### 1.9 Platform Admin (`FR-PADM`)
 

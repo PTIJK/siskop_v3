@@ -1,21 +1,20 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { SavingTransaction } from "@siskop/types";
-import { apiFetch, apiFetchPage, apiPost, ApiRequestError } from "@/api/client";
+import { apiFetch, apiPost, ApiRequestError } from "@/api/client";
 import { formatRupiah, formatTanggalPendek } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { SavingStatement } from "@/components/savings/SavingStatement";
 import { ArrowDownCircle, ArrowUpCircle, AlertTriangle } from "lucide-react";
 
 interface SavingDetail {
@@ -27,17 +26,7 @@ interface SavingDetail {
   createdAt: string;
 }
 
-interface TransactionRow extends SavingTransaction {
-  createdByUser: { name: string } | null;
-}
-
 type ActionType = "deposit" | "withdraw" | null;
-
-const TRANSACTION_TYPE_META: Record<TransactionRow["type"], { label: string; badgeClass: string; sign: "+" | "-" }> = {
-  DEPOSIT: { label: "Setoran", badgeClass: "bg-green-100 text-green-800 hover:bg-green-100", sign: "+" },
-  INTEREST: { label: "Bunga", badgeClass: "bg-blue-100 text-blue-800 hover:bg-blue-100", sign: "+" },
-  WITHDRAWAL: { label: "Penarikan", badgeClass: "bg-orange-100 text-orange-800 hover:bg-orange-100", sign: "-" }
-};
 
 export function SavingDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -53,11 +42,6 @@ export function SavingDetailPage() {
     queryKey: ["savings", id],
     queryFn: () => apiFetch<SavingDetail>(`/savings/${id}`)
   });
-  const { data: transactionsPage } = useQuery({
-    queryKey: ["savings", id, "transactions"],
-    queryFn: () => apiFetchPage<TransactionRow[]>(`/savings/${id}/transactions`)
-  });
-  const transactions = transactionsPage?.items ?? [];
 
   const handleTransaction = async () => {
     if (!amount || parseFloat(amount) <= 0) return;
@@ -121,55 +105,7 @@ export function SavingDetailPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Riwayat Transaksi</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tanggal</TableHead>
-                <TableHead>Jenis</TableHead>
-                <TableHead className="text-right">Nominal</TableHead>
-                <TableHead>Catatan</TableHead>
-                <TableHead>Petugas</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transactions.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                    Belum ada transaksi
-                  </TableCell>
-                </TableRow>
-              ) : (
-                transactions.map((t) => {
-                  const meta = TRANSACTION_TYPE_META[t.type];
-                  return (
-                    <TableRow key={t.id}>
-                      <TableCell className="text-sm">{formatTanggalPendek(t.createdAt)}</TableCell>
-                      <TableCell>
-                        <Badge variant={t.type === "DEPOSIT" ? "default" : "secondary"} className={meta.badgeClass}>
-                          {meta.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">
-                        <span className={meta.sign === "+" ? "text-green-700" : "text-orange-700"}>
-                          {meta.sign}
-                          {formatRupiah(t.amount)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{t.note ?? "-"}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{t.createdByUser?.name ?? "Sistem"}</TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <SavingStatement savingId={saving.id} />
 
       <Dialog open={!!action} onOpenChange={(o) => !o && setAction(null)}>
         <DialogContent className="sm:max-w-sm">

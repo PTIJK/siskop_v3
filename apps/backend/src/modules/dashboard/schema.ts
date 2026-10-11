@@ -5,3 +5,7 @@ export const chartQuerySchema = z.object({
 });
 
 export type ChartQueryInput = z.infer<typeof chartQuerySchema>;
+
+export const dashboardUnitQuerySchema = z.object({
+  unitId: z.string().cuid("Unit ID tidak valid").optional()
+});
