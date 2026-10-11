@@ -267,6 +267,10 @@ class ReleaseSafetyTests(unittest.TestCase):
             nonlocal selected_tag
             if args[:4] == ["gcloud", "artifacts", "docker", "images"]:
                 return "sha256:" + "b" * 64
+            if args[:4] == ["gcloud", "run", "jobs", "deploy"]:
+                self.assertIn("--set-secrets=DATABASE_URL=DATABASE_URL:3", args)
+                self.assertIn("--clear-cloudsql-instances", args)
+                self.assertFalse(any(arg.startswith(("--add-cloudsql-instances", "--set-cloudsql-instances")) for arg in args))
             if args[:2] == ["bash", "infra/firebase/deploy-api.sh"]:
                 selected_tag = next(arg.removeprefix("--tag=") for arg in args if arg.startswith("--tag="))
                 # Include the hostname separator in the budget as well.

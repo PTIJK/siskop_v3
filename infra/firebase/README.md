@@ -35,12 +35,13 @@ hostname does not provide arbitrary cooperative subdomains.
 
 ## Resources
 
-- Cloud SQL: `siskop-staging`, existing database `postgres`; migrations are versioned under `apps/backend/prisma/migrations`.
+- Database: temporary Supabase Singapore project `lovtfdddtafuyldnkbny` (`Siskop Staging v2`), database `postgres`. Migrations are versioned under `apps/backend/prisma/migrations`.
+- Cloud SQL: `siskop-staging` is stopped and retained for recovery of the previous staging data.
 - Cloud Run: `siskop-staging-api`, 1 CPU, 1 GiB, min 0/max 1 instance, concurrency 20.
 - Runtime account: `siskop-staging-api@siskop-d0f8c.iam.gserviceaccount.com`.
 - Image repository: `asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api`.
 - Private uploads bucket: `gs://siskop-d0f8c-staging-uploads`, mounted at `/mnt/uploads`.
-- Secret Manager versions: `DATABASE_URL:2`; JWT keys, Xendit secrets, `TENANT_GATEWAY_SECRET`, and `SCHEDULER_SECRET` at version 1.
+- Secret Manager versions: `DATABASE_URL:3` connects to Supabase; `DATABASE_URL:2` retains the Cloud SQL credential for recovery. JWT keys, Xendit secrets, `TENANT_GATEWAY_SECRET`, and `SCHEDULER_SECRET` use version 1.
 - Cloud Scheduler: daily interest/KOL at 07:05 WIB and Firebase recovery every 15 minutes;
   OIDC invoker `siskop-scheduler-invoker@siskop-d0f8c.iam.gserviceaccount.com` plus the app token.
 
@@ -51,7 +52,11 @@ values in a command argument, build substitution, commit, or chat.
 
 ## Database maintenance
 
-Open the authenticated local proxy in a separate terminal:
+The helper prefers `apps/backend/.env.supabase.local` (gitignored, mode 0600).
+It uses the Singapore session pooler on port 5432 with SSL and a three-connection
+Prisma pool. Create the private connection file without printing its credential.
+Without this file, it uses the original Cloud SQL connection through an
+authenticated local proxy:
 
 ```sh
 cloud-sql-proxy --gcloud-auth --address=127.0.0.1 --port=55434 \
@@ -64,11 +69,12 @@ From the repository root:
 node infra/firebase/database.mjs check
 node infra/firebase/database.mjs migrate
 node infra/firebase/database.mjs seed
+node infra/firebase/database.mjs seed-smoke
 node infra/firebase/check-hosted.mjs
 ```
 
-The helper reads the private local connection string, restricts itself to this
-staging instance, and connects through the proxy without printing credentials.
+The helper reads the private local connection string and restricts itself to the
+configured staging database without printing credentials.
 The seed creates only `Paket Lengkap (Demo)` at IDR 500,000; it preserves existing
 package data and creates no preset accounts. Set the actual package catalog before
 accepting live customers. Never run the backend integration suite against this
@@ -76,6 +82,42 @@ database: those tests delete test records and some suites truncate tenant data.
 The hosted checker tests route/auth behavior and signed sample callbacks without
 creating users or payments. See [verification record](VERIFICATION.md) for the
 actual browser payment test and deployed image.
+
+## Temporary Supabase staging (2026-10-11)
+
+All 40 Prisma migrations are applied to the Singapore database. Its 61
+public tables have RLS enabled with no public access policies; Prisma connects
+through the backend. Public API roles have no table privileges. Trigger function
+search paths are pinned to `public, pg_temp`. Supabase security migrations record
+these database-specific protections. Keep these protections when adding tables.
+
+The API revision `siskop-staging-api-supabase-sg-20261011` uses the existing image
+with secret version 3 and no Cloud SQL attachment. The current Firebase Hosting
+and tenant gateway tag `czxr36egjubccbh52pnk45lgmn4` was reassigned to this revision
+so both applications use Supabase without rebuilding their frontend assets.
+The previous API revision is `siskop-staging-api-00071-xum`.
+
+The demo subscription package and `siskop-ci-smoke` release verification tenant
+were initialized. The verification tenant has self-registration disabled and no
+users, members or financial records. Its slug is configured in both the Cloud
+Build trigger and committed build defaults; do not delete it while releases use it.
+`seed-smoke` is idempotent and refuses to overwrite conflicting tenant records.
+
+The deployment scripts bind `DATABASE_URL:3` and clear Cloud SQL attachments for
+both the API and migration job. CI uses a disposable PostgreSQL 17 database to
+match Supabase and receives no staging database credential. Pushes to `main`
+run the coordinated release; feature branch pushes do not publish.
+
+The initial setup used 23 migrations; the remaining migrations were applied after
+verification found missing tenant columns required by the running API. Future
+migrations are applied by the release job. The Supabase protection migration enables RLS and removes public
+API privileges on their new tables before the candidate API is deployed. Future
+table migrations must enable RLS as well; default grants stay restricted.
+
+Previous users, koperasi,
+members, balances and transactions have not been recovered. Recover Cloud SQL
+into a separate database first and plan a merge with any new Supabase data before
+restoring. Do not overwrite newly created staging records with an old dump.
 
 ## Repeat a deployment
 
