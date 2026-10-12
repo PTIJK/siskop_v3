@@ -269,8 +269,11 @@ class ReleaseSafetyTests(unittest.TestCase):
                 return "sha256:" + "b" * 64
             if args[:4] == ["gcloud", "run", "jobs", "deploy"]:
                 self.assertIn("--set-secrets=DATABASE_URL=DATABASE_URL:3", args)
-                self.assertIn("--clear-cloudsql-instances", args)
-                self.assertFalse(any(arg.startswith(("--add-cloudsql-instances", "--set-cloudsql-instances")) for arg in args))
+                self.assertIn("--set-cloudsql-instances=", args)
+                self.assertNotIn("--clear-cloudsql-instances", args)
+                self.assertFalse(any(arg.startswith("--add-cloudsql-instances") for arg in args))
+                sql_flags = [arg for arg in args if arg.startswith("--set-cloudsql-instances=")]
+                self.assertEqual(sql_flags, ["--set-cloudsql-instances="])
             if args[:2] == ["bash", "infra/firebase/deploy-api.sh"]:
                 selected_tag = next(arg.removeprefix("--tag=") for arg in args if arg.startswith("--tag="))
                 # Include the hostname separator in the budget as well.

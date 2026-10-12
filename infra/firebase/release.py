@@ -279,7 +279,8 @@ def backend(cloud, state, image):
     cloud.command(gcloud(
         "run", "jobs", "deploy", "siskop-staging-migrate", f"--region={REGION}", f"--image={image_ref}",
         f"--service-account=siskop-staging-migrate@{PROJECT}.iam.gserviceaccount.com",
-        "--clear-cloudsql-instances",
+        # Jobs deploy accepts an empty set; clear-cloudsql-instances is a service flag.
+        "--set-cloudsql-instances=",
         "--set-secrets=DATABASE_URL=DATABASE_URL:3", "--set-env-vars=NODE_ENV=production",
         "--command=node", "--args=/app/apps/backend/node_modules/prisma/build/index.js,migrate,deploy,--schema=/app/apps/backend/prisma/schema.prisma",
         "--cpu=1", "--memory=512Mi", "--tasks=1", "--parallelism=1", "--max-retries=0", "--task-timeout=600s", "--execute-now", "--wait",
