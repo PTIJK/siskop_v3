@@ -9,7 +9,7 @@ steps:
       - |
         docker run -d --network cloudbuild --name siskop-ci-postgres \
           -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=ci-only-password \
-          -e POSTGRES_DB=siskop_ci_test postgres:18
+          -e POSTGRES_DB=siskop_ci_test postgres:17
         for attempt in {1..30}; do
           if docker exec siskop-ci-postgres pg_isready -U postgres; then exit 0; fi
           sleep 2
@@ -86,7 +86,7 @@ substitutions:
   _TENANT_RENAME_ENABLED: 'false'
   _TENANT_LOGIN_SELECTION_ENABLED: 'true'
   _TENANT_SWITCHING_ENABLED: 'false'
-  _TENANT_SMOKE_SLUG: 'ptap'
+  _TENANT_SMOKE_SLUG: 'siskop-ci-smoke'
   _IMAGE: asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api
 options:
   logging: CLOUD_LOGGING_ONLY

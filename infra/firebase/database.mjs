@@ -6,13 +6,19 @@ import { spawnSync } from "node:child_process";
 const backend = fileURLToPath(new URL("../../apps/backend/", import.meta.url));
 const require = createRequire(`${backend}package.json`);
 const env = require("dotenv").parse(fs.readFileSync(`${backend}.env.firebase-secrets.local`));
+const supabaseEnv = `${backend}.env.supabase.local`;
+if (fs.existsSync(supabaseEnv)) Object.assign(env, require("dotenv").parse(fs.readFileSync(supabaseEnv)));
 const url = new URL(env.DATABASE_URL);
-if (url.searchParams.get("host") !== "/cloudsql/siskop-d0f8c:asia-southeast2:siskop-staging") {
+if (url.searchParams.get("host") === "/cloudsql/siskop-d0f8c:asia-southeast2:siskop-staging") {
+  url.hostname = "127.0.0.1";
+  url.port = "55434";
+  url.searchParams.delete("host");
+} else if (url.hostname !== "aws-0-ap-southeast-1.pooler.supabase.com" ||
+           decodeURIComponent(url.username) !== "postgres.lovtfdddtafuyldnkbny" ||
+           url.port !== "5432" || url.pathname !== "/postgres" ||
+           url.searchParams.get("sslmode") !== "require") {
   throw new Error("This helper is restricted to the configured SISKOP staging instance.");
 }
-url.hostname = "127.0.0.1";
-url.port = "55434";
-url.searchParams.delete("host");
 const command = process.argv[2] ?? "check";
 if (command === "migrate") {
   const result = spawnSync(`${backend}node_modules/.bin/prisma`, ["migrate", "deploy"], {
@@ -42,6 +48,31 @@ try {
       }
     });
     console.log("Staging demo package ready; no users or passwords seeded.");
+  } else if (command === "seed-smoke") {
+    if (url.hostname !== "aws-0-ap-southeast-1.pooler.supabase.com") {
+      throw new Error("Release verification tenant is restricted to Supabase staging.");
+    }
+    const data = {
+      id: "tenant_staging_release_smoke",
+      name: "SISKOP Staging Release Check",
+      slug: "siskop-ci-smoke",
+      address: "Staging verification only",
+      registrationNo: "SISKOP-STAGING-RELEASE-SMOKE",
+      type: "KONVENSIONAL",
+      isActive: true,
+      selfRegistrationEnabled: false
+    };
+    const existing = await db.tenant.findFirst({ where: { OR: [
+      { id: data.id }, { slug: data.slug }, { registrationNo: data.registrationNo }
+    ] } });
+    if (existing) {
+      if (Object.entries(data).some(([key, value]) => existing[key] !== value)) {
+        throw new Error("Verification tenant conflicts with an existing record; refusing to overwrite it.");
+      }
+    } else {
+      await db.tenant.create({ data });
+    }
+    console.log("Release verification tenant ready: siskop-ci-smoke; no accounts or financial data seeded.");
   } else if (command === "check") {
     console.log(
       JSON.stringify({
@@ -51,7 +82,7 @@ try {
       })
     );
   } else {
-    throw new Error("Use check, migrate, or seed.");
+    throw new Error("Use check, migrate, seed, or seed-smoke.");
   }
 } catch (error) {
   console.error("Staging database operation failed:", error.code ?? error.name);

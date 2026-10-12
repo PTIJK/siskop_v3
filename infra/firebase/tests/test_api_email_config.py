@@ -45,6 +45,13 @@ with open(os.environ['COMMAND_LOG'],'a') as output:
                 self.assertTrue(any(arg.startswith("--update-secrets=DATABASE_URL=") for arg in args))
                 self.assertIn("--no-traffic", args)
 
+    def test_deploy_uses_supabase_secret_without_cloud_sql_attachment(self):
+        args, _ = self.deploy("true")
+        secrets = next(arg for arg in args if arg.startswith("--update-secrets="))
+        self.assertIn("DATABASE_URL=DATABASE_URL:3", secrets.split("=", 1)[1].split(","))
+        self.assertIn("--clear-cloudsql-instances", args)
+        self.assertFalse(any(arg.startswith(("--add-cloudsql-instances", "--set-cloudsql-instances")) for arg in args))
+
 
 if __name__ == "__main__":
     unittest.main()

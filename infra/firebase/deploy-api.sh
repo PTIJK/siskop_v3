@@ -27,8 +27,8 @@ gcloud run deploy siskop-staging-api \
   --project=siskop-d0f8c --region=asia-southeast2 \
   --image="$image_ref" \
   --service-account=siskop-staging-api@siskop-d0f8c.iam.gserviceaccount.com \
-  --add-cloudsql-instances=siskop-d0f8c:asia-southeast2:siskop-staging \
-  --update-secrets=DATABASE_URL=DATABASE_URL:2,JWT_SECRET=JWT_SECRET:1,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:1,XENDIT_SECRET_KEY=XENDIT_SECRET_KEY:1,XENDIT_WEBHOOK_TOKEN=XENDIT_WEBHOOK_TOKEN:1,TENANT_GATEWAY_SECRET=TENANT_GATEWAY_SECRET:1,SCHEDULER_SECRET=SCHEDULER_SECRET:1 \
+  --clear-cloudsql-instances \
+  --update-secrets=DATABASE_URL=DATABASE_URL:3,JWT_SECRET=JWT_SECRET:1,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:1,XENDIT_SECRET_KEY=XENDIT_SECRET_KEY:1,XENDIT_WEBHOOK_TOKEN=XENDIT_WEBHOOK_TOKEN:1,TENANT_GATEWAY_SECRET=TENANT_GATEWAY_SECRET:1,SCHEDULER_SECRET=SCHEDULER_SECRET:1 \
   --flags-file="$flags_file" \
   --execution-environment=gen2 --cpu=1 --memory=1Gi --concurrency=20 \
   --min-instances=0 --max-instances=1 --timeout=300 --cpu-throttling \

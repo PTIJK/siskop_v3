@@ -10,5 +10,5 @@ substitutions:
   _DEPLOY: 'true'
   _TENANT_HOSTING: 'true'
   _TENANT_RENAME_ENABLED: 'false'
-  _TENANT_SMOKE_SLUG: 'ptap'
+  _TENANT_SMOKE_SLUG: 'siskop-ci-smoke'
 includeBuildLogs: INCLUDE_BUILD_LOGS_WITH_STATUS
