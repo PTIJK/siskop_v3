@@ -231,6 +231,15 @@ release resumes prepared jobs, including jobs manually paused for maintenance.
 
 ## Xendit test setup
 
+Staging deploys with `XENDIT_MODE=test`, independently of `NODE_ENV=production`.
+The backend accepts only a test secret key (`xnd_development_...`) in this mode;
+a live key or invalid mode disables paid registration and provider requests.
+The mode defaults to `test` if unset. The API origin remains `https://api.xendit.co`
+because Xendit selects the environment from the API key. Secret values stay in
+Secret Manager; the deployment pins `XENDIT_SECRET_KEY:1` and
+`XENDIT_WEBHOOK_TOKEN:1`. The active staging revision was checked on 2026-10-27
+and its pinned API key was a test key.
+
 In Xendit **Test Mode → Settings → Webhooks**, set both **Payment Session –
 Completed** and **Payment Session – Expired** to:
 
@@ -260,7 +269,8 @@ incur charges under the project's billing plan. A one-instance limit is a stagin
 setting, not a billing cap. Plan database retention/export before the trial ends.
 
 Before a live launch: provide the actual package catalog and domain routing,
-configure the final Spline scene if desired, switch Xendit credentials/webhooks
+configure the final Spline scene if desired, explicitly set `XENDIT_MODE=live`
+in the live deployment and switch Xendit credentials/webhooks
 deliberately, and verify the full flow again. Existing in-memory request limits
 reset on restart; scaling beyond staging requires a shared limiter. Review upload
 access and the broader dashboard workflows before storing real member documents.

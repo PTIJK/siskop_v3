@@ -38,6 +38,7 @@ with open(os.environ['COMMAND_LOG'],'a') as output:
                 self.assertFalse(any(arg.startswith(("--env-vars-file", "--set-env-vars", "--clear-env-vars")) for arg in args))
                 self.assertTrue(flags.startswith("--update-env-vars:\n"))
                 self.assertIn("  PUBLIC_APP_URL: https://siskop-d0f8c.web.app", flags)
+                self.assertIn("  XENDIT_MODE: test", flags)
                 self.assertIn(f'  TENANT_DOMAINS_ENABLED: "{hosting}"', flags)
                 self.assertIn(f'  TENANT_LOGIN_SELECTION_ENABLED: "{hosting}"', flags)
                 self.assertIn('  TENANT_SWITCHING_ENABLED: "false"', flags)
