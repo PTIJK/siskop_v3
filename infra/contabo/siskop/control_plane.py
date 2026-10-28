@@ -50,12 +50,13 @@ def main():
     elif json.loads(snapshot.read_text()).get('application') != 'siskop': raise ValueError('Unexpected existing control snapshot')
     if args.action == 'prepare':
         substitutions = {**trigger.get('substitutions', {}), '_BACKEND': 'contabo'}
-        # Use the SDK's complete config update for repository-event triggers;
-        # the provider rejects a bare disabled/substitutions partial payload.
+        # Import with an existing ID is update-only in the SDK. Unlike the
+        # provider-specific command, it omits an output-field update mask.
+        if trigger.get('id') != TRIGGER: raise ValueError('Unexpected trigger identity')
         trigger.update(disabled=True, substitutions=substitutions)
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as config:
             json.dump(trigger, config); config.flush()
-            gcloud('builds', 'triggers', 'update', 'github', TRIGGER, '--region=' + REGION, '--trigger-config=' + config.name)
+            gcloud('builds', 'triggers', 'import', '--region=' + REGION, '--source=' + config.name)
         for url, spec, job in jobs:
             if job['state'] == 'ENABLED':
                 job = request('POST', url + ':pause', {})
