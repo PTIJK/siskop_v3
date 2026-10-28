@@ -8,12 +8,12 @@ SPEC = importlib.util.spec_from_file_location("release", pathlib.Path(__file__).
 release = importlib.util.module_from_spec(SPEC)
 with patch.object(sys, "path", [str(pathlib.Path(__file__).parents[1]), *sys.path]):
     SPEC.loader.exec_module(release)
-ORIGIN = "https://siskop-staging-api-example.a.run.app"
+ORIGIN = "https://siskop-api.inovasijayakarsa.id:18443"
 REVISION = "api-revision"
 
 
 class SchedulerActivationTests(unittest.TestCase):
-    def test_finish_promotes_traffic_before_activation_and_keeps_lock_on_failure(self):
+    def test_finish_checks_hosted_release_before_activation_and_keeps_lock_on_failure(self):
         for selection in ["false", "true"]:
             with self.subTest(selection=selection), patch.dict(release.os.environ, {
                 "RELEASE_TENANT_HOSTING": "false",
@@ -30,12 +30,12 @@ class SchedulerActivationTests(unittest.TestCase):
                 cloud.public_json.side_effect = responses
 
                 def activate(*_):
-                    self.assertIn("--to-revisions=api-revision=100", cloud.command.call_args.args[0])
+                    cloud.command.assert_not_called()
                     raise RuntimeError("activation failed")
 
                 with patch.object(release, "activate_schedulers", side_effect=activate):
                     with self.assertRaisesRegex(RuntimeError, "activation failed"):
-                        release.finish(cloud, {"buildId": "build", "commit": "commit", "revision": REVISION, "generation": "8"})
+                        release.finish(cloud, {"backend": "contabo", "buildId": "build", "commit": "commit", "revision": REVISION, "generation": "8"})
                 cloud.delete_lock.assert_not_called()
 
     def cloud(self):
@@ -54,7 +54,7 @@ class SchedulerActivationTests(unittest.TestCase):
 
     def test_activates_both_only_after_read_only_readiness_checks(self):
         cloud = self.cloud()
-        release.activate_schedulers(cloud, {"revision": REVISION})
+        release.activate_schedulers(cloud, {"backend": "contabo", "revision": REVISION})
         self.assertEqual(cloud.scheduler_status.call_count, 2)
         calls = cloud.request.call_args_list
         self.assertEqual([call.args[0] for call in calls], ["GET", "GET", "POST", "POST"])
@@ -66,14 +66,14 @@ class SchedulerActivationTests(unittest.TestCase):
                 cloud = self.cloud()
                 cloud.scheduler_status.return_value["data"].update(change)
                 with self.assertRaises(RuntimeError):
-                    release.activate_schedulers(cloud, {"revision": REVISION})
+                    release.activate_schedulers(cloud, {"backend": "contabo", "revision": REVISION})
                 self.assertTrue(all(call.args[0] == "GET" for call in cloud.request.call_args_list))
 
     def test_wrong_target_never_receives_secret_and_never_resumes_any_job(self):
         cloud = self.cloud()
         self.jobs[0]["httpTarget"]["uri"] = "https://attacker.example/api/scheduler/run-daily"
         with self.assertRaises(RuntimeError):
-            release.activate_schedulers(cloud, {"revision": REVISION})
+            release.activate_schedulers(cloud, {"backend": "contabo", "revision": REVISION})
         cloud.scheduler_status.assert_not_called()
         self.assertTrue(all(call.args[0] == "GET" for call in cloud.request.call_args_list))
 
@@ -81,14 +81,14 @@ class SchedulerActivationTests(unittest.TestCase):
         cloud = self.cloud()
         self.jobs[1]["httpTarget"]["headers"] = {}
         with self.assertRaises(RuntimeError):
-            release.activate_schedulers(cloud, {"revision": REVISION})
+            release.activate_schedulers(cloud, {"backend": "contabo", "revision": REVISION})
         self.assertTrue(all(call.args[0] == "GET" for call in cloud.request.call_args_list))
 
     def test_repeated_release_does_not_resume_already_enabled_jobs(self):
         cloud = self.cloud()
         for job in self.jobs:
             job["state"] = "ENABLED"
-        release.activate_schedulers(cloud, {"revision": REVISION})
+        release.activate_schedulers(cloud, {"backend": "contabo", "revision": REVISION})
         self.assertTrue(all(call.args[0] == "GET" for call in cloud.request.call_args_list))
 
 

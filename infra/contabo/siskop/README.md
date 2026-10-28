@@ -1,6 +1,6 @@
 # SISKOP Contabo migration
 
-**Live:** API and PostgreSQL are now on Contabo. Supabase is frozen read-only. See [completion evidence](../../../docs/2026-10-28-contabo-migration-completion.md) for the successful release, backup/restore evidence and current operations. Earlier sections below record preparation milestones. Automatic main releases use the Contabo path.
+**Live:** API and PostgreSQL are now on Contabo. Both SISKOP Supabase projects were deleted at the user’s request; see [retirement status](../../../docs/2026-10-28-supabase-retirement.md). See [completion evidence](../../../docs/2026-10-28-contabo-migration-completion.md) for the successful release, backup/restore evidence and current operations. Earlier sections below record preparation milestones. Automatic main releases use the Contabo path.
 
 This directory controls SISKOP only. Never run it from a Sentryx checkout or pass Sentryx container names, credentials, volumes or database URLs.
 
@@ -86,7 +86,7 @@ SISKOP runtime, migration, owner and backup roles are separate. Backend-wide pol
 4. Promote the verified fresh destination under the deployment hold, publish both forwarding routes, retarget/authenticate the existing scheduled jobs and verify application behavior.
 5. Mark live authority only after routing succeeds, take an authoritative Contabo backup, enable alerts and resume the Contabo release path. Keep Supabase frozen; after new writes it is not a safe automatic rollback target.
 
-The old Cloud SQL data remains unrecovered and outside this migration. Preserve that instance separately. Supabase is retained read-only; current website routing uses the VPS API. The stopped historical Cloud SQL instance remains untouched.
+The old Cloud SQL data remains unrecovered and outside this migration. Preserve that instance separately. The former provider is no longer an operational rollback target; current website routing uses the VPS API. The stopped historical Cloud SQL instance remains untouched.
 
 
 ## Final cutover checklist (operator controlled)

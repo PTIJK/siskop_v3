@@ -1,6 +1,6 @@
 # SISKOP Contabo migration — completion record
 
-**Status:** Live on Contabo. Customer traffic opened 28 October 2026, 16:46 WIB. The current API/database writer is Contabo; Supabase is frozen read-only.
+**Status:** Live on Contabo. Customer traffic opened 28 October 2026, 16:46 WIB. The current API/database writer is Contabo. Both SISKOP Supabase projects were deleted at the user’s request; see [retirement status](2026-10-28-supabase-retirement.md).
 
 ## Current infrastructure
 
@@ -27,7 +27,7 @@ SISKOP has its own Compose project, PostgreSQL cluster, roles/passwords, data di
 
 The nine preexisting containers retained their IDs, start times and restart counts. All eight existing host proxy files retained their byte hashes. Sentryx's public website and API probes returned HTTP 200. No Sentryx database was queried or changed, and no preexisting application container was restarted. An earlier SISKOP-only HTTP-challenge diagnostic caused a graceful shared Nginx reload; existing site files/master remained intact. Ongoing TLS and routing use SISKOP's separate proxy.
 
-The source was drained, its existing application role made read-only, old pooled sessions terminated, and a negative write test verified rejection. The final export was taken after that fence. A new candidate was restored and every table compared before promotion. The old rehearsal database was preserved as `siskop_rehearsal_bf4af413c33c`; the earlier separate rehearsal candidate is also retained. No source database was deleted.
+The source was drained, its existing application role made read-only, old pooled sessions terminated, and a negative write test verified rejection. The final export was taken after that fence. A new candidate was restored and every table compared before promotion. The old rehearsal database was preserved as `siskop_rehearsal_bf4af413c33c`; the earlier separate rehearsal candidate is also retained. The source database was preserved through cutover, then retired separately after the user explicitly requested deletion; the encrypted final export remains retained.
 
 ## Backup and verification evidence
 
@@ -59,7 +59,7 @@ The first held release timed out before the one-time database preparation finish
 
 The backup, certificate, deploy and health timers are separate SISKOP units. Availability, local health/certificate/disk, missing reporter and 90-minute backup-freshness alert policies are enabled for the approved operator. The API has a graceful shutdown period sufficient for the existing scheduler deadline; releases pause scheduled work and resume it only after readiness checks.
 
-Retain the frozen Supabase project during at least the seven-day observation period. Observe a real daily run at 07:05 WIB and normal identity recovery every 15 minutes, plus continued backups and a restore drill. Do not point users back to Supabase after Contabo has accepted writes without first fencing Contabo and reconciling newer records.
+The user subsequently requested complete Supabase retirement, superseding the source-project observation retention. Preserve the encrypted exports and recover from current authoritative Contabo backups. Observe a real daily run at 07:05 WIB and normal identity recovery every 15 minutes, plus continued backups and a restore drill. Do not point users back to Supabase after Contabo has accepted writes without first fencing Contabo and reconciling newer records.
 
 The stopped historical Cloud SQL trial instance was left untouched and remains unrecovered; this migration covers the current Supabase SISKOP data. No paid Cloud SQL upgrade or new VPS was provisioned. Other Google resources were retained; unused-network/billing cleanup is a separate decision.
 

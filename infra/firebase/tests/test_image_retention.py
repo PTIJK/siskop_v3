@@ -114,7 +114,7 @@ class ImageRetentionTests(unittest.TestCase):
              patch.object(release, "activate_schedulers") as activate, \
              patch.object(release, "finish_image_retention", side_effect=RuntimeError("retention failed")):
             with self.assertRaisesRegex(RuntimeError, "retention failed"):
-                release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": "commit",
+                release.finish(cloud, {"backend": "contabo", "buildId": BUILD, "generation": "8", "commit": "commit",
                                        "image": release.IMAGE + "@" + NEW, "revision": "revision"})
         activate.assert_called_once()
         cloud.delete_lock.assert_not_called()

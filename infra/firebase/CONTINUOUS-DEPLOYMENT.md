@@ -1,38 +1,8 @@
 # Deploy main with Cloud Build
 
-Target: **https://siskop-d0f8c.web.app**, with API `siskop-staging-api` in
-`asia-southeast2`. This remains the existing Firebase/Xendit sandbox environment.
+Target: **https://siskop-d0f8c.web.app**, forwarding to the dedicated SISKOP API and PostgreSQL cluster on Contabo. This remains the existing Firebase/Xendit sandbox environment. Google hosting, builds, registry, authentication, scheduling, storage and monitoring stay in place.
 
-Setup status (2026-09-11): the GitHub connection is `COMPLETE`, `siskop-v3` is
-linked to `PTIJK/siskop_v3`, and `siskop-main-deploy` is enabled in
-`asia-southeast2` (trigger ID `8346644b-e829-4692-8226-fad4c3c5ce28`). The deployment
-identities and private lock bucket are configured. The temporary Secret Manager
-Admin permission used for connection setup has been removed.
-
-The pipeline reached main in merge commit `72cc4b0`. Its first automatic build
-passed verification and database migration, then failed before API deployment
-because the full UUID traffic tag exceeded Cloud Run's hostname length limit.
-Commit `c4cf78f` on `feature/cloud-build` fixes this and adds three regression
-tests (17 release tests total). Merge that fix into main for future releases.
-
-Recovery completed successfully in
-[Cloud Build `8500d404`](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/8500d404-2215-4f5f-8d24-c4ab1114eeb0?project=866351101735).
-It reused the verified main application image from build `c4fd419b`, rebuilt the
-frontend from the same `72cc4b0` application source, and used the deployment
-script fix from `c4cf78f`. The image digest was checked before migration. Migration,
-candidate API checks, Firebase publishing, and final hosted API checks all passed.
-Revision `siskop-staging-api-00006-lah` receives 100% of direct service traffic;
-the hosted release marker identifies the application commit, recovery build, and
-release-script commit. The release lock was removed after success. This recovery
-did not merge the script fix into main.
-
-Verification: commit `719b3ae` passed the full
-[Cloud Build verification run](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/37b3a90e-9011-4668-a6da-61ca558d8a44?project=866351101735)
-with `_DEPLOY=false`: 377 application tests, 14 release safety tests, lint,
-typechecks, frontend builds, and the backend container startup check. The
-[deployment account access check](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/07e9d6e2-f4e4-490d-b54a-f60b2d7810fb?project=866351101735)
-also passed for Cloud Run, Firebase Hosting, and both runtime identities. These
-checks did not migrate Cloud SQL or publish the live site.
+Current release and backup evidence is in the [migration completion record](../../docs/2026-10-28-contabo-migration-completion.md). The old Google API address is retained only as a database-free compatibility forwarder.
 
 The regional Cloud Build trigger `siskop-main-deploy` watches
 `PTIJK/siskop_v3` with branch pattern `^main$`. Merging a GitHub pull request updates
@@ -40,44 +10,20 @@ main and starts a release. Direct pushes to main also trigger it. Open pull
 requests run GitHub Actions checks; feature branches cannot publish through this
 pipeline. Repository branch protection controls who can merge or push main.
 
-## Release sequence
+## Current release sequence
 
-The optional tenant frontend is coordinated by the same release lock. See the
-[tenant-domain rollout](../../docs/tenant-domains.md#deployment-and-activation)
-for activation flags, DNS requirements, candidate pinning and recovery across
-both hosting products. Its default flags remain disabled during preparation.
+The authoritative API/database run on Contabo. The Cloud Run business-backend option has been retired. `_BACKEND=contabo` is the only supported mode; verification-only builds do not deploy.
 
-1. Start a disposable PostgreSQL 18 container, install dependencies with Node 22
-   and pnpm 11.19.0, run release safety tests, lint, typecheck, database migrations,
-   application tests with coverage, compiled Node ESM imports, and browser builds. No staging database
-   credentials are available to the tests.
-2. Build the backend container in parallel with verification, including its
-   compiled-import smoke check and committed Prisma migrations. Publish its unique
-   build tag only after both branches pass. Reuse dependency/runtime layers from
-   Artifact Registry. The frontend is bundled once with `vite build --mode staging`
-   so it includes the committed public Firebase web configuration.
-3. Confirm the commit still matches main and acquire a generation-checked lock
-   in the private `siskop-d0f8c-deployments` bucket. Superseded builds skip
-   publishing. Concurrent releases wait; a lock is reclaimed only after Cloud
-   Build confirms its owner has finished, failed, timed out, or been cancelled.
-4. Resolve the image digest and run `prisma migrate deploy` in the
-   `siskop-staging-migrate` Cloud Run Job. A failed migration stops the release.
-   The job never seeds or resets the database.
-5. Deploy a tagged API revision with no default traffic, then check its health
-   and database-backed package catalog. Publish Firebase Hosting only after
-   these checks pass. Hosting's `pinTag` binds the frontend to that API revision.
-   The tag encodes the complete build UUID in Base32 with a letter prefix:
-   27 characters, leaving room for the service name within the 46-character
-   hostname budget. It preserves every UUID bit to avoid reusing a pinned tag.
-6. Verify the hosted release marker and API catalog, move the direct Cloud Run
-   URL to that revision, validate the authenticated scheduler readiness probe against
-   the new revision, resume both prepared jobs, and release the lock. See
-   [scheduler setup](README.md#scheduled-jobs); preparation must run before the
-   first scheduler release is merged.
+1. Run release safety checks, lint, typechecks, migrations and application tests against a disposable PostgreSQL container, and build the browser assets and API image. Staging database credentials are unavailable to tests.
+2. Confirm the commit still matches main and acquire the generation-checked SISKOP release lock. Resolve and protect the immutable API image digest.
+3. Validate both existing SISKOP scheduler targets, then pause new scheduled executions.
+4. Write a request to the private SISKOP release mailbox. The dedicated host worker verifies the exact successful main build and approved image, runs migrations with SISKOP's separate migration role, gracefully restarts only the SISKOP API and returns a verified receipt. A failed migration or receipt stops frontend publication.
+5. Deploy the database-free central forwarding image, check the Contabo-backed catalog, then publish tenant and central hosting. Verify release markers, tenant workspace and staff/member login pages.
+6. Authenticate to the Contabo scheduler readiness endpoint, require the exact deployed build, resume both schedules, rotate protected image tags and release the lock.
 
-If a release fails after acquiring the lock, the next build can recover the
-lock after confirming that failure. A failed verification build does not acquire
-the lock, migrate Cloud SQL, or publish Hosting. It still produces a test image.
+The existing Google API URL forwards old integration callbacks to SISKOP on Contabo. It is not a business API deployment target. All forwarding routes go to SISKOP's dedicated API, never to Sentryx.
+
+See the [Contabo operator runbook](../contabo/siskop/README.md) for mailbox boundaries, runtime credentials, migration roles, backups and recovery. Database migrations must remain compatible with the previous API image. Rollback after new writes requires the current authoritative dataset; a pre-cutover source snapshot cannot replace it safely.
 
 ## Build performance
 
@@ -107,38 +53,11 @@ skip test results. See [performance measurements](BUILD-PERFORMANCE.md).
 
 ## Cloud setup
 
-`setup-release.sh` configures these identities without creating private keys:
+`setup-release.sh` configures the builder's base logging/build, hosting, registry and lock-bucket access, plus permission to deploy the central forwarding service as its dedicated account. It no longer creates a Cloud SQL/Supabase migrator or grants database-secret access. Existing Contabo-specific mailbox, build attestation, scheduler/OIDC and gateway setup is managed separately in `infra/contabo/siskop`.
 
-| Identity | Access |
-| --- | --- |
-| `siskop-cloud-build` | Build logs and build status; Cloud Run deployments; Firebase Hosting; Artifact Registry writer on `siskop-staging`; lock bucket object access; act as the two runtime accounts |
-| `siskop-staging-migrate` | Cloud SQL client and read access to `DATABASE_URL` only |
-| `siskop-staging-api` | Existing API runtime permissions and application secrets |
+The builder has no database credential. The VPS deployer key is restricted to SISKOP image/build reads, release requests and deployment receipts. Runtime, backup, certificate and deployer identities are separate; no identity grants access to Sentryx data.
 
-The release account has no Secret Manager read access. Scheduler activation reads
-the shared token from job metadata in memory; the custom activation role permits
-only reading and enabling jobs. Its permission
-to deploy as the runtime accounts is privileged: treat main and changes to this
-pipeline as deployment authority. Never configure a PR trigger with this account.
-
-One-time setup as a project administrator:
-
-```sh
-CLOUDSDK_CORE_ACCOUNT=yudith.octo@gmail.com bash infra/firebase/setup-release.sh
-```
-
-The GitHub host connection is `siskop-github` in `asia-southeast2`; its linked
-repository is `siskop-v3`. The Google Cloud Build GitHub app must be authorized
-and installed for `PTIJK/siskop_v3`. Import the configuration to create the trigger
-or update the existing trigger with the same name:
-
-```sh
-gcloud builds triggers import --project=siskop-d0f8c --region=asia-southeast2 \
-  --source=infra/firebase/release-trigger.yaml
-```
-
-The YAML must be merged into main before the trigger can read it there. Creating
-the trigger does not merge the pull request or deploy the current branch.
+The regional `siskop-main-deploy` trigger watches `PTIJK/siskop_v3` branch `^main$` with `_BACKEND=contabo`. Preserve the existing trigger ID and full configuration when updating it; importing a configuration without an existing ID may create a duplicate.
 
 ## Verification and monitoring
 
@@ -164,23 +83,8 @@ transient failure; a build for an older main commit will skip publishing.
 
 ## Failure recovery
 
-Before Hosting publishes, its existing frontend and pinned API stay active.
-Database migrations may already have applied. Keep migrations compatible with
-the previous API revision; use additive changes and backfills before removals.
-Never rewrite an applied migration. A failed migration may require inspecting
-the Cloud Run Job logs and an explicit Prisma migration repair before retrying.
+A failed release keeps its lock until the current build and any tenant rollout have settled. The next current-main build can reclaim it after verifying the previous owner is terminal. If schedulers remain paused, repair the SISKOP release and let its readiness checks resume them; do not force the financial job for a deployment test.
 
-If Hosting has published but a final smoke check fails, inspect the release in
-Firebase Hosting and roll back to the previous Hosting release if necessary.
-Hosting restores its pinned API reference with it. Restore the direct Cloud Run
-service traffic to the same previous revision separately. Database changes are
-not rolled back automatically.
+The host worker records deployment receipts and preserves the previous API image. Diagnose failures using SISKOP's private release-state files and container logs. Database rollback is separate from image rollback; never reset staging or modify an applied migration. Before restoring, fence writers, preserve a fresh recovery copy, rehearse an isolated restore and validate the complete dataset.
 
-Avoid manual deployments while a pipeline release is running; the release lock
-coordinates Cloud Build releases, not arbitrary manual Firebase/gcloud commands.
-Do not delete the lock while its owner build is active. The next build handles
-locks left by terminated builds using object-generation checks.
-
-References: [Cloud Build GitHub connections](https://docs.cloud.google.com/build/docs/automating-builds/github/connect-repo-github?generation=2nd-gen),
-[Cloud Build Firebase deployments](https://docs.cloud.google.com/build/docs/deploying-builds/deploy-firebase),
-[Firebase Hosting revision pinning](https://firebase.google.com/docs/hosting/cloud-run).
+Use the encrypted off-host Contabo backups if the VPS fails. The private decryption key is kept under operator control outside the VPS and Git. The stopped historical Cloud SQL instance is unrelated to this rollback and remains preserved.

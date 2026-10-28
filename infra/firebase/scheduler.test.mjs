@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { prepareJobs, optionalResource, jobs } from './scheduler.mjs';
 
-const origin = 'https://siskop-staging-api-example.a.run.app';
+const origin = 'https://siskop-api.inovasijayakarsa.id:18443';
 const token = 'test-only-secret';
 function fakeCloud(existing = false) {
   const resources = new Map();
@@ -71,7 +71,7 @@ test('pause failure leaves a newly created job read-only', async () => {
 });
 test('an unexpected service origin is rejected before transmitting the shared secret', async () => {
   const cloud = fakeCloud();
-  for (const url of ['http://example.com', origin + '/path', 'https://other-service.a.run.app', origin + '?foo=bar']) {
+  for (const url of ['http://example.com', origin + '/path', 'https://other-service.a.run.app', 'https://siskop-staging-api-example.a.run.app', origin + '?foo=bar']) {
     await assert.rejects(prepareJobs(cloud, url, token), /origin/);
   }
   assert.equal(cloud.calls.length, 0);

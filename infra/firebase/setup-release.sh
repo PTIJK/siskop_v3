@@ -5,10 +5,9 @@ cd "$(dirname "$0")/../.."
 project=siskop-d0f8c
 region=asia-southeast2
 builder="siskop-cloud-build@$project.iam.gserviceaccount.com"
-migrator="siskop-staging-migrate@$project.iam.gserviceaccount.com"
-runtime="siskop-staging-api@$project.iam.gserviceaccount.com"
+runtime="siskop-central-gateway@$project.iam.gserviceaccount.com"
 
-for account_id in siskop-cloud-build siskop-staging-migrate; do
+for account_id in siskop-cloud-build; do
   if ! gcloud iam service-accounts describe "$account_id@$project.iam.gserviceaccount.com" --project="$project" >/dev/null 2>&1; then
     gcloud iam service-accounts create "$account_id" --project="$project" --display-name="$account_id" --quiet
   fi
@@ -17,11 +16,7 @@ for role in logging.logWriter cloudbuild.builds.viewer run.developer firebasehos
   gcloud projects add-iam-policy-binding "$project" --member="serviceAccount:$builder" \
     --role="roles/$role" --condition=None --quiet --format='value(etag)'
 done
-gcloud projects add-iam-policy-binding "$project" --member="serviceAccount:$migrator" \
-  --role=roles/cloudsql.client --condition=None --quiet --format='value(etag)'
-gcloud secrets add-iam-policy-binding DATABASE_URL --project="$project" \
-  --member="serviceAccount:$migrator" --role=roles/secretmanager.secretAccessor --quiet --format='value(etag)'
-for identity in "$runtime" "$migrator"; do
+for identity in "$runtime"; do
   gcloud iam service-accounts add-iam-policy-binding "$identity" --project="$project" \
     --member="serviceAccount:$builder" --role=roles/iam.serviceAccountUser --quiet --format='value(etag)'
 done

@@ -5,7 +5,6 @@ The GCS object is a generation-checked mutex across all deployment steps. A late
 build can reclaim it only after its owner's Cloud Build has terminated and any
 deterministic App Hosting rollout has settled, even if the outer build timed out.
 """
-import base64
 import json
 import os
 import pathlib
@@ -15,9 +14,7 @@ import sys
 import time
 import types
 import urllib.error
-import urllib.parse
 import urllib.request
-import uuid
 
 from release_id import tenant_resource_id
 from contabo_release import publish_backend as publish_contabo_backend
@@ -199,31 +196,6 @@ def check_api(cloud, origin):
             raise RuntimeError("Tenant login redirect configuration is not ready; refusing publication")
 
 
-def check_email_bindings(service):
-    """Fail closed before Hosting publication when paid signups cannot send."""
-    containers = service.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
-    bindings = {
-        item["name"]: item.get("valueFrom", {}).get("secretKeyRef", {})
-        for container in containers for item in container.get("env", [])
-        if item.get("name") in {"RESEND_API_KEY", "RESEND_FROM_EMAIL"}
-    }
-    missing = [name for name in ("RESEND_API_KEY", "RESEND_FROM_EMAIL")
-               if bindings.get(name, {}).get("name") != name or not bindings[name].get("key", "").isdigit()]
-    if missing:
-        raise RuntimeError("Registration email secret bindings missing: " + ", ".join(missing))
-
-
-def traffic_tag(build_id):
-    if not UUID.fullmatch(build_id):
-        raise ValueError("Invalid Cloud Build ID for traffic tag")
-    # Encode all 128 UUID bits in 26 DNS-safe characters. Keeping the entire ID
-    # prevents later builds from reusing tags pinned by Firebase Hosting.
-    tag = "c" + base64.b32encode(uuid.UUID(build_id).bytes).decode("ascii").rstrip("=").lower()
-    if len(tag + "-" + SERVICE) > 46:
-        raise ValueError("Cloud Run traffic tag and service exceed the hostname limit")
-    return tag
-
-
 def validate_image_ref(image):
     if not re.fullmatch(re.escape(IMAGE) + r"@sha256:[a-f0-9]{64}", image):
         raise ValueError("Retention requires an immutable backend image digest")
@@ -265,54 +237,9 @@ def finish_image_retention(cloud, image, *, coordinated=False):
 def backend(cloud, state, image):
     if state is None:
         return
-    mode = os.environ.get("RELEASE_BACKEND", "cloudrun")
-    if mode == "contabo":
-        return publish_contabo_backend(cloud, state, image, types.SimpleNamespace(**globals()))
-    if mode != "cloudrun":
-        raise ValueError("Unexpected release backend")
-    tag = traffic_tag(state["buildId"])
-    assert_owner(cloud, state)
-    if tenant_hosting_enabled():
-        domain = cloud.request("GET", f"https://firebaseapphosting.googleapis.com/v1/{TENANT_BACKEND}/domains/*." + TENANT_BASE)
-        status = domain.get("customDomainStatus", {})
-        if any(status.get(key) != value for key, value in {
-            "hostState": "HOST_ACTIVE", "ownershipState": "OWNERSHIP_ACTIVE", "certState": "CERT_ACTIVE"
-        }.items()):
-            raise RuntimeError("Tenant DNS and HTTPS must be ready before enabling tenant hosting")
-    if not image.startswith(IMAGE + ":"):
-        raise ValueError("Unexpected image repository")
-    digest = cloud.command(gcloud("artifacts", "docker", "images", "describe", image, "--format=value(image_summary.digest)"))
-    if not re.fullmatch(r"sha256:[a-f0-9]{64}", digest):
-        raise ValueError("Build did not resolve to an immutable image digest")
-    image_ref = IMAGE + "@" + digest
-    protect_candidate_image(cloud, image_ref, state["buildId"])
-    # The job receives only the database secret. No test or seed command runs here.
-    cloud.command(gcloud(
-        "run", "jobs", "deploy", "siskop-staging-migrate", f"--region={REGION}", f"--image={image_ref}",
-        f"--service-account=siskop-staging-migrate@{PROJECT}.iam.gserviceaccount.com",
-        # Jobs deploy accepts an empty set; clear-cloudsql-instances is a service flag.
-        "--set-cloudsql-instances=",
-        "--set-secrets=DATABASE_URL=DATABASE_URL:3", "--set-env-vars=NODE_ENV=production",
-        "--command=node", "--args=/app/apps/backend/node_modules/prisma/build/index.js,migrate,deploy,--schema=/app/apps/backend/prisma/schema.prisma",
-        "--cpu=1", "--memory=512Mi", "--tasks=1", "--parallelism=1", "--max-retries=0", "--task-timeout=600s", "--execute-now", "--wait",
-    ))
-    cloud.command([
-        "bash", "infra/firebase/deploy-api.sh", image_ref, "--no-traffic", f"--tag={tag}",
-        f"--labels=commit-sha={state['commit']},cloud-build-id={state['buildId']}",
-    ])
-    service = json.loads(cloud.command(gcloud("run", "services", "describe", SERVICE, f"--region={REGION}", "--format=json")))
-    check_email_bindings(service)
-    target = next(item for item in service["status"]["traffic"] if item.get("tag") == tag)
-    revision = target.get("revisionName")
-    # A no-traffic configuration revision can leave latestReadyRevisionName
-    # pointing at the older serving revision. The unique tag identifies the
-    # candidate deployed by this build; deploy-api.sh waited for readiness.
-    if not revision or revision != service["status"].get("latestCreatedRevisionName"):
-        raise RuntimeError("Candidate tag does not point to the newly deployed revision")
-    check_api(cloud, target["url"])
-    state.update({"revision": revision, "image": image_ref, "candidateUrl": target["url"]})
-    STATE.write_text(json.dumps(state))
-    print("Migration and candidate API checks passed; ready to publish Firebase Hosting.")
+    if os.environ.get("RELEASE_BACKEND", "contabo") != "contabo":
+        raise ValueError("Only the Contabo backend is supported; the previous database is retired")
+    return publish_contabo_backend(cloud, state, image, types.SimpleNamespace(**globals()))
 
 
 def tenant_hosting_enabled():
@@ -326,10 +253,8 @@ def prepare_tenant(cloud, state):
     if state is None or not tenant_hosting_enabled():
         return
     assert_owner(cloud, state)
-    candidate = urllib.parse.urlsplit(state["candidateUrl"])
-    allowed_contabo = state.get("backend") == "contabo" and state["candidateUrl"] == "https://siskop-api.inovasijayakarsa.id:18443"
-    if not allowed_contabo and (candidate.scheme != "https" or not candidate.hostname or not candidate.hostname.endswith(".run.app") or candidate.username or candidate.password or candidate.path or candidate.query or candidate.fragment):
-        raise ValueError("Tenant gateway requires the verified Cloud Run candidate URL")
+    if state.get("backend") != "contabo" or state["candidateUrl"] != "https://siskop-api.inovasijayakarsa.id:18443":
+        raise ValueError("Tenant gateway requires the verified Contabo origin")
     config = pathlib.Path("apphosting.yaml")
     text = config.read_text()
     placeholder = "value: https://api-not-configured.invalid"
@@ -360,6 +285,8 @@ def tenant_smoke_origin():
 def finish(cloud, state):
     if state is None:
         return
+    if state.get("backend") != "contabo":
+        raise ValueError("A verified Contabo deployment receipt is required")
     assert_owner(cloud, state)
     deployed = cloud.public_json(ORIGIN + "/release.json?build=" + state["buildId"])
     if deployed.get("buildId") != state["buildId"] or deployed.get("commit") != state["commit"]:
@@ -379,8 +306,6 @@ def finish(cloud, state):
         context = workspace.get("data") or {}
         if workspace.get("success") is not True or not context.get("tenantId") or context.get("slug") != slug or context.get("isAlias") is not False:
             raise RuntimeError("Tenant gateway/database readiness check failed")
-    if state.get("backend") != "contabo":
-        cloud.command(gcloud("run", "services", "update-traffic", SERVICE, f"--region={REGION}", f"--to-revisions={state['revision']}=100"))
     activate_schedulers(cloud, state)
     finish_image_retention(cloud, state["image"], coordinated=tenant_hosting_enabled())
     cloud.delete_lock(state["generation"])
@@ -389,9 +314,9 @@ def finish(cloud, state):
 
 def activate_schedulers(cloud, state):
     """Resume prepared jobs only when their exact target serves this release."""
-    origin = "https://siskop-api.inovasijayakarsa.id:18443" if state.get("backend") == "contabo" else cloud.command(gcloud("run", "services", "describe", SERVICE, f"--region={REGION}", "--format=value(status.url)"))
-    if origin != "https://siskop-api.inovasijayakarsa.id:18443" and not re.fullmatch(r"https://siskop-staging-api-[a-z0-9-]+\.a\.run\.app", origin):
-        raise RuntimeError("Unexpected scheduler API origin")
+    if state.get("backend") != "contabo":
+        raise ValueError("A verified Contabo deployment receipt is required")
+    origin = "https://siskop-api.inovasijayakarsa.id:18443"
     specs = json.loads(pathlib.Path(__file__).with_name("scheduler-jobs.json").read_text())
     pending = []
     for spec in specs:
