@@ -55,6 +55,10 @@ def main():
                  "-o", f"-k {socket} -p 55439 -c listen_addresses=''", "-w", "start"], env=env)
             started = True
             run([str(pg / "createdb"), "--maintenance-db=postgres", "siskop_restore_verify"], env=env)
+            # Destination backups contain policies for these NOLOGIN stand-ins.
+            # This is a new disposable cluster; no shared host roles are touched.
+            run([str(pg / "psql"), "-X", "-v", "ON_ERROR_STOP=1", "-c",
+                 "CREATE ROLE siskop_runtime NOLOGIN NOBYPASSRLS; CREATE ROLE siskop_backup NOLOGIN NOBYPASSRLS;"], env=env)
             # This cluster was created above and contains no application objects.
             # The archive contains CREATE SCHEMA public, so remove the empty default.
             run([str(pg / "psql"), "-X", "-v", "ON_ERROR_STOP=1", "-c", "DROP SCHEMA public"], env=env)

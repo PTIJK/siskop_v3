@@ -2,7 +2,7 @@
 
 This directory controls SISKOP only. Never run it from a Sentryx checkout or pass Sentryx container names, credentials, volumes or database URLs.
 
-The target is `/srv/siskop/staging` on `vmi3303548`, Compose project `siskop-staging`, database container `siskop-postgres-staging`, database `siskop_staging`. PostgreSQL is on the internal `siskop-staging-database` network with **no published port**. API deployment is opt-in through the `application` profile; it has not been activated.
+The target is `/srv/siskop/staging` on `vmi3303548`, Compose project `siskop-staging`, database container `siskop-postgres-staging`, database `siskop_staging`. PostgreSQL is on the internal `siskop-staging-database` network with **no published port**. API and HTTPS proxy candidates run through the `application` profile. They are not serving the live website yet.
 
 ## Implemented on 28 October 2026
 
@@ -61,14 +61,25 @@ SISKOP runtime, migration, owner and backup roles are separate. Backend-wide pol
 - `infra/central-gateway/`: fixed-upstream forwarding service with signed requests, cookie/status streaming and no automatic mutation retries. It has no database credentials.
 - `cloudbuild-candidate.yaml`: manual candidate image builds only; it performs no deployment or traffic changes. Production release automation has **not** been switched to Contabo.
 
+## Candidate deployment and recovery verified on 28 October 2026
+
+- The isolated API and unprivileged HTTPS proxy run with separate limits. Public HTTPS is `https://siskop-api.inovasijayakarsa.id:18443`; PostgreSQL remains private. The nonstandard port preserves Sentryx's existing Cloudflare-only 80/443 firewall rules. Frontend addresses stay unchanged.
+- Four parent DNS NS records delegate only `_acme-challenge.siskop-api` to the dedicated Google zone `siskop-api-acme`. A dedicated certificate lineage and fixed-zone DNS hooks passed a real renewal dry run. Renewal reloads only `siskop-proxy-staging`.
+- The initial HTTP-challenge diagnostic added a SISKOP-only HTTP virtual host and one graceful shared Nginx reload. Existing site files were byte-identical and the master remained running. That challenge path is unused; ongoing certificates use DNS validation and the separate proxy. Do not reuse the legacy shared-host ingress installer.
+- Candidate API checks proved restricted database access, transaction rollback, Firebase lookup permissions, and GCS write/read/delete using a new temporary probe object. Xendit remains in test mode. No existing business rows were modified by these probes.
+- Dedicated runtime, backup and certificate identities are installed with separate permissions. Following explicit user approval, the deployer identity can read only SISKOP registry images/build results and the private release mailbox, and create receipts. Its root-only key is not mounted into the API. CI receives no VPS login or database credential.
+- `siskop-backup.timer` is installed hourly at minute 12 UTC. It does nothing until `traffic-switched.json` exists. Encrypted rehearsal backups were uploaded and restored locally, matching all 61 tables and 110 rows. Retention is two days hourly, fourteen days daily, twenty-eight days weekly; initial recovery archives are preserved.
+- A second fresh read-only source export, `pre-contabo/20261028-pre-cutover-review/`, also passed a complete local restore and has encrypted off-host copies and verification evidence. This is preparation, not a final write-frozen export.
+- The new `siskop-deploy.timer` polls a private Google Storage mailbox over outbound HTTPS; no SSH/firewall change is required. `deploy_host.py` accepts only tested main builds from the exact SISKOP trigger/account and immutable SISKOP image digests. It is held before cutover and while `deployment-hold.json` exists.
+- `RELEASE_BACKEND=contabo` prepares coordinated API/central/tenant publication and OIDC scheduler readiness. Default release behavior remains Cloud Run until the controlled trigger override. This path still needs a real Cloud Build rehearsal and live release verification.
+- `restore_candidate.py` restores only into a new allowlisted SISKOP database and compares every table checksum. `promote_candidate.py` requires documented source fencing and a newer verified final export; it preserves the old rehearsal database instead of deleting it. The final promotion has not run.
+
 ## Required before traffic can move
 
-1. Obtain DNS access for the approved `siskop-api.inovasijayakarsa.id` hostname. The currently signed-in Vercel account's three teams do not contain `inovasijayakarsa.id`; nameservers are still Vercel. Do not edit `sentryxmonitor.com` DNS.
-2. Establish SISKOP HTTPS ingress without changing Sentryx virtual hosts, certificates or upstreams. Any change to shared host ingress must be explicitly scoped and checked against the user's requirement to leave existing services untouched.
-3. Provision separate SISKOP runtime/backup Google identities, restricted credential delivery and registry access. No new runtime key or Google identity has been installed yet.
-4. Implement the restricted build-to-VPS release wrapper, local migration execution, coordinated gateway/Hosting publication and scheduler maintenance hold. Do not route normal `main` deployments to the rehearsal database prematurely.
-5. Add automatic SISKOP-only encrypted off-host backups, failure alerts and rotation. The initial verified export is complete; recurring destination backups are **not yet configured**.
-6. Build and deploy API/gateway candidates, verify real Firebase/GCS/email/test-payment integration, and run representative capacity and recovery tests.
-7. Schedule a write freeze, fence old revisions and external writers, take/verify a fresh final export, restore into a fresh SISKOP destination, coordinate routing and resume only one authoritative writer.
+1. Complete integration, capacity, migration-role and build-to-host release checks. Verify external availability and backup-freshness alerts reach the approved operator, `yudith.octo@gmail.com`.
+2. Rehearse final restore/promotion on disposable SISKOP targets; preserve both source and rehearsal data. Never reset the populated rehearsal database with `restore_initial.py`.
+3. Disable the old release trigger and pause both scheduled jobs, block old API invocation, drain writers, fence the source and take a new final consistent backup. Verify its encrypted off-host copy and clean restore before promotion.
+4. Promote the verified fresh destination under the deployment hold, publish both forwarding routes, retarget/authenticate the existing scheduled jobs and verify application behavior.
+5. Mark live authority only after routing succeeds, take an authoritative Contabo backup, enable alerts and resume the Contabo release path. Keep Supabase frozen; after new writes it is not a safe automatic rollback target.
 
 The old Cloud SQL data remains unrecovered and outside this migration. Preserve that instance separately. Supabase and all current production routing remain unchanged.

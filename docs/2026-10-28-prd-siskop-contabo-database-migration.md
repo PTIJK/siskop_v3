@@ -1,7 +1,7 @@
 # PRD: Move the SISKOP API and database to Contabo
 
 **Date:** 28 October 2026
-**Status:** Implementation started; backup and isolated database rehearsal complete; live cutover pending
+**Status:** Isolated API/database candidates and verified encrypted backups ready; release/cutover validation in progress; live application remains on Supabase
 **Environment:** SISKOP staging/demo, initially approximately 100 participants
 **Primary requirement:** SISKOP data belongs exclusively to SISKOP. It must never be restored into, combined with, or accessed through Sentryx databases.
 
@@ -206,7 +206,7 @@ Keep the existing Git-to-Cloud-Build workflow and Artifact Registry. Change its 
 
 ### Restricted deployment transport
 
-Choose and prove a non-interactive authenticated path from Cloud Build to a dedicated SISKOP deploy account before cutover. Baseline: pinned-host-key SSH with a forced command that accepts only validated SISKOP release metadata and invokes a root-owned, narrowly allowlisted release wrapper. Do not grant CI root SSH, a shell with unrestricted sudo, Docker-group membership, arbitrary mounts, or general container execution. A broad Docker command is effectively host administration.
+Choose and prove a non-interactive authenticated path from Cloud Build to a dedicated SISKOP deploy account before cutover. Implemented transport: a dedicated private Google Storage release mailbox, polled by a SISKOP-only host worker over outbound HTTPS. The worker validates the exact Cloud Build trigger, builder identity, main commit, completed verification steps, request freshness and immutable registry digest before invoking a root-owned allowlisted SISKOP release wrapper. This replaces the proposed inbound forced-command SSH path, preserving the existing Tailscale-only SSH firewall. Do not grant CI root SSH, a shell with unrestricted sudo, Docker-group membership, arbitrary mounts, or general container execution. A broad Docker command is effectively host administration.
 
 Cloud Build workers may have dynamic source addresses. Do not rely on an observed build IP for allowlisting. Use a restricted SSH service with strong key authentication, no forwarding/PTY, rate limiting and audited forced commands, or a tested private/pull-based release mechanism if policy requires it. Neither approach needs a public database port. Keep deployment authorization material separate from runtime credentials. Prove this path without interactive prompts or a laptop tunnel; fail closed if unavailable.
 

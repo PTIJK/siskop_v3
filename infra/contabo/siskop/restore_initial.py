@@ -30,7 +30,7 @@ def provision_roles():
     sql('BEGIN;\n' + '\n'.join(statements) + '\nCOMMIT;')
 
 
-def runtime_grants():
+def runtime_grants(database='siskop_staging'):
     sql('''BEGIN;
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO siskop_runtime, siskop_backup;
@@ -54,13 +54,15 @@ DECLARE t record;
 BEGIN
  FOR t IN SELECT tablename FROM pg_tables WHERE schemaname='public' LOOP
    IF t.tablename <> '_prisma_migrations' THEN
+     EXECUTE format('DROP POLICY IF EXISTS siskop_backend_access ON public.%I',t.tablename);
      EXECUTE format('CREATE POLICY siskop_backend_access ON public.%I TO siskop_runtime USING (true) WITH CHECK (true)',t.tablename);
    END IF;
+   EXECUTE format('DROP POLICY IF EXISTS siskop_backup_read ON public.%I',t.tablename);
    EXECUTE format('CREATE POLICY siskop_backup_read ON public.%I FOR SELECT TO siskop_backup USING (true)',t.tablename);
  END LOOP;
 END
 $policies$;
-COMMIT;''')
+COMMIT;''', database=database)
 
 
 def main():

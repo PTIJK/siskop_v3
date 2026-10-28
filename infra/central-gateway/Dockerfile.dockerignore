@@ -1,4 +1,2 @@
 **
-!infra/
-!infra/central-gateway/
-!infra/central-gateway/server.mjs
+!server.mjs

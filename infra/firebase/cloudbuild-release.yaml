@@ -35,11 +35,21 @@ steps:
     entrypoint: bash
     args: ['infra/firebase/build-backend.sh', 'build']
 
+  - id: build-central-gateway
+    waitFor: ['-']
+    name: gcr.io/cloud-builders/docker
+    args: [build, --pull, -t, 'asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/central-gateway:$BUILD_ID', infra/central-gateway]
+
   - id: push-backend
-    waitFor: ['verify-and-build-frontend', 'build-backend']
+    waitFor: ['verify-and-build-frontend', 'build-backend', 'build-central-gateway']
     name: gcr.io/cloud-builders/docker
     entrypoint: bash
     args: ['infra/firebase/build-backend.sh', 'push']
+
+  - id: push-central-gateway
+    waitFor: ['push-backend']
+    name: gcr.io/cloud-builders/docker
+    args: [push, 'asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/central-gateway:$BUILD_ID']
 
   - id: acquire-release
     name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
@@ -77,10 +87,12 @@ steps:
     entrypoint: bash
     args: ['infra/firebase/run-release.sh', 'finish']
 
-images: ['${_IMAGE}:$BUILD_ID']
-timeout: 2400s
+images: ['${_IMAGE}:$BUILD_ID', 'asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/central-gateway:$BUILD_ID']
+timeout: 3600s
 substitutions:
   _DEPLOY: 'true'
+  # Change the trigger override only during the coordinated database cutover.
+  _BACKEND: cloudrun
   # Wildcard hosting is live. Staff login and paid registrations must use it.
   _TENANT_HOSTING: 'true'
   _TENANT_RENAME_ENABLED: 'false'
@@ -92,6 +104,7 @@ options:
   logging: CLOUD_LOGGING_ONLY
   env:
     - RELEASE_DEPLOY=${_DEPLOY}
+    - RELEASE_BACKEND=${_BACKEND}
     - RELEASE_BUILD_ID=$BUILD_ID
     - RELEASE_COMMIT=$COMMIT_SHA
     - RELEASE_BRANCH=$BRANCH_NAME

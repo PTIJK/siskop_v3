@@ -5,7 +5,7 @@ steps:
     args: [build, --pull, -f, apps/backend/Dockerfile, -t, '${_API}:${_TAG}', .]
   - id: build-central-gateway
     name: gcr.io/cloud-builders/docker
-    args: [build, --pull, -f, infra/central-gateway/Dockerfile, -t, '${_GATEWAY}:${_TAG}', .]
+    args: [build, --pull, -t, '${_GATEWAY}:${_TAG}', infra/central-gateway]
 images: ['${_API}:${_TAG}', '${_GATEWAY}:${_TAG}']
 substitutions:
   _TAG: contabo-candidate

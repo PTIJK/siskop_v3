@@ -38,4 +38,11 @@ describe("external scheduler identity", () => {
     mocks.verify.mockRejectedValue(new Error("expired or invalid signature"));
     await expect(verifySchedulerIdentity("Bearer token")).rejects.toThrow("Invalid scheduler identity");
   });
+  it("allows the builder to inspect readiness but never to run scheduled writes", async () => {
+    vi.stubEnv("SISKOP_HOSTING", "contabo");
+    vi.stubEnv("SCHEDULER_OIDC_AUDIENCE", "https://siskop-api.inovasijayakarsa.id:18443");
+    mocks.verify.mockResolvedValue({ getPayload: () => ({ email: "siskop-cloud-build@siskop-d0f8c.iam.gserviceaccount.com", email_verified: true, iss: "https://accounts.google.com", sub: "builder-id" }) });
+    await verifySchedulerIdentity("Bearer token", true);
+    await expect(verifySchedulerIdentity("Bearer token")).rejects.toThrow("Invalid scheduler identity");
+  });
 });

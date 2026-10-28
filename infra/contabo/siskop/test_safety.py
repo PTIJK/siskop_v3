@@ -15,6 +15,22 @@ def module(name):
 
 
 class SafetyTests(unittest.TestCase):
+    def test_certificate_cleanup_preserves_other_validation_values(self):
+        hook = module('dns_hook')
+        original = {'name': hook.RECORD, 'type': 'TXT', 'ttl': 60, 'rrdatas': ['"our-token"', '"another-token"']}
+        result = hook.change_body(original, 'our-token', cleanup=True)
+        self.assertEqual(result['additions'][0]['rrdatas'], ['"another-token"'])
+        self.assertEqual(original['rrdatas'], ['"our-token"', '"another-token"'])
+        self.assertIsNone(hook.change_body(original, 'absent-token', cleanup=True))
+
+    def test_certificate_hook_does_not_accept_other_domains(self):
+        hook = module('dns_hook')
+        with patch('sys.argv', ['dns_hook.py', 'auth']), patch.dict('os.environ', {'CERTBOT_DOMAIN': 'sentryxmonitor.com'}):
+            with patch.object(hook, 'session') as session:
+                with self.assertRaises(ValueError):
+                    hook.main()
+                session.assert_not_called()
+
     def test_wrong_host_or_directory_is_rejected_before_file_access(self):
         ctl = module('siskopctl')
         for directory, hostname in [(Path('/srv/sentryx'), 'vmi3303548'), (ctl.ROOT, 'another-host')]:

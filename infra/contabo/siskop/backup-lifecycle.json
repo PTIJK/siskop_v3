@@ -1,0 +1,5 @@
+{"rule":[
+  {"action":{"type":"Delete"},"condition":{"age":2,"matchesPrefix":["contabo/hourly/"]}},
+  {"action":{"type":"Delete"},"condition":{"age":14,"matchesPrefix":["contabo/daily/"]}},
+  {"action":{"type":"Delete"},"condition":{"age":28,"matchesPrefix":["contabo/weekly/"]}}
+]}

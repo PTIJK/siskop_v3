@@ -1,0 +1,16 @@
+[Unit]
+Description=Encrypted SISKOP-only database backup
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/srv/siskop/staging
+ExecStart=/srv/siskop/staging/jobs-venv/bin/python /srv/siskop/staging/backup_host.py
+CPUQuota=50%
+MemoryMax=768M
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=600
+UMask=0077
+PrivateTmp=true

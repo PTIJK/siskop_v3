@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly SISKOP backup schedule
+
+[Timer]
+OnCalendar=*-*-* *:12:00 UTC
+Persistent=true
+Unit=siskop-backup.service
+
+[Install]
+WantedBy=timers.target

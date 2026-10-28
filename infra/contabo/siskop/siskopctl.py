@@ -29,6 +29,10 @@ def validate_root(root=ROOT, hostname=None):
     settings = dict(line.split('=', 1) for line in (ROOT / 'compose.env').read_text().splitlines() if line and not line.startswith('#'))
     if not re.fullmatch(r'postgres@sha256:[a-f0-9]{64}', settings.get('SISKOP_POSTGRES_IMAGE', '')):
         raise ValueError('Pinned PostgreSQL digest required')
+    if 'SISKOP_API_IMAGE' in settings and not re.fullmatch(r'asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api@sha256:[a-f0-9]{64}', settings['SISKOP_API_IMAGE']):
+        raise ValueError('Pinned SISKOP API image required')
+    if 'SISKOP_PROXY_IMAGE' in settings and not re.fullmatch(r'nginxinc/nginx-unprivileged@sha256:[a-f0-9]{64}', settings['SISKOP_PROXY_IMAGE']):
+        raise ValueError('Pinned SISKOP proxy image required')
 
 
 def command(args, **kwargs):
@@ -56,11 +60,13 @@ def validate_container():
     return data
 
 
-def sql(query):
+def sql(query, database='siskop_staging'):
+    if database not in {'siskop_staging', 'postgres'} and not re.fullmatch(r'siskop_cutover_[a-f0-9]{12}', database):
+        raise ValueError('Refusing unexpected SISKOP database target')
     validate_container()
     # The bootstrap password is resolved only inside this one SISKOP container.
     return command(['docker', 'exec', '-i', CONTAINER, 'sh', '-c',
-                    'PGPASSWORD="$(cat /run/secrets/bootstrap-password)" exec psql -X -qAt -v ON_ERROR_STOP=1 -U siskop_bootstrap -d siskop_staging'],
+                    'PGPASSWORD="$(cat /run/secrets/bootstrap-password)" exec psql -X -qAt -v ON_ERROR_STOP=1 -U siskop_bootstrap -d ' + database],
                    input=query.encode()).decode()
 
 

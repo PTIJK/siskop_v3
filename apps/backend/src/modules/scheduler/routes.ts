@@ -36,7 +36,7 @@ export function schedulerRoutes(): Router {
   router.use((req, _res, next) => {
     try {
       verifySchedulerToken(req.get("x-scheduler-token"));
-      void verifySchedulerIdentity(req.get("authorization")).then(() => next(), next);
+      void verifySchedulerIdentity(req.get("authorization"), req.method === "GET" && req.path === "/status").then(() => next(), next);
     }
     catch (error) { next(error); }
   });
