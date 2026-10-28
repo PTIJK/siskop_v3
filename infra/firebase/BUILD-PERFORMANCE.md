@@ -15,8 +15,8 @@ sets three backend fork slots for GitHub's test step. Each slot gets a clean,
 separate clone of the migrated local test database; fixture resets cannot cross
 slots. Full coverage remains combined in one Vitest run with unchanged thresholds.
 
-Local validation passed all 1,097 backend tests in **93.8s wall time** (91.45s
-reported by Vitest), with **97.06% line coverage**. An initial serial run took
+The final guarded push passed all **1,102 backend tests across 105 files** in
+**86.74s reported by Vitest**, with **97.06% line coverage**. An initial serial run took
 259.2s but failed one accounting fixture, so it is not a clean before/after speed
 benchmark. Local investigation reproduced macOS allowing a separate IPv4 listener
 on an automatically assigned IPv6 HTTP test port, while Supertest sends requests
@@ -34,7 +34,7 @@ build invocations/cache tags and preserves runtime import checks. Actual Cloud
 Build timing for this follow-up has not been measured; no new worker size or
 manually triggered release is part of the change.
 
-## October 2026 optimization — proposed, not deployed
+## Initial October 2026 proposal (before the SDK-wrapper release)
 
 The [completed October release](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/0183950e-724a-4bce-8696-5c5fc011cc4a?project=siskop-d0f8c)
 took about **25m 27s**. Its slow stage was verification, not the completed Supabase data transfer.
