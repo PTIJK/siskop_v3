@@ -20,6 +20,7 @@ import urllib.request
 import uuid
 
 from release_id import tenant_resource_id
+from contabo_release import publish_backend as publish_contabo_backend
 
 PROJECT = "siskop-d0f8c"
 REGION = "asia-southeast2"
@@ -266,8 +267,7 @@ def backend(cloud, state, image):
         return
     mode = os.environ.get("RELEASE_BACKEND", "cloudrun")
     if mode == "contabo":
-        import contabo_release
-        return contabo_release.publish_backend(cloud, state, image, types.SimpleNamespace(**globals()))
+        return publish_contabo_backend(cloud, state, image, types.SimpleNamespace(**globals()))
     if mode != "cloudrun":
         raise ValueError("Unexpected release backend")
     tag = traffic_tag(state["buildId"])

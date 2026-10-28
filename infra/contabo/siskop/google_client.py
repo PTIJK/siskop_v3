@@ -8,7 +8,7 @@ def session(purpose):
     from google.auth.transport.requests import AuthorizedSession
     scopes = {
         'acme': 'https://www.googleapis.com/auth/ndev.clouddns.readwrite',
-        'backup': 'https://www.googleapis.com/auth/devstorage.read_write',
+        'backup': ['https://www.googleapis.com/auth/devstorage.read_write', 'https://www.googleapis.com/auth/monitoring.write'],
         'deployer': 'https://www.googleapis.com/auth/cloud-platform',
     }
     if purpose not in scopes:
@@ -21,5 +21,6 @@ def session(purpose):
     expected = f'siskop-contabo-{purpose}@siskop-d0f8c.iam.gserviceaccount.com'
     if data.get('client_email') != expected or data.get('project_id') != 'siskop-d0f8c':
         raise ValueError('Unexpected Google job identity')
-    credentials = service_account.Credentials.from_service_account_info(data, scopes=[scopes[purpose]])
+    selected = scopes[purpose]
+    credentials = service_account.Credentials.from_service_account_info(data, scopes=selected if isinstance(selected, list) else [selected])
     return AuthorizedSession(credentials)

@@ -73,6 +73,8 @@ SISKOP runtime, migration, owner and backup roles are separate. Backend-wide pol
 - The new `siskop-deploy.timer` polls a private Google Storage mailbox over outbound HTTPS; no SSH/firewall change is required. `deploy_host.py` accepts only tested main builds from the exact SISKOP trigger/account and immutable SISKOP image digests. It is held before cutover and while `deployment-hold.json` exists.
 - `RELEASE_BACKEND=contabo` prepares coordinated API/central/tenant publication and OIDC scheduler readiness. Default release behavior remains Cloud Run until the controlled trigger override. This path still needs a real Cloud Build rehearsal and live release verification.
 - `restore_candidate.py` restores only into a new allowlisted SISKOP database and compares every table checksum. `promote_candidate.py` requires documented source fencing and a newer verified final export; it preserves the old rehearsal database instead of deleting it. The final promotion has not run.
+- Fresh-destination rehearsal restored the second archive into `siskop_cutover_ae2af97f92a2`, preserving the canonical rehearsal copy and matching all 61 tables/110 rows. PDF generation also succeeded inside the bounded API container.
+- External API/database uptime, 90-minute backup freshness, missing health reporter and local API/certificate/disk alert policies are configured for the user-approved `yudith.octo@gmail.com`. Policies remain disabled before cutover. The backup identity has only backup-object creation and metric writing; its OAuth scopes are limited to storage and monitoring writes, with no general cloud-platform scope. A SISKOP-only health timer will publish metrics after authority switches.
 
 ## Required before traffic can move
 
