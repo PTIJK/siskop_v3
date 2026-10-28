@@ -4,8 +4,8 @@ steps:
   - id: verify-ci-source
     waitFor: ['-']
     name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
-    entrypoint: python3
-    args: ['infra/firebase/verified_source.py']
+    entrypoint: bash
+    args: ['infra/firebase/run-sdk-python.sh', 'infra/firebase/verified_source.py']
 
   - id: test-database
     waitFor: ['verify-ci-source']
@@ -16,8 +16,8 @@ steps:
   - id: restore-frontend-dependencies
     waitFor: ['verify-ci-source']
     name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
-    entrypoint: python3
-    args: ['infra/firebase/dependency_cache.py', 'restore']
+    entrypoint: bash
+    args: ['infra/firebase/run-sdk-python.sh', 'infra/firebase/dependency_cache.py', 'restore']
 
   - id: verify-and-build-frontend
     waitFor: ['test-database', 'restore-frontend-dependencies']
@@ -94,8 +94,8 @@ steps:
   - id: save-frontend-dependencies
     waitFor: ['verify-and-build-frontend']
     name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
-    entrypoint: python3
-    args: ['infra/firebase/dependency_cache.py', 'save']
+    entrypoint: bash
+    args: ['infra/firebase/run-sdk-python.sh', 'infra/firebase/dependency_cache.py', 'save']
 
 images: ['${_IMAGE}:$BUILD_ID', 'asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/central-gateway:$BUILD_ID']
 timeout: 3600s
