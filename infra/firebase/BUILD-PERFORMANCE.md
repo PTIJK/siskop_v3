@@ -19,12 +19,17 @@ The proposed fast path reuses full GitHub CI results for the **identical source 
 - CI explicitly checks out the immutable source commit, uses PostgreSQL 17 to match Contabo, and retains full tests and coverage.
 - A bounded public-metadata lookup verifies the repository, pinned CI workflow, exact tree, successful verification job and result freshness. A different squash commit hash is acceptable; different tracked content is not.
 - Eligible builds omit the duplicate test database, test-schema migration, Chromium installation and repeated full application suite. They install only browser-workspace dependencies, rerun release/gateway/host boundary tests and build fresh browser artifacts.
+- Dependency downloads persist in a dependency-keyed pnpm store archive in the existing SISKOP deployment bucket. Source-only changes reuse it; lockfile/manifests/toolchain changes use a new key. Frozen installs and package integrity checks remain. Cold/missing/corrupt cache and storage failures fall back to ordinary downloads; optional uploads overlap deployment.
 - API image compilation, live Prisma schema migrations, release locking, deployment receipts, readiness checks and scheduler controls remain unchanged. Live schema checks are needed for future migrations; the old one-time provider transfer is already finished.
 - Missing or invalid evidence preserves the original full verification path. Manual verification and the explicit full-mode override also retain it.
 
 **Target:** below ten minutes for the normal CI-reuse path. The measured downstream release stages take roughly six minutes; the aim is to overlap the existing backend image build with a short source-proof/browser-build stage. This is a target, not a measured optimized Cloud Build result. No new Cloud Build run or live infrastructure change is part of this PR.
 
 Wait for green GitHub verification before merging and update the branch with main before the final CI run. Source changes introduced at merge, stale evidence, public API rate limits/network failures, cold dependency downloads or slow hosting rollouts can require full verification or exceed the target. No extra worker size, service or persistent credential is introduced.
+
+Local pre-push checks, single full GitHub verification, and Cloud Build CI-result/dependency reuse are implemented together. The first merged release populates the dependency cache; reduced download time applies to later matching builds. The local hook is installed per clone and supplements the shared CI result.
+
+Implementation reference: [Google Cloud Build directory caching](https://docs.cloud.google.com/build/docs/optimize-builds/speeding-up-builds#caching_directories_with_google_cloud_storage).
 
 ## Earlier baseline and optimizations
 

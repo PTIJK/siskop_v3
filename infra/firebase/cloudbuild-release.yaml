@@ -13,8 +13,14 @@ steps:
     entrypoint: bash
     args: ['infra/firebase/prepare-test-database.sh']
 
+  - id: restore-frontend-dependencies
+    waitFor: ['verify-ci-source']
+    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: python3
+    args: ['infra/firebase/dependency_cache.py', 'restore']
+
   - id: verify-and-build-frontend
-    waitFor: ['test-database']
+    waitFor: ['test-database', 'restore-frontend-dependencies']
     name: node:22-bookworm
     entrypoint: bash
     env:
@@ -83,6 +89,13 @@ steps:
     name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
     entrypoint: bash
     args: ['infra/firebase/run-release.sh', 'finish']
+
+  # Optional upload overlaps image publication/deployment, rather than gating it.
+  - id: save-frontend-dependencies
+    waitFor: ['verify-and-build-frontend']
+    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: python3
+    args: ['infra/firebase/dependency_cache.py', 'save']
 
 images: ['${_IMAGE}:$BUILD_ID', 'asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/central-gateway:$BUILD_ID']
 timeout: 3600s

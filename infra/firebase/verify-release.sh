@@ -13,7 +13,7 @@ test "$DATABASE_URL" = 'postgresql://postgres:ci-only-password@siskop-ci-postgre
 apt-get update -qq
 apt-get install -y --no-install-recommends chromium python3 >/dev/null
 npm install --global pnpm@11.19.0
-pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile --store-dir=.release/pnpm-store --config.verify-store-integrity=true --config.side-effects-cache=false
 python3 -m unittest discover -s infra/firebase/tests -v
 python3 -m unittest discover -s infra/contabo/siskop -p 'test_*.py' -v
 node --test infra/central-gateway/server.test.mjs

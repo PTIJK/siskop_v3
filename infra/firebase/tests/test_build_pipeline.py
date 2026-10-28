@@ -32,6 +32,14 @@ class PipelineGateTests(unittest.TestCase):
     def test_backend_build_starts_independently_of_verification(self):
         self.assertEqual(dependencies()["build-backend"], [])
 
+    def test_dependency_restore_precedes_install_and_optional_save_does_not_gate_deploy(self):
+        steps = dependencies()
+        self.assertIn("restore-frontend-dependencies", steps["verify-and-build-frontend"])
+        self.assertEqual(steps["restore-frontend-dependencies"], ["verify-ci-source"])
+        self.assertEqual(steps["save-frontend-dependencies"], ["verify-and-build-frontend"])
+        for parents in steps.values():
+            self.assertNotIn("save-frontend-dependencies", parents)
+
     def test_publishing_requires_both_verified_source_and_successful_image(self):
         steps = dependencies()
         def ancestors(step):

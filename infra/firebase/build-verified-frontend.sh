@@ -10,7 +10,7 @@ if ! command -v python3 >/dev/null; then
   apt-get install -y --no-install-recommends python3 >/dev/null
 fi
 npm install --global pnpm@11.19.0
-pnpm --filter @siskop/frontend... --filter @siskop/mobile... install --frozen-lockfile --ignore-scripts
+pnpm --filter @siskop/frontend... --filter @siskop/mobile... install --frozen-lockfile --ignore-scripts --store-dir=.release/pnpm-store --config.verify-store-integrity=true --config.side-effects-cache=false
 python3 -m unittest discover -s infra/firebase/tests -v
 python3 -m unittest discover -s infra/contabo/siskop -p 'test_*.py' -v
 node --test infra/central-gateway/server.test.mjs

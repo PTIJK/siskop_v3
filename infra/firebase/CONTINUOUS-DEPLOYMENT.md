@@ -66,6 +66,22 @@ An automated test detects policy drift. No GitHub token, new IAM permission or l
 worker is required: this repository's public CI metadata is read with a bounded request budget.
 See [performance measurements and target](BUILD-PERFORMANCE.md).
 
+Browser dependency downloads now use an optional pnpm store cache under
+`gs://siskop-d0f8c-deployments/dependency-cache/frontend-v1/`, using the builder's
+existing bucket permissions. The key includes the lockfile, workspace manifests,
+package-manager configuration, Node/pnpm/platform family, verification scope and
+month. Source-only changes reuse downloads. The install still uses the frozen
+lockfile and store integrity checks; test results, application source, environment
+files and `node_modules` are never restored from this archive. Built package side
+effects are disabled. Full and frontend-only installs use separate cache keys.
+
+Missing/corrupt caches or storage errors retain normal installation. Downloads and
+uploads each have a 45-second timeout; archive entries are bounded and links/path
+traversal are rejected. Successful verification can save a create-only cache entry
+in parallel with publishing; cache uploads never gate deployment. Manual and
+non-main builds do not access remote dependency caches. First use is cold. Cached
+objects consume bucket storage; old monthly keys are not automatically deleted.
+
 ## Cloud setup
 
 `setup-release.sh` configures the builder's base logging/build, hosting, registry and lock-bucket access, plus permission to deploy the central forwarding service as its dedicated account. It no longer creates a Cloud SQL/Supabase migrator or grants database-secret access. Existing Contabo-specific mailbox, build attestation, scheduler/OIDC and gateway setup is managed separately in `infra/contabo/siskop`.
