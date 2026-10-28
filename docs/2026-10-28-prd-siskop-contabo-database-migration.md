@@ -1,7 +1,7 @@
 # PRD: Move the SISKOP API and database to Contabo
 
 **Date:** 28 October 2026
-**Status:** Isolated API/database candidates and verified encrypted backups ready; release/cutover validation in progress; live application remains on Supabase
+**Status:** Live on Contabo; final write-frozen export and authoritative off-host restore verified; seven-day observation in progress. See [completion record](2026-10-28-contabo-migration-completion.md).
 **Environment:** SISKOP staging/demo, initially approximately 100 participants
 **Primary requirement:** SISKOP data belongs exclusively to SISKOP. It must never be restored into, combined with, or accessed through Sentryx databases.
 
