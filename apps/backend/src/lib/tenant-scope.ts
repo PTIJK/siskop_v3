@@ -66,7 +66,13 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   "Charge",
   "ChargePayment",
   // Koperasi pasar plan F6 — mobile Kolektor write dedup.
-  "IdempotencyKey"
+  "IdempotencyKey",
+  // Pricing V2 — tenant-owned billing rows. The catalog tables (Feature, PackageFeature,
+  // VolumeAddon, SupportPlan, PricingSetting, PricingVersion, PricingAuditLog) and
+  // WebhookEvent are platform-level and deliberately absent.
+  "TenantSubscription",
+  "Invoice",
+  "Payment"
 ]);
 
 const WHERE_REQUIRED_ACTIONS = new Set([

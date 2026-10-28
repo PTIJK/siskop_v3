@@ -84,8 +84,9 @@ export function PlatformPackagesPage() {
       name: pkg.name,
       price: Number(pkg.price),
       accounting: pkg.modules.includes("accounting"),
-      maxUsers: pkg.maxUsers,
-      maxMembers: pkg.maxMembers,
+      // Legacy form: a null (unlimited) limit shows 0 and fails validation until the owner picks a number.
+      maxUsers: pkg.maxUsers ?? 0,
+      maxMembers: pkg.maxMembers ?? 0,
       maxSavingConfigs: pkg.maxSavingConfigs === null ? "" : String(pkg.maxSavingConfigs),
       whitelabelEnabled: pkg.whitelabelEnabled,
       customSubdomainEnabled: pkg.customSubdomainEnabled

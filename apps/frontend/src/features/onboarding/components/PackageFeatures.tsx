@@ -5,8 +5,8 @@ export function PackageFeatures({ pkg }: { pkg: PublicPackage }) {
   return (
     <ul className='package-features'>
       {[
-        `${pkg.maxMembers.toLocaleString("id-ID")} anggota`,
-        `${pkg.maxUsers.toLocaleString("id-ID")} pengguna`,
+        pkg.maxMembers === null ? "Anggota tanpa batas" : `${pkg.maxMembers.toLocaleString("id-ID")} anggota`,
+        pkg.maxUsers === null ? "Pengguna tanpa batas" : `${pkg.maxUsers.toLocaleString("id-ID")} pengguna`,
         "Simpanan & pinjaman",
         ...(pkg.modules.includes("accounting") ? ["Akuntansi & laporan"] : []),
         ...(pkg.whitelabelEnabled ? ["Identitas koperasi Anda"] : []),
