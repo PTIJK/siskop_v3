@@ -1,11 +1,9 @@
-import base64
 import importlib.util
 import json
 import pathlib
 import sys
 import tempfile
 import unittest
-import uuid
 from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("release", pathlib.Path(__file__).parents[1] / "release.py")
@@ -138,25 +136,13 @@ class CloudBuildStatusTests(unittest.TestCase):
 
 
 class ReleaseSafetyTests(unittest.TestCase):
-    def test_missing_resend_bindings_block_candidate_publication(self):
-        service = {"spec": {"template": {"spec": {"containers": [{"env": [
-            {"name": "DATABASE_URL", "valueFrom": {"secretKeyRef": {"name": "DATABASE_URL", "key": "2"}}}
-        ]}]}}}}
-        with self.assertRaisesRegex(RuntimeError, "RESEND_API_KEY.*RESEND_FROM_EMAIL"):
-            release.check_email_bindings(service)
 
-    def test_resend_bindings_accept_numeric_secret_versions(self):
-        service = {"spec": {"template": {"spec": {"containers": [{"env": [
-            {"name": name, "valueFrom": {"secretKeyRef": {"name": name, "key": "1"}}}
-            for name in ("RESEND_API_KEY", "RESEND_FROM_EMAIL")
-        ]}]}}}}
-        release.check_email_bindings(service)
 
     def setUp(self):
         # Cloud Build exports these flags to verification too. Each test owns
         # its configuration instead of inheriting the deployment environment.
         environment = patch.dict(release.os.environ, {
-            "RELEASE_BACKEND": "cloudrun",
+            "RELEASE_BACKEND": "contabo",
             "RELEASE_TENANT_HOSTING": "false",
             "RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "false",
         })
@@ -178,10 +164,10 @@ class ReleaseSafetyTests(unittest.TestCase):
             "RELEASE_TENANT_HOSTING": "true", "RELEASE_TENANT_SMOKE_SLUG": "alpha",
             "RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "true",
         }):
-            release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision", "image": release.IMAGE + "@sha256:" + "b" * 64})
+            release.finish(cloud, {"backend": "contabo", "buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision", "image": release.IMAGE + "@sha256:" + "b" * 64})
         cloud.public_json.assert_any_call(release.ORIGIN + "/api/tenant-access/config")
         cloud.public_json.assert_any_call("https://alpha." + release.TENANT_BASE + "/release.json?build=" + BUILD)
-        self.assertIn("--to-revisions=api-revision=100", cloud.command.call_args.args[0])
+        cloud.command.assert_not_called()
         cloud.delete_lock.assert_called_once_with("8")
         activate.assert_called_once()
         retention.assert_called_once_with(cloud, release.IMAGE + "@sha256:" + "b" * 64, coordinated=True)
@@ -199,7 +185,7 @@ class ReleaseSafetyTests(unittest.TestCase):
             "RELEASE_TENANT_HOSTING": "true", "RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "true",
         }):
             with self.assertRaisesRegex(RuntimeError, "Tenant login redirect"):
-                release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
+                release.finish(cloud, {"backend": "contabo", "buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
         cloud.command.assert_not_called()
         cloud.delete_lock.assert_not_called()
         activate.assert_not_called()
@@ -214,7 +200,7 @@ class ReleaseSafetyTests(unittest.TestCase):
         ]
         with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true", "RELEASE_TENANT_SMOKE_SLUG": "alpha"}):
             with self.assertRaisesRegex(RuntimeError, "wildcard"):
-                release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
+                release.finish(cloud, {"backend": "contabo", "buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
         cloud.command.assert_not_called()
         cloud.delete_lock.assert_not_called()
 
@@ -230,7 +216,7 @@ class ReleaseSafetyTests(unittest.TestCase):
     def test_tenant_gateway_is_pinned_to_candidate_and_same_release(self):
         cloud = Mock()
         cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
-        state = {"buildId": BUILD, "generation": "8", "commit": COMMIT, "candidateUrl": "https://candidate-api.a.run.app"}
+        state = {"buildId": BUILD, "generation": "8", "commit": COMMIT, "backend": "contabo", "candidateUrl": "https://siskop-api.inovasijayakarsa.id:18443"}
         with tempfile.TemporaryDirectory() as directory, patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true"}):
             previous = pathlib.Path.cwd()
             try:
@@ -253,68 +239,12 @@ class ReleaseSafetyTests(unittest.TestCase):
         ]
         with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true"}):
             with self.assertRaisesRegex(RuntimeError, "App Hosting"):
-                release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
+                release.finish(cloud, {"backend": "contabo", "buildId": BUILD, "generation": "8", "commit": COMMIT, "revision": "api-revision"})
         cloud.command.assert_not_called()
         cloud.delete_lock.assert_not_called()
 
-    def test_backend_uses_a_valid_unique_tag_for_the_failed_release(self):
-        build_id = "c4fd419b-fdb3-4d75-a0b2-2fd5c2942d61"
-        cloud = Mock()
-        cloud.read_lock.return_value = ({"buildId": build_id}, "8")
-        state = {"buildId": build_id, "generation": "8", "commit": COMMIT}
-        selected_tag = None
 
-        def command(args):
-            nonlocal selected_tag
-            if args[:4] == ["gcloud", "artifacts", "docker", "images"]:
-                return "sha256:" + "b" * 64
-            if args[:4] == ["gcloud", "run", "jobs", "deploy"]:
-                self.assertIn("--set-secrets=DATABASE_URL=DATABASE_URL:3", args)
-                self.assertIn("--set-cloudsql-instances=", args)
-                self.assertNotIn("--clear-cloudsql-instances", args)
-                self.assertFalse(any(arg.startswith("--add-cloudsql-instances") for arg in args))
-                sql_flags = [arg for arg in args if arg.startswith("--set-cloudsql-instances=")]
-                self.assertEqual(sql_flags, ["--set-cloudsql-instances="])
-            if args[:2] == ["bash", "infra/firebase/deploy-api.sh"]:
-                selected_tag = next(arg.removeprefix("--tag=") for arg in args if arg.startswith("--tag="))
-                # Include the hostname separator in the budget as well.
-                self.assertLessEqual(len(selected_tag + "-" + release.SERVICE), 46)
-                self.assertRegex(selected_tag, r"^[a-z][a-z0-9-]*[a-z0-9]$")
-                self.assertIn("--no-traffic", args)
-            if args[:4] == ["gcloud", "run", "services", "describe"]:
-                return json.dumps({
-                    "spec": {"template": {"spec": {"containers": [{"env": [
-                        {"name": name, "valueFrom": {"secretKeyRef": {"name": name, "key": "1"}}}
-                        for name in ("RESEND_API_KEY", "RESEND_FROM_EMAIL")
-                    ]}]}}},
-                    "status": {"latestCreatedRevisionName": "revision-4", "latestReadyRevisionName": "older-ready-revision", "traffic": [
-                        {"tag": selected_tag, "revisionName": "revision-4", "url": "https://candidate.example"}
-                    ]}
-                })
-            return ""
 
-        cloud.command.side_effect = command
-        cloud.public_json.side_effect = [
-            {"success": True}, {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}}
-        ]
-        with tempfile.TemporaryDirectory() as directory, patch.object(release, "STATE", pathlib.Path(directory) / "state.json"):
-            release.backend(cloud, state, release.IMAGE + ":test")
-            self.assertEqual(json.loads(release.STATE.read_text())["revision"], "revision-4")
-
-    def test_traffic_tags_preserve_all_uuid_bits(self):
-        # These differ only at the end; truncating a UUID would reuse a pinned tag.
-        for build_id in [BUILD, BUILD[:-1] + "d", "00000000-0000-0000-0000-000000000000", "ffffffff-ffff-ffff-ffff-ffffffffffff"]:
-            with self.subTest(build_id=build_id):
-                tag = release.traffic_tag(build_id)
-                decoded = base64.b32decode(tag[1:].upper() + "======")
-                self.assertEqual(uuid.UUID(bytes=decoded), uuid.UUID(build_id))
-                self.assertLessEqual(len(tag + "-" + release.SERVICE), 46)
-
-    def test_invalid_tag_input_stops_before_database_migration(self):
-        cloud = Mock()
-        with self.assertRaises(ValueError):
-            release.backend(cloud, {"buildId": "not-a-build-id"}, release.IMAGE + ":test")
-        self.assertEqual(cloud.mock_calls, [])
 
     def test_verification_build_never_needs_cloud_credentials(self):
         cloud = Mock()
@@ -440,24 +370,13 @@ class ReleaseSafetyTests(unittest.TestCase):
         cloud.check_login_page.assert_called_once_with("https://alpha." + release.TENANT_BASE + "/login?build=" + BUILD)
         cloud.delete_lock.assert_not_called()
 
-    def test_failed_migration_prevents_backend_deployment(self):
-        cloud = Mock()
-        cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
-        cloud.command.side_effect = ["sha256:" + "b" * 64, "", RuntimeError("migration failed")]
-        state = {"buildId": BUILD, "generation": "8", "commit": COMMIT}
-        with self.assertRaisesRegex(RuntimeError, "migration failed"):
-            release.backend(cloud, state, release.IMAGE + ":test")
-        self.assertEqual(cloud.command.call_count, 3)
-        self.assertIn(release.IMAGE + ":retain-pending-" + BUILD, cloud.command.call_args_list[1].args[0])
-        self.assertEqual(cloud.command.call_args.args[0][1:4], ["run", "jobs", "deploy"])
-        cloud.delete_lock.assert_not_called()
 
     def test_wrong_hosted_release_blocks_completion(self):
         cloud = Mock()
         cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
         cloud.public_json.return_value = {"buildId": OTHER, "commit": COMMIT}
         with self.assertRaises(RuntimeError):
-            release.finish(cloud, {"buildId": BUILD, "generation": "8", "commit": COMMIT})
+            release.finish(cloud, {"backend": "contabo", "buildId": BUILD, "generation": "8", "commit": COMMIT})
         cloud.command.assert_not_called()
         cloud.delete_lock.assert_not_called()
 

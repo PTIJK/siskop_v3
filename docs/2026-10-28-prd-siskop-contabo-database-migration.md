@@ -1,3 +1,5 @@
+> **28 October update:** Cutover is complete. The user subsequently requested complete Supabase retirement, superseding the proposed source-retention period and source-provider rollback below. Recover from the current authoritative Contabo dataset and encrypted off-host backups. See [completion](2026-10-28-contabo-migration-completion.md) and [retirement status](2026-10-28-supabase-retirement.md). Original planning sections are retained for audit.
+
 # PRD: Move the SISKOP API and database to Contabo
 
 **Date:** 28 October 2026

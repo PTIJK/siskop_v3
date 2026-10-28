@@ -5,12 +5,11 @@ Project: `siskop-d0f8c`, region: `asia-southeast2`.
 Frontend: https://siskop-d0f8c.web.app
 
 Firebase Hosting serves the existing Vite frontend and forwards `/api/**` and
-`/uploads/**` to `siskop-staging-api` on Cloud Run. The API uses the existing
-Prisma/PostgreSQL database. New registrations and public login use Firebase
+`/uploads/**` through `siskop-central-gateway` on Cloud Run to the dedicated Contabo API. The API uses SISKOP’s private PostgreSQL cluster on Contabo. New registrations and public login use Firebase
 Authentication (Google or email/password); Firestore and Data Connect are not used.
 
 Registration confirmation emails use Resend after verified payment. Follow
-[Resend setup](RESEND.md) to configure a sender, test the key, and enable Cloud Run.
+[Resend setup](RESEND.md) to configure a sender and test the key in the SISKOP API runtime.
 
 ## Session compatibility
 
@@ -33,122 +32,32 @@ off until DNS/HTTPS and hosted validation are complete. Once routing is enabled,
 payment completion returns the canonical tenant login URL. The default `web.app`
 hostname does not provide arbitrary cooperative subdomains.
 
-## Resources
+## Current resources
 
-- Database: temporary Supabase Singapore project `lovtfdddtafuyldnkbny` (`Siskop Staging v2`), database `postgres`. Migrations are versioned under `apps/backend/prisma/migrations`.
-- Cloud SQL: `siskop-staging` is stopped and retained for recovery of the previous staging data.
-- Cloud Run: `siskop-staging-api`, 1 CPU, 1 GiB, min 0/max 1 instance, concurrency 20.
-- Runtime account: `siskop-staging-api@siskop-d0f8c.iam.gserviceaccount.com`.
-- Image repository: `asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api`.
-- Private uploads bucket: `gs://siskop-d0f8c-staging-uploads`, mounted at `/mnt/uploads`.
-- Secret Manager versions: `DATABASE_URL:3` connects to Supabase; `DATABASE_URL:2` retains the Cloud SQL credential for recovery. JWT keys, Xendit secrets, `TENANT_GATEWAY_SECRET`, and `SCHEDULER_SECRET` use version 1.
-- Cloud Scheduler: daily interest/KOL at 07:05 WIB and Firebase recovery every 15 minutes;
-  OIDC invoker `siskop-scheduler-invoker@siskop-d0f8c.iam.gserviceaccount.com` plus the app token.
+- Business API: dedicated `siskop-api-staging` container on Contabo.
+- Database: dedicated PostgreSQL 17 cluster/database `siskop_staging` on Contabo, with no published SQL port. SISKOP shares no database, roles or volumes with Sentryx.
+- Central Google gateway: `siskop-central-gateway` forwards API/uploads to `https://siskop-api.inovasijayakarsa.id:18443`.
+- Compatibility Google URL: `siskop-staging-api` forwards existing integration calls to the same SISKOP API. Neither forwarding service has database credentials.
+- Tenant/member sites: existing Firebase App Hosting and cooperative custom domains.
+- Authentication: existing Firebase identities; email: Resend; payments: Xendit test mode.
+- Uploads: private `gs://siskop-d0f8c-staging-uploads`, accessed by SISKOP's dedicated runtime identity.
+- Database backups: client-side encrypted archives in `gs://siskop-d0f8c-db-backups`, including the final source export and verified authoritative Contabo restore.
+- Historical Cloud SQL: `siskop-staging` remains stopped and unrecovered, preserved separately.
 
-Cloud Run reads secrets at runtime; they are never bundled into the frontend/image.
-`.gcloudignore` permits only backend build inputs. The private local copy is
-`apps/backend/.env.firebase-secrets.local` (gitignored, mode 0600). Never put its
-values in a command argument, build substitution, commit, or chat.
+See the [completion record](../../docs/2026-10-28-contabo-migration-completion.md) and [Supabase retirement record](../../docs/2026-10-28-supabase-retirement.md) for current operational evidence and provider-deletion status.
 
-## Database maintenance
+## Database maintenance and releases
 
-The helper prefers `apps/backend/.env.supabase.local` (gitignored, mode 0600).
-It uses the Singapore session pooler on port 5432 with SSL and a three-connection
-Prisma pool. Create the private connection file without printing its credential.
-Without this file, it uses the original Cloud SQL connection through an
-authenticated local proxy:
+Migrations run in a dedicated one-shot container against SISKOP's private PostgreSQL cluster during the coordinated main release. Use [the Contabo runbook](../contabo/siskop/README.md). The old `database.mjs` and `deploy-api.sh` entry points deliberately fail before reading credentials or contacting a provider. There is no Cloud Run/Supabase business-backend fallback.
 
-```sh
-cloud-sql-proxy --gcloud-auth --address=127.0.0.1 --port=55434 \
-  siskop-d0f8c:asia-southeast2:siskop-staging
-```
+Never run integration tests against staging: they delete records and some truncate tenant data. Tests use a disposable local/CI PostgreSQL database. Applied Prisma migrations stay immutable, including historical provider-specific protection migrations; these are schema history rather than a dependency on that provider.
 
-From the repository root:
-
-```sh
-node infra/firebase/database.mjs check
-node infra/firebase/database.mjs migrate
-node infra/firebase/database.mjs seed
-node infra/firebase/database.mjs seed-smoke
-node infra/firebase/check-hosted.mjs
-```
-
-The helper reads the private local connection string and restricts itself to the
-configured staging database without printing credentials.
-The seed creates only `Paket Lengkap (Demo)` at IDR 500,000; it preserves existing
-package data and creates no preset accounts. Set the actual package catalog before
-accepting live customers. Never run the backend integration suite against this
-database: those tests delete test records and some suites truncate tenant data.
-The hosted checker tests route/auth behavior and signed sample callbacks without
-creating users or payments. See [verification record](VERIFICATION.md) for the
-actual browser payment test and deployed image.
-
-## Temporary Supabase staging (2026-10-11)
-
-All 40 Prisma migrations are applied to the Singapore database. Its 61
-public tables have RLS enabled with no public access policies; Prisma connects
-through the backend. Public API roles have no table privileges. Trigger function
-search paths are pinned to `public, pg_temp`. Supabase security migrations record
-these database-specific protections. Keep these protections when adding tables.
-
-The API revision `siskop-staging-api-supabase-sg-20261011` uses the existing image
-with secret version 3 and no Cloud SQL attachment. The current Firebase Hosting
-and tenant gateway tag `czxr36egjubccbh52pnk45lgmn4` was reassigned to this revision
-so both applications use Supabase without rebuilding their frontend assets.
-The previous API revision is `siskop-staging-api-00071-xum`.
-
-The demo subscription package and `siskop-ci-smoke` release verification tenant
-were initialized. The verification tenant has self-registration disabled and no
-users, members or financial records. Its slug is configured in both the Cloud
-Build trigger and committed build defaults; do not delete it while releases use it.
-`seed-smoke` is idempotent and refuses to overwrite conflicting tenant records.
-
-The deployment scripts bind `DATABASE_URL:3` and clear Cloud SQL attachments for
-both the API and migration job. CI uses a disposable PostgreSQL 17 database to
-match Supabase and receives no staging database credential. Pushes to `main`
-run the coordinated release; feature branch pushes do not publish.
-
-The initial setup used 23 migrations; the remaining migrations were applied after
-verification found missing tenant columns required by the running API. Future
-migrations are applied by the release job. The Supabase protection migration enables RLS and removes public
-API privileges on their new tables before the candidate API is deployed. Future
-table migrations must enable RLS as well; default grants stay restricted.
-
-Previous users, koperasi,
-members, balances and transactions have not been recovered. Recover Cloud SQL
-into a separate database first and plan a merge with any new Supabase data before
-restoring. Do not overwrite newly created staging records with an old dump.
-
-## Repeat a deployment
-
-For automatic releases after merging into main, see
-[continuous deployment](CONTINUOUS-DEPLOYMENT.md). The commands below are the
-manual backend/frontend fallback; avoid running them during a pipeline release.
-
-Run the backend tests against a separate local test database first, then typecheck
-and lint. Build and deploy from the repository root:
-
-```sh
-gcloud builds submit . --project=siskop-d0f8c --region=asia-southeast2 \
-  --config=infra/firebase/cloudbuild.yaml \
-  --substitutions=_IMAGE=asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api:YOUR_UNIQUE_TAG
-
-# Copy the sha256 digest from the successful build's results.images.
-bash infra/firebase/deploy-api.sh asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api@sha256:YOUR_DIGEST
-
-pnpm --filter @siskop/frontend exec tsc --noEmit
-pnpm --filter @siskop/frontend exec vite build --mode staging
-firebase deploy --only hosting --project=siskop-d0f8c
-```
-
-Hosting pins the backend revision so a Hosting release rollback restores its
-associated API revision. Database migrations are separate and must remain
-compatible with the revision being restored.
+For deployment use the [coordinated pipeline](CONTINUOUS-DEPLOYMENT.md). Do not manually publish a frontend or repoint the database during a release. Recover newer data from an authoritative Contabo backup on an isolated compatible destination; never reopen the stale pre-cutover source as a writer.
 
 ## Scheduled jobs
 
-Cloud Scheduler cold-starts the API when needed. The Cloud Run entrypoint has no
-in-process cron timer. Both jobs use the direct Cloud Run URL, OIDC from
+Cloud Scheduler invokes the Contabo API. The API entrypoint has no
+in-process cron timer. Both jobs use the Contabo HTTPS origin, OIDC from
 `siskop-scheduler-invoker`, and an application-verified `x-scheduler-token`.
 The shared token is required because this API also serves public Firebase routes.
 Tenant subdomains cannot invoke these system endpoints.
@@ -190,14 +99,14 @@ GET, then are paused before their real POST targets are installed. Re-running th
 script updates the same jobs and leaves them paused again.
 
 The script also grants the Cloud Build identity a custom role containing only
-`cloudscheduler.jobs.get` and `cloudscheduler.jobs.enable`. The release reads the
+`cloudscheduler.jobs.get`, `cloudscheduler.jobs.enable`, and `cloudscheduler.jobs.pause`. The release reads the
 job header in memory for its authenticated readiness check; it does not read
 Secret Manager. Do not print full job resources: their headers contain the token.
 
 ### Activation and operation
 
 Merge the tested PR into main. The coordinated Cloud Build release deploys the
-API with the pinned secret, verifies Hosting and promotes the direct API URL.
+API with the pinned secret, verifies Hosting and verifies the Contabo API.
 It then checks `GET /api/scheduler/status` using each job's token. Both jobs must
 target the expected service and report the exact new revision and both features
 ready before either is resumed. This check does not perform financial work or
@@ -217,7 +126,7 @@ gcloud scheduler jobs list --project=siskop-d0f8c --location=asia-southeast2 \
   --format='table(name.basename(),state,schedule,timeZone,lastAttemptTime,status.code)'
 ```
 
-Check execution results in Cloud Scheduler and Cloud Run logs. Do not use
+Check execution results in Cloud Scheduler and the dedicated SISKOP API container logs. Do not use
 "Force run" on the financial job just to test deployment: it performs real
 accruals. Local integration tests use a disposable database and mocked Firebase.
 
@@ -263,10 +172,7 @@ renew automatically. A published custom Spline scene can be configured with
 
 ## Costs and remaining production work
 
-The existing Cloud SQL instance is a 30-day trial; this setup does not upgrade it.
-Cloud Run scales to zero but build, artifact, storage, and network usage can still
-incur charges under the project's billing plan. A one-instance limit is a staging
-setting, not a billing cap. Plan database retention/export before the trial ends.
+The stopped historical Cloud SQL instance is preserved for separate data recovery. API and database use the existing Contabo VPS. Google hosting/forwarding, builds, artifacts, uploads, encrypted backups, monitoring and network usage can still incur charges. Container resource limits are not a billing cap or high availability.
 
 Before a live launch: provide the actual package catalog and domain routing,
 configure the final Spline scene if desired, explicitly set `XENDIT_MODE=live`
@@ -288,8 +194,7 @@ project identifiers, not server credentials. Firebase allows `localhost`,
 `siskop-d0f8c.web.app`, and `siskop-d0f8c.firebaseapp.com` for authentication.
 
 The API requires `FIREBASE_PROJECT_ID=siskop-d0f8c` and Application Default
-Credentials with `firebaseauth.users.get`. Cloud Run uses its attached service
-account with `roles/firebaseauth.viewer`; no service-account private key is used.
+Credentials with `firebaseauth.users.get`. The Contabo runtime uses its dedicated SISKOP credential with scoped Firebase user permissions; Google forwarding services do not receive business/database credentials.
 Local backend development also needs ADC authorized for this project.
 `FIREBASE_AUTH_EMULATOR_HOST` is forbidden in production.
 

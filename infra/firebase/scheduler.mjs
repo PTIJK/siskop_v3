@@ -13,7 +13,7 @@ export async function optionalResource(cloud, url) {
 }
 
 export async function prepareJobs(cloud, origin, token) {
-  if (origin !== 'https://siskop-api.inovasijayakarsa.id:18443' && !/^https:\/\/siskop-staging-api-[a-z0-9-]+\.a\.run\.app$/.test(origin)) throw new Error('Unexpected API origin');
+  if (origin !== 'https://siskop-api.inovasijayakarsa.id:18443') throw new Error('Unexpected API origin');
   if (!token || /[\r\n]/.test(token)) throw new Error('Invalid scheduler credential');
   for (const spec of jobs) {
     const name = `projects/${project}/locations/${region}/jobs/${spec.id}`;

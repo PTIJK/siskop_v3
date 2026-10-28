@@ -1,37 +1,5 @@
 #!/usr/bin/env bash
+# Deliberately fail before any cloud command: business logic now runs on Contabo.
 set -euo pipefail
-cd "$(dirname "$0")/../.."
-image_ref="${1:?Pass the immutable Artifact Registry image digest from a successful build}"
-if [[ "$image_ref" != asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api@sha256:* ]]; then
-  echo "Expected the staging API image digest." >&2
-  exit 1
-fi
-shift
-if [[ "${RELEASE_TENANT_LOGIN_SELECTION_ENABLED:-false}" == true && "${RELEASE_TENANT_HOSTING:-false}" != true ]]; then
-  echo "Tenant login selection requires coordinated tenant hosting." >&2
-  exit 1
-fi
-mkdir -p .release
-flags_file=.release/api-env-flags.yaml
-{
-  # --env-vars-file replaces the entire environment, including optional
-  # Secret Manager bindings such as Resend. Update only plain settings.
-  printf '%s\n' '--update-env-vars:'
-  sed 's/^/  /' infra/firebase/staging-env.yaml
-  printf '  TENANT_DOMAINS_ENABLED: "%s"\n' "${RELEASE_TENANT_HOSTING:-false}"
-  printf '  TENANT_DOMAIN_RENAME_ENABLED: "%s"\n' "${RELEASE_TENANT_RENAME_ENABLED:-false}"
-  printf '  TENANT_LOGIN_SELECTION_ENABLED: "%s"\n' "${RELEASE_TENANT_LOGIN_SELECTION_ENABLED:-false}"
-  printf '  TENANT_SWITCHING_ENABLED: "%s"\n' "${RELEASE_TENANT_SWITCHING_ENABLED:-false}"
-} > "$flags_file"
-gcloud run deploy siskop-staging-api \
-  --project=siskop-d0f8c --region=asia-southeast2 \
-  --image="$image_ref" \
-  --service-account=siskop-staging-api@siskop-d0f8c.iam.gserviceaccount.com \
-  --clear-cloudsql-instances \
-  --update-secrets=DATABASE_URL=DATABASE_URL:3,JWT_SECRET=JWT_SECRET:1,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:1,XENDIT_SECRET_KEY=XENDIT_SECRET_KEY:1,XENDIT_WEBHOOK_TOKEN=XENDIT_WEBHOOK_TOKEN:1,TENANT_GATEWAY_SECRET=TENANT_GATEWAY_SECRET:1,SCHEDULER_SECRET=SCHEDULER_SECRET:1 \
-  --flags-file="$flags_file" \
-  --execution-environment=gen2 --cpu=1 --memory=1Gi --concurrency=20 \
-  --min-instances=0 --max-instances=1 --timeout=300 --cpu-throttling \
-  --add-volume='name=uploads,type=cloud-storage,bucket=siskop-d0f8c-staging-uploads,mount-options=uid=1000;gid=1000' \
-  --add-volume-mount=volume=uploads,mount-path=/mnt/uploads \
-  --quiet "$@"
+echo 'Retired: use the coordinated main release with _BACKEND=contabo. See infra/contabo/siskop/README.md.' >&2
+exit 1
