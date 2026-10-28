@@ -1,20 +1,17 @@
 # Triggered only by pushes to main (including merged PRs).
 # Manual verification uses _DEPLOY=false; it builds/tests without publishing.
 steps:
+  - id: verify-ci-source
+    waitFor: ['-']
+    name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: python3
+    args: ['infra/firebase/verified_source.py']
+
   - id: test-database
+    waitFor: ['verify-ci-source']
     name: gcr.io/cloud-builders/docker
     entrypoint: bash
-    args:
-      - -ceu
-      - |
-        docker run -d --network cloudbuild --name siskop-ci-postgres \
-          -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=ci-only-password \
-          -e POSTGRES_DB=siskop_ci_test postgres:17
-        for attempt in {1..30}; do
-          if docker exec siskop-ci-postgres pg_isready -U postgres; then exit 0; fi
-          sleep 2
-        done
-        exit 1
+    args: ['infra/firebase/prepare-test-database.sh']
 
   - id: verify-and-build-frontend
     waitFor: ['test-database']
@@ -91,6 +88,7 @@ images: ['${_IMAGE}:$BUILD_ID', 'asia-southeast2-docker.pkg.dev/siskop-d0f8c/sis
 timeout: 3600s
 substitutions:
   _DEPLOY: 'true'
+  _VERIFICATION: reuse-ci
   # The controlled cutover holds the live trigger until the new source is ready.
   _BACKEND: contabo
   # Wildcard hosting is live. Staff login and paid registrations must use it.
@@ -104,6 +102,7 @@ options:
   logging: CLOUD_LOGGING_ONLY
   env:
     - RELEASE_DEPLOY=${_DEPLOY}
+    - RELEASE_VERIFICATION=${_VERIFICATION}
     - RELEASE_BACKEND=${_BACKEND}
     - RELEASE_BUILD_ID=$BUILD_ID
     - RELEASE_COMMIT=$COMMIT_SHA

@@ -7,6 +7,9 @@
 !tsconfig.base.json
 !turbo.json
 !.dockerignore
+!.github/
+!.github/workflows/
+!.github/workflows/ci.yml
 !firebase.json
 !apphosting.yaml
 !.firebaserc

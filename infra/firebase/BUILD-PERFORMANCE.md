@@ -1,5 +1,33 @@
 # Cloud Build performance
 
+## October 2026 optimization — proposed, not deployed
+
+The [completed October release](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/0183950e-724a-4bce-8696-5c5fc011cc4a?project=siskop-d0f8c)
+took about **25m 27s**. Its slow stage was verification, not the completed Supabase data transfer.
+
+| Measured stage | Duration |
+| --- | ---: |
+| Disposable test database | 40s |
+| Verification and browser builds | **18m 25s** |
+| Backend image build, in parallel | 2m 26s |
+| Migration and API deployment together | 1m 29s |
+| Tenant hosting publication | 2m 33s |
+| Central hosting publication | 1m 01s |
+
+The proposed fast path reuses full GitHub CI results for the **identical source tree**:
+
+- CI explicitly checks out the immutable source commit, uses PostgreSQL 17 to match Contabo, and retains full tests and coverage.
+- A bounded public-metadata lookup verifies the repository, pinned CI workflow, exact tree, successful verification job and result freshness. A different squash commit hash is acceptable; different tracked content is not.
+- Eligible builds omit the duplicate test database, test-schema migration, Chromium installation and repeated full application suite. They install only browser-workspace dependencies, rerun release/gateway/host boundary tests and build fresh browser artifacts.
+- API image compilation, live Prisma schema migrations, release locking, deployment receipts, readiness checks and scheduler controls remain unchanged. Live schema checks are needed for future migrations; the old one-time provider transfer is already finished.
+- Missing or invalid evidence preserves the original full verification path. Manual verification and the explicit full-mode override also retain it.
+
+**Target:** below ten minutes for the normal CI-reuse path. The measured downstream release stages take roughly six minutes; the aim is to overlap the existing backend image build with a short source-proof/browser-build stage. This is a target, not a measured optimized Cloud Build result. No new Cloud Build run or live infrastructure change is part of this PR.
+
+Wait for green GitHub verification before merging and update the branch with main before the final CI run. Source changes introduced at merge, stale evidence, public API rate limits/network failures, cold dependency downloads or slow hosting rollouts can require full verification or exceed the target. No extra worker size, service or persistent credential is introduced.
+
+## Earlier baseline and optimizations
+
 Baseline deployment: [3f35c703](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/3f35c703-518f-45a6-928d-2ac1c73385e0?project=siskop-d0f8c),
 main commit `1817514`, 2026-09-15. The build completed successfully and activated
 both scheduler jobs.

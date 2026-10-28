@@ -18,7 +18,8 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18
+        # Match the authoritative PostgreSQL major version used on Contabo.
+        image: postgres:17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -41,6 +42,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Test the immutable head, rather than GitHub's temporary merge ref.
+          # Cloud Build may reuse this result only when the deployed tree is identical.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v4
         with:
@@ -54,6 +60,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: python3 -m unittest discover -s infra/firebase/tests -v
+
+      - run: python3 -m unittest discover -s infra/contabo/siskop -p 'test_*.py' -v
+
+      - run: node --test infra/central-gateway/server.test.mjs
+
+      - run: node --test infra/firebase/ci-proof.test.mjs
 
       - run: node --test infra/tenant-web/server.test.mjs
 

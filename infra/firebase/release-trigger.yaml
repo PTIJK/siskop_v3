@@ -8,6 +8,7 @@ repositoryEventConfig:
     branch: ^main$
 substitutions:
   _DEPLOY: 'true'
+  _VERIFICATION: reuse-ci
   _BACKEND: contabo
   _TENANT_HOSTING: 'true'
   _TENANT_RENAME_ENABLED: 'false'

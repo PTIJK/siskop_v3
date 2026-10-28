@@ -14,7 +14,7 @@ pipeline. Repository branch protection controls who can merge or push main.
 
 The authoritative API/database run on Contabo. The Cloud Run business-backend option has been retired. `_BACKEND=contabo` is the only supported mode; verification-only builds do not deploy.
 
-1. Run release safety checks, lint, typechecks, migrations and application tests against a disposable PostgreSQL container, and build the browser assets and API image. Staging database credentials are unavailable to tests.
+1. Resolve verification evidence before publication. A successful, pinned GitHub CI run may be reused only for an identical Git source tree. Otherwise run the full existing PostgreSQL verification. Build fresh browser assets and the API image; staging database credentials are unavailable to tests.
 2. Confirm the commit still matches main and acquire the generation-checked SISKOP release lock. Resolve and protect the immutable API image digest.
 3. Validate both existing SISKOP scheduler targets, then pause new scheduled executions.
 4. Write a request to the private SISKOP release mailbox. The dedicated host worker verifies the exact successful main build and approved image, runs migrations with SISKOP's separate migration role, gracefully restarts only the SISKOP API and returns a verified receipt. A failed migration or receipt stops frontend publication.
@@ -46,10 +46,25 @@ verification's pnpm store, Turbo artifacts and frontend bundles cannot enter it
 while the backend builds in parallel. No extra machine-size setting or IAM role
 is required. The existing machine size and deployment checks are preserved.
 
-Lint, typechecking, all backend tests with coverage, release tests and browser
-bundles still run for each main commit. Backend compilation happens in Docker;
-the frontend and mobile bundles are built once after typechecking. Caches do not
-skip test results. See [performance measurements](BUILD-PERFORMANCE.md).
+GitHub CI tests the immutable PR head, including lint, typechecks, PostgreSQL 17 migrations,
+the complete application suite and coverage gate. Cloud Build reuses that result
+only when the merged source tree is byte-for-byte identical and the reviewed CI
+workflow, successful verification job and freshness checks all match. Cheap release,
+gateway and host-boundary tests still run in Cloud Build. Fresh browser assets are
+built and the API image still compiles and checks its Node imports.
+
+Wait for the GitHub verification check before merging. Keep the branch up to date
+with main before its final CI run to make reuse possible. If a merge adds code not
+present in the tested head, or evidence is missing, failed, stale or unavailable,
+Cloud Build automatically keeps the full original verification path. It does not
+publish untested merged code. Manual `_DEPLOY=false` verification and the explicit
+`_VERIFICATION=full` override always use the full path.
+
+The CI definition is pinned in `ci-verification-policy.json`; changing the workflow
+requires reviewing and updating its Git blob hash with `git hash-object .github/workflows/ci.yml`.
+An automated test detects policy drift. No GitHub token, new IAM permission or larger
+worker is required: this repository's public CI metadata is read with a bounded request budget.
+See [performance measurements and target](BUILD-PERFORMANCE.md).
 
 ## Cloud setup
 
