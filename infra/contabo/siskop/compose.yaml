@@ -1,0 +1,138 @@
+name: siskop-staging
+services:
+  postgres:
+    image: ${SISKOP_POSTGRES_IMAGE:?Pinned PostgreSQL image digest required}
+    container_name: siskop-postgres-staging
+    user: '999:999'
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 2g
+    memswap_limit: 2g
+    shm_size: 512m
+    pids_limit: 128
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    environment:
+      POSTGRES_USER: siskop_bootstrap
+      POSTGRES_DB: siskop_staging
+      POSTGRES_PASSWORD_FILE: /run/secrets/bootstrap-password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+      PGDATA: /var/lib/postgresql/data
+      TZ: UTC
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - max_connections=40
+      - -c
+      - temp_file_limit=256MB
+      - -c
+      - password_encryption=scram-sha-256
+      - -c
+      - log_statement=none
+      - -c
+      - timezone=UTC
+    volumes:
+      - /srv/siskop/staging/postgres:/var/lib/postgresql/data
+      - /srv/siskop/staging/secrets/bootstrap-password:/run/secrets/bootstrap-password:ro
+    tmpfs:
+      - /tmp:size=64m,uid=999,gid=999,mode=1777
+      - /var/run/postgresql:size=16m,uid=999,gid=999
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U siskop_bootstrap -d siskop_staging']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    labels:
+      com.siskop.application: siskop
+      com.siskop.environment: staging
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+
+  api:
+    profiles: [application]
+    image: ${SISKOP_API_IMAGE:-siskop-api-not-configured:invalid}
+    container_name: siskop-api-staging
+    user: '1000:1000'
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 330s
+    cpus: 1
+    mem_limit: 1g
+    memswap_limit: 1g
+    pids_limit: 256
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    env_file:
+      - path: /srv/siskop/staging/secrets/api.env
+        format: raw
+    environment:
+      NODE_ENV: production
+      PORT: '8080'
+      SISKOP_HOSTING: contabo
+      STORAGE_DRIVER: gcs
+      STORAGE_BUCKET: siskop-d0f8c-staging-uploads
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-credentials.json
+      XDG_CONFIG_HOME: /tmp/siskop-config
+      XDG_CACHE_HOME: /tmp/siskop-cache
+    command: [node, apps/backend/dist/hosting/contabo.js]
+    ports: ['127.0.0.1:18081:8080']
+    volumes:
+      - /srv/siskop/staging/secrets/google-runtime.json:/run/secrets/google-credentials.json:ro
+    networks: [database, egress]
+    depends_on:
+      postgres: {condition: service_healthy}
+    tmpfs: ['/tmp:size=256m,uid=1000,gid=1000,mode=1777']
+    shm_size: 128m
+    labels:
+      com.siskop.application: siskop
+      com.siskop.environment: staging
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+
+  proxy:
+    profiles: [application]
+    image: ${SISKOP_PROXY_IMAGE:-siskop-proxy-not-configured:invalid}
+    container_name: siskop-proxy-staging
+    user: '101:101'
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 64
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    entrypoint: [nginx, -g, 'daemon off;']
+    ports: ['62.146.238.173:18443:8443']
+    networks: [egress]
+    volumes:
+      - /srv/siskop/staging/proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /srv/siskop/staging/tls:/etc/siskop-tls:ro
+      - /srv/siskop/staging/proxy-state:/etc/siskop-state:ro
+    tmpfs: ['/tmp:size=32m,uid=101,gid=101,mode=1777']
+    depends_on:
+      api: {condition: service_started}
+    labels:
+      com.siskop.application: siskop
+      com.siskop.environment: staging
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+
+networks:
+  database:
+    name: siskop-staging-database
+    internal: true
+    labels: {com.siskop.application: siskop}
+  egress:
+    name: siskop-staging-egress
+    labels: {com.siskop.application: siskop}

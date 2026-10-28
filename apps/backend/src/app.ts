@@ -33,6 +33,7 @@ import { collectionsRoutes } from "./modules/collections/routes.js";
 import { journalRoutes } from "./modules/journal/routes.js";
 import { workspaceRequest } from "./modules/tenant-domains/middleware.js";
 import { tenantDomainRoutes } from "./modules/tenant-domains/routes.js";
+import { gcsUploads } from "./hosting/gcs-uploads.js";
 
 function meta() {
   return { timestamp: new Date().toISOString(), requestId: randomUUID() };
@@ -58,7 +59,7 @@ export function createApp(): Express {
   // otherwise block cross-origin <img> loads from the Vite dev server.
   app.use(
     "/uploads",
-    express.static(path.resolve(process.env.STORAGE_PATH ?? "./uploads"), {
+    process.env.STORAGE_DRIVER === "gcs" ? gcsUploads() : express.static(path.resolve(process.env.STORAGE_PATH ?? "./uploads"), {
       setHeaders: (res) => res.setHeader("Cross-Origin-Resource-Policy", "cross-origin")
     })
   );

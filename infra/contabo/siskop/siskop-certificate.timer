@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily SISKOP certificate renewal check
+
+[Timer]
+OnCalendar=*-*-* 01:41:00 UTC
+RandomizedDelaySec=1800
+Persistent=true
+Unit=siskop-certificate.service
+
+[Install]
+WantedBy=timers.target

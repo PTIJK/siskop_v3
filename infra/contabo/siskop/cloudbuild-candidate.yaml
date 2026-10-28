@@ -1,0 +1,16 @@
+# Builds candidates only. Does not change Cloud Run, Hosting or Contabo traffic.
+steps:
+  - id: build-api
+    name: gcr.io/cloud-builders/docker
+    args: [build, --pull, -f, apps/backend/Dockerfile, -t, '${_API}:${_TAG}', .]
+  - id: build-central-gateway
+    name: gcr.io/cloud-builders/docker
+    args: [build, --pull, -t, '${_GATEWAY}:${_TAG}', infra/central-gateway]
+images: ['${_API}:${_TAG}', '${_GATEWAY}:${_TAG}']
+substitutions:
+  _TAG: contabo-candidate
+  _API: asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/api
+  _GATEWAY: asia-southeast2-docker.pkg.dev/siskop-d0f8c/siskop-staging/central-gateway
+timeout: 1800s
+options: {logging: CLOUD_LOGGING_ONLY}
+serviceAccount: projects/siskop-d0f8c/serviceAccounts/siskop-cloud-build@siskop-d0f8c.iam.gserviceaccount.com

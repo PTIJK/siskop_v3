@@ -1,0 +1,16 @@
+[Unit]
+Description=Process attested SISKOP releases from its private deployment mailbox
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/srv/siskop/staging
+ExecStart=/srv/siskop/staging/jobs-venv/bin/python /srv/siskop/staging/deploy_host.py
+CPUQuota=50%
+MemoryMax=512M
+Nice=10
+TimeoutStartSec=900
+UMask=0077
+PrivateTmp=true
+

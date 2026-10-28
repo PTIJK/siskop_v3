@@ -56,7 +56,9 @@ def create_archive(root, destination, state):
     if not re.fullmatch(r"[a-f0-9]{40}", state.get("commit", "")):
         raise ValueError("An exact release commit is required")
     candidate = state.get("candidateUrl", "")
-    if not re.fullmatch(r"https://[a-z0-9-]+\.a\.run\.app", candidate):
+    if not re.fullmatch(r"https://[a-z0-9-]+\.a\.run\.app", candidate) and not (
+        state.get("backend") == "contabo" and candidate == "https://siskop-api.inovasijayakarsa.id:18443"
+    ):
         raise ValueError("A verified API candidate URL is required")
     config = _regular_file(root, "apphosting.yaml").read_text()
     if "api-not-configured.invalid" in config or f"value: {candidate}\n" not in config:

@@ -156,6 +156,7 @@ class ReleaseSafetyTests(unittest.TestCase):
         # Cloud Build exports these flags to verification too. Each test owns
         # its configuration instead of inheriting the deployment environment.
         environment = patch.dict(release.os.environ, {
+            "RELEASE_BACKEND": "cloudrun",
             "RELEASE_TENANT_HOSTING": "false",
             "RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "false",
         })

@@ -41,7 +41,8 @@ async function premium() {
 }
 describe("workspace gateway and authentication", () => {
   it("generates registration addresses, denies unpaid workspaces, and returns the tenant login only after verified payment", async () => {
-    vi.stubEnv("PUBLIC_APP_URL", "https://siskop-d0f8c.web.app"); vi.stubEnv("XENDIT_SECRET_KEY", "test-key"); vi.stubEnv("XENDIT_WEBHOOK_TOKEN", "test-callback"); vi.stubEnv("RESEND_API_KEY", "");
+    vi.stubEnv("XENDIT_MODE", "test");
+    vi.stubEnv("PUBLIC_APP_URL", "https://siskop-d0f8c.web.app"); vi.stubEnv("XENDIT_SECRET_KEY", "xnd_development_test-key"); vi.stubEnv("XENDIT_WEBHOOK_TOKEN", "test-callback"); vi.stubEnv("RESEND_API_KEY", "");
     const pkg = await db.subscriptionPackage.create({ data: { name: "Package", price: 100000, maxUsers: 10, maxMembers: 100, modules: [] } });
     const id = await registerOnboarding({ tenantName: "New koperasi", slug: "client-chosen", packageId: pkg.id, registrationNo: "NEW", address: "Jakarta", type: "KONVENSIONAL", adminName: "New Admin", idToken: "new-uid" });
     const order = await db.onboardingOrder.findUniqueOrThrow({ where: { id }, include: { tenant: true } });

@@ -1,6 +1,4 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import path from "node:path";
-import fs from "node:fs";
 import multer from "multer";
 import { ErrorCode } from "@siskop/types";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
@@ -10,6 +8,7 @@ import { requireParam } from "../../lib/http.js";
 import { activatePortalAccess } from "../member-auth/service.js";
 import { createMemberSchema, listMembersQuerySchema, updateMemberSchema } from "./schema.js";
 import { registrationRoutes } from "./registration.routes.js";
+import { saveKtp } from "../../lib/upload-storage.js";
 import {
   createMember,
   deactivateMember,
@@ -26,20 +25,8 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
   };
 }
 
-const storage = multer.diskStorage({
-  destination: (req, _file, cb) => {
-    const dir = path.join(process.env.STORAGE_PATH ?? "./uploads", "ktp", authClaims(req).tenantId);
-    fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${req.params.id}-${Date.now()}${ext}`);
-  }
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (["image/jpeg", "image/png", "application/pdf"].includes(file.mimetype)) {
@@ -134,11 +121,8 @@ export function membersRoutes(): Router {
     upload.single("ktp"),
     handle(async (req, res) => {
       if (!req.file) throw new AppError(ErrorCode.INVALID_FILE_TYPE, "File KTP wajib diunggah");
-      // Built explicitly (forward slashes) rather than reusing req.file.path —
-      // that's an OS filesystem path and would embed backslashes on Windows,
-      // corrupting the URL.
       const tenantId = authClaims(req).tenantId;
-      const url = `/uploads/ktp/${tenantId}/${req.file.filename}`;
+      const url = await saveKtp(tenantId, req.file.buffer);
       const member = await uploadMemberKtp(tenantId, requireParam(req, "id"), url);
       res.json({ success: true, data: member, meta: res.locals.meta });
     })

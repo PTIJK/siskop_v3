@@ -26,6 +26,13 @@ Without provider configuration, visitors can browse real packages and the regist
 
 ## Payment behavior
 
+Set `XENDIT_MODE=test` for local and staging registration. Test is also the
+default when the setting is absent, including with `NODE_ENV=production`.
+The backend rejects keys whose mode does not match, before registration or any
+session creation/reconciliation request. A live deployment must explicitly set
+`XENDIT_MODE=live`, use a live key (`xnd_production_...`), and configure its live
+webhook callback token. Changing `NODE_ENV` does not change payment mode.
+
 For sandbox testing, switch the Xendit dashboard to Test Mode and create a test secret key with Money-in Write permission. Store it as `XENDIT_SECRET_KEY` in the ignored backend `.env`, together with the test webhook callback token. Both modes use `https://api.xendit.co`; the API key selects the environment. Test checkout links can use `dev.xen.to` or `checkout-staging.xendit.co`. Use an HTTPS development origin and start registration from that origin so its cookie is present when Xendit returns. Configure the Payment Session Completed and Expired webhooks in Test Mode, then use the selected channel's documented simulation flow. Verify both the provider's completed status and successful dashboard access before considering the sandbox journey complete.
 
 The integration uses Xendit `POST /sessions`, with `session_type: PAY`, `mode: PAYMENT_LINK`, automatic capture, IDR, and country ID. This collects the initial monthly payment once; it does not enroll automatic recurring charges. The existing billing date is set one month after successful payment. Renewal collection, reminders, refunds, and automatic expiry enforcement remain separate billing work.

@@ -1,0 +1,15 @@
+[Unit]
+Description=SISKOP-only backup, API and certificate health metrics
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/srv/siskop/staging
+ExecStart=/srv/siskop/staging/jobs-venv/bin/python /srv/siskop/staging/health_host.py
+CPUQuota=25%
+MemoryMax=192M
+TimeoutStartSec=90
+UMask=0077
+PrivateTmp=true
+

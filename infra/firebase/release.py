@@ -13,12 +13,14 @@ import re
 import subprocess
 import sys
 import time
+import types
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 
 from release_id import tenant_resource_id
+from contabo_release import publish_backend as publish_contabo_backend
 
 PROJECT = "siskop-d0f8c"
 REGION = "asia-southeast2"
@@ -88,9 +90,13 @@ class Cloud:
     def scheduler_status(self, origin, token):
         # Job metadata contains the app token. Keep it in memory and never pass
         # it to gcloud arguments or logs. This GET does not execute either job.
-        request = urllib.request.Request(origin + "/api/scheduler/status", headers={
-            "x-scheduler-token": token, "Cache-Control": "no-cache",
-        })
+        headers = {"x-scheduler-token": token, "Cache-Control": "no-cache"}
+        if origin == "https://siskop-api.inovasijayakarsa.id:18443":
+            email = "siskop-cloud-build@" + PROJECT + ".iam.gserviceaccount.com"
+            identity = self.request("POST", "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/" + email + ":generateIdToken",
+                json.dumps({"audience": origin, "includeEmail": True}).encode())["token"]
+            headers["Authorization"] = "Bearer " + identity
+        request = urllib.request.Request(origin + "/api/scheduler/status", headers=headers)
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
                 return json.load(response)
@@ -259,6 +265,11 @@ def finish_image_retention(cloud, image, *, coordinated=False):
 def backend(cloud, state, image):
     if state is None:
         return
+    mode = os.environ.get("RELEASE_BACKEND", "cloudrun")
+    if mode == "contabo":
+        return publish_contabo_backend(cloud, state, image, types.SimpleNamespace(**globals()))
+    if mode != "cloudrun":
+        raise ValueError("Unexpected release backend")
     tag = traffic_tag(state["buildId"])
     assert_owner(cloud, state)
     if tenant_hosting_enabled():
@@ -316,7 +327,8 @@ def prepare_tenant(cloud, state):
         return
     assert_owner(cloud, state)
     candidate = urllib.parse.urlsplit(state["candidateUrl"])
-    if candidate.scheme != "https" or not candidate.hostname or not candidate.hostname.endswith(".run.app") or candidate.username or candidate.password or candidate.path or candidate.query or candidate.fragment:
+    allowed_contabo = state.get("backend") == "contabo" and state["candidateUrl"] == "https://siskop-api.inovasijayakarsa.id:18443"
+    if not allowed_contabo and (candidate.scheme != "https" or not candidate.hostname or not candidate.hostname.endswith(".run.app") or candidate.username or candidate.password or candidate.path or candidate.query or candidate.fragment):
         raise ValueError("Tenant gateway requires the verified Cloud Run candidate URL")
     config = pathlib.Path("apphosting.yaml")
     text = config.read_text()
@@ -367,7 +379,8 @@ def finish(cloud, state):
         context = workspace.get("data") or {}
         if workspace.get("success") is not True or not context.get("tenantId") or context.get("slug") != slug or context.get("isAlias") is not False:
             raise RuntimeError("Tenant gateway/database readiness check failed")
-    cloud.command(gcloud("run", "services", "update-traffic", SERVICE, f"--region={REGION}", f"--to-revisions={state['revision']}=100"))
+    if state.get("backend") != "contabo":
+        cloud.command(gcloud("run", "services", "update-traffic", SERVICE, f"--region={REGION}", f"--to-revisions={state['revision']}=100"))
     activate_schedulers(cloud, state)
     finish_image_retention(cloud, state["image"], coordinated=tenant_hosting_enabled())
     cloud.delete_lock(state["generation"])
@@ -376,8 +389,8 @@ def finish(cloud, state):
 
 def activate_schedulers(cloud, state):
     """Resume prepared jobs only when their exact target serves this release."""
-    origin = cloud.command(gcloud("run", "services", "describe", SERVICE, f"--region={REGION}", "--format=value(status.url)"))
-    if not re.fullmatch(r"https://siskop-staging-api-[a-z0-9-]+\.a\.run\.app", origin):
+    origin = "https://siskop-api.inovasijayakarsa.id:18443" if state.get("backend") == "contabo" else cloud.command(gcloud("run", "services", "describe", SERVICE, f"--region={REGION}", "--format=value(status.url)"))
+    if origin != "https://siskop-api.inovasijayakarsa.id:18443" and not re.fullmatch(r"https://siskop-staging-api-[a-z0-9-]+\.a\.run\.app", origin):
         raise RuntimeError("Unexpected scheduler API origin")
     specs = json.loads(pathlib.Path(__file__).with_name("scheduler-jobs.json").read_text())
     pending = []

@@ -8,11 +8,9 @@ const SIGNATURES: Array<{ type: SniffedFileType; bytes: number[] }> = [
 
 /**
  * Identifies a file by its leading magic bytes rather than trusting the
- * caller-declared MIME type. The internal KTP upload (modules/members/routes.ts)
- * only checks multer's fileFilter against the multipart Content-Type, which is
- * fine behind requireAuth — but the public self-registration endpoint has no
- * authenticated uploader behind it, so a client-declared MIME type alone isn't
- * trustworthy there. Only 3 signatures are needed, so this is hand-rolled
+ * caller-declared MIME type. Both internal and public KTP uploads validate
+ * these signatures before storing the file. Only 3 signatures are needed,
+ * so this is hand-rolled
  * rather than pulling in a dependency for it.
  */
 export function sniffFileType(buffer: Buffer): SniffedFileType | null {

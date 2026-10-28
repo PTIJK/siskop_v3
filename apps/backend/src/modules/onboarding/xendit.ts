@@ -3,11 +3,20 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { conflict, unauthorized, validationError } from "../../lib/errors.js";
 
+function configuredSecret(): string | undefined {
+  // Xendit uses the same API origin for both modes; the key selects the mode.
+  // Default to test even when NODE_ENV=production (as on staging Cloud Run).
+  const mode = process.env.XENDIT_MODE ?? "test";
+  const secret = process.env.XENDIT_SECRET_KEY;
+  const prefix = mode === "test" ? "xnd_development_" : mode === "live" ? "xnd_production_" : undefined;
+  return prefix && secret?.startsWith(prefix) && secret.length > prefix.length ? secret : undefined;
+}
+
 export function checkoutConfigured(): boolean {
   try {
     const url = new URL(process.env.PUBLIC_APP_URL ?? "");
     return (
-      !!process.env.XENDIT_SECRET_KEY &&
+      !!configuredSecret() &&
       !!process.env.XENDIT_WEBHOOK_TOKEN &&
       !!process.env.JWT_SECRET &&
       url.protocol === "https:" &&
@@ -79,7 +88,7 @@ export class ProviderRequestError extends Error {
   }
 }
 async function requestSession(path: string, body?: unknown): Promise<unknown> {
-  const secret = process.env.XENDIT_SECRET_KEY;
+  const secret = configuredSecret();
   if (!secret) throw conflict("Pembayaran belum tersedia. Silakan coba kembali nanti.");
   let response: Response;
   try {

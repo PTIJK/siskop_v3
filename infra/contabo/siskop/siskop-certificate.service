@@ -1,0 +1,14 @@
+[Unit]
+Description=Renew SISKOP-only TLS certificate
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/srv/siskop/staging
+ExecStart=/usr/bin/certbot renew --non-interactive --cert-name siskop-api.inovasijayakarsa.id --config-dir /srv/siskop/staging/letsencrypt --work-dir /srv/siskop/staging/certbot-work --logs-dir /srv/siskop/staging/certbot-logs --deploy-hook "/usr/bin/python3 /srv/siskop/staging/deploy_tls.py --reload"
+CPUQuota=25%
+MemoryMax=256M
+UMask=0077
+TimeoutStartSec=600
+PrivateTmp=true

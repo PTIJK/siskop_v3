@@ -1,0 +1,11 @@
+[Unit]
+Description=Check the private SISKOP release mailbox
+
+[Timer]
+OnBootSec=60
+OnUnitInactiveSec=15
+Unit=siskop-deploy.service
+
+[Install]
+WantedBy=timers.target
+

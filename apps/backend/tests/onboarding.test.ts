@@ -71,7 +71,8 @@ beforeEach(async () => {
   vi.stubEnv("RESEND_FROM_EMAIL", "");
   sessions.clear();
   vi.stubEnv("PUBLIC_APP_URL", "https://siskop.example");
-  vi.stubEnv("XENDIT_SECRET_KEY", "test-only");
+  vi.stubEnv("XENDIT_MODE", "test");
+  vi.stubEnv("XENDIT_SECRET_KEY", "xnd_development_test-only");
   vi.stubEnv("XENDIT_WEBHOOK_TOKEN", "callback-test");
   vi.stubGlobal("fetch", fetchProvider);
   await db.subscriptionPackage.upsert({
@@ -114,6 +115,13 @@ async function callback(
     .send({ event: "payment_session.completed", data: session });
 }
 describe("cooperative onboarding", () => {
+  it("rejects a live payment key in test mode before provisioning a koperasi", async () => {
+    vi.stubEnv("XENDIT_SECRET_KEY", "xnd_production_test-only");
+    const response = await request(createApp()).post("/api/onboarding/register").send(registration);
+    expect(response.status).toBe(409);
+    expect(await db.tenant.count({ where: { registrationNo: registration.registrationNo } })).toBe(0);
+    expect(calls).toBe(0);
+  });
   it("routes a paid registration to its current slug and later central login uses a tenant handoff", async () => {
     const base = "koperasi.inovasijayakarsa.id";
     vi.stubEnv("NODE_ENV", "production");
