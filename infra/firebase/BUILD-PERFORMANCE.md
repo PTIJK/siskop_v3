@@ -20,8 +20,9 @@ reported by Vitest), with **97.06% line coverage**. An initial serial run took
 259.2s but failed one accounting fixture, so it is not a clean before/after speed
 benchmark. Local investigation reproduced macOS allowing a separate IPv4 listener
 on an automatically assigned IPv6 HTTP test port, while Supertest sends requests
-to IPv4. Test-only auto-assigned HTTP listeners now bind explicitly to 127.0.0.1,
-with a real socket regression test. The accounting fixture also checks successful
+to IPv4. Test-only Supertest URLs now follow the actual listener family while
+preserving the original Host header, covered by a real socket regression test.
+The accounting fixture also checks successful
 mapping setup before its deactivation assertion. Additional
 cleanup/boundary unit tests cover owned-clone deletion and partial setup failures.
 GitHub performance still needs measurement after merge.

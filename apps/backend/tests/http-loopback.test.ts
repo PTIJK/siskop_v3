@@ -1,23 +1,19 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import request from "supertest";
 import { expect, it } from "vitest";
 
-it("auto-assigned HTTP test ports belong exclusively to the IPv4 loopback listener", async () => {
-  const first = createServer();
-  const second = createServer();
+it("Supertest connects to the listener's family while preserving the Host header", async () => {
+  const first = createServer((req, res) => res.end(req.headers.host));
   try {
-    await new Promise<void>((resolve, reject) => {
-      first.once("error", reject);
-      first.listen(0, resolve);
-    });
+    const test = request(first).get("/");
     const address = first.address() as AddressInfo;
-    expect(address.address).toBe("127.0.0.1");
-    await expect(new Promise<void>((resolve, reject) => {
-      second.once("error", reject);
-      second.listen(address.port, "127.0.0.1", resolve);
-    })).rejects.toMatchObject({ code: "EADDRINUSE" });
+    expect(test.url).toContain(address.family === "IPv6" ? "[::1]" : "127.0.0.1");
+    const response = await test.expect(200);
+    expect(response.text).toBe(`127.0.0.1:${address.port}`);
+    const custom = await request(first).get("/").set("Host", "demo.localhost:3000").expect(200);
+    expect(custom.text).toBe("demo.localhost:3000");
   } finally {
-    if (second.listening) await new Promise<void>(resolve => second.close(() => resolve()));
     if (first.listening) await new Promise<void>(resolve => first.close(() => resolve()));
   }
 });
