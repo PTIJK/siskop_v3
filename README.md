@@ -102,6 +102,28 @@ explicit rather than an install lifecycle script, so production dependency insta
 and CI are unaffected. Uninstall with `git config --local --unset core.hooksPath`
 if this clone uses SISKOP's `.githooks` configuration.
 
+#### Parallel backend tests
+
+GitHub CI sets `SISKOP_TEST_WORKERS=3` for the test step. The backend remains serial
+by default; explicitly setting this to 2–4 enables that many fork slots. Before
+tests start, each slot gets a separate clone of the migrated local `_test`
+database. Only those generated clones are emptied and removed; the base database
+is unchanged. PostgreSQL must allow the test user to create databases. Remote
+database hosts and non-test database names are rejected in parallel mode.
+All test files and the combined coverage thresholds remain enabled.
+
+For a local disposable test cluster without Docker, native PostgreSQL 17 is an
+explicit alternative: set `SISKOP_TEST_POSTGRES_BIN` to its binary directory when
+running the hook or `pnpm prepush:check`. For example, on Homebrew macOS:
+
+```bash
+SISKOP_TEST_POSTGRES_BIN=/opt/homebrew/opt/postgresql@17/bin SISKOP_TEST_WORKERS=3 pnpm prepush:check
+```
+
+This creates a temporary cluster on a loopback-only random port and removes it
+after checks. It does not use Homebrew services or an existing database URL.
+Docker remains the default when the native provider is not selected.
+
 ## Team model
 
 Four agents — PM, Engineer, QA, Ops — with no-consensus convergence. The

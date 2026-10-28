@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { nativeTestDatabase } from './test-postgres.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const all = ['@siskop/frontend', '@siskop/mobile', '@siskop/backend', '@siskop/types'];
@@ -84,6 +85,11 @@ function assertClean(head) {
 }
 
 function backendDatabase() {
+  if (process.env.SISKOP_TEST_POSTGRES_BIN) {
+    const local = nativeTestDatabase(process.env.SISKOP_TEST_POSTGRES_BIN);
+    return { close: local.close, env: { ...process.env, NODE_ENV: 'test', DATABASE_URL: local.url,
+      JWT_SECRET: 'siskop-prepush-test-only', JWT_REFRESH_SECRET: 'siskop-prepush-refresh-only', JWT_EXPIRES_IN: '15m' } };
+  }
   const name = `siskop-prepush-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
   const password = crypto.randomBytes(24).toString('hex');
   let created = false;

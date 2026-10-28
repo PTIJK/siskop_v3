@@ -66,6 +66,18 @@ An automated test detects policy drift. No GitHub token, new IAM permission or l
 worker is required: this repository's public CI metadata is read with a bounded request budget.
 See [performance measurements and target](BUILD-PERFORMANCE.md).
 
+GitHub's test step uses three isolated PostgreSQL fork slots. Each receives its own
+clone of the migrated disposable test database, so fixture deletion cannot affect
+another slot. The complete suite still produces one combined coverage result with
+the existing thresholds; lint/typechecks remain in place. Local and fallback runs
+remain serial unless `SISKOP_TEST_WORKERS` is explicitly set.
+
+The `cache-dependencies` image now retains the backend `build` stage, including
+dependency ancestors and intermediate compilation layers. This avoids recompiling
+unchanged backend sources on infrastructure-only releases. Changed source, manifests
+or base layers still invalidate the corresponding Docker layers. Runtime import
+checks, immutable release tags and post-verification cache publication remain.
+
 Browser dependency downloads now use an optional pnpm store cache under
 `gs://siskop-d0f8c-deployments/dependency-cache/frontend-v1/`, using the builder's
 existing bucket permissions. The key includes the lockfile, workspace manifests,
