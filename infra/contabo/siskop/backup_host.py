@@ -43,7 +43,7 @@ def main():
     parser.add_argument('--rehearsal', action='store_true')
     args = parser.parse_args()
     validate_root(); validate_container()
-    if not args.rehearsal and not (ROOT / 'traffic-switched.json').is_file():
+    if not args.rehearsal and not (ROOT / 'database-authoritative.json').is_file():
         print('SISKOP live cutover not marked; destination backup timer is inactive')
         return
     os.umask(0o077)

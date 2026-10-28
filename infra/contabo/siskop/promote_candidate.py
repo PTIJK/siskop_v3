@@ -7,7 +7,7 @@ import json
 import os
 import re
 from siskopctl import ROOT, validate_root, validate_container, sql, compose
-from deploy_host import health, write_private
+from deploy_host import write_private
 
 
 def validate_evidence(evidence, candidate):

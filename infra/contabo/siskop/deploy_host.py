@@ -148,7 +148,7 @@ def receipt(client, data, result):
 
 def main():
     os.umask(0o077); validate_root(); validate_container()
-    if not (ROOT / 'traffic-switched.json').is_file() or (ROOT / 'deployment-hold.json').exists():
+    if not (ROOT / 'database-authoritative.json').is_file() or (ROOT / 'deployment-hold.json').exists():
         print('SISKOP release mailbox held until live cutover is ready'); return
     state = ROOT / 'release-state'; state.mkdir(exist_ok=True)
     with (state / 'release.lock').open('w') as lock:
