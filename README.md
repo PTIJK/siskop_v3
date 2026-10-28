@@ -72,6 +72,36 @@ activation are documented in [the tenant-domain guide](docs/tenant-domains.md).
 
 `pnpm run dev` · `pnpm run test` · `pnpm run lint` · `pnpm run typecheck` · `pnpm run build`
 
+### Checks before pushing
+
+Run `pnpm hooks:install` once per clone. Then normal `git push origin <branch>`
+runs SISKOP's versioned pre-push hook before uploading refs. Run
+`pnpm prepush:check` to check the committed branch against local `origin/main`
+without pushing. Dependencies must already be installed with `pnpm install`.
+
+The hook checks affected workspaces: lint, typechecks and frontend/backend tests
+where those suites exist. Shared dependencies and configuration check all consuming
+workspaces; infrastructure changes run their contract tests. A new branch compares
+against the locally fetched main merge-base, so fetch main before starting work.
+Existing branches compare against their previous remote commit. Documentation-only
+changes do not run application suites. Commit or stash local changes first, and
+push the checked-out commit; failures stop the push.
+
+Backend tests require Docker. The hook creates a disposable PostgreSQL 17 container
+with a random password and loopback-only port, migrates only that test database,
+then removes its own container on success or failure. It never uses an existing
+`DATABASE_URL`. PDF integration tests also require the Puppeteer browser installed
+with `pnpm --filter @siskop/backend exec puppeteer browsers install chrome`.
+
+Full Docker/browser release builds remain outside the hook. GitHub CI remains the
+shared verification gate because local hooks can be bypassed or absent on another
+clone. Cloud Build reuses successful matching CI results, while retaining full
+verification when matching proof is unavailable. Installing hooks preserves existing
+custom hook setups: the installer refuses to overwrite them. Hook installation is
+explicit rather than an install lifecycle script, so production dependency installs
+and CI are unaffected. Uninstall with `git config --local --unset core.hooksPath`
+if this clone uses SISKOP's `.githooks` configuration.
+
 ## Team model
 
 Four agents — PM, Engineer, QA, Ops — with no-consensus convergence. The

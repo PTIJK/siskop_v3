@@ -11,6 +11,9 @@
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "hooks:install": "node scripts/install-git-hooks.mjs",
+    "prepush:check": "node scripts/pre-push.mjs --check",
+    "test:hooks": "node --test scripts/pre-push.test.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\""
   },
   "devDependencies": {

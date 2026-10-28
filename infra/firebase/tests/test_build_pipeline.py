@@ -32,14 +32,22 @@ class PipelineGateTests(unittest.TestCase):
     def test_backend_build_starts_independently_of_verification(self):
         self.assertEqual(dependencies()["build-backend"], [])
 
+    def test_dependency_restore_precedes_install_and_optional_save_does_not_gate_deploy(self):
+        steps = dependencies()
+        self.assertIn("restore-frontend-dependencies", steps["verify-and-build-frontend"])
+        self.assertEqual(steps["restore-frontend-dependencies"], ["verify-ci-source"])
+        self.assertEqual(steps["save-frontend-dependencies"], ["verify-and-build-frontend"])
+        for parents in steps.values():
+            self.assertNotIn("save-frontend-dependencies", parents)
+
     def test_publishing_requires_both_verified_source_and_successful_image(self):
         steps = dependencies()
         def ancestors(step):
             parents = set(steps[step])
             return parents.union(*(ancestors(parent) for parent in parents))
-        for step in ["push-backend", "acquire-release", "migrate-and-deploy-backend", "publish-frontend", "verify-and-finish-release"]:
+        for step in ["push-backend", "push-central-gateway", "acquire-release", "migrate-and-deploy-backend", "publish-tenant-hosting", "publish-frontend", "verify-and-finish-release"]:
             with self.subTest(step=step):
-                self.assertTrue({"verify-and-build-frontend", "build-backend"}.issubset(ancestors(step)))
+                self.assertTrue({"verify-ci-source", "test-database", "verify-and-build-frontend", "build-backend"}.issubset(ancestors(step)))
 
 
 class BuildCommandsTests(unittest.TestCase):
@@ -113,7 +121,8 @@ if [[ "$(basename "$0") $*" == 'pnpm run test' ]]; then exit 7; fi
                 path.chmod(0o755)
             result = subprocess.run(["bash", "infra/firebase/verify-release.sh"], cwd=ROOT, capture_output=True,
                                     env={**os.environ, "PATH": str(directory) + os.pathsep + os.environ["PATH"],
-                                         "COMMAND_LOG": str(log), "DATABASE_URL": "postgresql://postgres:ci-only-password@siskop-ci-postgres:5432/siskop_ci_test"})
+                                         "COMMAND_LOG": str(log), "RELEASE_VERIFICATION": "full",
+                                         "DATABASE_URL": "postgresql://postgres:ci-only-password@siskop-ci-postgres:5432/siskop_ci_test"})
             self.assertNotEqual(result.returncode, 0)
             calls = log.read_text()
             self.assertIn("pnpm run test", calls)
