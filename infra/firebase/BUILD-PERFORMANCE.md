@@ -1,5 +1,35 @@
 # Cloud Build performance
 
+## Follow-up: isolated CI tests and backend compilation cache
+
+The completed [SDK-wrapper release](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/b8abc4f3-0e3b-48d1-bab5-e1d1664d73e5?project=siskop-d0f8c)
+finished in **11m21s**, with frontend verification/build at **2m37s** and the
+parallel backend build at **4m33s**. Frontend compilation itself took about 50s;
+package installation took 38.6s. This run missed the frontend dependency cache and
+then saved it successfully. Backend package installation also rebuilt after root
+manifest changes. These are cold-cache observations, not steady-state timings.
+
+GitHub's completed verification spent **7m19s** on `pnpm run test`, compared with
+19s each for lint and typechecks. This follow-up leaves both checks in place and
+sets three backend fork slots for GitHub's test step. Each slot gets a clean,
+separate clone of the migrated local test database; fixture resets cannot cross
+slots. Full coverage remains combined in one Vitest run with unchanged thresholds.
+
+Local validation passed all 1,097 backend tests in **93.8s wall time** (91.45s
+reported by Vitest), with **97.06% line coverage**. An initial serial run took
+259.2s but failed one accounting fixture, so it is not a clean before/after speed
+benchmark. The fixture now asserts successful mapping setup rather than allowing
+an earlier setup failure to surface as a misleading deactivation result. Additional
+cleanup/boundary unit tests cover owned-clone deletion and partial setup failures.
+GitHub performance still needs measurement after merge.
+
+Backend Docker caching now preserves the `build` stage, not only dependency and
+final runtime layers. Unchanged backend sources can reuse TypeScript compilation
+layers on later infrastructure-only releases. This keeps the same two Docker
+build invocations/cache tags and preserves runtime import checks. Actual Cloud
+Build timing for this follow-up has not been measured; no new worker size or
+manually triggered release is part of the change.
+
 ## October 2026 optimization — proposed, not deployed
 
 The [completed October release](https://console.cloud.google.com/cloud-build/builds;region=asia-southeast2/0183950e-724a-4bce-8696-5c5fc011cc4a?project=siskop-d0f8c)

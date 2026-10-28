@@ -80,7 +80,7 @@ if os.environ.get('FAIL_COMMAND')=='cache-push' and args[0]=='push' and ':cache-
         self.assertEqual(result.returncode, 0, result.stderr)
         builds = [call for call in calls if call[0] == "build"]
         self.assertEqual(len(builds), 2)
-        self.assertIn("dependencies", builds[0])
+        self.assertEqual(builds[0][builds[0].index("--target") + 1], "build")
         self.assertTrue(any("dependencies-test-build" in arg for arg in builds[1]))
         self.assertFalse(any(call[0] == "push" for call in calls))
 

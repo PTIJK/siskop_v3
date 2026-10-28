@@ -26,7 +26,9 @@ case "${1:-}" in
     wait "$runtime_pull" || echo 'Runtime cache unavailable; building it.'
     # Refresh system-package layers monthly even if Node/lockfile are unchanged.
     cache_epoch="${RELEASE_CACHE_EPOCH:-$(date -u +%Y-%m)}"
-    docker build --pull -f apps/backend/Dockerfile --target dependencies \
+    # Keep the build stage as well as its dependency ancestors. A final runtime
+    # image alone does not preserve these intermediate compilation layers.
+    docker build --pull -f apps/backend/Dockerfile --target build \
       --build-arg "OS_CACHE_EPOCH=$cache_epoch" --cache-from "$dependency_cache" \
       -t "$dependencies" .
     docker build --pull -f apps/backend/Dockerfile \

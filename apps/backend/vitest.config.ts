@@ -1,13 +1,18 @@
 import { defineConfig } from "vitest/config";
+import { testWorkerCount } from "./tests/database-isolation.js";
+
+const workers = testWorkerCount();
 
 export default defineConfig({
   test: {
     environment: "node",
     globals: true,
     setupFiles: ["./tests/setup.ts"],
-    // Integration tests share one database and truncate it between cases, so
-    // files must not run concurrently against it.
-    fileParallelism: false,
+    // Serial by default. Opt-in parallel runs clone the migrated test database
+    // per exclusive fork slot so destructive fixture resets cannot cross files.
+    fileParallelism: workers > 1,
+    globalSetup: workers > 1 ? ["./tests/database-global.ts"] : [],
+    poolOptions: { forks: { minForks: 1, maxForks: workers } },
     // The default `threads` pool segfaults partway through this suite when
     // `--coverage` (v8 provider) is on — reproducible, unrelated to test
     // correctness (`vitest run` with no coverage passes clean on the same

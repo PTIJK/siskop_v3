@@ -93,5 +93,7 @@ jobs:
       - run: pnpm --filter @siskop/backend exec prisma migrate deploy
 
       - run: pnpm run test
+        env:
+          SISKOP_TEST_WORKERS: '3'
 
       - run: pnpm run build

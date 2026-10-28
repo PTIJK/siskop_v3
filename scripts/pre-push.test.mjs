@@ -36,14 +36,14 @@ function fixture(t) {
   fs.mkdirSync(repository);
   const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   // Nested hook tests must not inherit the caller repository's Git context.
-  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES']) delete env[key];
+  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'SISKOP_TEST_POSTGRES_BIN', 'SISKOP_TEST_WORKERS']) delete env[key];
   const git = (...args) => execFileSync('git', args, { cwd: repository, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git('init', '-b', 'main');
   git('config', 'user.email', 'hook-test@example.invalid');
   git('config', 'user.name', 'Hook Test');
   execFileSync('git', ['init', '--bare', remote], { env, stdio: 'ignore' });
   git('remote', 'add', 'origin', remote);
-  for (const file of ['scripts/pre-push.mjs', 'scripts/install-git-hooks.mjs', '.githooks/pre-push']) {
+  for (const file of ['scripts/pre-push.mjs', 'scripts/test-postgres.mjs', 'scripts/install-git-hooks.mjs', '.githooks/pre-push']) {
     fs.mkdirSync(path.dirname(path.join(repository, file)), { recursive: true });
     fs.copyFileSync(path.join(root, file), path.join(repository, file));
   }

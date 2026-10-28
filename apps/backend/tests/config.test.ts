@@ -409,6 +409,9 @@ describe("GET/POST/PUT /api/config/accounts", () => {
         transactionKind: "DEPOSIT",
         debitAccountId: kas.id,
         creditAccountId: simpanan.id
+      })
+      .expect(response => {
+        if (![200, 201].includes(response.status)) throw new Error(`Mapping fixture failed: ${JSON.stringify(response.body)}`);
       });
 
     const res = await request(app())
