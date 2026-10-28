@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -54,7 +54,11 @@ export function NewLoanPage() {
   const [memberSearch, setMemberSearch] = useState("");
   const [memberResults, setMemberResults] = useState<MemberResult[]>([]);
   const [selectedMember, setSelectedMember] = useState<MemberResult | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(() => searchParams.get("memberId"));
   const [hasPokokSaving, setHasPokokSaving] = useState<boolean | null>(null);
+  const [memberCheckError, setMemberCheckError] = useState("");
+  const [memberCheckAttempt, setMemberCheckAttempt] = useState(0);
+  const memberRequest = useRef(0);
   const [bmpp, setBmpp] = useState<BmppHeadroom | null>(null);
   const [selectedConfig, setSelectedConfig] = useState<LoanConfig | null>(null);
   const [calc, setCalc] = useState<LoanCalculation | null>(null);
@@ -85,15 +89,7 @@ export function NewLoanPage() {
   const rateOverride = watch("rate");
   const disbursedAt = watch("disbursedAt");
   const isMonthly = !selectedConfig || selectedConfig.installmentFrequency === "MONTHLY";
-
-  /** The member's BMPP room (Permenkop UKM 8/2023): 10% of Modal Sendiri for pengurus/pengawas, 15% otherwise. */
-  const loadBmpp = async (member: MemberWithSavings) => {
-    try {
-      setBmpp(await apiFetch<BmppHeadroom>(`/loans/bmpp-headroom?memberId=${member.id}`));
-    } catch {
-      setBmpp(null);
-    }
-  };
+  const canContinue = selectedMember !== null && selectedMember.id === selectedMemberId && hasPokokSaving === true && !memberCheckError;
 
   useEffect(() => {
     apiFetch<LoanConfig[]>("/loans/configs")
@@ -103,21 +99,36 @@ export function NewLoanPage() {
         toast({ title: "Gagal memuat jenis pembiayaan", description: message, variant: "destructive" });
       });
 
-    const prefillId = searchParams.get("memberId");
-    if (prefillId) {
-      apiFetch<MemberWithSavings>(`/members/${prefillId}`)
-        .then((m) => {
-          setSelectedMember({ id: m.id, memberId: m.memberId, fullName: m.fullName, accountNumber: m.accountNumber });
-          const hasPokok = m.savings?.some((s) => s.savingConfig.type === "POKOK" && s.isActive);
-          setHasPokokSaving(hasPokok ?? false);
-          void loadBmpp(m);
-        })
-        .catch((err) => {
-          const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
-          toast({ title: "Gagal memuat data anggota", description: message, variant: "destructive" });
-        });
-    }
   }, []);
+
+  useEffect(() => {
+    if (!selectedMemberId) return;
+    const request = ++memberRequest.current;
+    const controller = new AbortController();
+    let active = true;
+    const isCurrent = () => active && request === memberRequest.current;
+    setHasPokokSaving(null);
+    setMemberCheckError("");
+    setBmpp(null);
+    void (async () => {
+      try {
+        const member = await apiFetch<MemberWithSavings>(`/members/${encodeURIComponent(selectedMemberId)}`, { signal: controller.signal });
+        if (!isCurrent()) return;
+        setSelectedMember({ id: member.id, memberId: member.memberId, fullName: member.fullName, accountNumber: member.accountNumber });
+        setHasPokokSaving(member.savings?.some((saving) => saving.savingConfig.type === "POKOK" && saving.isActive) ?? false);
+        // BMPP is advisory here; the server recalculates and enforces it on submission.
+        try {
+          const headroom = await apiFetch<BmppHeadroom>(`/loans/bmpp-headroom?memberId=${encodeURIComponent(member.id)}`, { signal: controller.signal });
+          if (isCurrent()) setBmpp(headroom);
+        } catch {
+          if (isCurrent()) setBmpp(null);
+        }
+      } catch {
+        if (isCurrent()) setMemberCheckError("Belum dapat memeriksa simpanan pokok anggota. Coba lagi sebelum melanjutkan.");
+      }
+    })();
+    return () => { active = false; controller.abort(); };
+  }, [selectedMemberId, memberCheckAttempt]);
 
   useEffect(() => {
     if (!selectedConfig || !principal || !termMonths) {
@@ -195,22 +206,25 @@ export function NewLoanPage() {
     }
   };
 
-  const selectMember = async (m: MemberResult) => {
+  const resetMemberCheck = () => {
+    // Invalidate immediately, before effect cleanup, when selection changes.
+    memberRequest.current += 1;
+    setHasPokokSaving(null);
+    setMemberCheckError("");
+    setBmpp(null);
+  };
+
+  const selectMember = (m: MemberResult | null) => {
+    resetMemberCheck();
     setSelectedMember(m);
+    setSelectedMemberId(m?.id ?? null);
+    setMemberCheckAttempt((attempt) => attempt + 1);
     setMemberResults([]);
     setMemberSearch("");
-    try {
-      const member = await apiFetch<MemberWithSavings>(`/members/${m.id}`);
-      const hasPokok = member.savings?.some((s) => s.savingConfig.type === "POKOK" && s.isActive);
-      setHasPokokSaving(hasPokok ?? false);
-      void loadBmpp(member);
-    } catch (err) {
-      const message = err instanceof ApiRequestError ? err.message : "Terjadi kesalahan";
-      toast({ title: "Gagal memuat data anggota", description: message, variant: "destructive" });
-    }
   };
 
   const submitLoan = async (data: Step2Form, force = false, acknowledgeBmpp = false) => {
+    if (!canContinue) { setStep(1); return; }
     setApiError("");
     const configFrequency = configs.find((c) => c.id === data.loanConfigId)?.installmentFrequency ?? "MONTHLY";
     if (configFrequency === "MONTHLY" && !data.termMonths) {
@@ -292,11 +306,7 @@ export function NewLoanPage() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      setSelectedMember(null);
-                      setHasPokokSaving(null);
-                      setBmpp(null);
-                    }}
+                    onClick={() => selectMember(null)}
                   >
                     Ganti
                   </Button>
@@ -345,7 +355,19 @@ export function NewLoanPage() {
               </div>
             )}
 
-            <Button className="w-full" disabled={!selectedMember} onClick={() => setStep(2)}>
+            {selectedMemberId && hasPokokSaving === null && !memberCheckError && (
+              <p role="status" className="text-sm text-muted-foreground">Memeriksa simpanan pokok anggota…</p>
+            )}
+            {memberCheckError && (
+              <div role="alert" className="space-y-2 text-sm text-destructive">
+                <p>{memberCheckError}</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => {
+                  resetMemberCheck();
+                  setMemberCheckAttempt((attempt) => attempt + 1);
+                }}>Coba lagi</Button>
+              </div>
+            )}
+            <Button className="w-full" disabled={!canContinue} onClick={() => { if (canContinue) setStep(2); }}>
               Lanjut <ChevronRight className="ml-1 h-4 w-4" />
             </Button>
           </CardContent>
