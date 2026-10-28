@@ -6,6 +6,8 @@ import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { Toaster } from "../ui/toaster";
 import { HandoffSessionGate } from "@/features/tenant-access/HandoffSessionGate";
+import { Suspense } from "react";
+import { PageLoading } from "../shared/LoadingSpinner";
 
 export function AppLayout() {
   const accessConfig = useTenantAccessConfig();
@@ -48,7 +50,10 @@ export function AppLayout() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar />
         <main className="flex-1 overflow-y-auto p-6">
-          <Outlet />
+          {/* Keep the navigation shell visible when a lazy route is loading. */}
+          <Suspense fallback={<PageLoading />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
       <Toaster />

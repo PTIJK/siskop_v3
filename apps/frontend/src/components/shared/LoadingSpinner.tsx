@@ -21,7 +21,7 @@ export function LoadingSpinner({ size = "md", className }: LoadingSpinnerProps) 
 
 export function PageLoading() {
   return (
-    <div className="flex h-64 items-center justify-center">
+    <div role="status" aria-label="Memuat halaman" className="flex h-64 items-center justify-center">
       <LoadingSpinner size="lg" />
     </div>
   );
