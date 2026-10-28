@@ -19,6 +19,7 @@ import { savingsRoutes } from "./modules/savings/routes.js";
 import { loansRoutes } from "./modules/loans/routes.js";
 import { dashboardRoutes } from "./modules/dashboard/routes.js";
 import { configRoutes } from "./modules/config/routes.js";
+import { publicPricingRoutes } from "./modules/pricing/routes.js";
 import { usersRoutes } from "./modules/users/routes.js";
 import { reportsRoutes } from "./modules/reports/routes.js";
 import { platformRoutes } from "./modules/platform/routes.js";
@@ -96,6 +97,7 @@ export function createApp(): Express {
   app.use("/api/member", memberPortalRoutes());
   app.use("/api/members", membersRoutes());
   app.use("/api/public/register", publicMemberRegistrationRoutes());
+  app.use("/api/public/pricing", publicPricingRoutes());
   app.use("/api/savings", savingsRoutes());
   app.use("/api/loans", loansRoutes());
   app.use("/api/dashboard", dashboardRoutes());

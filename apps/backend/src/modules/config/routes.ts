@@ -3,6 +3,7 @@ import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { requireAccountingEntitlement, requireWhitelabelEntitlement } from "../../middleware/entitlement.js";
 import { requireParam } from "../../lib/http.js";
+import { getSubscriptionInfo } from "../pricing/service.js";
 import { listReadableUnits } from "../../lib/unit-access.js";
 import {
   createAccountSchema,
@@ -66,6 +67,17 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
 export function configRoutes(): Router {
   const router = Router();
   router.use(requireAuth);
+
+  // ── Subscription (Pricing V2) ──────────────────────────────────────────────
+  // Every signed-in user needs this for nav locks and usage meters, so there is
+  // no permission gate. Data is null until the tenant has a subscription.
+  router.get(
+    "/subscription",
+    handle(async (req, res) => {
+      res.set("Cache-Control", "private, no-store");
+      res.json({ success: true, data: await getSubscriptionInfo(authClaims(req).tenantId), meta: res.locals.meta });
+    })
+  );
 
   // ── Units ──────────────────────────────────────────────────────────────────
 

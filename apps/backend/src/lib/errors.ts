@@ -20,6 +20,7 @@ const STATUS: Record<ErrorCode, number> = {
   [ErrorCode.JOURNAL_ENTRY_UNBALANCED]: 500,
   [ErrorCode.FEATURE_NOT_ENTITLED]: 403,
   [ErrorCode.PACKAGE_LIMIT_EXCEEDED]: 422,
+  [ErrorCode.QUOTA_EXCEEDED]: 403,
   [ErrorCode.MEMBER_HAS_NO_ACTIVE_SAVING]: 422,
   [ErrorCode.MEMBER_CREDIT_LIMIT_EXCEEDED]: 422,
   [ErrorCode.RATE_EXCEEDS_REGULATORY_CAP]: 422,
@@ -79,8 +80,13 @@ export function validationError(message: string, details?: Record<string, unknow
   return new AppError(ErrorCode.VALIDATION_ERROR, message, details);
 }
 
-export function featureNotEntitled(message: string): AppError {
-  return new AppError(ErrorCode.FEATURE_NOT_ENTITLED, message);
+export function featureNotEntitled(message: string, details?: Record<string, unknown>): AppError {
+  return new AppError(ErrorCode.FEATURE_NOT_ENTITLED, message, details);
+}
+
+/** Pricing V2 volume limit hit; details carry what the UI needs to show a usage meter. */
+export function quotaExceeded(item: string, limit: number, used: number): AppError {
+  return new AppError(ErrorCode.QUOTA_EXCEEDED, `Batas ${item} paket Anda tercapai (${used}/${limit})`, { item, limit, used });
 }
 
 export function packageLimitExceeded(message: string): AppError {
