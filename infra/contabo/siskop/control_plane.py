@@ -50,7 +50,12 @@ def main():
     elif json.loads(snapshot.read_text()).get('application') != 'siskop': raise ValueError('Unexpected existing control snapshot')
     if args.action == 'prepare':
         substitutions = {**trigger.get('substitutions', {}), '_BACKEND': 'contabo'}
-        request('PATCH', trigger_url + '?updateMask=disabled,substitutions', {'disabled': True, 'substitutions': substitutions})
+        # Use the SDK's complete config update for repository-event triggers;
+        # the provider rejects a bare disabled/substitutions partial payload.
+        trigger.update(disabled=True, substitutions=substitutions)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as config:
+            json.dump(trigger, config); config.flush()
+            gcloud('builds', 'triggers', 'update', 'github', TRIGGER, '--region=' + REGION, '--trigger-config=' + config.name)
         for url, spec, job in jobs:
             if job['state'] == 'ENABLED':
                 job = request('POST', url + ':pause', {})
