@@ -3,7 +3,7 @@
   "repository": "PTIJK/siskop_v3",
   "workflowPath": ".github/workflows/ci.yml",
   "workflowId": 321261660,
-  "workflowBlob": "eba90904c6ba0c3ab4fba6e6cf3bb93f86956047",
+  "workflowBlob": "1003a55ccb2a3ac5e7fe27d340f4c1001ffbf7b1",
   "jobName": "verify",
   "maxAgeSeconds": 86400
 }

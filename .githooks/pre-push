@@ -1,0 +1,3 @@
+#!/bin/sh
+# Git supplies the remote name/address as arguments and proposed refs on stdin.
+exec node scripts/pre-push.mjs "$@"
