@@ -16,7 +16,7 @@ The authoritative API/database run on Contabo. The Cloud Run business-backend op
 
 1. Run release safety checks, lint, typechecks, migrations and application tests against a disposable PostgreSQL container, and build the browser assets and API image. Staging database credentials are unavailable to tests.
 2. Confirm the commit still matches main and acquire the generation-checked SISKOP release lock. Resolve and protect the immutable API image digest.
-3. Validate tenant DNS/HTTPS and both existing SISKOP scheduler targets, then pause new scheduled executions.
+3. Validate both existing SISKOP scheduler targets, then pause new scheduled executions.
 4. Write a request to the private SISKOP release mailbox. The dedicated host worker verifies the exact successful main build and approved image, runs migrations with SISKOP's separate migration role, gracefully restarts only the SISKOP API and returns a verified receipt. A failed migration or receipt stops frontend publication.
 5. Deploy the database-free central forwarding image, check the Contabo-backed catalog, then publish tenant and central hosting. Verify release markers, tenant workspace and staff/member login pages.
 6. Authenticate to the Contabo scheduler readiness endpoint, require the exact deployed build, resume both schedules, rotate protected image tags and release the lock.

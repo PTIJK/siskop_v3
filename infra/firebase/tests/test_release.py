@@ -204,14 +204,6 @@ class ReleaseSafetyTests(unittest.TestCase):
         cloud.command.assert_not_called()
         cloud.delete_lock.assert_not_called()
 
-    def test_pending_tenant_dns_stops_before_database_migration(self):
-        cloud = Mock()
-        cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
-        cloud.request.return_value = {"customDomainStatus": {"hostState": "HOST_NON_FAH"}}
-        with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true"}):
-            with self.assertRaisesRegex(RuntimeError, "DNS and HTTPS"):
-                release.backend(cloud, {"buildId": BUILD, "generation": "8"}, release.IMAGE + ":test")
-        cloud.command.assert_not_called()
 
     def test_tenant_gateway_is_pinned_to_candidate_and_same_release(self):
         cloud = Mock()

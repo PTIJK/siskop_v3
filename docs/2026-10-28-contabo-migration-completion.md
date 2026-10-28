@@ -27,7 +27,7 @@ SISKOP has its own Compose project, PostgreSQL cluster, roles/passwords, data di
 
 The nine preexisting containers retained their IDs, start times and restart counts. All eight existing host proxy files retained their byte hashes. Sentryx's public website and API probes returned HTTP 200. No Sentryx database was queried or changed, and no preexisting application container was restarted. An earlier SISKOP-only HTTP-challenge diagnostic caused a graceful shared Nginx reload; existing site files/master remained intact. Ongoing TLS and routing use SISKOP's separate proxy.
 
-The source was drained, its existing application role made read-only, old pooled sessions terminated, and a negative write test verified rejection. The final export was taken after that fence. A new candidate was restored and every table compared before promotion. The old rehearsal database was preserved as `siskop_rehearsal_bf4af413c33c`; the earlier separate rehearsal candidate is also retained. No source database was deleted.
+The source was drained, its existing application role made read-only, old pooled sessions terminated, and a negative write test verified rejection. The final export was taken after that fence. A new candidate was restored and every table compared before promotion. The old rehearsal database was preserved as `siskop_rehearsal_bf4af413c33c`; the earlier separate rehearsal candidate is also retained. The source database was preserved through cutover, then retired separately after the user explicitly requested deletion; the encrypted final export remains retained.
 
 ## Backup and verification evidence
 

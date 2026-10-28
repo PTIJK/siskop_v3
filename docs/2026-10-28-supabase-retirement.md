@@ -36,3 +36,5 @@ Historical schema migrations and encrypted source-export provenance remain intac
 The stopped historical Cloud SQL instance remains preserved and unrecovered. Firebase users, existing uploads, Google services and Sentryx remain separate from the retired provider projects.
 
 Provider absence verified at 2026-10-28T10:36:37.462392+00:00.
+
+Validation: 77 release tests, 16 Contabo boundary tests and 5 scheduler tests passed. Central catalog, tenant workspace and legacy compatibility checks passed after deletion. Both Google schedules remain enabled with Contabo targets. All nine preexisting container IDs/start times/restart counts and eight shared proxy-file hashes matched their saved baseline.

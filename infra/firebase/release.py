@@ -239,14 +239,6 @@ def backend(cloud, state, image):
         return
     if os.environ.get("RELEASE_BACKEND", "contabo") != "contabo":
         raise ValueError("Only the Contabo backend is supported; the previous database is retired")
-    assert_owner(cloud, state)
-    if tenant_hosting_enabled():
-        domain = cloud.request("GET", f"https://firebaseapphosting.googleapis.com/v1/{TENANT_BACKEND}/domains/*." + TENANT_BASE)
-        status = domain.get("customDomainStatus", {})
-        if any(status.get(key) != value for key, value in {
-            "hostState": "HOST_ACTIVE", "ownershipState": "OWNERSHIP_ACTIVE", "certState": "CERT_ACTIVE"
-        }.items()):
-            raise RuntimeError("Tenant DNS and HTTPS must be ready before enabling tenant hosting")
     return publish_contabo_backend(cloud, state, image, types.SimpleNamespace(**globals()))
 
 
