@@ -19,6 +19,17 @@ def publish_backend(cloud, state, image, release):
     reference = release.IMAGE + '@' + digest
     release.validate_image_ref(reference)
     release.protect_candidate_image(cloud, reference, state['buildId'])
+    # Hold both schedules before changing the API. Pausing stops new executions;
+    # the host's 330-second graceful stop lets existing requests finish.
+    jobs = json.loads(pathlib.Path(__file__).with_name('scheduler-jobs.json').read_text())
+    pending = []
+    for spec in jobs:
+        url = f'https://cloudscheduler.googleapis.com/v1/projects/{release.PROJECT}/locations/{release.REGION}/jobs/' + spec['id']
+        job = cloud.request('GET', url)
+        if job.get('state') not in {'ENABLED', 'PAUSED'} or job.get('httpTarget', {}).get('uri') != ORIGIN + spec['path']:
+            raise RuntimeError('SISKOP scheduler target must be prepared before deployment')
+        if job['state'] == 'ENABLED': pending.append(url)
+    for url in pending: cloud.request('POST', url + ':pause', b'{}')
     data = {key: state[key] for key in ['buildId', 'commit']}; data['image'] = reference
     name = 'contabo-requests/' + state['buildId'] + '.json'
     try:
@@ -40,6 +51,7 @@ def publish_backend(cloud, state, image, release):
     gateway_tag = GATEWAY_IMAGE + ':' + state['buildId']
     gateway_digest = cloud.command(release.gcloud('artifacts', 'docker', 'images', 'describe', gateway_tag, '--format=value(image_summary.digest)'))
     if not re.fullmatch(r'sha256:[a-f0-9]{64}', gateway_digest): raise ValueError('Immutable gateway image required')
+    cloud.command(release.gcloud('artifacts', 'docker', 'tags', 'add', GATEWAY_IMAGE + '@' + gateway_digest, GATEWAY_IMAGE + ':retain-pending-' + state['buildId']))
     cloud.command(release.gcloud('run', 'deploy', GATEWAY, '--region=' + release.REGION,
         '--image=' + GATEWAY_IMAGE + '@' + gateway_digest,
         '--service-account=siskop-central-gateway@' + release.PROJECT + '.iam.gserviceaccount.com',

@@ -42,7 +42,7 @@ async function main() {
 
   const role = 'siskopSchedulerActivator';
   const roleExists = await optionalResource(cloud, `https://iam.googleapis.com/v1/projects/${project}/roles/${role}`);
-  command(['iam', 'roles', roleExists ? 'update' : 'create', role, '--title=SISKOP scheduler release activation', '--permissions=cloudscheduler.jobs.get,cloudscheduler.jobs.enable', '--stage=GA']);
+  command(['iam', 'roles', roleExists ? 'update' : 'create', role, '--title=SISKOP scheduler release activation', '--permissions=cloudscheduler.jobs.get,cloudscheduler.jobs.enable,cloudscheduler.jobs.pause', '--stage=GA']);
   command(['projects', 'add-iam-policy-binding', project, `--member=serviceAccount:${builder}`, `--role=projects/${project}/roles/${role}`, '--condition=None']);
 
   const origin = command(['run', 'services', 'describe', service, `--region=${region}`, '--format=value(status.url)']);

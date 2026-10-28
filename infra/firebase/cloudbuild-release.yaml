@@ -91,8 +91,8 @@ images: ['${_IMAGE}:$BUILD_ID', 'asia-southeast2-docker.pkg.dev/siskop-d0f8c/sis
 timeout: 3600s
 substitutions:
   _DEPLOY: 'true'
-  # Change the trigger override only during the coordinated database cutover.
-  _BACKEND: cloudrun
+  # The controlled cutover holds the live trigger until the new source is ready.
+  _BACKEND: contabo
   # Wildcard hosting is live. Staff login and paid registrations must use it.
   _TENANT_HOSTING: 'true'
   _TENANT_RENAME_ENABLED: 'false'

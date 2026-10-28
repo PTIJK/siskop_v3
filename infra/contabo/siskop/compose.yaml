@@ -62,7 +62,7 @@ services:
     user: '1000:1000'
     restart: unless-stopped
     init: true
-    stop_grace_period: 75s
+    stop_grace_period: 330s
     cpus: 1
     mem_limit: 1g
     memswap_limit: 1g
@@ -117,6 +117,7 @@ services:
     volumes:
       - /srv/siskop/staging/proxy/nginx.conf:/etc/nginx/nginx.conf:ro
       - /srv/siskop/staging/tls:/etc/siskop-tls:ro
+      - /srv/siskop/staging/proxy-state:/etc/siskop-state:ro
     tmpfs: ['/tmp:size=32m,uid=101,gid=101,mode=1777']
     depends_on:
       api: {condition: service_started}
