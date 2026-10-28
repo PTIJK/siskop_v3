@@ -19,6 +19,10 @@
 !infra/firebase/**
 !infra/tenant-web/
 !infra/tenant-web/**
+!infra/central-gateway/
+!infra/central-gateway/**
+!infra/contabo/
+!infra/contabo/**
 **/.env*
 !apps/frontend/.env.staging
 **/node_modules/**

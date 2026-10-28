@@ -4,6 +4,7 @@ import { ErrorCode, type ApiResponse, type SchedulerStatus } from "@siskop/types
 import { unauthorized } from "../../lib/errors.js";
 import { identityProvisioner } from "../identity-provisioning/service.js";
 import { runDailyScheduler } from "./service.js";
+import { verifySchedulerIdentity } from "../../hosting/scheduler-identity.js";
 
 /**
  * Machine-to-machine auth, not a user session: this endpoint is meant to be
@@ -33,7 +34,10 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
 export function schedulerRoutes(): Router {
   const router = Router();
   router.use((req, _res, next) => {
-    try { verifySchedulerToken(req.get("x-scheduler-token")); next(); }
+    try {
+      verifySchedulerToken(req.get("x-scheduler-token"));
+      void verifySchedulerIdentity(req.get("authorization")).then(() => next(), next);
+    }
     catch (error) { next(error); }
   });
 
@@ -42,7 +46,7 @@ export function schedulerRoutes(): Router {
   router.get("/status", (_req, res) => {
     res.set("Cache-Control", "no-store").json({
       success: true,
-      data: { version: 1, revision: process.env.K_REVISION ?? "local", daily: true, identityRecovery: process.env.FIREBASE_ACCOUNT_PROVISIONING_ENABLED === "true" },
+      data: { version: 1, revision: process.env.SISKOP_RELEASE_ID ?? process.env.K_REVISION ?? "local", daily: true, identityRecovery: process.env.FIREBASE_ACCOUNT_PROVISIONING_ENABLED === "true" },
       meta: res.locals.meta
     } satisfies ApiResponse<SchedulerStatus>);
   });

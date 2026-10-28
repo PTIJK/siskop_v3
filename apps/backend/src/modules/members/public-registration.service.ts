@@ -1,5 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
+import { saveKtp } from "../../lib/upload-storage.js";
 import { db } from "../../lib/db.js";
 import { notFound } from "../../lib/errors.js";
 import type { SniffedFileType } from "../../lib/file-sniff.js";
@@ -49,20 +48,6 @@ function maskNik(nik: string): string {
   return "*".repeat(Math.max(0, nik.length - 4)) + nik.slice(-4);
 }
 
-/** Same on-disk layout the internal KTP upload uses (members/routes.ts) —
- * /uploads/ktp/{tenantId}/{filename} — so both are served by the one static
- * mount in app.ts. Written outside the DB transaction below, same as the
- * internal upload route (multer writes to disk during request parsing,
- * before the DB row is touched) — not attempting file+DB atomicity that
- * doesn't exist elsewhere in this codebase either. */
-function saveKtpFile(tenantId: string, ktp: KtpUpload): string {
-  const dir = path.join(process.env.STORAGE_PATH ?? "./uploads", "ktp", tenantId);
-  fs.mkdirSync(dir, { recursive: true });
-  const filename = `self-reg-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}.${ktp.type}`;
-  fs.writeFileSync(path.join(dir, filename), ktp.buffer);
-  return `/uploads/ktp/${tenantId}/${filename}`;
-}
-
 /**
  * The unauthenticated write path. Never writes to Member — only to
  * MemberRegistrationRequest (PENDING), reviewed later through
@@ -82,7 +67,7 @@ export async function submitPublicRegistration(
   ]);
   const nikWarning = !!existingMember || !!existingPending;
 
-  const ktpPhotoUrl = ktp ? saveKtpFile(tenantId, ktp) : undefined;
+  const ktpPhotoUrl = ktp ? await saveKtp(tenantId, ktp.buffer) : undefined;
 
   await db.$transaction(async (tx) => {
     const created = await tx.memberRegistrationRequest.create({
