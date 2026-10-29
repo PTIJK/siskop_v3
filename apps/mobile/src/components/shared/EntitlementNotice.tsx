@@ -7,7 +7,7 @@ import { Lock } from "lucide-react";
 // mobile screen so far has hit an entitlement-gated route.
 export function EntitlementNotice({ message }: { message: string }) {
   return (
-    <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+    <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning">
       <Lock className="mt-0.5 h-4 w-4 shrink-0" />
       <p>{message}</p>
     </div>

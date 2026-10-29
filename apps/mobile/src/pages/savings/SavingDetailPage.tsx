@@ -34,13 +34,13 @@ export function SavingDetailPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold">{saving.savingConfig.name}</h1>
+        <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.02em]">{saving.savingConfig.name}</h1>
         <p className="text-sm text-muted-foreground">
           {saving.member.fullName} — {saving.member.memberId}
         </p>
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
+      <div className="rounded-[16px] border bg-card p-4">
         <div className="flex flex-wrap gap-1.5">
           <Badge variant="secondary">{saving.savingConfig.type}</Badge>
           <Badge variant="outline">

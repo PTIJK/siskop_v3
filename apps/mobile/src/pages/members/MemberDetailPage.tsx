@@ -44,15 +44,15 @@ export function MemberDetailPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold">{member.fullName}</h1>
+        <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.02em]">{member.fullName}</h1>
         <div className="mt-1 flex flex-wrap gap-1.5">
-          <Badge variant="outline" className="font-mono">
+          <Badge variant="outline" className="money">
             {member.memberId}
           </Badge>
-          <Badge variant="outline" className="font-mono">
+          <Badge variant="outline" className="money">
             {member.accountNumber}
           </Badge>
-          <Badge variant={member.isActive ? "default" : "secondary"}>{member.isActive ? "Aktif" : "Nonaktif"}</Badge>
+          <Badge variant={member.isActive ? "ok" : "secondary"}>{member.isActive ? "Aktif" : "Nonaktif"}</Badge>
         </div>
       </div>
 
@@ -63,7 +63,7 @@ export function MemberDetailPage() {
             value: "info",
             label: "Info Pribadi",
             content: (
-              <div className="rounded-lg border bg-card p-4">
+              <div className="rounded-[16px] border bg-card p-4">
                 <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {[
                     { label: "NIK", value: member.nik },
@@ -74,12 +74,12 @@ export function MemberDetailPage() {
                   ].map((item) => (
                     <div key={item.label} className="min-w-0">
                       <dt className="text-xs text-muted-foreground">{item.label}</dt>
-                      <dd className="mt-0.5 truncate text-sm font-medium">{item.value}</dd>
+                      <dd className="mt-0.5 truncate text-sm font-semibold">{item.value}</dd>
                     </div>
                   ))}
                   <div className="sm:col-span-2">
                     <dt className="text-xs text-muted-foreground">Alamat</dt>
-                    <dd className="mt-0.5 text-sm font-medium">{member.address}</dd>
+                    <dd className="mt-0.5 text-sm font-semibold">{member.address}</dd>
                   </div>
                 </dl>
 
@@ -102,20 +102,20 @@ export function MemberDetailPage() {
             label: "Simpanan",
             content: (
               <div className="space-y-3">
-                <div className="rounded-lg border bg-card p-3">
+                <div className="rounded-[16px] border bg-card p-3">
                   <p className="text-xs text-muted-foreground">Total Saldo Simpanan</p>
                   <p className="text-xl font-bold">{formatRupiah(totalSavings)}</p>
                 </div>
                 {member.savings.length === 0 ? (
-                  <div className="flex flex-col items-center gap-2 rounded-lg border py-8 text-center text-muted-foreground">
+                  <div className="flex flex-col items-center gap-2 rounded-[16px] border py-8 text-center text-muted-foreground">
                     <PiggyBank className="h-6 w-6" />
                     <p className="text-sm">Belum ada rekening simpanan</p>
                   </div>
                 ) : (
                   member.savings.map((s) => (
-                    <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
+                    <div key={s.id} className="flex items-center justify-between gap-3 rounded-[16px] border bg-card p-3">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{s.savingConfig.name}</p>
+                        <p className="truncate text-sm font-semibold">{s.savingConfig.name}</p>
                         <Badge variant="secondary" className="mt-1">
                           {s.savingConfig.type}
                         </Badge>
@@ -131,8 +131,8 @@ export function MemberDetailPage() {
             value: "loans",
             label: "Pinjaman",
             content: activeLoan ? (
-              <div className="rounded-lg border bg-card p-4">
-                <p className="text-sm font-medium">{activeLoan.loanConfig.name}</p>
+              <div className="rounded-[16px] border bg-card p-4">
+                <p className="text-sm font-semibold">{activeLoan.loanConfig.name}</p>
                 <div className="mt-1 flex gap-1.5">
                   <Badge>{activeLoan.status}</Badge>
                   <Badge variant="outline">{activeLoan.kolCategory}</Badge>
@@ -145,7 +145,7 @@ export function MemberDetailPage() {
                   ].map((item) => (
                     <div key={item.label} className="flex items-center justify-between">
                       <dt className="text-xs text-muted-foreground">{item.label}</dt>
-                      <dd className={item.highlight ? "text-sm font-bold text-orange-600" : "text-sm font-semibold"}>
+                      <dd className={item.highlight ? "text-sm font-bold text-warning" : "text-sm font-bold"}>
                         {item.value}
                       </dd>
                     </div>
@@ -153,7 +153,7 @@ export function MemberDetailPage() {
                 </dl>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-2 rounded-lg border py-8 text-center text-muted-foreground">
+              <div className="flex flex-col items-center gap-2 rounded-[16px] border py-8 text-center text-muted-foreground">
                 <CreditCard className="h-6 w-6" />
                 <p className="text-sm">Tidak ada pinjaman aktif</p>
               </div>
@@ -167,7 +167,7 @@ export function MemberDetailPage() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
           onClick={() => setKtpLightbox(false)}
         >
-          <img src={member.ktpPhotoUrl} alt="KTP" className="max-h-[90vh] max-w-[90vw] rounded-lg" />
+          <img src={member.ktpPhotoUrl} alt="KTP" className="max-h-[90vh] max-w-[90vw] rounded-[16px]" />
         </div>
       )}
     </div>

@@ -19,8 +19,8 @@ export function PeriodRangeControls({
   isLoading: boolean;
 }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <p className="mb-2 text-xs font-medium text-muted-foreground">Periode</p>
+    <div className="rounded-[16px] border bg-card p-4">
+      <p className="mb-2 text-xs font-semibold text-muted-foreground">Periode</p>
       <div className="flex gap-2">
         <input
           type="date"
@@ -38,7 +38,7 @@ export function PeriodRangeControls({
       <button
         onClick={onSubmit}
         disabled={isLoading}
-        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
+        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
       >
         <FileText className="h-4 w-4" /> {isLoading ? "Memuat..." : "Tampilkan"}
       </button>

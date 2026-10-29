@@ -28,7 +28,7 @@ export function MembersPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Anggota</h1>
+      <h1 className="text-[26px] font-extrabold leading-tight tracking-[-0.02em]">Anggota</h1>
 
       <CardList
         items={query.data?.items ?? []}
@@ -44,13 +44,13 @@ export function MembersPage() {
         renderCard={(m) => (
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{m.fullName}</p>
-              <p className="truncate font-mono text-xs text-muted-foreground">{m.memberId}</p>
+              <p className="truncate text-sm font-semibold">{m.fullName}</p>
+              <p className="truncate money text-xs text-muted-foreground">{m.memberId}</p>
               <p className="mt-1 truncate text-xs text-muted-foreground">{m.occupation}</p>
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1">
-              <Badge variant={m.isActive ? "default" : "secondary"}>{m.isActive ? "Aktif" : "Nonaktif"}</Badge>
-              <p className="font-mono text-xs text-muted-foreground">{m.accountNumber}</p>
+              <Badge variant={m.isActive ? "ok" : "secondary"}>{m.isActive ? "Aktif" : "Nonaktif"}</Badge>
+              <p className="money text-xs text-muted-foreground">{m.accountNumber}</p>
             </div>
           </div>
         )}

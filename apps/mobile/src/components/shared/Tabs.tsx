@@ -24,8 +24,8 @@ export function Tabs({ tabs, defaultValue }: { tabs: Tab[]; defaultValue: string
             key={tab.value}
             onClick={() => setActive(tab.value)}
             className={cn(
-              "flex-1 rounded-sm px-2 py-1.5 text-xs font-medium transition-colors",
-              active === tab.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+              "flex-1 rounded-sm px-2 py-1.5 text-xs font-semibold transition-colors",
+              active === tab.value ? "bg-background text-foreground " : "text-muted-foreground"
             )}
           >
             {tab.label}

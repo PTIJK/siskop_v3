@@ -70,7 +70,7 @@ function QuickPayRow({ icon: Icon, label, hint, defaultAmount, actionLabel = "Se
 
   if (status === "done") {
     return (
-      <div className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
+      <div className="flex items-center gap-2 rounded-md bg-success/10 px-3 py-2 text-sm text-success">
         <Check className="h-4 w-4 shrink-0" />
         <span className="truncate">
           {label} — {formatRupiah(amount)} tercatat
@@ -83,7 +83,7 @@ function QuickPayRow({ icon: Icon, label, hint, defaultAmount, actionLabel = "Se
     <div className="rounded-md border p-2.5">
       <div className="flex items-center gap-1.5 text-muted-foreground">
         <Icon className="h-3.5 w-3.5 shrink-0" />
-        <p className="truncate text-sm font-medium text-foreground">{label}</p>
+        <p className="truncate text-sm font-semibold text-foreground">{label}</p>
       </div>
       {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
       <div className="mt-2 flex items-center gap-2">
@@ -100,7 +100,7 @@ function QuickPayRow({ icon: Icon, label, hint, defaultAmount, actionLabel = "Se
           type="button"
           onClick={handleSubmit}
           disabled={disabled || status === "pending" || !amount || Number(amount) <= 0}
-          className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+          className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground disabled:opacity-50"
         >
           {status === "pending" ? "Memproses…" : actionLabel}
         </button>
@@ -163,7 +163,7 @@ export function KolektorTodayPage() {
       "Fitur ini tidak termasuk dalam paket koperasi Anda";
     return (
       <div className="space-y-4">
-        <h1 className="text-lg font-semibold">Setoran Hari Ini</h1>
+        <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.02em]">Setoran Hari Ini</h1>
         <EntitlementNotice message={message} />
       </div>
     );
@@ -177,21 +177,21 @@ export function KolektorTodayPage() {
   return (
     <div className="space-y-4 pb-24">
       <div>
-        <h1 className="text-lg font-semibold">Setoran Hari Ini</h1>
+        <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.02em]">Setoran Hari Ini</h1>
         <p className="text-sm text-muted-foreground">{items.length} anggota binaan</p>
       </div>
 
       {!isOnline && (
-        <div className="flex items-center gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5">
-          <WifiOff className="h-4 w-4 shrink-0 text-amber-700" />
-          <p className="text-xs font-medium text-amber-800">
+        <div className="flex items-center gap-2.5 rounded-[16px] border border-warning/30 bg-warning/10 px-3 py-2.5">
+          <WifiOff className="h-4 w-4 shrink-0 text-warning" />
+          <p className="text-xs font-semibold text-warning">
             Tidak ada koneksi internet. Setoran tidak dapat disimpan saat offline.
           </p>
         </div>
       )}
 
       {items.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-lg border py-10 text-center text-muted-foreground">
+        <div className="flex flex-col items-center gap-2 rounded-[16px] border py-10 text-center text-muted-foreground">
           <p className="text-sm">Belum ada anggota binaan</p>
         </div>
       ) : (
@@ -208,12 +208,12 @@ export function KolektorTodayPage() {
             return (
               <div key={item.memberId}>
                 {showGroupHeading && (
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{groupKey}</p>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">{groupKey}</p>
                 )}
-                <div className="rounded-lg border bg-card p-3">
+                <div className="rounded-[16px] border bg-card p-3">
                   <div className="mb-2">
-                    <p className="truncate text-sm font-medium">{item.memberName}</p>
-                    <p className="truncate font-mono text-xs text-muted-foreground">{item.memberCode}</p>
+                    <p className="truncate text-sm font-semibold">{item.memberName}</p>
+                    <p className="truncate money text-xs text-muted-foreground">{item.memberCode}</p>
                   </div>
 
                   {hasNothingDue && <p className="text-xs text-muted-foreground">Tidak ada tagihan hari ini</p>}
@@ -270,7 +270,7 @@ export function KolektorTodayPage() {
             onClick={handleSubmitBatch}
             disabled={!batch || !isOnline || submitting}
             className={cn(
-              "shrink-0 rounded-md px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50",
+              "shrink-0 rounded-md px-4 py-2 text-sm font-bold text-primary-foreground disabled:opacity-50",
               confirmingSubmit ? "bg-destructive" : "bg-primary"
             )}
           >

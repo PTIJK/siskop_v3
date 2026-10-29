@@ -64,7 +64,7 @@ export function ShuDistribusiTab() {
           <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error.message}</p>
         )
       ) : data?.catatan ? (
-        <div className="flex items-start gap-2.5 rounded-lg border bg-card p-4 text-sm">
+        <div className="flex items-start gap-2.5 rounded-[16px] border bg-card p-4 text-sm">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-muted-foreground">{data.catatan}</p>
         </div>
@@ -82,7 +82,7 @@ export function ShuDistribusiTab() {
                 { label: "Cadangan", bucket: data.alokasi.cadangan },
                 { label: "Lainnya", bucket: data.alokasi.lainnya }
               ].map((item) => (
-                <div key={item.label} className="rounded-lg border bg-card p-3">
+                <div key={item.label} className="rounded-[16px] border bg-card p-3">
                   <p className="text-xs text-muted-foreground">
                     {item.label} ({item.bucket.percent}%)
                   </p>
@@ -92,8 +92,8 @@ export function ShuDistribusiTab() {
             </div>
           )}
 
-          <div className="rounded-lg border bg-card p-4">
-            <h3 className="mb-2 text-sm font-semibold">Pembagian per Anggota</h3>
+          <div className="rounded-[16px] border bg-card p-4">
+            <h3 className="mb-2 text-sm font-bold">Pembagian per Anggota</h3>
             {pageRows.length === 0 ? (
               <p className="text-sm text-muted-foreground">Belum ada data.</p>
             ) : (
@@ -102,25 +102,25 @@ export function ShuDistribusiTab() {
                   <div key={a.memberId} className="rounded-md border p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
+                        <p className="truncate text-sm font-semibold">
                           {a.no}. {a.fullName}
                         </p>
-                        <p className="truncate font-mono text-xs text-muted-foreground">{a.memberCode}</p>
+                        <p className="truncate money text-xs text-muted-foreground">{a.memberCode}</p>
                       </div>
                       <p className="shrink-0 text-sm font-bold">{formatRupiahSingkat(a.totalShu)}</p>
                     </div>
                     <div className="mt-2 grid grid-cols-3 gap-x-2 border-t pt-2 text-xs">
                       <div>
                         <p className="text-muted-foreground">Pokok/SW</p>
-                        <p className="font-medium">{formatRupiahSingkat(a.shuPokokWajib)}</p>
+                        <p className="font-semibold">{formatRupiahSingkat(a.shuPokokWajib)}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Sukarela</p>
-                        <p className="font-medium">{formatRupiahSingkat(a.shuSukarela)}</p>
+                        <p className="font-semibold">{formatRupiahSingkat(a.shuSukarela)}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Pinjaman</p>
-                        <p className="font-medium">{formatRupiahSingkat(a.jasaPinjaman)}</p>
+                        <p className="font-semibold">{formatRupiahSingkat(a.jasaPinjaman)}</p>
                       </div>
                     </div>
                   </div>
@@ -153,7 +153,7 @@ export function ShuDistribusiTab() {
             )}
 
             {data.totalDibagikanKeAnggota && (
-              <div className="mt-3 flex items-center justify-between border-t pt-3 text-sm font-semibold">
+              <div className="mt-3 flex items-center justify-between border-t pt-3 text-sm font-bold">
                 <span>Total Dibagikan ke Anggota</span>
                 <span>{formatRupiahSingkat(data.totalDibagikanKeAnggota)}</span>
               </div>

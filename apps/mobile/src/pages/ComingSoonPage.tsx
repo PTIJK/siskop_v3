@@ -5,7 +5,7 @@
 export function ComingSoonPage({ title }: { title: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-      <p className="text-sm font-medium">{title}</p>
+      <p className="text-sm font-semibold">{title}</p>
       <p className="text-xs">Segera hadir</p>
     </div>
   );

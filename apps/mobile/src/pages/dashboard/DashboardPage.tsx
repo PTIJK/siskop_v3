@@ -42,17 +42,17 @@ const SUGGESTION_ICONS: Record<SuggestionTone, typeof AlertTriangle> = {
 };
 
 const SUGGESTION_COLORS: Record<SuggestionTone, string> = {
-  danger: "text-red-600",
-  warning: "text-amber-600",
-  info: "text-blue-600",
-  success: "text-green-600"
+  danger: "text-destructive",
+  warning: "text-warning",
+  info: "text-info",
+  success: "text-success"
 };
 
 function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-md border bg-background px-2.5 py-1.5 shadow-md">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+    <div className="rounded-md border bg-background px-2.5 py-1.5 ">
+      <p className="text-xs font-semibold text-muted-foreground">{label}</p>
       <p className="text-sm font-bold">{formatRupiah(payload[0]?.value ?? 0)}</p>
     </div>
   );
@@ -84,7 +84,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
+        <h1 className="text-[26px] font-extrabold leading-tight tracking-[-0.02em]">Dashboard</h1>
         <p className="text-sm text-muted-foreground">Ringkasan operasional koperasi</p>
       </div>
 
@@ -127,10 +127,10 @@ export function DashboardPage() {
         />
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
+      <div className="rounded-[16px] border bg-card p-4">
         <div className="mb-3 flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold">Rekomendasi AI</h2>
+          <h2 className="text-sm font-bold">Rekomendasi AI</h2>
         </div>
         {suggestionsLoading ? (
           <div className="space-y-2">
@@ -152,36 +152,36 @@ export function DashboardPage() {
         )}
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
-        <h2 className="mb-2 text-sm font-semibold">Pencairan Pinjaman per Bulan</h2>
+      <div className="rounded-[16px] border bg-card p-4 [&_.recharts-cartesian-axis-line]:stroke-border [&_.recharts-cartesian-axis-tick-line]:stroke-border [&_.recharts-cartesian-axis-tick-value]:fill-muted-foreground">
+        <h2 className="mb-2 text-sm font-bold">Pencairan Pinjaman per Bulan</h2>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={loanChartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-            <XAxis dataKey="month" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-            <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 10 }} width={52} />
+            <XAxis dataKey="month" tick={{ fontSize: 10, style: { fill: "hsl(var(--muted-foreground))" } }} interval="preserveStartEnd" />
+            <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 10, style: { fill: "hsl(var(--muted-foreground))" } }} width={52} />
             {/* recharts' default Tooltip generally responds to tap on mobile
                 browsers (touch translates to a synthetic mouseover on the SVG
                 target) — real-device verification is still pending per
                 docs/06-PRD-SISKOP-Mobile-Version.md §8.4, not assumed here. */}
             <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="value" fill="#3b82f6" radius={[3, 3, 0, 0]} name="Pencairan" />
+            <Bar dataKey="value" fill="hsl(var(--chart-3))" radius={[3, 3, 0, 0]} name="Pencairan" />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
-        <h2 className="mb-2 text-sm font-semibold">Pembayaran Cicilan per Bulan</h2>
+      <div className="rounded-[16px] border bg-card p-4 [&_.recharts-cartesian-axis-line]:stroke-border [&_.recharts-cartesian-axis-tick-line]:stroke-border [&_.recharts-cartesian-axis-tick-value]:fill-muted-foreground">
+        <h2 className="mb-2 text-sm font-bold">Pembayaran Cicilan per Bulan</h2>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={paymentChartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-            <XAxis dataKey="month" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-            <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 10 }} width={52} />
+            <XAxis dataKey="month" tick={{ fontSize: 10, style: { fill: "hsl(var(--muted-foreground))" } }} interval="preserveStartEnd" />
+            <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 10, style: { fill: "hsl(var(--muted-foreground))" } }} width={52} />
             {/* recharts' default Tooltip generally responds to tap on mobile
                 browsers (touch translates to a synthetic mouseover on the SVG
                 target) — real-device verification is still pending per
                 docs/06-PRD-SISKOP-Mobile-Version.md §8.4, not assumed here. */}
             <Tooltip content={<CustomTooltip />} />
-            <Line type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} name="Pembayaran" />
+            <Line type="monotone" dataKey="value" stroke="hsl(var(--chart-4))" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} name="Pembayaran" />
           </LineChart>
         </ResponsiveContainer>
       </div>

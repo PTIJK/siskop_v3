@@ -6,8 +6,8 @@ import type { LoanConfig } from "@siskop/types";
 import { apiFetch, apiFetchPage } from "@/api/client";
 import { formatRupiahSingkat } from "@/lib/format";
 import { CardList } from "@/components/shared/CardList";
-import { Badge } from "@/components/shared/Badge";
 import { KOLBadge } from "@/components/shared/KOLBadge";
+import { LoanStatusBadge } from "@/components/shared/LoanStatusBadge";
 import { cn } from "@/lib/utils";
 
 interface LoanRow {
@@ -65,7 +65,7 @@ export function LoansDashboardPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Pinjaman</h1>
+      <h1 className="text-[26px] font-extrabold leading-tight tracking-[-0.02em]">Pinjaman</h1>
 
       {/* Always rendered (not conditional on overdueCount) — desktop's
           Sidebar has "Anggota Menunggak" as a permanent submenu item
@@ -77,12 +77,12 @@ export function LoansDashboardPage() {
       <button
         onClick={() => navigate("/loans/overdue")}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left",
-          overdueCount > 0 ? "border-red-300 bg-red-50" : "border-muted bg-muted/40"
+          "flex w-full items-center gap-2.5 rounded-[16px] border px-3 py-2.5 text-left",
+          overdueCount > 0 ? "border-destructive/30 bg-destructive/10" : "border-muted bg-muted/40"
         )}
       >
-        <AlertTriangle className={cn("h-4 w-4 shrink-0", overdueCount > 0 ? "text-red-600" : "text-muted-foreground")} />
-        <p className={cn("flex-1 text-xs font-medium", overdueCount > 0 ? "text-red-800" : "text-muted-foreground")}>
+        <AlertTriangle className={cn("h-4 w-4 shrink-0", overdueCount > 0 ? "text-destructive" : "text-muted-foreground")} />
+        <p className={cn("flex-1 text-xs font-semibold", overdueCount > 0 ? "text-destructive" : "text-muted-foreground")}>
           {overdueCount > 0
             ? `${overdueCount} anggota memiliki pinjaman bermasalah (MACET/DIRAGUKAN)`
             : "Tidak ada pinjaman bermasalah saat ini"}
@@ -115,8 +115,8 @@ export function LoansDashboardPage() {
               setPage(1);
             }}
             className={cn(
-              "flex-1 rounded-sm px-2 py-1.5 text-xs font-medium transition-colors",
-              status === tab.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+              "flex-1 rounded-sm px-2 py-1.5 text-xs font-semibold transition-colors",
+              status === tab.value ? "bg-background text-foreground " : "text-muted-foreground"
             )}
           >
             {tab.label}
@@ -139,11 +139,11 @@ export function LoansDashboardPage() {
           <div>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{l.member.fullName}</p>
-                <p className="truncate font-mono text-xs text-muted-foreground">{l.member.memberId}</p>
+                <p className="truncate text-sm font-semibold">{l.member.fullName}</p>
+                <p className="truncate money text-xs text-muted-foreground">{l.member.memberId}</p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
-                <Badge variant="outline">{l.status}</Badge>
+                <LoanStatusBadge status={l.status} />
                 <KOLBadge category={l.kolCategory} />
               </div>
             </div>
@@ -153,19 +153,19 @@ export function LoansDashboardPage() {
             <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t pt-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Pokok</span>
-                <span className="font-medium">{formatRupiahSingkat(l.principalAmount)}</span>
+                <span className="font-semibold">{formatRupiahSingkat(l.principalAmount)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Sisa</span>
-                <span className="font-semibold text-orange-600">{formatRupiahSingkat(l.remainingAmount)}</span>
+                <span className="font-bold text-warning">{formatRupiahSingkat(l.remainingAmount)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total</span>
-                <span className="font-medium">{formatRupiahSingkat(l.totalAmount)}</span>
+                <span className="font-semibold">{formatRupiahSingkat(l.totalAmount)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">/bln</span>
-                <span className="font-medium">{formatRupiahSingkat(l.monthlyPayment)}</span>
+                <span className="font-semibold">{formatRupiahSingkat(l.monthlyPayment)}</span>
               </div>
             </div>
           </div>

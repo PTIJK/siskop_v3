@@ -12,27 +12,27 @@ const NARRATIVE_SECTIONS: CalkSection[] = ["UMUM", "DASAR_PENYUSUNAN", "KEBIJAKA
 
 function MutasiCard({ title, items }: { title: string; items: CalkMutasiItem[] }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+    <div className="rounded-[16px] border bg-card p-4">
+      <h3 className="mb-2 text-sm font-bold">{title}</h3>
       {items.length === 0 ? (
         <p className="text-sm text-muted-foreground">Tidak ada data.</p>
       ) : (
         items.map((item, i) => (
           <div key={item.accountId ?? i} className="border-b py-2 last:border-b-0">
             <p className="truncate text-sm">{item.name}</p>
-            {item.code && <p className="font-mono text-xs text-muted-foreground">{item.code}</p>}
+            {item.code && <p className="money text-xs text-muted-foreground">{item.code}</p>}
             <div className="mt-1 grid grid-cols-3 gap-x-2 text-xs">
               <div>
                 <p className="text-muted-foreground">Awal</p>
-                <p className="font-medium">{formatRupiahSingkat(item.saldoAwal)}</p>
+                <p className="font-semibold">{formatRupiahSingkat(item.saldoAwal)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Akhir</p>
-                <p className="font-medium">{formatRupiahSingkat(item.saldoAkhir)}</p>
+                <p className="font-semibold">{formatRupiahSingkat(item.saldoAkhir)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Mutasi</p>
-                <p className="font-medium">{formatRupiahSingkat(item.mutasi)}</p>
+                <p className="font-semibold">{formatRupiahSingkat(item.mutasi)}</p>
               </div>
             </div>
           </div>
@@ -44,8 +44,8 @@ function MutasiCard({ title, items }: { title: string; items: CalkMutasiItem[] }
 
 function IncomeExpenseCard({ title, items }: { title: string; items: LabaRugiItem[] }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+    <div className="rounded-[16px] border bg-card p-4">
+      <h3 className="mb-2 text-sm font-bold">{title}</h3>
       {items.length === 0 ? (
         <p className="text-sm text-muted-foreground">Tidak ada data.</p>
       ) : (
@@ -53,9 +53,9 @@ function IncomeExpenseCard({ title, items }: { title: string; items: LabaRugiIte
           <div key={item.accountId} className="flex items-center justify-between gap-3 border-b py-2 text-sm last:border-b-0">
             <div className="min-w-0">
               <p className="truncate">{item.name}</p>
-              <p className="font-mono text-xs text-muted-foreground">{item.code}</p>
+              <p className="money text-xs text-muted-foreground">{item.code}</p>
             </div>
-            <span className="shrink-0 font-medium">{formatRupiahSingkat(item.total)}</span>
+            <span className="shrink-0 font-semibold">{formatRupiahSingkat(item.total)}</span>
           </div>
         ))
       )}
@@ -114,12 +114,12 @@ export function CalkTab() {
           </p>
 
           <div className="space-y-3">
-            <h2 className="text-sm font-semibold">Catatan Naratif</h2>
+            <h2 className="text-sm font-bold">Catatan Naratif</h2>
             {NARRATIVE_SECTIONS.map((section) => {
               const entry = data.narasi[section];
               return (
-                <div key={section} className="rounded-lg border bg-card p-4">
-                  <h3 className="mb-1.5 text-sm font-semibold">{CALK_SECTION_LABEL[section]}</h3>
+                <div key={section} className="rounded-[16px] border bg-card p-4">
+                  <h3 className="mb-1.5 text-sm font-bold">{CALK_SECTION_LABEL[section]}</h3>
                   <p className="whitespace-pre-wrap text-sm text-muted-foreground">{entry.content || "Belum diisi"}</p>
                   {entry.updatedAt && (
                     <p className="mt-1.5 text-xs text-muted-foreground">
@@ -132,13 +132,13 @@ export function CalkTab() {
           </div>
 
           <div className="space-y-3">
-            <h2 className="text-sm font-semibold">Rincian Angka</h2>
+            <h2 className="text-sm font-bold">Rincian Angka</h2>
             <MutasiCard title="Aset" items={data.rincianAset} />
             <MutasiCard title="Kewajiban" items={data.rincianKewajiban} />
             <MutasiCard title="Ekuitas" items={data.rincianEkuitas} />
             <IncomeExpenseCard title="Pendapatan" items={data.rincianPendapatan} />
             <IncomeExpenseCard title="Beban" items={data.rincianBeban} />
-            <div className="flex items-center justify-between rounded-lg border bg-card p-4 text-sm font-semibold">
+            <div className="flex items-center justify-between rounded-[16px] border bg-card p-4 text-sm font-bold">
               <span>SHU Berjalan</span>
               <span>{formatRupiahSingkat(data.shuBerjalan)}</span>
             </div>
