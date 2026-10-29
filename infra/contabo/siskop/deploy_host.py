@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 import hmac
 import json
+import ipaddress
 import os
 from pathlib import Path
 import re
@@ -70,19 +71,26 @@ def write_private(path, value):
     pending.replace(path)
 
 
-def health(revision):
+def health(revision=None, container=None, port=None):
+    if container is None:
+        active = ROOT / "active-api.json"
+        route = json.loads(active.read_text()) if active.exists() else {}
+        container = route.get("container", "siskop-api-staging")
+        port = route.get("port", 18081)
+    if (container, port) not in [("siskop-api-staging", 18081), ("siskop-api-candidate", 18082)]:
+        raise ValueError("Unexpected SISKOP readiness target")
     values = dict(line.split('=', 1) for line in (ROOT / 'secrets/api.env').read_text().splitlines() if line and not line.startswith('#'))
     path = '/api/public/pricing'
     stamp = str(int(time.time() * 1000))
     signature = base64.urlsafe_b64encode(hmac.new(values['CENTRAL_GATEWAY_SECRET'].encode(), f'central\n{stamp}\nGET\n{path}'.encode(), hashlib.sha256).digest()).decode().rstrip('=')
-    request = Request('http://127.0.0.1:18081' + path, headers={'x-siskop-central-time': stamp, 'x-siskop-central-signature': signature})
+    request = Request(f'http://127.0.0.1:{port}' + path, headers={'x-siskop-central-time': stamp, 'x-siskop-central-signature': signature})
     with urlopen(request, timeout=10) as response:
         data = json.load(response)
     if data.get('success') is not True or not data.get('data', {}).get('version') or not data['data'].get('packages'):
         raise ValueError('New SISKOP API failed database readiness')
     # Check the actual process environment, never the desired env file alone.
-    observed = command(['docker', 'exec', 'siskop-api-staging', 'node', '-e', 'process.stdout.write(process.env.SISKOP_RELEASE_ID || "")']).decode()
-    if observed != revision:
+    observed = command(['docker', 'exec', container, 'node', '-e', 'process.stdout.write(process.env.SISKOP_RELEASE_ID || "")']).decode()
+    if (revision is not None and observed != revision) or not UUID.fullmatch(observed):
         raise ValueError('New SISKOP API release identity mismatch')
 
 
@@ -121,20 +129,90 @@ def deploy(client, data):
     runtime['SISKOP_RELEASE_ID'] = data['buildId']
     write_private(ROOT / 'compose.env', ''.join(k + '=' + v + '\n' for k, v in settings.items()))
     write_private(ROOT / 'secrets/api.env', ''.join(k + '=' + v + '\n' for k, v in runtime.items()))
+    handoff(old_compose, old_runtime, data['buildId'])
+
+
+def wait_ready(revision, container, port):
+    for _ in range(30):
+        try:
+            health(revision, container, port)
+            return
+        except Exception:
+            time.sleep(2)
+    raise ValueError('Candidate API did not become ready')
+
+
+def switch_api(container, port):
+    if (container, port) not in [('siskop-api-staging', 18081), ('siskop-api-candidate', 18082)]:
+        raise ValueError('Unexpected SISKOP handoff target')
+    api = json.loads(command(['docker', 'inspect', container]))[0]
+    labels = api['Config'].get('Labels', {})
+    if labels.get('com.docker.compose.project') != PROJECT or labels.get('com.siskop.application') != 'siskop':
+        raise ValueError('Refusing non-SISKOP handoff target')
+    address = ipaddress.IPv4Address(api['NetworkSettings']['Networks']['siskop-staging-egress']['IPAddress'])
+    if not address.is_private: raise ValueError('Private SISKOP API address required')
+    proxy = json.loads(command(['docker', 'inspect', 'siskop-proxy-staging']))[0]
+    labels = proxy['Config'].get('Labels', {})
+    mounts = {m['Destination']: m['Source'] for m in proxy['Mounts'] if m['Type'] == 'bind'}
+    if labels.get('com.docker.compose.project') != PROJECT or labels.get('com.siskop.application') != 'siskop' or mounts.get('/etc/siskop-state') != str(ROOT / 'proxy-state'):
+        raise ValueError('Refusing non-SISKOP proxy')
+    target = ROOT / 'proxy-state/upstream.conf'
+    if target.is_symlink(): raise ValueError('Unexpected upstream symlink')
+    previous = target.read_text()
+    pending = target.with_suffix('.pending')
+    pending.write_text(f'set $siskop_upstream {address}:8080;\n'); pending.chmod(0o644); pending.replace(target)
     try:
+        command(['docker', 'exec', 'siskop-proxy-staging', 'nginx', '-t'])
+        workers = proxy_workers()
+        if not workers: raise ValueError('SISKOP proxy has no serving worker')
+        command(['docker', 'exec', 'siskop-proxy-staging', 'nginx', '-s', 'reload'])
+    except Exception:
+        target.write_text(previous)
+        raise
+    write_private(ROOT / 'active-api.json', json.dumps({'container': container, 'port': port}))
+    # Old workers can still have in-flight requests; do not stop their API yet.
+    for _ in range(340):
+        if not workers.intersection(proxy_workers()): return
+        time.sleep(1)
+    raise TimeoutError('SISKOP proxy did not finish draining; serving APIs retained')
+
+
+def proxy_workers():
+    rows = command(['docker', 'top', 'siskop-proxy-staging', '-eo', 'pid,args']).decode().splitlines()
+    return {row.split()[0] for row in rows if 'nginx: worker process' in row}
+
+
+def remove_candidate():
+    api = json.loads(command(['docker', 'inspect', 'siskop-api-candidate']))[0]
+    labels = api['Config'].get('Labels', {})
+    if labels.get('com.docker.compose.project') != PROJECT or labels.get('com.siskop.application') != 'siskop':
+        raise ValueError('Refusing non-SISKOP cleanup')
+    command(['docker', 'stop', '--time', '330', 'siskop-api-candidate'], timeout=350)
+    command(['docker', 'rm', 'siskop-api-candidate'])
+
+
+def handoff(old_compose, old_runtime, revision):
+    started = False
+    try:
+        compose('--profile', 'application', 'run', '-d', '--no-deps', '--name', 'siskop-api-candidate',
+                '--publish', '127.0.0.1:18082:8080', 'api')
+        started = True
+        wait_ready(revision, 'siskop-api-candidate', 18082)
+        switch_api('siskop-api-candidate', 18082)
         compose('--profile', 'application', 'up', '-d', '--no-deps', 'api')
-        for _ in range(30):
-            try:
-                health(data['buildId']); break
-            except Exception:
-                time.sleep(2)
-        else:
-            raise ValueError('Candidate API did not become ready')
+        wait_ready(revision, 'siskop-api-staging', 18081)
+        switch_api('siskop-api-staging', 18081)
     except Exception:
         write_private(ROOT / 'compose.env', old_compose)
         write_private(ROOT / 'secrets/api.env', old_runtime)
+        # If recovery fails, leave the candidate running and keep its route.
         compose('--profile', 'application', 'up', '-d', '--no-deps', 'api')
+        old_revision = dict(line.split('=', 1) for line in old_runtime.splitlines() if line and not line.startswith('#'))['SISKOP_RELEASE_ID']
+        wait_ready(old_revision, 'siskop-api-staging', 18081)
+        switch_api('siskop-api-staging', 18081)
+        if started: remove_candidate()
         raise
+    remove_candidate()
 
 
 def receipt(client, data, result):
