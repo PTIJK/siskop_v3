@@ -16,6 +16,7 @@ import {
   X,
   Menu,
   Package as PackageIcon,
+  Tags,
   ShieldCheck,
   Layers,
   PieChart,
@@ -262,6 +263,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
             {[
               { href: "/platform/tenants", icon: Landmark, label: "Koperasi" },
               { href: "/platform/packages", icon: PackageIcon, label: "Paket Langganan" },
+              { href: "/platform/pricing", icon: Tags, label: "Harga & Paket" },
               { href: "/platform/admins", icon: ShieldCheck, label: "Admin Platform" }
             ].map((item) => (
               <NavLink
