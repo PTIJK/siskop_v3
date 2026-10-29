@@ -17,6 +17,7 @@
     "db:seed:ksu-demo": "tsx prisma/seed-ksu-demo.ts",
     "db:seed:pricing": "tsx prisma/seed-pricing.ts",
     "pricing:migration-plan": "tsx scripts/plan-subscription-migration.ts",
+    "pricing:migration-apply": "tsx scripts/apply-subscription-migration.ts",
     "backfill:loan-installments": "tsx scripts/backfill-loan-installments.ts"
   },
   "dependencies": {

@@ -1,10 +1,14 @@
 import type { db } from "../db.js";
 import { withoutTenantScope } from "../tenant-scope.js";
+import { writePricingAudit } from "./audit.js";
+import { getPublishedCatalog } from "./catalog.js";
+import { buildSubscriptionSnapshot } from "./engine.js";
+import { clearEntitlementCache } from "./entitlements.js";
 
 /**
  * Dry-run planner for the one-off move from the legacy SubscriptionPackage
  * flags to TenantSubscription rows. It only reads. Applying the plan needs the
- * owner-approved mapping table and is deliberately not implemented here.
+ * owner-approved mapping table: see applySubscriptionMigration below.
  */
 
 export interface MigrationUsage {
@@ -64,6 +68,19 @@ const NOT_BUILT_YET = new Set(["ai_chatbot", "ocr"]);
 type Client = typeof db;
 const NONE_KEY = "none";
 
+type LegacyPackage = { modules: string[]; whitelabelEnabled: boolean; customSubdomainEnabled: boolean } | null;
+
+/** The Pricing V2 features a tenant could reach under its legacy package: everything ungated, plus what its flags unlocked. */
+function legacyFeatureKeys(legacy: LegacyPackage, allKeys: string[]): Set<string> {
+  const gated = new Set([...ACCOUNTING_FEATURES, ...WHITELABEL_FEATURES, ...PASAR_FEATURES, ...SUBDOMAIN_FEATURES]);
+  const keys = new Set(allKeys.filter((k) => !gated.has(k)));
+  if (legacy?.modules.includes("accounting")) ACCOUNTING_FEATURES.forEach((k) => keys.add(k));
+  if (legacy?.modules.includes("pasar")) PASAR_FEATURES.forEach((k) => keys.add(k));
+  if (legacy?.whitelabelEnabled) WHITELABEL_FEATURES.forEach((k) => keys.add(k));
+  if (legacy?.customSubdomainEnabled) SUBDOMAIN_FEATURES.forEach((k) => keys.add(k));
+  return keys;
+}
+
 export async function planSubscriptionMigration(client: Client, opts: { mapping: Record<string, string> }): Promise<MigrationPlan> {
   const targets = await client.subscriptionPackage.findMany({
     where: { code: { not: null } },
@@ -75,7 +92,6 @@ export async function planSubscriptionMigration(client: Client, opts: { mapping:
   }
 
   const allKeys = (await client.feature.findMany({ select: { key: true } })).map((f) => f.key).filter((k) => !NOT_BUILT_YET.has(k));
-  const gated = new Set([...ACCOUNTING_FEATURES, ...WHITELABEL_FEATURES, ...PASAR_FEATURES, ...SUBDOMAIN_FEATURES]);
 
   const tenants = await client.tenant.findMany({ include: { package: true }, orderBy: { createdAt: "asc" } });
 
@@ -129,11 +145,7 @@ export async function planSubscriptionMigration(client: Client, opts: { mapping:
       if (cap !== null && usage[dim] > cap) limitOverrides[dim] = usage[dim];
     }
 
-    const legacyKeys = new Set(allKeys.filter((k) => !gated.has(k)));
-    if (legacy?.modules.includes("accounting")) ACCOUNTING_FEATURES.forEach((k) => legacyKeys.add(k));
-    if (legacy?.modules.includes("pasar")) PASAR_FEATURES.forEach((k) => legacyKeys.add(k));
-    if (legacy?.whitelabelEnabled) WHITELABEL_FEATURES.forEach((k) => legacyKeys.add(k));
-    if (legacy?.customSubdomainEnabled) SUBDOMAIN_FEATURES.forEach((k) => legacyKeys.add(k));
+    const legacyKeys = legacyFeatureKeys(legacy, allKeys);
     const newKeys = new Set(target.features.map((pf) => pf.feature.key).filter((k) => !NOT_BUILT_YET.has(k)));
 
     plan.rows.push({
@@ -154,4 +166,113 @@ export async function planSubscriptionMigration(client: Client, opts: { mapping:
   }
 
   return plan;
+}
+
+export interface MigrationApplyOptions {
+  /** Legacy package id (or "none") to the approved Pricing V2 package code. The owner supplies it. */
+  mapping: Record<string, string>;
+  /** Migrate a tenant even when the new package gives it less than it has today. Off by default. */
+  allowFeatureLoss?: boolean;
+  now?: Date;
+}
+
+export interface MigrationApplyResult {
+  created: number;
+  alreadyMigrated: number;
+  unmapped: MigrationPlan["unmapped"];
+  /** Not migrated: the new package would remove features the tenant has now. */
+  blockedByFeatureLoss: { tenantId: string; tenantName: string; targetPackageCode: string; featuresLost: string[] }[];
+  /** Not migrated: the koperasi is switched off, so there is no live access to preserve. */
+  skippedInactive: { tenantId: string; tenantName: string }[];
+  failed: { tenantId: string; tenantName: string; reason: string }[];
+}
+
+/**
+ * The one-off move to TenantSubscription. It only creates subscriptions, one
+ * transaction per tenant, so a failure affects that tenant alone and the run
+ * can be repeated: migrated tenants are skipped. Each tenant keeps its current
+ * price and billing date. Limits and features come from the PUBLISHED catalog
+ * (what the tenant will actually get), and a limit override is added wherever
+ * current usage is above it, so nothing is trimmed. The legacy package link on
+ * Tenant is left untouched. Never guesses: no mapping, no change.
+ */
+export async function applySubscriptionMigration(client: Client, opts: MigrationApplyOptions): Promise<MigrationApplyResult> {
+  const published = await getPublishedCatalog();
+  const catalog = published.snapshot;
+  for (const code of new Set(Object.values(opts.mapping))) {
+    if (!catalog.packages.some((p) => p.code === code)) throw new Error(`Mapping targets unknown package code "${code}"`);
+  }
+
+  const plan = await planSubscriptionMigration(client, { mapping: opts.mapping });
+  const result: MigrationApplyResult = {
+    created: 0,
+    alreadyMigrated: plan.alreadyMigrated,
+    unmapped: plan.unmapped,
+    blockedByFeatureLoss: [],
+    skippedInactive: [],
+    failed: []
+  };
+
+  const allKeys = catalog.features.map((f) => f.key).filter((k) => !NOT_BUILT_YET.has(k));
+  const tenants = await client.tenant.findMany({
+    where: { id: { in: plan.rows.map((r) => r.tenantId) } },
+    include: { package: true }
+  });
+  const tenantById = new Map(tenants.map((t) => [t.id, t]));
+
+  for (const row of plan.rows) {
+    const tenant = tenantById.get(row.tenantId);
+    if (!tenant) continue;
+    if (!tenant.isActive) {
+      result.skippedInactive.push({ tenantId: tenant.id, tenantName: tenant.name });
+      continue;
+    }
+    try {
+      const target = catalog.packages.find((p) => p.code === row.targetPackageCode)!;
+      const targetKeys = new Set(target.features.filter((k) => !NOT_BUILT_YET.has(k)));
+      const lost = allKeys.filter((k) => legacyFeatureKeys(tenant.package, allKeys).has(k) && !targetKeys.has(k));
+      if (lost.length > 0 && !opts.allowFeatureLoss) {
+        result.blockedByFeatureLoss.push({ tenantId: tenant.id, tenantName: tenant.name, targetPackageCode: target.code, featuresLost: lost });
+        continue;
+      }
+
+      const limitOverrides: Partial<MigrationUsage> = {};
+      for (const dim of Object.keys(row.usage) as (keyof MigrationUsage)[]) {
+        const cap = target.limits[dim];
+        if (cap !== null && row.usage[dim] > cap) limitOverrides[dim] = row.usage[dim];
+      }
+
+      const snapshot = buildSubscriptionSnapshot({ packageCode: target.code, billingCycle: "MONTHLY" }, published);
+      const pkg = await client.subscriptionPackage.findUniqueOrThrow({ where: { code: target.code } });
+      await client.$transaction(async (tx) => {
+        await tx.tenantSubscription.create({
+          data: {
+            tenantId: tenant.id,
+            packageId: pkg.id,
+            pricingVersion: published.version,
+            billingCycle: "MONTHLY",
+            snapshot: snapshot as never,
+            amountPerCycle: row.amountPerCycle,
+            status: "ACTIVE",
+            startsAt: opts.now ?? new Date(),
+            nextBillingDate: tenant.nextBillingDate,
+            createdVia: "MIGRATION",
+            ...(Object.keys(limitOverrides).length > 0 ? { limitOverrides } : {})
+          }
+        });
+        await writePricingAudit(tx, {
+          entity: "subscription",
+          entityId: tenant.id,
+          action: "MIGRATED",
+          before: { legacyPackage: tenant.package?.name ?? null, price: row.amountPerCycle },
+          after: { package: target.code, amountPerCycle: row.amountPerCycle, limitOverrides, nextBillingDate: row.nextBillingDate }
+        });
+      });
+      clearEntitlementCache(tenant.id);
+      result.created += 1;
+    } catch (error) {
+      result.failed.push({ tenantId: tenant.id, tenantName: tenant.name, reason: error instanceof Error ? error.message : "unknown" });
+    }
+  }
+  return result;
 }
