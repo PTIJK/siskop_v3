@@ -24,7 +24,7 @@ export type StaffLoginResult =
   | { next: 'tenant_selection'; eligibleCount: number }
   | { next: 'no_access' }
   | { next: 'dashboard'; session: import('./user.js').LoginResponse }
-  | { next: 'checkout'; order: import('./onboarding.js').OnboardingStatus }
+  | { next: 'awaiting_payment'; status: import('./onboarding.js').RegistrationStatus }
 export interface TenantAccessConfig {
   enabled: boolean
   switching: boolean

@@ -1,60 +1,68 @@
-import { withoutTenantScope } from "../../lib/tenant-scope.js";
-import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
-import { addMonths } from "date-fns";
+import { addDays } from "date-fns";
 import { Prisma } from "@prisma/client";
-import type { OnboardingStatus, PackageCatalog } from "@siskop/types";
+import type { RegistrationStatus } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { conflict, notFound, unauthorized } from "../../lib/errors.js";
-import { provisionTenantInTx } from "../tenants/provision.js";
-import { verifyFirebaseIdentity } from "./firebase.js";
+import { getPublishedCatalog } from "../../lib/pricing/catalog.js";
+import { buildSubscriptionSnapshot, quote } from "../../lib/pricing/engine.js";
+import { createInvoice } from "../../lib/pricing/invoice.js";
+import { assertFirstUnitAllowed } from "../../lib/pricing/unit-rules.js";
+import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import { sessionFor } from "../auth/service.js";
 import { tenantDomainsEnabled, tenantLoginUrl } from "../tenant-domains/config.js";
-import { registrationSchema, resumeSchema, firebaseSignInSchema } from "./schema.js";
-import { deliverRegistrationEmail, tryRegistrationEmail } from "./email.js";
-import {
-  checkoutConfigured,
-  createPaymentSession,
-  getPaymentSession,
-  ProviderRequestError,
-  validateProviderSession
-} from "./xendit.js";
+import { provisionTenantInTx } from "../tenants/provision.js";
+import { verifyFirebaseIdentity } from "./firebase.js";
+import { sendInvoiceEmail, type InvoiceEmailData } from "./invoice-email.js";
+import { firebaseSignInSchema, registrationSchema } from "./schema.js";
 
-export async function catalog(): Promise<PackageCatalog> {
-  const packages = await db.subscriptionPackage.findMany({
-    where: { isActive: true, price: { gt: 0 } },
-    orderBy: [{ price: "asc" }, { id: "asc" }]
-  });
-  return {
-    checkoutAvailable: checkoutConfigured(),
-    packages: packages
-      .filter((p) => p.price.isInteger())
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        price: p.price.toString(),
-        modules: p.modules.filter((m): m is "accounting" => m === "accounting"),
-        maxUsers: p.maxUsers,
-        maxMembers: p.maxMembers,
-        maxSavingConfigs: p.maxSavingConfigs,
-        whitelabelEnabled: p.whitelabelEnabled,
-        customSubdomainEnabled: p.customSubdomainEnabled
-      }))
-  };
+/** How long the registration response waits for the invoice email before moving on. */
+const EMAIL_WAIT_MS = 3000;
+
+function workspaceSlug(tenantName: string, requested: string | undefined): string {
+  const fromName =
+    tenantName
+      .normalize("NFKD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 50)
+      .replace(/-+$/g, "") || "koperasi";
+  const generated = `${fromName}-${randomBytes(6).toString("hex")}`;
+  return tenantDomainsEnabled() ? generated : (requested ?? generated);
 }
-export async function register(input: unknown): Promise<string> {
+
+/**
+ * Creates the koperasi, its first admin, its subscription and, when money is
+ * owed, its first invoice, all in one transaction. The package arrives as a
+ * selection: the price is recomputed here from the published catalog, and
+ * a request that names a price is rejected by the schema before this runs.
+ *
+ * A registration that costs nothing is active at once. One that costs anything
+ * (a paid package, or a free package with a paid support plan) leaves the
+ * koperasi inactive and the subscription PENDING_PAYMENT until an invoice is paid.
+ */
+async function createRegistration(input: unknown): Promise<{ tenantId: string; invoiceEmail: InvoiceEmailData | null }> {
   const data = registrationSchema.parse(input);
-  if (!checkoutConfigured()) throw conflict("Pembayaran belum tersedia. Silakan coba kembali nanti.");
-  const pkg = await db.subscriptionPackage.findUnique({ where: { id: data.packageId } });
-  if (!pkg?.isActive || !pkg.price.gt(0) || !pkg.price.isInteger()) throw notFound("Paket tidak tersedia");
-  const identity = await verifyFirebaseIdentity(data.idToken);
-  const nameSlug = data.tenantName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50).replace(/-+$/g, "") || "koperasi";
-  const generatedSlug = `${nameSlug}-${randomBytes(6).toString("hex")}`;
-  const slug = tenantDomainsEnabled() ? generatedSlug : data.slug ?? generatedSlug;
+  const published = await getPublishedCatalog();
+  const priced = quote(data.subscription, published, { publicOnly: true });
+  const snapshot = buildSubscriptionSnapshot(data.subscription, published, { publicOnly: true });
   const firstUnit = data.firstUnit ?? { type: "KSP" as const, name: "Simpan pinjam" };
+  assertFirstUnitAllowed(firstUnit.type, priced.effectiveFeatures);
+
+  const identity = await verifyFirebaseIdentity(data.idToken);
+  const slug = workspaceSlug(data.tenantName, data.slug);
+  const free = new Prisma.Decimal(priced.subtotal).isZero();
+  const settings = published.snapshot.settings;
+
   try {
     return await db.$transaction(async (tx) => {
+      const pkg = await tx.subscriptionPackage.findUniqueOrThrow({ where: { code: data.subscription.packageCode } });
+      const supportPlan = data.subscription.supportPlanCode
+        ? await tx.supportPlan.findUnique({ where: { code: data.subscription.supportPlanCode } })
+        : null;
+
       const { tenant, roles } = await provisionTenantInTx(tx, {
         name: data.tenantName,
         slug,
@@ -64,10 +72,11 @@ export async function register(input: unknown): Promise<string> {
         cooperativeType: firstUnit.type,
         firstUnit
       });
-      await tx.tenant.update({ where: { id: tenant.id }, data: { isActive: false, packageId: pkg.id } });
+      await tx.tenant.update({ where: { id: tenant.id }, data: { isActive: free, packageId: pkg.id } });
+
       const role = roles.find((r) => r.name === "Super Admin");
       if (!role) throw new Error("Missing provisioned admin role");
-      const user = await tx.user.create({
+      await tx.user.create({
         data: {
           tenantId: tenant.id,
           roleId: role.id,
@@ -77,16 +86,50 @@ export async function register(input: unknown): Promise<string> {
           authProvider: identity.provider
         }
       });
-      const order = await tx.onboardingOrder.create({
+
+      const subscription = await tx.tenantSubscription.create({
         data: {
           tenantId: tenant.id,
-          adminId: user.id,
           packageId: pkg.id,
-          packageName: pkg.name,
-          amount: pkg.price
+          pricingVersion: published.version,
+          billingCycle: data.subscription.billingCycle,
+          supportPlanId: supportPlan?.id ?? null,
+          selectedFeatureKeys: data.subscription.featureKeys ?? [],
+          addons: Object.fromEntries((data.subscription.addons ?? []).map((a) => [a.itemKey, a.qty])),
+          snapshot: snapshot as unknown as Prisma.InputJsonValue,
+          amountPerCycle: new Prisma.Decimal(priced.amountPerCycle),
+          status: free ? "ACTIVE" : "PENDING_PAYMENT",
+          startsAt: new Date(),
+          createdVia: "REGISTRATION"
         }
       });
-      return order.id;
+      if (free) return { tenantId: tenant.id, invoiceEmail: null };
+
+      const invoice = await createInvoice(tx, {
+        tenantId: tenant.id,
+        subscriptionId: subscription.id,
+        type: "REGISTRATION",
+        quote: priced,
+        dueDate: addDays(new Date(), settings.unpaidRegistrationPurgeDays)
+      });
+      return {
+        tenantId: tenant.id,
+        invoiceEmail: {
+          to: identity.email,
+          adminName: data.adminName,
+          tenantName: data.tenantName,
+          packageName: snapshot.packageName,
+          billingCycle: data.subscription.billingCycle,
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.number,
+          subtotal: invoice.subtotal.toString(),
+          taxRate: invoice.taxRate?.toString() ?? null,
+          taxAmount: invoice.taxAmount.toString(),
+          total: invoice.total.toString(),
+          dueDate: invoice.dueDate,
+          paymentInstructions: settings.paymentInstructions
+        }
+      };
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -97,202 +140,82 @@ export async function register(input: unknown): Promise<string> {
     throw error;
   }
 }
-export async function resume(input: unknown): Promise<string> {
-  const data = resumeSchema.parse(input);
-  const tenant = await db.tenant.findUnique({
-    where: { slug: data.slug },
-    include: { onboardingOrder: true }
-  });
-  const user = tenant
-    ? await db.user.findUnique({ where: { tenantId_email: { tenantId: tenant.id, email: data.email } } })
-    : null;
-  const valid = await bcrypt.compare(
-    data.password,
-    user?.passwordHash ?? "$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinva"
-  );
-  if (!user?.isActive || !valid || !tenant?.onboardingOrder || tenant.onboardingOrder.adminId !== user.id)
-    throw unauthorized("Data pendaftaran tidak cocok");
-  return tenant.onboardingOrder.id;
-}
-export async function status(orderId: string): Promise<OnboardingStatus> {
-  const order = await db.onboardingOrder.findUnique({
-    where: { id: orderId },
-    include: { tenant: true, attempts: { orderBy: { createdAt: "desc" }, take: 1 } }
-  });
-  if (!order) throw notFound("Pendaftaran tidak ditemukan");
-  const checkout = order.attempts[0];
-  return {
-    id: order.id,
-    status: order.status as OnboardingStatus["status"],
-    tenantName: order.tenant.name,
-    slug: order.tenant.slug,
-    packageName: order.packageName,
-    amount: order.amount.toString(),
-    paidAt: order.paidAt?.toISOString() ?? null,
-    checkout: checkout
-      ? {
-          status: checkout.status as NonNullable<OnboardingStatus["checkout"]>["status"],
-          url: checkout.paymentUrl,
-          expiresAt: checkout.expiresAt?.toISOString() ?? null
-        }
-      : null
-  };
-}
-// A row lock serializes checkout creation across processes and duplicate clicks.
-// Never hold a DB transaction open during provider network requests.
-export async function checkout(orderId: string): Promise<OnboardingStatus> {
-  if (!checkoutConfigured()) throw conflict("Pembayaran belum tersedia. Silakan coba kembali nanti.");
-  const reservation = await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "OnboardingOrder" WHERE id = ${orderId} FOR UPDATE`;
-    const order = await tx.onboardingOrder.findUnique({
-      where: { id: orderId },
-      include: { attempts: { orderBy: { createdAt: "desc" }, take: 1 } }
-    });
-    if (!order) throw notFound();
-    if (order.status === "PAID") return null;
-    const latest = order.attempts[0];
-    if (latest && ["CREATING", "ACTIVE"].includes(latest.status)) return null;
-    const attempt = await tx.checkoutAttempt.create({ data: { orderId } });
-    return { attempt, order };
-  });
-  if (!reservation) return status(orderId);
-  const { attempt, order } = reservation;
-  const user = await db.user.findFirstOrThrow({ where: { id: order.adminId, tenantId: order.tenantId } });
-  try {
-    const session = await createPaymentSession({
-      id: attempt.id,
-      orderId,
-      amount: order.amount.toString(),
-      packageName: order.packageName,
-      name: user.name,
-      email: user.email
-    });
-    await applySession(attempt.id, session);
-  } catch (error) {
-    // Only definitive provider rejection is retryable. A timeout could mean the
-    // charge was created: leave CREATING until a webhook/operator reconciles it.
-    if (error instanceof ProviderRequestError && error.definitive) {
-      await db.checkoutAttempt.updateMany({
-        where: { id: attempt.id, status: "CREATING" },
-        data: { status: "FAILED" }
-      });
-    }
-    throw conflict("Tautan pembayaran belum dapat dikonfirmasi. Periksa status sebelum mencoba lagi.");
+
+/** Registers a koperasi and returns its tenant id. The invoice email is sent but never blocks or fails the registration. */
+export async function register(input: unknown): Promise<string> {
+  const { tenantId, invoiceEmail } = await createRegistration(input);
+  if (invoiceEmail) {
+    await Promise.race([sendInvoiceEmail(invoiceEmail), new Promise<void>((resolve) => setTimeout(resolve, EMAIL_WAIT_MS))]);
   }
-  await tryRegistrationEmail(orderId);
-  return status(orderId);
-}
-export async function handleSessionWebhook(referenceId: string, sessionId: string): Promise<void> {
-  // The dashboard sends sample references, and this account may serve other apps.
-  // Acknowledge unrelated sessions without changing an order or fetching provider data.
-  const attempt = await db.checkoutAttempt.findUnique({ where: { id: referenceId }, select: { id: true, orderId: true } });
-  if (!attempt) return;
-  // Checkout attempts exist before calling Xendit, so this also recovers CREATING
-  // attempts whose provider response timed out. applySession validates every match.
-  await applySession(attempt.id, await getPaymentSession(sessionId));
-  // Returning an error asks Xendit to retry delivery; payment is already committed.
-  await deliverRegistrationEmail(attempt.orderId);
-}
-export async function applySession(attemptId: string, value: unknown): Promise<void> {
-  await db.$transaction(async (tx) => {
-    const attempt = await tx.checkoutAttempt.findUnique({
-      where: { id: attemptId },
-      include: { order: true }
-    });
-    if (!attempt) throw notFound("Checkout not found");
-    const session = validateProviderSession(value, {
-      id: attempt.id,
-      providerSessionId: attempt.providerSessionId,
-      amount: attempt.order.amount.toString()
-    });
-    // A completed payment wins over expired/out-of-order callbacks forever.
-    await tx.checkoutAttempt.updateMany({
-      where: { id: attempt.id, status: { not: "COMPLETED" } },
-      data: {
-        status: session.status,
-        providerSessionId: session.payment_session_id,
-        ...(session.payment_link_url ? { paymentUrl: session.payment_link_url } : {}),
-        ...(session.expires_at ? { expiresAt: new Date(session.expires_at) } : {})
-      }
-    });
-    if (session.status !== "COMPLETED") return;
-    const paidAt = new Date();
-    const activated = await tx.onboardingOrder.updateMany({
-      where: { id: attempt.orderId, status: "PENDING" },
-      data: { status: "PAID", paidAt }
-    });
-    if (activated.count) {
-      const tenant = await tx.tenant.update({
-        where: { id: attempt.order.tenantId },
-        data: { isActive: true, packageId: attempt.order.packageId, nextBillingDate: addMonths(paidAt, 1) }
-      });
-      const admin = await tx.user.findFirstOrThrow({ where: { id: attempt.order.adminId, tenantId: tenant.id } });
-      await tx.registrationEmail.create({ data: {
-        orderId: attempt.orderId,
-        details: { orderId: attempt.orderId, email: admin.email, adminName: admin.name,
-          tenantName: tenant.name, packageName: attempt.order.packageName, amount: attempt.order.amount.toString(), authProvider: admin.authProvider ?? "password" }
-      } });
-    }
-  });
-}
-export async function reconcile(orderId: string): Promise<OnboardingStatus> {
-  const order = await db.onboardingOrder.findUnique({
-    where: { id: orderId },
-    include: { attempts: { orderBy: { createdAt: "desc" }, take: 1 } }
-  });
-  if (!order) throw notFound();
-  const latest = order.attempts[0];
-  if (
-    order.status !== "PAID" &&
-    latest?.providerSessionId &&
-    ["ACTIVE", "CREATING"].includes(latest.status)
-  ) {
-    try {
-      await applySession(latest.id, await getPaymentSession(latest.providerSessionId));
-    } catch {
-      throw conflict("Status pembayaran belum dapat diperbarui. Silakan coba lagi.");
-    }
-  }
-  await tryRegistrationEmail(orderId);
-  return status(orderId);
-}
-export async function complete(orderId: string) {
-  const order = await db.onboardingOrder.findUnique({ where: { id: orderId }, include: { tenant: true } });
-  if (!order || order.status !== "PAID" || !order.tenant.isActive)
-    throw conflict("Pembayaran belum terverifikasi");
-  const user = await db.user.findFirst({
-    where: { id: order.adminId, tenantId: order.tenantId, isActive: true },
-    include: { role: true }
-  });
-  if (!user) throw unauthorized();
-  await tryRegistrationEmail(orderId);
-  return { next: "login" as const, ...(tenantDomainsEnabled() ? { loginUrl: tenantLoginUrl(order.tenant.slug) } : {}) };
+  return tenantId;
 }
 
-// Firebase UID is globally unique. Tenant scope comes from this verified binding,
-// never an email address, workspace supplied by the client, or token custom claims.
+/** Where a registration stands: the plan, the invoice awaiting payment and how to pay it. */
+export async function status(tenantId: string): Promise<RegistrationStatus> {
+  const tenant = await db.tenant.findUnique({ where: { id: tenantId }, include: { subscription: true } });
+  if (!tenant?.subscription) throw notFound("Pendaftaran tidak ditemukan");
+  const sub = tenant.subscription;
+
+  const invoice = await db.invoice.findFirst({ where: { tenantId, type: "REGISTRATION" }, orderBy: { createdAt: "desc" } });
+  // Instructions come from the published settings so the owner can correct them without reissuing an invoice.
+  const instructions =
+    invoice?.status === "OPEN" ? await getPublishedCatalog().then((c) => c.snapshot.settings.paymentInstructions, () => null) : null;
+
+  return {
+    tenantName: tenant.name,
+    slug: tenant.slug,
+    status: sub.status,
+    packageName: (sub.snapshot as { packageName?: string }).packageName ?? "",
+    billingCycle: sub.billingCycle,
+    invoice: invoice
+      ? {
+          number: invoice.number,
+          subtotal: invoice.subtotal.toString(),
+          taxRate: invoice.taxRate?.toString() ?? null,
+          taxAmount: invoice.taxAmount.toString(),
+          total: invoice.total.toString(),
+          status: invoice.status,
+          dueDate: invoice.dueDate.toISOString()
+        }
+      : null,
+    paymentInstructions: instructions,
+    ...(sub.status === "ACTIVE" && tenantDomainsEnabled() ? { loginUrl: tenantLoginUrl(tenant.slug) } : {})
+  };
+}
+
+/**
+ * Firebase UID is globally unique. Tenant scope comes from this verified binding,
+ * never an email address, workspace supplied by the client, or token custom claims.
+ *
+ * A koperasi still waiting for payment cannot sign in: the result is its status,
+ * and the route sets the registration cookie so the status page can be reloaded.
+ */
 export async function firebaseSignIn(input: unknown, resumeOnly = false, expectedTenantId?: string) {
   const { idToken } = firebaseSignInSchema.parse(input);
   const identity = await verifyFirebaseIdentity(idToken);
-  const where = { identity: { firebaseUid: identity.uid, isActive: true }, ...(expectedTenantId ? { tenantId: expectedTenantId } : {}), isActive: true };
+  const where = {
+    identity: { firebaseUid: identity.uid, isActive: true },
+    ...(expectedTenantId ? { tenantId: expectedTenantId } : {}),
+    isActive: true
+  };
   const user = resumeOnly
-    ? await withoutTenantScope(async () => {
-      // Recovery resolves the order administrator, even when this identity also
-      // has active memberships elsewhere. A regular membership grants no order access.
-      const candidates = await db.user.findMany({ where: { ...where, tenant: { onboardingOrder: { isNot: null } } },
-        include: { role: true, unitAssignments: true, tenant: { include: { onboardingOrder: true } } } });
-      return candidates.find(member => member.tenant.onboardingOrder?.adminId === member.id) ?? null;
-    })
+    ? // Recovery resolves the administrator of a self-registered koperasi, even when the
+      // identity also has active memberships elsewhere. A regular membership grants nothing here.
+      await withoutTenantScope(() =>
+        db.user.findFirst({
+          where: { ...where, role: { name: "Super Admin" }, tenant: { subscription: { createdVia: "REGISTRATION" } } },
+          include: { role: true, unitAssignments: true }
+        })
+      )
     : await withoutTenantScope(() => db.user.findFirst({ where, include: { role: true, unitAssignments: true } }));
   if (!user?.isActive) throw unauthorized("Akun belum terdaftar di SISKOP atau tidak aktif.");
   if (expectedTenantId && user.tenantId !== expectedTenantId) throw unauthorized("Akun ini tidak memiliki akses ke workspace ini.");
   if (expectedTenantId && user.isPlatformAdmin) throw unauthorized("Gunakan situs pusat untuk akun admin platform.");
-  const tenant = await db.tenant.findUnique({ where: { id: user.tenantId }, include: { onboardingOrder: true } });
+
+  const tenant = await db.tenant.findUnique({ where: { id: user.tenantId }, include: { subscription: true } });
   if (!tenant) throw unauthorized();
-  const order = tenant.onboardingOrder;
-  if (order?.status === "PENDING" || resumeOnly) {
-    if (!order || order.adminId !== user.id) throw unauthorized("Pendaftaran tidak ditemukan.");
-    return { next: "checkout" as const, order: await status(order.id) };
+  if (tenant.subscription?.status === "PENDING_PAYMENT" || resumeOnly) {
+    return { next: "awaiting_payment" as const, tenantId: tenant.id, status: await status(tenant.id) };
   }
   if (!tenant.isActive) throw unauthorized("Koperasi tidak aktif.");
   const session = await sessionFor(user, identity.authTime);

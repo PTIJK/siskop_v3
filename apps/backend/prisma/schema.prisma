@@ -477,6 +477,12 @@ model IdentityProvisioning {
   @@index([status, createdAt])
 }
 
+// DEPRECATED (Pricing V2, Phase 4): OnboardingOrder, CheckoutAttempt and
+// RegistrationEmail belonged to the retired Xendit checkout. Registration now
+// creates a TenantSubscription and Invoice instead and nothing reads or writes
+// these tables. Kept for one release so unpaid legacy orders can be reviewed;
+// drop them in a later migration.
+//
 // Platform onboarding records, accessed only through a signed order cookie or
 // an authenticated provider callback. Amount/name are immutable checkout snapshots.
 model OnboardingOrder {

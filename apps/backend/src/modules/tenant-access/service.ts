@@ -7,7 +7,7 @@ import { forbidden, unauthorized } from '../../lib/errors.js'
 import { getEffectiveUnitIds } from '../../lib/unit-access.js'
 import { sessionFor } from '../auth/service.js'
 import { assertFirebaseSession, verifyFirebaseIdentity } from '../onboarding/firebase.js'
-import { status as orderStatus } from '../onboarding/service.js'
+import { status as registrationStatus } from '../onboarding/service.js'
 import { centralUrl, tenantOrigin } from './config.js'
 
 export const secretValue = () => randomBytes(32).toString('base64url')
@@ -154,13 +154,11 @@ export async function login(idToken: string) {
     return { token, result: { next: 'tenant_selection' as const, eligibleCount: available.total } }
   const pending = await withoutTenantScope(() =>
     db.user.findFirst({
-      where: { identityId: identity.id, isActive: true, tenant: { onboardingOrder: { status: 'PENDING' } } },
-      include: { tenant: { include: { onboardingOrder: true } } }
+      where: { identityId: identity.id, isActive: true, tenant: { subscription: { status: 'PENDING_PAYMENT' } } }
     })
   )
-  const order = pending?.tenant.onboardingOrder
-  if (order?.adminId === pending?.id && order)
-    return { token, result: { next: 'checkout' as const, order: await orderStatus(order.id) } }
+  if (pending)
+    return { token, result: { next: 'awaiting_payment' as const, tenantId: pending.tenantId, status: await registrationStatus(pending.tenantId) } }
   return { token, result: { next: 'no_access' as const } }
 }
 async function attemptFor(id: string, origin?: string) {

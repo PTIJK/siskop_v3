@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { AppError, forbidden } from '../../lib/errors.js'
 import { requireAuth, authClaims } from '../../middleware/auth.js'
 import { clearRefreshCookie, setRefreshCookie } from '../auth/refresh-cookie.js'
+import { setRegistrationCookie } from '../onboarding/cookie.js'
 import { centralUrl, selectionEnabled, switchingEnabled } from './config.js'
 import {
   identitySession,
@@ -131,16 +132,10 @@ export function tenantAccessRoutes() {
         const { refreshToken, ...session } = response.result.session
         setRefreshCookie(res, refreshToken)
         result(res, { next: 'dashboard', session })
-      } else if (response.result.next === 'checkout') {
-        // Keep the existing checkout cookie/flow available on its own path.
-        res.cookie('siskop_onboarding', response.result.order.id, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          path: '/api/onboarding',
-          maxAge: 7 * 86400_000
-        })
-        result(res, response.result)
+      } else if (response.result.next === 'awaiting_payment') {
+        // Hand over to the registration status page with its own signed cookie.
+        setRegistrationCookie(res, response.result.tenantId)
+        result(res, { next: response.result.next, status: response.result.status })
       } else result(res, response.result)
     })
   )

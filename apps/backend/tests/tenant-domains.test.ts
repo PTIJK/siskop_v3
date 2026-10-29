@@ -7,7 +7,11 @@ import { registerTenant } from "../src/modules/auth/service.js";
 import { tenantDomains } from "../src/modules/tenant-domains/service.js";
 import { provisionTenant } from "../src/modules/tenants/provision.js";
 import { tenantLoginUrl } from "../src/modules/tenant-domains/config.js";
-import { register as registerOnboarding, applySession, complete as completeOnboarding } from "../src/modules/onboarding/service.js";
+import { register as registerOnboarding, status as registrationStatus } from "../src/modules/onboarding/service.js";
+import { clearCatalogCache } from "../src/lib/pricing/catalog.js";
+import { loadPricingSeed, parsePricingSeed } from "../src/lib/pricing/seed.js";
+import { withoutTenantScope } from "../src/lib/tenant-scope.js";
+import { seedJson } from "./pricing-fixture.js";
 import { signMemberAccessToken } from "../src/middleware/member-auth.js";
 
 vi.mock("../src/modules/onboarding/firebase.js", () => ({
@@ -40,19 +44,27 @@ async function premium() {
   return { session, caller: { tenantId: session.user.tenantId, userId: session.user.id } };
 }
 describe("workspace gateway and authentication", () => {
-  it("generates registration addresses, denies unpaid workspaces, and returns the tenant login only after verified payment", async () => {
-    vi.stubEnv("XENDIT_MODE", "test");
-    vi.stubEnv("PUBLIC_APP_URL", "https://siskop-d0f8c.web.app"); vi.stubEnv("XENDIT_SECRET_KEY", "xnd_development_test-key"); vi.stubEnv("XENDIT_WEBHOOK_TOKEN", "test-callback"); vi.stubEnv("RESEND_API_KEY", "");
-    const pkg = await db.subscriptionPackage.create({ data: { name: "Package", price: 100000, maxUsers: 10, maxMembers: 100, modules: [] } });
-    const id = await registerOnboarding({ tenantName: "New koperasi", slug: "client-chosen", packageId: pkg.id, registrationNo: "NEW", address: "Jakarta", type: "KONVENSIONAL", adminName: "New Admin", idToken: "new-uid" });
-    const order = await db.onboardingOrder.findUniqueOrThrow({ where: { id }, include: { tenant: true } });
-    expect(order.tenant.slug).toMatch(/^new-koperasi-[a-f0-9]{12}$/);
-    await expect(tenantDomains.resolve(order.tenant.slug)).rejects.toThrow("NOT_FOUND");
-    await expect(completeOnboarding(id)).rejects.toThrow("CONFLICT");
-    const attempt = await db.checkoutAttempt.create({ data: { orderId: id } });
-    await applySession(attempt.id, { payment_session_id: "ps-preview", reference_id: attempt.id, session_type: "PAY", currency: "IDR", amount: 100000, status: "COMPLETED" });
-    expect(await completeOnboarding(id)).toEqual({ next: "login", loginUrl: `https://${order.tenant.slug}.${base}/login` });
-    expect((await tenantDomains.resolve(order.tenant.slug)).tenantId).toBe(order.tenantId);
+  it("generates registration addresses, denies unpaid workspaces, and returns the tenant login only after payment is confirmed", async () => {
+    // A published catalog is needed to register; the beforeEach above clears packages.
+    await withoutTenantScope(async () => db.invoice.deleteMany({}));
+    await withoutTenantScope(async () => db.tenantSubscription.deleteMany({}));
+    await db.packageFeature.deleteMany({}); await db.feature.deleteMany({}); await db.volumeAddon.deleteMany({});
+    await db.supportPlan.deleteMany({}); await db.pricingSetting.deleteMany({}); await db.pricingVersion.deleteMany({});
+    await loadPricingSeed(db, parsePricingSeed(seedJson())); clearCatalogCache();
+
+    const tenantId = await registerOnboarding({ tenantName: "New koperasi", slug: "client-chosen", subscription: { packageCode: "small", billingCycle: "MONTHLY" },
+      registrationNo: "NEW", address: "Jakarta", type: "KONVENSIONAL", adminName: "New Admin", idToken: "new-uid" });
+    const tenant = await db.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+    expect(tenant.slug).toMatch(/^new-koperasi-[a-f0-9]{12}$/);
+    await expect(tenantDomains.resolve(tenant.slug)).rejects.toThrow("NOT_FOUND");
+    expect(await registrationStatus(tenantId)).toMatchObject({ status: "PENDING_PAYMENT" });
+    expect((await registrationStatus(tenantId)).loginUrl).toBeUndefined();
+
+    // The platform owner confirming payment (Phase 4b adds the real confirmPayment).
+    await withoutTenantScope(async () => db.tenantSubscription.update({ where: { tenantId }, data: { status: "ACTIVE" } }));
+    await db.tenant.update({ where: { id: tenantId }, data: { isActive: true } });
+    expect((await registrationStatus(tenantId)).loginUrl).toBe(`https://${tenant.slug}.${base}/login`);
+    expect((await tenantDomains.resolve(tenant.slug)).tenantId).toBe(tenantId);
   });
   it("also rejects member-portal tokens belonging to another workspace", async () => {
     await register("alpha"); const b = await register("beta");

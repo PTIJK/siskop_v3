@@ -185,8 +185,12 @@ export function quote(selection: PricingSelection, published: PublishedCatalog, 
 }
 
 /** What gets frozen onto TenantSubscription.snapshot when a tenant subscribes. */
-export function buildSubscriptionSnapshot(selection: PricingSelection, published: PublishedCatalog): SubscriptionSnapshot {
-  const n = validateSelection(selection, published);
+export function buildSubscriptionSnapshot(
+  selection: PricingSelection,
+  published: PublishedCatalog,
+  opts: { publicOnly?: boolean } = {}
+): SubscriptionSnapshot {
+  const n = validateSelection(selection, published, opts);
   return {
     pricingVersion: published.version,
     packageCode: n.pkg.code,
