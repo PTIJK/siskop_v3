@@ -60,7 +60,7 @@ Dashboard, Anggota, Piutang Anggota (`konsumen:read`, fitur `member_receivables`
 | 1 Token | selesai | lihat git log |
 | 2 Primitif | selesai | lihat git log |
 | 3 Shell | selesai | lihat git log |
-| 4 DataTable | belum | |
+| 4 DataTable | selesai | lihat git log |
 | 5 Halaman P1 | belum | |
 | 6 Halaman P2/P3 | belum | |
 | 7 Penutup | belum | |
@@ -114,3 +114,24 @@ Keputusan:
 Tes baru: `nav.test.ts` (13), `format-nik.test.ts` (2). Total 171 lulus.
 Gerbang: tsc 0, eslint 0, vitest 171/171, vite build sukses.
 Belum diverifikasi di peramban nyata (lihat laporan akhir): Ctrl/Cmd+K, urutan fokus, drawer mobile.
+
+## Fase 4: DataTable (selesai)
+
+Diubah: `shared/DataTable.tsx` (prop lama tidak berubah; tambahan opsional: `chips`, `exportOptions`, `emptyDescription`, `emptyAction`, `label`), `ui/table.tsx` (TableHead 44px/12,5px/bold).
+
+- Header lengket `top-[60px]`, latar solid `bg-muted`; pembungkus kartu `overflow-clip`; wrapper gulir bawaan `Table` dinetralkan (`overflow-visible`) karena jika tidak ia menjadi container gulir dan sticky gagal.
+- Kolom uang: kelas `text-right` pada ColumnDef mengenai header dan sel, dan otomatis memberi `tabular-nums`.
+- Kepadatan Nyaman/Padat (disimpan di localStorage), filter chip dengan jumlah, baris interaktif bisa difokus dan Enter/Spasi membuka drawer/halaman, ekspor lewat menu footer (halaman memasok aksi nyatanya), paginasi dengan jendela 5 halaman yang mengikuti halaman aktif (sebelumnya halaman > 5 tak terjangkau kecuali lewat tombol berikutnya).
+- <= 900px: header disembunyikan, tiap baris jadi kartu dua kolom dengan label dari `data-label`.
+- Keadaan memuat (skeleton), kosong (EmptyState), galat (pesan manusiawi + Coba lagi), semua di dalam tabel.
+
+Keputusan/risiko: tabel lebar di 901-1100px tidak lagi punya gulir horizontal sendiri (wrapper netral agar sticky bekerja; kartu clip). Jika ada halaman dengan kolom sangat banyak, periksa manual.
+
+Pemeriksaan peramban nyata (Puppeteer + mock /api, Vite 3200, tanpa backend/DB):
+- Anggota 1366x768 terang/gelap/rail: menu per izin benar, item terkunci bergembok dan bernama "terkunci", halaman aktif ber-aria-current, h1 tunggal, Manrope aktif.
+- Header tabel: position sticky, top 60px, wrapper overflow clip, scroller visible.
+- Ctrl+K membuka palet dengan fokus di input; cari anggota "siti" menemukan hasil dengan NIK tersamar; Esc menutup.
+- Teller: tidak ada Pinjaman/Laporan/Pengaturan, aksi cepat "Setor simpanan"; satu unit: tanpa pemilih unit; dua unit: pemilih tampil.
+- 390px: tombol menu, tanpa gulir horizontal, tabel jadi kartu, drawer menu dengan tautan >= 44px, Esc menutup.
+
+Gerbang: tsc 0, eslint 0, vitest 171/171, vite build sukses.

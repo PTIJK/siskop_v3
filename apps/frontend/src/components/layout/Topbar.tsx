@@ -43,7 +43,7 @@ function UnitSelector() {
   if (!units || units.length <= 1) return null;
   return (
     <Select value={unitId} onValueChange={setUnitId}>
-      <SelectTrigger aria-label="Unit usaha" className="hidden h-[38px] w-[200px] rounded-full bg-card md:flex">
+      <SelectTrigger aria-label="Unit usaha" className="hidden h-[38px] w-[230px] rounded-full bg-card md:flex">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
