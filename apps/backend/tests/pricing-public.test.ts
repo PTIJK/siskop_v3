@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import request from "supertest";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ErrorCode } from "@siskop/types";
@@ -11,8 +9,8 @@ import { clearEntitlementCache } from "../src/lib/pricing/entitlements.js";
 import { loadPricingSeed, parsePricingSeed } from "../src/lib/pricing/seed.js";
 import type { CatalogSnapshot } from "../src/lib/pricing/snapshot.js";
 import { app, setupTenant } from "./helpers.js";
+import { seedJson } from "./pricing-fixture.js";
 
-const SEED_PATH = resolve(__dirname, "../../../docs/package-modules/pricing.seed.json");
 
 async function resetCatalog() {
   await withoutTenantScope(async () => db.tenantSubscription.deleteMany({}));
@@ -31,7 +29,7 @@ beforeEach(async () => {
   clearCatalogCache();
   clearEntitlementCache();
   if ((await db.pricingVersion.count()) === 0) {
-    await loadPricingSeed(db, parsePricingSeed(JSON.parse(readFileSync(SEED_PATH, "utf8"))));
+    await loadPricingSeed(db, parsePricingSeed(seedJson()));
   }
 });
 afterEach(async () => {
@@ -103,7 +101,7 @@ describe("GET /api/public/pricing", () => {
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe(ErrorCode.NOT_FOUND);
-    await loadPricingSeed(db, parsePricingSeed(JSON.parse(readFileSync(SEED_PATH, "utf8"))));
+    await loadPricingSeed(db, parsePricingSeed(seedJson()));
   });
 });
 

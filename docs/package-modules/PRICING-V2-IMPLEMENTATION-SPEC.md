@@ -23,7 +23,7 @@ Replace the single-tier `SubscriptionPackage` with a configurable pricing and en
 | Support plans SP.0 to SP.2 | Yearly only, selectable on any package including Free. Visits and SLA are recorded, not enforced. |
 | Free tier | Permanent. Locked on Free: accounting book, manual journal, period closing. Free has COA, account mapping, SHU config. |
 | Journal auto-posting | Requires `accounting_book`. Not on Free. |
-| VAT | All prices exclude VAT. Separate line at owner-set `taxRate` (no default seeded). |
+| VAT | All prices exclude VAT. PPN is a separate line added to the final cost at `taxRate`, seeded at 11% (owner decision 2026-10-29) and editable by the owner. |
 | Currency | IDR everywhere. No USD. |
 | Payments | Architecture built now; payment gateway (GDC) connected later. Until then the owner marks invoices paid. |
 | Grace and purge | `paymentGraceDays` = 7, unpaid registration purge = 14 days. Owner-editable. |
@@ -180,7 +180,7 @@ Rollout: deploy schema and seed with `PRICING_V2` off → run tenant migration a
 
 ## 13. Inputs still needed from the owner
 
-1. VAT (PPN) rate for `taxRate`.
+1. ~~VAT (PPN) rate~~: decided, seeded at 11%, owner-editable. Confirm the rate is still correct before go-live.
 2. Bank transfer instructions text for invoices.
 3. Approval of the old-tier to new-package mapping table (draft it from live data; do not run the migration before approval).
 4. Later, for GDC: API docs, sandbox keys, signature scheme, supported methods, card auto-debit decision.

@@ -3,7 +3,7 @@
     "Source: two screenshots of Pricing_Metrix_Guideline.xlsx (the attached xlsx itself was empty). Re-check every cell against the original workbook before first publish.",
     "customPrice: 0 = included free for Custom; a number = Custom add-on price in IDR per month; null never used.",
     "requires[] is INFERRED from the matrix pattern, not stated in the sheet. Confirm with product owner.",
-    "All prices exclude VAT. VAT rate comes from settings.taxRate (owner enters it; no default)."
+    "All prices exclude VAT. VAT (PPN) is added on top at settings.taxRate, seeded at 0.11 (11%) and editable by the owner in admin."
   ],
   "version": 1,
   "currency": "IDR",
@@ -16,7 +16,7 @@
     "addonsOnFixedPackages": true,
     "paymentGraceDays": 7,
     "unpaidRegistrationPurgeDays": 14,
-    "taxRate": null,
+    "taxRate": 0.11,
     "invoiceNumberFormat": "INV-YYYYMM-NNNN",
     "paymentProvider": "manual",
     "paymentInstructions": null,

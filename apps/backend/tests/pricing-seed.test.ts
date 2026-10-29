@@ -4,7 +4,9 @@ import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "../src/lib/db.js";
 import { withoutTenantScope } from "../src/lib/tenant-scope.js";
+import { quote } from "../src/lib/pricing/engine.js";
 import { loadPricingSeed, parsePricingSeed } from "../src/lib/pricing/seed.js";
+import type { CatalogSnapshot } from "../src/lib/pricing/snapshot.js";
 
 const SEED_PATH = resolve(__dirname, "../../../docs/package-modules/pricing.seed.json");
 const rawSeed = (): unknown => JSON.parse(readFileSync(SEED_PATH, "utf8"));
@@ -99,7 +101,17 @@ describe("loadPricingSeed", () => {
     expect(total.toString()).toBe("6550000");
   });
 
-  it("stores settings with owner inputs left null", async () => {
+  it("ships PPN at 11% so quotes include VAT by default", async () => {
+    await loadPricingSeed(db, parsePricingSeed(rawSeed()));
+
+    const setting = await db.pricingSetting.findUniqueOrThrow({ where: { id: "singleton" } });
+    expect(setting.taxRate?.toString()).toBe("0.11");
+    const v = await db.pricingVersion.findUniqueOrThrow({ where: { version: 1 } });
+    const q = quote({ packageCode: "small", billingCycle: "MONTHLY" }, { version: 1, snapshot: v.snapshot as unknown as CatalogSnapshot });
+    expect([q.taxRate, q.amountPerCycle, q.taxAmount, q.total]).toEqual(["0.1100", "500000.00", "55000.00", "555000.00"]);
+  });
+
+  it("stores settings with the remaining owner inputs left null", async () => {
     await loadPricingSeed(db, parsePricingSeed(rawSeed()));
 
     const s = await db.pricingSetting.findUniqueOrThrow({ where: { id: "singleton" } });
@@ -108,7 +120,7 @@ describe("loadPricingSeed", () => {
     expect(s.defaultPackageCode).toBe("free");
     expect(s.paymentGraceDays).toBe(7);
     expect(s.unpaidRegistrationPurgeDays).toBe(14);
-    expect(s.taxRate).toBeNull();
+    expect(s.taxRate?.toString()).toBe("0.11");
     expect(s.paymentInstructions).toBeNull();
     expect(s.customBaseLimits).toEqual({ members: 50, users: 1, savingTypes: 2, loanTypes: 2 });
   });
@@ -141,7 +153,7 @@ describe("loadPricingSeed", () => {
     expect(snap.features.find((f) => f.key === "ocr")?.customPrice).toBe("1000000");
     expect(snap.volumeAddons).toHaveLength(4);
     expect(snap.supportPlans.map((s) => s.code)).toEqual(["SP0", "SP1", "SP2"]);
-    expect(snap.settings.taxRate).toBeNull();
+    expect(snap.settings.taxRate).toBe("0.1100");
   });
 
   it("is idempotent and never rewrites an already published version", async () => {

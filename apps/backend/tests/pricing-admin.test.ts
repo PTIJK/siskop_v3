@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../src/lib/db.js";
@@ -8,9 +6,8 @@ import { clearCatalogCache } from "../src/lib/pricing/catalog.js";
 import { clearEntitlementCache, getTenantEntitlements } from "../src/lib/pricing/entitlements.js";
 import { loadPricingSeed, parsePricingSeed } from "../src/lib/pricing/seed.js";
 import { app, createPlatformAdminSession, setupTenant } from "./helpers.js";
+import { seedJson } from "./pricing-fixture.js";
 
-const SEED_PATH = resolve(__dirname, "../../../docs/package-modules/pricing.seed.json");
-const seedJson = () => JSON.parse(readFileSync(SEED_PATH, "utf8"));
 
 async function resetCatalog() {
   await withoutTenantScope(async () => db.tenantSubscription.deleteMany({}));
@@ -286,6 +283,17 @@ describe("GET /diff and POST /publish", () => {
     const row = await db.pricingVersion.findUniqueOrThrow({ where: { version: 2 } });
     expect(row.publishedBy).toBe(adminId);
     expect((await db.pricingAuditLog.findFirstOrThrow({ where: { entity: "PricingVersion", action: "PUBLISH" } })).after).toMatchObject({ version: 2, note: "Naik harga Small" });
+  });
+
+  it("an edited VAT rate, once published, is added to the final cost of a public quote", async () => {
+    await put("/settings", { taxRate: "0.12" });
+    const before = await request(app()).post("/api/public/pricing/quote").send({ packageCode: "small", billingCycle: "MONTHLY" });
+    expect(before.body.data.taxAmount).toBe("0.00");
+
+    await post("/publish");
+    const after = await request(app()).post("/api/public/pricing/quote").send({ packageCode: "small", billingCycle: "MONTHLY", supportPlanCode: "SP1" });
+
+    expect(after.body.data).toMatchObject({ taxRate: "0.1200", subtotal: "5500000.00", taxAmount: "660000.00", total: "6160000.00" });
   });
 
   it("never rewrites an earlier version", async () => {

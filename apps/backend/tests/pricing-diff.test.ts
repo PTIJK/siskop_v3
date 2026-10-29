@@ -1,13 +1,11 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { db } from "../src/lib/db.js";
 import { diffCatalogs } from "../src/lib/pricing/diff.js";
 import { loadPricingSeed, parsePricingSeed } from "../src/lib/pricing/seed.js";
 import type { CatalogSnapshot } from "../src/lib/pricing/snapshot.js";
 import { snapshotToSeed } from "../src/lib/pricing/transform.js";
+import { seedJson } from "./pricing-fixture.js";
 
-const SEED_PATH = resolve(__dirname, "../../../docs/package-modules/pricing.seed.json");
 let v1: CatalogSnapshot;
 
 beforeAll(async () => {
@@ -19,7 +17,7 @@ beforeAll(async () => {
   await db.pricingSetting.deleteMany({});
   await db.pricingVersion.deleteMany({});
   await db.pricingAuditLog.deleteMany({});
-  await loadPricingSeed(db, parsePricingSeed(JSON.parse(readFileSync(SEED_PATH, "utf8"))));
+  await loadPricingSeed(db, parsePricingSeed(seedJson()));
   v1 = (await db.pricingVersion.findUniqueOrThrow({ where: { version: 1 } })).snapshot as unknown as CatalogSnapshot;
 });
 

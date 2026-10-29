@@ -1,13 +1,11 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../src/lib/db.js";
 import { withoutTenantScope } from "../src/lib/tenant-scope.js";
 import { planSubscriptionMigration } from "../src/lib/pricing/migration.js";
 import { loadPricingSeed, parsePricingSeed } from "../src/lib/pricing/seed.js";
 import { provisionTenant } from "../src/modules/tenants/provision.js";
+import { seedJson } from "./pricing-fixture.js";
 
-const SEED_PATH = resolve(__dirname, "../../../docs/package-modules/pricing.seed.json");
 
 async function resetAll() {
   await withoutTenantScope(async () => db.tenantSubscription.deleteMany({}));
@@ -24,7 +22,7 @@ async function resetAll() {
 
 beforeEach(async () => {
   await resetAll();
-  await loadPricingSeed(db, parsePricingSeed(JSON.parse(readFileSync(SEED_PATH, "utf8"))));
+  await loadPricingSeed(db, parsePricingSeed(seedJson()));
 });
 afterEach(resetAll);
 
