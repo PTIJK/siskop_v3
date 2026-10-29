@@ -4,7 +4,7 @@ import { formatRupiah, formatTanggalIndonesia } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
 import { BalanceChip } from "@/components/reports/BalanceChip";
 import { CompareCells, CompareHeads } from "@/components/reports/CompareCells";
@@ -18,6 +18,7 @@ import { useReport } from "@/components/reports/useReport";
 import { useReportFilter } from "@/components/reports/useReportFilter";
 import { bukuBesarHref } from "../accounting/drilldown";
 import { todayLocal } from "./period";
+import { currentUnitScope } from "@/stores/unit-scope";
 
 /** The computed unclosed-SHU line has no account id, so it is matched by its name. */
 const itemKey = (i: NeracaItem) => i.accountId ?? i.name;
@@ -104,7 +105,7 @@ function SectionTable({
 
 export function NeracaTab() {
   // "Per tanggal" reports use only `to`; `from` is kept so the filter shape matches the range reports.
-  const filter = useReportFilter("neraca", () => ({ from: "", to: todayLocal(), unitId: ALL_UNITS, compare: COMPARE_NONE }));
+  const filter = useReportFilter("neraca", () => ({ from: "", to: todayLocal(), unitId: currentUnitScope(), compare: COMPARE_NONE }));
   const { value: f } = filter;
   const report = useReport<Neraca>("Gagal memuat neraca");
   const unitLabel = useUnitLabel(f.unitId);

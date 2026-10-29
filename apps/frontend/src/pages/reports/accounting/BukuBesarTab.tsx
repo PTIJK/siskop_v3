@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
 import { ExportMenu } from "@/components/reports/ExportMenu";
 import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
@@ -19,12 +19,13 @@ import { useReportFilter } from "@/components/reports/useReportFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "../regulatory/period";
 import { sourceHref, type DrilldownTarget } from "./drilldown";
 import { TrialBalanceTableRow } from "./TrialBalanceTable";
+import { currentUnitScope } from "@/stores/unit-scope";
 
 const LIMIT = 50;
 
 /** Buku Besar: the overview of accounts with activity; clicking an account opens its ledger with a running balance. */
 export function BukuBesarTab({ initial }: { initial?: DrilldownTarget | null }) {
-  const filter = useReportFilter("buku-besar", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS }));
+  const filter = useReportFilter("buku-besar", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: currentUnitScope() }));
   const { value: f } = filter;
   const overview = useReport<TrialBalance>("Gagal memuat buku besar");
   const ledger = useReport<BukuBesarAccount>("Gagal memuat buku besar akun");

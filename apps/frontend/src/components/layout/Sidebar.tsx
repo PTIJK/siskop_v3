@@ -1,332 +1,170 @@
-import { NavLink } from "react-router-dom";
+import { useEffect } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import { Lock, X } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useIsMultiUnit } from "@/hooks/useIsMultiUnit";
+import { useEntitlements, useSubscription } from "@/hooks/useEntitlements";
 import { useAuth } from "@/stores/auth";
-import { useEntitlements } from "@/hooks/useEntitlements";
-import {
-  LayoutDashboard,
-  Users,
-  PiggyBank,
-  CreditCard,
-  FileText,
-  AlertTriangle,
-  Building2,
-  Landmark,
-  Store,
-  Settings,
-  X,
-  Menu,
-  Package as PackageIcon,
-  Tags,
-  ShieldCheck,
-  Layers,
-  PieChart,
-  Receipt,
-  Wallet,
-  Warehouse,
-  Lock
-} from "lucide-react";
-import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { QuotaMeter } from "@/components/shared/QuotaMeter";
+import { buildNav, type NavSection, type ResolvedNavEntry } from "./nav";
+import { BrandMark } from "./BrandMark";
 
-// Config (Konfigurasi) is gated on any of config/roles/accounting:read below,
-// since it's a single page covering all three. Simpanan/Pinjaman used to live
-// here as top-level items — they now live inside the dynamically-built "Unit
-// Usaha" tree below (still individually gated on savings:read/loans:read),
-// since the requested menu nests them under Unit Usaha > KSP.
-//
-// Split in two (rather than one flat array) so Unit Usaha can render between
-// them: Dashboard/Anggota, then Unit Usaha, then Laporan/Laporan Konsolidasi,
-// then Konfigurasi — see the render order in SidebarContent below.
-const NAV_ITEMS_TOP = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, module: "dashboard" as const, action: "read" as const },
-  { label: "Anggota", href: "/members", icon: Users, module: "members" as const, action: "read" as const },
-  // Tenant-wide (not unit-scoped, even though the credit originates at
-  // Konsumen/Toko's POS) — top-level rather than nested under Unit Usaha >
-  // Konsumen, which would misleadingly imply unit-scoping. Reuses the
-  // konsumen permission scope, same gate credit.routes.ts already uses.
-  { label: "Piutang Anggota", href: "/piutang", icon: Receipt, module: "konsumen" as const, action: "read" as const, feature: "member_receivables" },
-  // Base feature (not gated by the "accounting" package add-on) — see
-  // docs/2026-09-27-beban-umum-design.md. Top-level, not under Konfigurasi:
-  // it's a recurring transaction, not a settings screen.
-  { label: "Beban Umum", href: "/expenses", icon: Wallet, module: "expenses" as const, action: "read" as const }
-];
-
-const NAV_ITEMS_REPORTS = [
-  {
-    label: "Laporan",
-    href: "/reports",
-    icon: FileText,
-    module: "reports" as const,
-    action: "read" as const,
-    children: [
-      { label: "Laporan Keuangan", href: "/reports", feature: "reports_financial" },
-      { label: "Laporan Regulasi", href: "/reports/regulatory", feature: "reports_regulatory" },
-      { label: "Buku Akuntansi", href: "/reports/accounting", feature: "accounting_book" },
-      { label: "Kualitas Portofolio", href: "/reports/portfolio", feature: "portfolio_quality" },
-      // Always listed (like Laporan Regulasi above), not hidden by entitlement — a
-      // non-pasar tenant sees EntitlementNotice on the page itself, same pattern.
-      { label: "Laporan Pasar", href: "/reports/pasar", feature: "reports_market" },
-      { label: "Jurnal Manual", href: "/journal/new", feature: "manual_journal" },
-      { label: "Tutup Buku", href: "/journal/close", feature: "period_closing" }
-    ]
-  },
-  // Consolidated-reporting-across-units — genuinely KSU-only, unlike Unit
-  // Usaha below, so this is the one nav item that keeps a requiresMultiUnit
-  // gate (CLAUDE.md rule 2b: KSU is `units.length > 1`, used sparingly and
-  // only where the feature itself is about having multiple units).
-  {
-    label: "Laporan Konsolidasi",
-    href: "/ksu/report",
-    icon: PieChart,
-    module: "reports" as const,
-    action: "read" as const,
-    feature: "reports_consolidated",
-    requiresMultiUnit: true
-  }
-];
-
-interface NavNode {
-  label: string;
-  href?: string;
-  /** Pricing V2 feature this entry needs; when the server enforces and the package lacks it, the entry is shown locked. */
-  feature?: string;
-  icon?: React.ElementType;
-  children?: NavNode[];
+/** Menu for the current user: role permissions hide entries, package features lock them. */
+export function useNavSections(): NavSection[] {
+  const { can } = usePermissions();
+  const { isLocked } = useEntitlements();
+  const isPlatformAdmin = useAuth((s) => s.user?.role === "super_admin");
+  // Fails closed while /config/units is pending, so multi-unit entries never flash in early.
+  const isMultiUnit = useIsMultiUnit().data ?? false;
+  return buildNav({ can, isLocked, isPlatformAdmin, isMultiUnit });
 }
 
-function NavItemComponent({ item, onClose, level = 0 }: { item: NavNode; onClose?: () => void; level?: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const { isLocked } = useEntitlements();
-  const isTop = level === 0;
-  const locked = item.feature !== undefined && isLocked(item.feature);
-
-  if (item.children && item.children.length > 0) {
-    return (
-      <div>
-        <button
-          onClick={() => setExpanded((e) => !e)}
-          className={cn(
-            "flex w-full items-center rounded-md text-left font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white",
-            isTop ? "gap-3 px-3 py-2.5 text-sm" : "gap-2 px-3 py-2 text-sm text-slate-400"
-          )}
-        >
-          {item.icon && <item.icon className={cn("shrink-0", isTop ? "h-4 w-4" : "h-3.5 w-3.5")} />}
-          <span className="flex-1 text-left">{item.label}</span>
-          <svg
-            className={cn("h-3 w-3 shrink-0 transition-transform", expanded && "rotate-90")}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-        {expanded && (
-          <div className="ml-3 mt-1 space-y-1 border-l border-slate-700 pl-2">
-            {item.children.map((child) => (
-              <NavItemComponent key={child.href ?? child.label} item={child} onClose={onClose} level={level + 1} />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
+function NavItem({ item, rail, onNavigate }: { item: ResolvedNavEntry; rail: boolean; onNavigate?: () => void }) {
+  const Icon = item.icon;
   return (
     <NavLink
-      to={locked ? `/langganan?fitur=${item.feature}` : item.href!}
-      end
-      onClick={onClose}
-      title={locked ? "Belum termasuk paket Anda" : undefined}
+      to={item.to}
+      end={item.href === "/dashboard" || item.href === "/loans" || item.href === "/reports" || item.href === "/savings" || item.href === "/members"}
+      onClick={onNavigate}
+      title={rail ? item.label : item.locked ? "Belum termasuk paket Anda" : undefined}
+      aria-label={rail ? (item.locked ? `${item.label} (terkunci)` : item.label) : undefined}
       className={({ isActive }) =>
         cn(
-          "flex rounded-md transition-colors",
-          // items-start (not items-center) below the top level: a long
-          // label like "Anggota Menunggak" wraps at deep indentation, and a
-          // vertically-centered icon next to two-line text reads as a big
-          // empty gap. Single-line labels look identical either way.
-          isTop ? "items-center gap-3 px-3 py-2.5 text-sm font-medium" : "items-start gap-2 px-3 py-2 text-sm",
-          isActive
-            ? "border-l-2 border-primary bg-slate-700 text-white"
-            : isTop
-              ? "text-slate-300 hover:bg-slate-700 hover:text-white"
-              : "text-slate-400 hover:bg-slate-700 hover:text-white"
+          "relative flex min-h-[40px] items-center gap-[11px] rounded-[10px] px-2.5 py-2 text-[13.5px] font-semibold transition-colors duration-150 hover:bg-sidebar-active/70 max-[900px]:min-h-[44px]",
+          rail && "justify-center",
+          // An entry that is locked is never "the current page": it goes to Langganan instead.
+          isActive && !item.locked && "bg-sidebar-active shadow-[inset_3px_0_0_hsl(var(--primary))]",
+          item.locked && "text-muted-foreground"
         )
       }
+      // NavLink sets aria-current="page" itself while active.
     >
-      {item.icon && <item.icon className={cn("shrink-0", isTop ? "h-4 w-4" : "mt-0.5 h-3 w-3")} />}
-      <span className={cn(locked && "text-slate-500")}>{item.label}</span>
-      {locked && <Lock className="ml-auto mt-0.5 h-3 w-3 shrink-0 text-slate-500" aria-label="Terkunci" />}
+      <Icon className="h-[18px] w-[18px] shrink-0 opacity-85" strokeWidth={1.75} aria-hidden="true" />
+      {!rail && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+      {item.locked && !rail && (
+        <>
+          <Lock className="h-[14px] w-[14px] shrink-0 opacity-65" aria-hidden="true" />
+          <span className="sr-only">(terkunci, belum termasuk paket Anda)</span>
+        </>
+      )}
     </NavLink>
   );
 }
 
-function SidebarContent({ onClose }: { onClose?: () => void }) {
-  const { can } = usePermissions();
+function TenantCard() {
+  const { data } = useSubscription();
   const isPlatformAdmin = useAuth((s) => s.user?.role === "super_admin");
-  // Same useIsMultiUnit() hook App.tsx's RequireMultiUnit route gate uses —
-  // one source of truth, so nav items and routes can never disagree. `data`
-  // is undefined while /config/units is still pending or on error; treat
-  // that as "not multi-unit" (fail closed) rather than flashing KSU items
-  // before we've actually confirmed the tenant has 2+ active units.
-  const isMultiUnit = useIsMultiUnit().data ?? false;
-
-  // Unit Usaha tree — KSP (Simpanan/Pinjaman) and Konsumen (Toko) as
-  // sub-groups, each gated on its own module permission exactly like the old
-  // top-level Simpanan/Pinjaman items were, NOT on isMultiUnit: most tenants
-  // are single-unit (CLAUDE.md rule 2b), and gating this whole tree on
-  // units.length > 1 would strand every single-unit tenant with no nav path
-  // to their own Simpanan/Pinjaman/Toko. isMultiUnit stays reserved for
-  // genuinely multi-unit features (Laporan Konsolidasi above).
-  const kspChildren: NavNode[] = [];
-  if (can("savings", "read")) {
-    kspChildren.push({ label: "Simpanan", href: "/savings", icon: PiggyBank });
-  }
-  if (can("loans", "read")) {
-    kspChildren.push({
-      label: "Pinjaman",
-      href: "/loans",
-      icon: CreditCard,
-      children: [
-        { label: "Semua Pinjaman", href: "/loans" },
-        { label: "Anggota Menunggak", href: "/loans/overdue", icon: AlertTriangle }
-      ]
-    });
-  }
-
-  const konsumenChildren: NavNode[] = [];
-  if (can("konsumen", "read")) {
-    konsumenChildren.push({ label: "Toko", href: "/ksu/toko", feature: "unit_konsumen" });
-  }
-
-  // Koperasi pasar plan F3 — gated on market:read like every other Unit Usaha
-  // sub-group, not on isMultiUnit (its JASA unit is auto-resolved, never
-  // client-chosen, so there's nothing multi-unit-specific about this page).
-  const pasarChildren: NavNode[] = [];
-  if (can("market", "read")) {
-    pasarChildren.push({ label: "Pasar", href: "/market", feature: "unit_pasar" });
-  }
-
-  const unitUsahaChildren: NavNode[] = [];
-  if (kspChildren.length > 0) unitUsahaChildren.push({ label: "KSP", icon: Landmark, children: kspChildren });
-  if (konsumenChildren.length > 0) unitUsahaChildren.push({ label: "Konsumen", icon: Store, children: konsumenChildren });
-  if (pasarChildren.length > 0) unitUsahaChildren.push({ label: "Pasar", icon: Warehouse, children: pasarChildren });
-
+  if (!data || isPlatformAdmin) return null;
   return (
-    <div className="flex h-full flex-col bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-700 px-4 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-            <Building2 className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-white">SISKOP</p>
-          </div>
-        </div>
-        {onClose && (
-          <button onClick={onClose} className="text-slate-400 hover:text-white lg:hidden">
-            <X className="h-5 w-5" />
-          </button>
-        )}
-      </div>
-
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {/* Platform admins run the SaaS platform, not any single tenant's
-            cooperative — the tenant business modules below (Dashboard through
-            Konfigurasi) come from the tenant role they're attached to purely to
-            satisfy User's roleId FK (see modules/platform/service.ts), not from
-            any intent for them to operate that tenant. Hide those modules
-            entirely rather than exposing them because of an incidental role. */}
-        {!isPlatformAdmin && (
-          <>
-            {NAV_ITEMS_TOP.map((item) => {
-              if (!can(item.module, item.action)) return null;
-              return <NavItemComponent key={item.href} item={item} onClose={onClose} />;
-            })}
-            {unitUsahaChildren.length > 0 && (
-              <NavItemComponent
-                item={{ label: "Unit Usaha", icon: Layers, children: unitUsahaChildren }}
-                onClose={onClose}
-              />
-            )}
-            {NAV_ITEMS_REPORTS.map((item) => {
-              if (!can(item.module, item.action)) return null;
-              if (item.requiresMultiUnit && !isMultiUnit) return null;
-              return <NavItemComponent key={item.href} item={item} onClose={onClose} />;
-            })}
-            {(can("config", "read") || can("roles", "read") || can("accounting", "read")) && (
-              <NavItemComponent
-                item={{ label: "Konfigurasi", href: "/config", icon: Settings }}
-                onClose={onClose}
-              />
-            )}
-            <NavItemComponent item={{ label: "Langganan", href: "/langganan", icon: PackageIcon }} onClose={onClose} />
-          </>
-        )}
-
-        {isPlatformAdmin && (
-          <>
-            <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Platform Admin
-            </p>
-            {[
-              { href: "/platform/tenants", icon: Landmark, label: "Koperasi" },
-              { href: "/platform/packages", icon: PackageIcon, label: "Paket Langganan" },
-              { href: "/platform/pricing", icon: Tags, label: "Harga & Paket" },
-              { href: "/platform/invoices", icon: Receipt, label: "Faktur" },
-              { href: "/platform/admins", icon: ShieldCheck, label: "Admin Platform" }
-            ].map((item) => (
-              <NavLink
-                key={item.href}
-                to={item.href}
-                onClick={onClose}
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
-                    isActive ? "border-l-2 border-primary bg-slate-700 text-white" : "text-slate-300 hover:bg-slate-700 hover:text-white"
-                  )
-                }
-              >
-                <item.icon className="h-4 w-4 shrink-0" />
-                {item.label}
-              </NavLink>
-            ))}
-          </>
-        )}
-      </nav>
+    <div className="mt-auto rounded-[12px] border bg-card p-3 text-[12.5px]">
+      <p className="truncate text-[13.5px] font-extrabold">Paket {data.packageName}</p>
+      <p className="mb-2 text-muted-foreground">{data.status === "ACTIVE" ? "Langganan aktif" : "Perlu perhatian"}</p>
+      <QuotaMeter label="Anggota aktif" used={data.usage.members} limit={data.limits.members} />
     </div>
   );
 }
 
-export function Sidebar() {
-  const [mobileOpen, setMobileOpen] = useState(false);
+interface SidebarContentProps {
+  rail: boolean;
+  onNavigate?: () => void;
+  onClose?: () => void;
+}
+
+function SidebarContent({ rail, onNavigate, onClose }: SidebarContentProps) {
+  const sections = useNavSections();
+  return (
+    <div className="flex h-full flex-col gap-1.5 overflow-y-auto border-r bg-sidebar px-3 py-4 text-sidebar-foreground">
+      <div className={cn("flex items-center gap-2.5 px-2 pb-3.5 pt-1", rail && "justify-center px-0")}>
+        <BrandMark />
+        {!rail && <span className="flex-1 text-[17px] font-extrabold tracking-[-0.01em]">SISKOP</span>}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup menu"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+          >
+            <X className="h-[18px] w-[18px]" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+
+      <nav aria-label="Menu utama" className="flex flex-col gap-1">
+        {sections.map((section, index) => (
+          <div key={section.group} role="group" aria-label={section.label} className="flex flex-col gap-0.5">
+            {rail ? (
+              index > 0 && <div aria-hidden="true" className="mx-1.5 my-2.5 h-px bg-border" />
+            ) : (
+              <p className={cn("px-2.5 pb-1 text-xs font-bold text-muted-foreground", index > 0 ? "mt-3" : "mt-1")}>{section.label}</p>
+            )}
+            {section.items.map((item) => (
+              <NavItem key={item.id} item={item} rail={rail} onNavigate={onNavigate} />
+            ))}
+          </div>
+        ))}
+      </nav>
+
+      {!rail && <TenantCard />}
+    </div>
+  );
+}
+
+interface SidebarProps {
+  rail: boolean;
+  mobileOpen: boolean;
+  onMobileOpenChange: (open: boolean) => void;
+}
+
+/**
+ * Desktop: sticky 248px column (72px rail). At 900px and below it becomes a
+ * drawer from the left with a scrim; Esc and the scrim close it.
+ */
+export function Sidebar({ rail, mobileOpen, onMobileOpenChange }: SidebarProps) {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    onMobileOpenChange(false);
+  }, [pathname, onMobileOpenChange]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onMobileOpenChange(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileOpen, onMobileOpenChange]);
 
   return (
     <>
-      <button
-        className="fixed left-4 top-4 z-50 rounded-md bg-slate-900 p-2 text-white lg:hidden"
-        onClick={() => setMobileOpen(true)}
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)} />
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-scrim bg-foreground/50 min-[901px]:hidden"
+          onClick={() => onMobileOpenChange(false)}
+        />
       )}
 
-      <div
+      <aside
+        id="sidebar-mobile"
+        aria-label="Navigasi"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:hidden",
+          "fixed inset-y-0 left-0 z-drawer w-[272px] max-w-[85vw] transition-transform duration-200 min-[901px]:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
+        // A closed drawer must not be tabbable or read by assistive tech.
+        {...(mobileOpen ? { role: "dialog", "aria-modal": true } : { inert: "" as unknown as undefined, "aria-hidden": true })}
       >
-        <SidebarContent onClose={() => setMobileOpen(false)} />
-      </div>
+        <SidebarContent rail={false} onNavigate={() => onMobileOpenChange(false)} onClose={() => onMobileOpenChange(false)} />
+      </aside>
 
-      <div className="hidden w-64 shrink-0 lg:block">
-        <SidebarContent />
-      </div>
+      <aside
+        aria-label="Navigasi"
+        className={cn("sticky top-0 z-sidebar hidden h-screen shrink-0 min-[901px]:block", rail ? "w-[72px]" : "w-[248px]")}
+      >
+        <SidebarContent rail={rail} />
+      </aside>
     </>
   );
 }

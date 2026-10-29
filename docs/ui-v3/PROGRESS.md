@@ -59,7 +59,7 @@ Dashboard, Anggota, Piutang Anggota (`konsumen:read`, fitur `member_receivables`
 | 0 Temuan | selesai | lihat git log |
 | 1 Token | selesai | lihat git log |
 | 2 Primitif | selesai | lihat git log |
-| 3 Shell | belum | |
+| 3 Shell | selesai | lihat git log |
 | 4 DataTable | belum | |
 | 5 Halaman P1 | belum | |
 | 6 Halaman P2/P3 | belum | |
@@ -95,3 +95,22 @@ Keputusan:
 - Nama varian lama Button/Badge dipertahankan (`default` = primary tinta).
 
 Gerbang: tsc 0, eslint 0, vitest 155/155, vite build sukses.
+
+## Fase 3: Shell (selesai)
+
+Baru: `layout/nav.ts` (model menu tunggal dipakai Sidebar dan palet: grup, izin, kunci paket, aksi cepat per peran, pencocokan), `layout/CommandPalette.tsx` (Radix Dialog + pola combobox/listbox, tanpa pustaka baru), `layout/BrandMark.tsx`, `lib/theme.ts` (terang/gelap, disimpan, diterapkan sebelum render pertama di `main.tsx`), `stores/unit-scope.ts`.
+Ditulis ulang: `layout/AppLayout.tsx` (gulir dokumen agar header tabel lengket top 60px; tautan "Lewati ke konten"; Ctrl/Cmd+K; rail tersimpan), `layout/Sidebar.tsx` (grup Harian/Anggota/Keuangan/Laporan/Pengaturan; rail 72px; drawer <= 900px dengan scrim dan Esc; item terkunci = ikon gembok + tautan ke `/langganan?fitur=<key>`; kartu paket + QuotaMeter di kaki), `layout/Topbar.tsx` (pencarian pemicu palet, aksi cepat split-button per peran, lonceng, tema, menu pengguna, pemilih unit bersyarat, Ganti Koperasi dipertahankan).
+Disentuh: `NotificationBell`, `AccessBanner` (token, label aksesibel), `AppLayout.test.tsx` (mock CommandPalette), dashboard + Kualitas Portofolio + 7 tab laporan (nilai awal filter unit dari `unit-scope`).
+
+Keputusan:
+- Item menu dipetakan ke grup design.md; item yang tidak ada di tabel §7.1 (Piutang anggota, Beban umum, Menunggak, Kualitas portofolio, Laporan pasar, Konsolidasi, Jurnal manual, Tutup buku) ditempatkan di grup terdekat; tidak ada rute lama yang hilang dari navigasi (dijaga oleh tes `nav.test.ts`).
+- Izin per item sama dengan Sidebar lama (mis. Jurnal manual/Tutup buku memakai `reports:read`). "Setor dan tarik" memakai `savings:create`; "Simpanan" (daftar) tetap `savings:read`.
+- Pemilih unit memakai `useAccessibleUnits` (unit yang boleh dibuka pemanggil), konsisten dengan `UnitFilter` yang sudah ada: tampil hanya bila > 1. Dashboard dan Kualitas Portofolio memakai nilai global; tab laporan memakai nilai itu hanya sebagai nilai awal (filter laporan tetap tersimpan per sesi).
+- Nama koperasi tidak tersedia di data klien (`User` dan `TenantSubscriptionInfo` tidak memuatnya), jadi kartu kaki sidebar menampilkan paket dan kuota saja, tidak mengarang nama.
+- Item terkunci tidak pernah ditandai halaman aktif; kontrak lama ke `/langganan?fitur=` dipertahankan, dan SubscriptionPage akan menampilkan LockedFeature untuk parameter itu di Fase 5.
+- Judul h1 dipindah dari Topbar ke PageHeader tiap halaman (menghindari dua h1).
+- Tema: `.dark` diterapkan di `<html>` untuk seluruh SPA, termasuk halaman pemasaran/onboarding (yang memakai warna heks sendiri; hanya satu aturan `hsl(var(--input))` terpengaruh). Dicatat sebagai risiko Fase 7.
+
+Tes baru: `nav.test.ts` (13), `format-nik.test.ts` (2). Total 171 lulus.
+Gerbang: tsc 0, eslint 0, vitest 171/171, vite build sukses.
+Belum diverifikasi di peramban nyata (lihat laporan akhir): Ctrl/Cmd+K, urutan fokus, drawer mobile.

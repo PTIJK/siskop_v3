@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -33,6 +32,7 @@ import { apiFetch, ApiRequestError } from "@/api/client";
 import { formatRupiah, formatRupiahSingkat } from "@/lib/format";
 import { buildAiSuggestions, type SuggestionTone } from "@/lib/aiSuggestions";
 import { ALL_UNITS } from "@/lib/unit";
+import { useUnitScope } from "@/stores/unit-scope";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatCard } from "@/components/shared/StatCard";
 import { UnitFilter } from "@/components/shared/UnitFilter";
@@ -104,7 +104,8 @@ function memberDelta(summary: DashboardSummary): { subtitle?: string; trend?: "u
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const [unitId, setUnitId] = useState(ALL_UNITS);
+  const unitId = useUnitScope((s) => s.unitId);
+  const setUnitId = useUnitScope((s) => s.setUnitId);
   const unitQuery = unitId === ALL_UNITS ? "" : `?unitId=${encodeURIComponent(unitId)}`;
 
   const summaryQuery = useQuery({

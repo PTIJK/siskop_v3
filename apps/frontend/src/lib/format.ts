@@ -69,3 +69,9 @@ export function formatPercent(value: string | number | null | undefined): string
   if (isNaN(n)) return "-";
   return `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(n)}%`;
 }
+
+/** NIK shown masked (design.md §9.7): first four and last four digits, e.g. 3174••••••0012. */
+export function maskNik(nik: string): string {
+  if (nik.length <= 8) return nik;
+  return `${nik.slice(0, 4)}${"•".repeat(nik.length - 8)}${nik.slice(-4)}`;
+}

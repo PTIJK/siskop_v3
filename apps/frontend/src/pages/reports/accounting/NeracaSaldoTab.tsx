@@ -2,7 +2,7 @@ import type { TrialBalance } from "@siskop/types";
 import { formatPeriode } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
 import { BalanceChip } from "@/components/reports/BalanceChip";
 import { ExportMenu } from "@/components/reports/ExportMenu";
@@ -17,9 +17,10 @@ import { useReportFilter } from "@/components/reports/useReportFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "../regulatory/period";
 import { bukuBesarHref } from "./drilldown";
 import { TrialBalanceTableRow } from "./TrialBalanceTable";
+import { currentUnitScope } from "@/stores/unit-scope";
 
 export function NeracaSaldoTab() {
-  const filter = useReportFilter("neraca-saldo", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS, compare: COMPARE_NONE }));
+  const filter = useReportFilter("neraca-saldo", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: currentUnitScope(), compare: COMPARE_NONE }));
   const { value: f } = filter;
   const report = useReport<TrialBalance>("Gagal memuat neraca saldo");
   const unitLabel = useUnitLabel(f.unitId);

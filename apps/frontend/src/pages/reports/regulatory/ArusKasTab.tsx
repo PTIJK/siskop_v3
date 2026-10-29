@@ -4,7 +4,7 @@ import { formatPeriode, formatRupiah } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Info } from "lucide-react";
-import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
 import { BalanceChip } from "@/components/reports/BalanceChip";
 import { ExportMenu } from "@/components/reports/ExportMenu";
@@ -14,6 +14,7 @@ import { ReportAmount, ReportTotalRow } from "@/components/reports/ReportTable";
 import { useReport } from "@/components/reports/useReport";
 import { useReportFilter } from "@/components/reports/useReportFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "./period";
+import { currentUnitScope } from "@/stores/unit-scope";
 
 function ActivitySection({ title, section }: { title: string; section: ArusKasSection }) {
   return (
@@ -43,7 +44,7 @@ function ActivitySection({ title, section }: { title: string; section: ArusKasSe
 }
 
 export function ArusKasTab() {
-  const filter = useReportFilter("arus-kas", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS }));
+  const filter = useReportFilter("arus-kas", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: currentUnitScope() }));
   const { value: f } = filter;
   const report = useReport<ArusKas>("Gagal memuat arus kas");
   const unitLabel = useUnitLabel(f.unitId);

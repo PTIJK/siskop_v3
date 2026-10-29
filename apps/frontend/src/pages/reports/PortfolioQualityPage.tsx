@@ -13,7 +13,7 @@ import {
 } from "@siskop/types";
 import { apiFetch, apiFetchPage } from "@/api/client";
 import { formatPeriode, formatPercent, formatRupiahOrDash, formatRupiahSingkat } from "@/lib/format";
-import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { unitQueryParam } from "@/lib/unit";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { StatCard } from "@/components/shared/StatCard";
@@ -29,6 +29,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { STATUS } from "@/pages/dashboard/chartColors";
 import { defaultPeriodFrom, defaultPeriodTo } from "./regulatory/period";
+import { currentUnitScope, useUnitScope } from "@/stores/unit-scope";
 
 const LIMIT = 15;
 
@@ -111,7 +112,7 @@ function LoansInBucket({ bucket, unitId, onClose }: { bucket: ParBucket; unitId:
 }
 
 function EfficiencySection() {
-  const filter = useReportFilter("portfolio-efficiency", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS }));
+  const filter = useReportFilter("portfolio-efficiency", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: currentUnitScope() }));
   const { value: f } = filter;
   const report = useReport<CollectionEfficiency>("Gagal memuat efisiensi penagihan");
   const data = report.data;
@@ -163,7 +164,8 @@ function EfficiencySection() {
 }
 
 export function PortfolioQualityPage() {
-  const [unitId, setUnitId] = useState(ALL_UNITS);
+  const unitId = useUnitScope((s) => s.unitId);
+  const setUnitId = useUnitScope((s) => s.setUnitId);
   const [openBucket, setOpenBucket] = useState<ParBucket | null>(null);
   const { data, isPending, isError } = useQuery({
     queryKey: ["portfolio", "par", unitId],
