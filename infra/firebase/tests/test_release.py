@@ -22,12 +22,12 @@ class CloudBuildStatusTests(unittest.TestCase):
         origin = "https://candidate.example"
         cloud.public_json.side_effect = [
             {"success": True},
-            {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+            {"success": True, "data": {"version": 1, "packages": [{}]}},
         ]
         with patch.dict(release.os.environ, {"RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "false"}):
             release.check_api(cloud, origin)
         self.assertEqual([call.args[0] for call in cloud.public_json.call_args_list], [
-            origin + "/api/health", origin + "/api/onboarding/packages",
+            origin + "/api/health", origin + "/api/public/pricing",
         ])
 
     def test_candidate_checks_reject_missing_or_wrong_tenant_handoff_configuration(self):
@@ -36,7 +36,7 @@ class CloudBuildStatusTests(unittest.TestCase):
         def responses(config):
             return [
                 {"success": True},
-                {"success": True, "data": {"checkoutAvailable": True, "packages": [{"id": "package"}]}},
+                {"success": True, "data": {"version": 1, "packages": [{"id": "package"}]}},
                 config,
             ]
         with patch.dict(release.os.environ, {"RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "true"}):
@@ -156,7 +156,7 @@ class ReleaseSafetyTests(unittest.TestCase):
         cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
         marker = {"buildId": BUILD, "commit": COMMIT}
         cloud.public_json.side_effect = [
-            marker, {"success": True}, {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+            marker, {"success": True}, {"success": True, "data": {"version": 1, "packages": [{}]}},
             {"success": True, "data": {"enabled": True, "centralUrl": release.ORIGIN + "/login"}},
             marker, marker, {"success": True, "data": {"tenantId": "tenant-alpha", "slug": "alpha", "isAlias": False}}
         ]
@@ -178,7 +178,7 @@ class ReleaseSafetyTests(unittest.TestCase):
         cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
         cloud.public_json.side_effect = [
             {"buildId": BUILD, "commit": COMMIT}, {"success": True},
-            {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+            {"success": True, "data": {"version": 1, "packages": [{}]}},
             {"success": True, "data": {"enabled": False, "centralUrl": release.ORIGIN + "/login"}},
         ]
         with patch.dict(release.os.environ, {
@@ -195,7 +195,7 @@ class ReleaseSafetyTests(unittest.TestCase):
         cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
         marker = {"buildId": BUILD, "commit": COMMIT}
         cloud.public_json.side_effect = [
-            marker, {"success": True}, {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+            marker, {"success": True}, {"success": True, "data": {"version": 1, "packages": [{}]}},
             marker, {"buildId": OTHER, "commit": COMMIT}
         ]
         with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true", "RELEASE_TENANT_SMOKE_SLUG": "alpha"}):
@@ -226,7 +226,7 @@ class ReleaseSafetyTests(unittest.TestCase):
         cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
         cloud.public_json.side_effect = [
             {"buildId": BUILD, "commit": COMMIT}, {"success": True},
-            {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+            {"success": True, "data": {"version": 1, "packages": [{}]}},
             {"buildId": OTHER, "commit": COMMIT}
         ]
         with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "true"}):

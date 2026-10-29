@@ -23,7 +23,7 @@ class SchedulerActivationTests(unittest.TestCase):
                 cloud.read_lock.return_value = ({"buildId": "build"}, "8")
                 responses = [
                     {"buildId": "build", "commit": "commit"}, {"success": True},
-                    {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}},
+                    {"success": True, "data": {"version": 1, "packages": [{}]}},
                 ]
                 if selection == "true":
                     responses.append({"success": True, "data": {"enabled": True, "centralUrl": release.ORIGIN + "/login"}})

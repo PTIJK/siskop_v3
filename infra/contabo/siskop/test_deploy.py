@@ -13,6 +13,21 @@ with patch.object(sys, 'path', [str(ROOT), *sys.path]):
 
 
 class DeploymentBoundaryTests(unittest.TestCase):
+    def test_readiness_requires_published_pricing_v2_catalog(self):
+        import io
+        import json
+        root = unittest.mock.MagicMock()
+        (root / 'secrets/api.env').read_text.return_value = 'CENTRAL_GATEWAY_SECRET=test-only'
+        with patch.object(deploy, 'ROOT', root), patch.object(deploy, 'command', return_value=b'revision'), patch.object(deploy, 'urlopen') as request:
+            for catalog in [{'version': 1, 'packages': [{}]}, {'packages': [{}]}, {'version': 1, 'packages': []}]:
+                request.return_value.__enter__.return_value = io.BytesIO(json.dumps({'success': True, 'data': catalog}).encode())
+                if catalog.get('version') and catalog['packages']:
+                    deploy.health('revision')
+                else:
+                    with self.assertRaisesRegex(ValueError, 'database readiness'):
+                        deploy.health('revision')
+                self.assertEqual(request.call_args.args[0].full_url, 'http://127.0.0.1:18081/api/public/pricing')
+
     def setUp(self):
         self.data = {'buildId': '12345678-1234-1234-1234-123456789abc', 'commit': 'a' * 40, 'image': deploy.IMAGE + '@sha256:' + 'b' * 64}
         self.build = {'id': self.data['buildId'], 'buildTriggerId': deploy.TRIGGER, 'serviceAccount': deploy.BUILDER,
