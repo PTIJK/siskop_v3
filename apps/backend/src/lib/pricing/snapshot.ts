@@ -80,7 +80,7 @@ export async function buildCatalogSnapshot(tx: TxClient): Promise<CatalogSnapsho
       priceMonthly: money(p.priceMonthly),
       priceYearly: money(p.priceYearly),
       limits: { members: p.maxMembers, users: p.maxUsers, savingTypes: p.maxSavingTypes, loanTypes: p.maxLoanTypes },
-      features: p.features.map((pf) => pf.feature.key)
+      features: [...p.features].sort((a, b) => a.feature.sortOrder - b.feature.sortOrder).map((pf) => pf.feature.key)
     })),
     features: features.map((f) => ({
       key: f.key,
@@ -114,7 +114,7 @@ export async function buildCatalogSnapshot(tx: TxClient): Promise<CatalogSnapsho
       addonsOnFixedPackages: settings.addonsOnFixedPackages,
       paymentGraceDays: settings.paymentGraceDays,
       unpaidRegistrationPurgeDays: settings.unpaidRegistrationPurgeDays,
-      taxRate: money(settings.taxRate),
+      taxRate: settings.taxRate === null ? null : settings.taxRate.toFixed(4),
       invoiceNumberFormat: settings.invoiceNumberFormat,
       paymentProvider: settings.paymentProvider,
       paymentInstructions: settings.paymentInstructions,

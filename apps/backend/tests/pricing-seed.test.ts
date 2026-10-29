@@ -194,6 +194,22 @@ describe("parsePricingSeed", () => {
     expect(() => parsePricingSeed(mutate((s) => s.features[0].includedIn.push("custom")))).toThrow(/custom/);
   });
 
+  it("rejects a package that includes a feature without a feature it requires", () => {
+    const bad = mutate((s) => {
+      const f = s.features.find((x: { key: string }) => x.key === "period_closing");
+      f.includedIn = [...f.includedIn];
+      s.features.find((x: { key: string }) => x.key === "accounting_book").includedIn = ["medium", "enterprise"];
+    });
+    expect(() => parsePricingSeed(bad)).toThrow(/small.*period_closing.*accounting_book/);
+  });
+
+  it("rejects a package that includes a feature without its parent", () => {
+    const bad = mutate((s) => {
+      s.features.find((x: { key: string }) => x.key === "reports").includedIn = ["free", "medium", "enterprise"];
+    });
+    expect(() => parsePricingSeed(bad)).toThrow(/small.*reports_regulatory.*reports/);
+  });
+
   it("rejects a fixed package priced monthly without a yearly price", () => {
     expect(() => parsePricingSeed(mutate((s) => (s.packages[1].priceYearly = null)))).toThrow(/priceYearly/);
   });

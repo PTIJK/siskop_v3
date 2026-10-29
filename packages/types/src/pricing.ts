@@ -101,3 +101,120 @@ export interface TenantSubscriptionInfo {
   limits: PricingLimits;
   usage: { members: number; users: number; savingTypes: number; loanTypes: number };
 }
+
+// ── Owner console (platform admin) ───────────────────────────────────────────
+
+export interface PricingCatalogPackage {
+  code: string;
+  name: string;
+  isCustom: boolean;
+  isPublic: boolean;
+  sortOrder: number;
+  priceMonthly: string | null;
+  priceYearly: string | null;
+  limits: PricingLimits;
+  features: string[];
+}
+
+export interface PricingCatalogFeature {
+  key: string;
+  name: string;
+  parentKey: string | null;
+  requires: string[];
+  customPrice: string;
+  priceGroup: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface PricingCatalogSettings {
+  yearlyMultiplier: number;
+  enabledCycles: BillingCycle[];
+  defaultPackageCode: string;
+  customEnabled: boolean;
+  customBaseLimits: PricingLimits;
+  addonsOnFixedPackages: boolean;
+  paymentGraceDays: number;
+  unpaidRegistrationPurgeDays: number;
+  /** Fraction, 0.11 = 11%. Null until the owner enters it. */
+  taxRate: string | null;
+  invoiceNumberFormat: string;
+  paymentProvider: string;
+  paymentInstructions: string | null;
+  oneFreeTenantPerRegistrationNo: boolean;
+}
+
+export interface PricingCatalog {
+  packages: PricingCatalogPackage[];
+  features: PricingCatalogFeature[];
+  volumeAddons: { itemKey: VolumeItem; stepQty: number; price: string; period: "MONTHLY" | "YEARLY" }[];
+  supportPlans: {
+    code: string;
+    name: string;
+    yearlyCost: string;
+    remote: boolean;
+    onsite: boolean;
+    visitsPerYear: number;
+    slaHours: number | null;
+    aiSupport: boolean;
+  }[];
+  settings: PricingCatalogSettings;
+}
+
+export interface PricingDraft {
+  publishedVersion: number | null;
+  changeCount: number;
+  catalog: PricingCatalog;
+}
+
+export interface PricingChange {
+  section: "packages" | "features" | "volumeAddons" | "supportPlans" | "settings";
+  key: string;
+  type: "ADDED" | "REMOVED" | "CHANGED";
+  fields?: { field: string; before: unknown; after: unknown }[];
+}
+
+export interface PricingDiff {
+  fromVersion: number | null;
+  changes: PricingChange[];
+}
+
+export interface PricingVersionSummary {
+  version: number;
+  publishedBy: string | null;
+  publishedAt: string;
+}
+
+export interface PricingAuditEntry {
+  id: string;
+  actorId: string | null;
+  entity: string;
+  entityId: string | null;
+  action: string;
+  before: unknown;
+  after: unknown;
+  at: string;
+}
+
+/** A tenant's subscription as the platform admin sees it. */
+export interface AdminTenantSubscription {
+  packageCode: string;
+  packageName: string;
+  status: "PENDING_PAYMENT" | "ACTIVE" | "PAST_DUE" | "CANCELLED";
+  billingCycle: BillingCycle;
+  amountPerCycle: string;
+  pricingVersion: number;
+  nextBillingDate: string | null;
+  supportPlanCode: string | null;
+  selectedFeatureKeys: string[];
+  addons: Partial<Record<VolumeItem, number>>;
+  limitOverrides: Partial<PricingLimits> | null;
+  createdVia: "REGISTRATION" | "ADMIN" | "MIGRATION";
+}
+
+export interface AdminTenantSubscriptionDetail {
+  subscription: AdminTenantSubscription | null;
+  features: string[];
+  limits: PricingLimits | null;
+  usage: { members: number; users: number; savingTypes: number; loanTypes: number };
+}
