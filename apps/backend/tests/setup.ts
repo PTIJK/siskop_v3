@@ -11,16 +11,14 @@ import { poolDatabase, testWorkerCount } from "./database-isolation.js";
 config({ path: ".env.test" });
 config({ path: ".env" });
 
-// Supertest's default URL uses IPv4 even when listen(0) allocated an IPv6 port.
-// Darwin can assign that port to another IPv4 server. Match the actual family,
-// keeping Supertest's synchronous listener setup and the original Host header.
+// macOS can allocate overlapping IPv4 and IPv6 ports; Cloud Build cannot reach ::1.
 const prototype = request.Test.prototype;
 const originalAddress = prototype.serverAddress;
 beforeAll(() => {
   prototype.serverAddress = function (server, path) {
     const url = originalAddress.call(this, server, path);
     const address = typeof server === "object" && server !== null && "address" in server ? (server as Server).address() : null;
-    if (address && typeof address !== "string" && address.family === "IPv6") {
+    if (process.platform === "darwin" && address && typeof address !== "string" && address.family === "IPv6") {
       this.set("Host", new URL(url).host);
       return url.replace("://127.0.0.1:", "://[::1]:");
     }
