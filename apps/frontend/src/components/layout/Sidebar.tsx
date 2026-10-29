@@ -264,6 +264,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               { href: "/platform/tenants", icon: Landmark, label: "Koperasi" },
               { href: "/platform/packages", icon: PackageIcon, label: "Paket Langganan" },
               { href: "/platform/pricing", icon: Tags, label: "Harga & Paket" },
+              { href: "/platform/invoices", icon: Receipt, label: "Faktur" },
               { href: "/platform/admins", icon: ShieldCheck, label: "Admin Platform" }
             ].map((item) => (
               <NavLink
