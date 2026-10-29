@@ -58,7 +58,7 @@ Dashboard, Anggota, Piutang Anggota (`konsumen:read`, fitur `member_receivables`
 |---|---|---|
 | 0 Temuan | selesai | lihat git log |
 | 1 Token | selesai | lihat git log |
-| 2 Primitif | belum | |
+| 2 Primitif | selesai | lihat git log |
 | 3 Shell | belum | |
 | 4 DataTable | belum | |
 | 5 Halaman P1 | belum | |
@@ -79,3 +79,19 @@ Berkas: `apps/frontend/src/index.css`, `apps/frontend/tailwind.config.js`.
 - Radius global berubah (sebelumnya 8px): komponen lama otomatis lebih bulat.
 
 Gerbang: tsc 0, eslint 0, vitest 132/132, vite build sukses.
+
+## Fase 2: Primitif (selesai)
+
+Diubah: `ui/button` (varian brand, ukuran 32/38/48, prop `loading` + `aria-busy`), `ui/input` (42px, `aria-invalid`), `ui/badge` (varian ok/warn/bad/info + penanda bentuk, accent), `ui/dialog` (radius 20, maks 480, scrim/modal z, tombol tutup "Tutup"), `ui/card` (tanpa bayangan, radius 16, padding 18), `ui/toast` + `toaster` (kanan bawah, 3 dtk; galat 6 dtk, tombol tutup bernama), `shared/KOLBadge` ("KOL n Nama" + penanda), `shared/PageHeader` (26/800, breadcrumb ber-ol, aria-current), `shared/StatCard` (tanpa pulse/bayangan, klik = tombol sungguhan), `shared/EntitlementNotice` dan `NotEntitledNotice` (kini pembungkus LockedFeature inline), `shared/QuotaBadge` (token).
+
+Baru: `ui/money-input` + `lib/money-input`, `ui/drawer`, `shared/QuotaMeter`, `GlossaryTerm`, `LockedFeature`, `EmptyState`, `Stepper`. MemberPicker ditunda ke Fase 5 karena bergantung pada endpoint pencarian anggota di halaman Setor/Pinjaman.
+
+Tes: `lib/money-input.test.ts` (9) dan `components/primitives.test.tsx` (14). Total 155 tes lulus.
+
+Keputusan:
+- MoneyInput menyimpan string digit ("1250000"), bukan float; konsisten dengan aturan uang bukan Float. Ada `digitsToNumber` hanya untuk perbandingan tampilan.
+- Toast galat tampil 6 dtk (bukan 3) karena pesan galat perlu dibaca; selain itu 3 dtk sesuai design.md.
+- QuotaMeter memakai ambang 85% (design.md §8); `lib/entitlements` tetap 80% untuk logika "near" yang sudah ada dan teruji (tidak diubah: bukan lapisan presentasi). Dua ambang ini berbeda tipis; dicatat.
+- Nama varian lama Button/Badge dipertahankan (`default` = primary tinta).
+
+Gerbang: tsc 0, eslint 0, vitest 155/155, vite build sukses.

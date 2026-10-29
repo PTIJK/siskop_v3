@@ -6,6 +6,7 @@ import { cn } from "../../lib/utils";
 interface StatCardProps {
   title: string;
   value: string;
+  /** Delta or note, e.g. "Naik 2,1% dari September". Shown with a trend icon and words. */
   subtitle?: string;
   icon: LucideIcon;
   iconColor?: string;
@@ -22,8 +23,8 @@ const TREND_ICONS = {
 };
 
 const TREND_COLORS = {
-  up: "text-green-600",
-  down: "text-red-600",
+  up: "text-success",
+  down: "text-destructive",
   neutral: "text-muted-foreground"
 };
 
@@ -32,7 +33,7 @@ export function StatCard({
   value,
   subtitle,
   icon: Icon,
-  iconColor = "text-primary",
+  iconColor = "text-accent-foreground",
   trend,
   onClick,
   isLoading,
@@ -40,10 +41,10 @@ export function StatCard({
 }: StatCardProps) {
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="p-5">
+      <Card aria-busy="true">
+        <CardContent className="p-[18px]">
           <div className="flex items-start justify-between">
-            <div className="space-y-2 flex-1">
+            <div className="flex-1 space-y-2">
               <Skeleton className="h-4 w-24" />
               <Skeleton className="h-7 w-32" />
               <Skeleton className="h-3 w-20" />
@@ -57,36 +58,41 @@ export function StatCard({
 
   const TrendIcon = trend ? TREND_ICONS[trend] : null;
 
-  return (
-    <Card
-      className={cn(
-        "transition-all",
-        onClick && "cursor-pointer hover:shadow-md",
-        alert && "animate-pulse border-red-500 ring-1 ring-red-500"
-      )}
-      onClick={onClick}
-    >
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className={cn("mt-1 text-2xl font-bold tracking-tight", alert && "text-red-600")}>{value}</p>
-            {(subtitle || TrendIcon) && (
-              <div className="mt-1 flex items-center gap-1">
-                {TrendIcon && <TrendIcon className={cn("h-3 w-3", trend ? TREND_COLORS[trend] : "")} />}
-                {subtitle && (
-                  <span className={cn("text-xs", trend ? TREND_COLORS[trend] : "text-muted-foreground")}>
-                    {subtitle}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          <div className={cn("rounded-full bg-muted p-2.5", alert && "bg-red-50")}>
-            <Icon className={cn("h-5 w-5", iconColor)} />
-          </div>
+  const body = (
+    <CardContent className="p-[18px]">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-muted-foreground">{title}</p>
+          <p className={cn("mt-1 text-2xl font-extrabold leading-tight tracking-[-0.02em] tabular-nums", alert && "text-destructive")}>
+            {value}
+          </p>
+          {(subtitle || TrendIcon) && (
+            <div className="mt-1 flex items-center gap-1">
+              {TrendIcon && <TrendIcon className={cn("h-3.5 w-3.5", trend ? TREND_COLORS[trend] : "")} aria-hidden="true" />}
+              {subtitle && (
+                <span className={cn("text-[12.5px] font-semibold", trend ? TREND_COLORS[trend] : "text-muted-foreground")}>
+                  {subtitle}
+                </span>
+              )}
+            </div>
+          )}
         </div>
-      </CardContent>
-    </Card>
+        <div className={cn("rounded-full bg-accent p-2.5", alert && "bg-destructive/[0.13]")}>
+          <Icon className={cn("h-[18px] w-[18px]", alert ? "text-destructive" : iconColor)} aria-hidden="true" />
+        </div>
+      </div>
+    </CardContent>
   );
+
+  if (onClick) {
+    return (
+      <Card className={cn("transition-colors hover:bg-muted/40", alert && "border-destructive")}>
+        <button type="button" onClick={onClick} className="block w-full rounded-[16px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          {body}
+        </button>
+      </Card>
+    );
+  }
+
+  return <Card className={cn(alert && "border-destructive")}>{body}</Card>;
 }

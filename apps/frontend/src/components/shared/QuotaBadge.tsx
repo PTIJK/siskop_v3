@@ -10,7 +10,7 @@ export function QuotaBadge({ hint, noun }: { hint: QuotaHint | null; noun: strin
     <span
       className={cn(
         "text-xs",
-        blocked ? "font-medium text-destructive" : meter.state === "near" ? "text-amber-600" : "text-muted-foreground"
+        blocked ? "font-medium text-destructive" : meter.state === "near" ? "text-warning" : "text-muted-foreground"
       )}
       title={`Pemakaian ${noun} pada paket Anda`}
     >
