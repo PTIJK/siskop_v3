@@ -43,6 +43,14 @@ def policy(name, conditions, channel):
         'content': 'SISKOP Contabo staging needs attention. Check only /srv/siskop/staging and SISKOP units. Never restart, alter or restore Sentryx services. See infra/contabo/siskop/README.md in PTIJK/siskop_v3.'}, 'conditions': conditions})
 
 
+def update_uptime_readiness(uptime):
+    matchers = [{'content': '"success":true', 'matcher': 'CONTAINS_STRING'}]
+    if uptime.get('httpCheck', {}).get('path') != '/api/public/pricing' or uptime.get('contentMatchers') != matchers:
+        return request('PATCH', uptime['name'].removeprefix('projects/' + PROJECT + '/') + '?updateMask=httpCheck.path,contentMatchers',
+            {'name': uptime['name'], 'httpCheck': {'path': '/api/public/pricing'}, 'contentMatchers': matchers})
+    return uptime
+
+
 def main():
     gcloud('services', 'enable', 'monitoring.googleapis.com')
     writer = role('siskopBackupMetrics', ['monitoring.timeSeries.create'])
@@ -63,9 +71,10 @@ def main():
         uptime = request('POST', 'uptimeCheckConfigs', {'displayName': 'SISKOP Contabo database API',
             'userLabels': {'application': 'siskop', 'environment': 'staging'}, 'period': '300s', 'timeout': '10s',
             'monitoredResource': {'type': 'uptime_url', 'labels': {'project_id': PROJECT, 'host': 'siskop-central-gateway-q5y6rflxaa-et.a.run.app'}},
-            'httpCheck': {'requestMethod': 'GET', 'useSsl': True, 'port': 443, 'path': '/api/onboarding/packages', 'validateSsl': True,
+            'httpCheck': {'requestMethod': 'GET', 'useSsl': True, 'port': 443, 'path': '/api/public/pricing', 'validateSsl': True,
                 'acceptedResponseStatusCodes': [{'statusValue': 200}]},
-            'contentMatchers': [{'content': '"checkoutAvailable":true', 'matcher': 'CONTAINS_STRING'}]})
+            'contentMatchers': [{'content': '"success":true', 'matcher': 'CONTAINS_STRING'}]})
+    uptime = update_uptime_readiness(uptime)
     metric_filter = lambda name: 'resource.type="global" AND metric.type="custom.googleapis.com/siskop/' + name + '"'
     backup_policy = policy('SISKOP Contabo backup freshness', [
         {'displayName': 'No successful encrypted off-host backup for 90 minutes', 'conditionThreshold': {'filter': metric_filter('backup_age_seconds'),
