@@ -6,6 +6,7 @@ import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { AccessBanner } from "./AccessBanner";
 import { CommandPalette } from "./CommandPalette";
+import { BrandStyle } from "./BrandStyle";
 import { Toaster } from "../ui/toaster";
 import { HandoffSessionGate } from "@/features/tenant-access/HandoffSessionGate";
 import { Suspense, useCallback, useEffect, useState } from "react";
@@ -107,6 +108,7 @@ export function AppLayout() {
           </Suspense>
         </main>
       </div>
+      <BrandStyle />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <Toaster />
     </div>

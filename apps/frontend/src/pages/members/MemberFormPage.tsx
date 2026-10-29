@@ -184,9 +184,10 @@ export function MemberFormPage() {
                           setKtpFile(null);
                           setKtpPreview(null);
                         }}
-                        className="absolute -right-2 -top-2 rounded-full bg-destructive p-0.5 text-destructive-foreground"
+                        aria-label="Hapus foto KTP"
+                        className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full bg-destructive text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </div>
                   )}

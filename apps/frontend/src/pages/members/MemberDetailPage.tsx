@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Edit, PiggyBank, CreditCard, ArrowDownCircle, ArrowUpCircle, Smartphone, Store, Building2 } from "lucide-react";
 
 interface MemberDetail extends Member {
@@ -400,13 +400,16 @@ export function MemberDetailPage() {
         />
       )}
 
-      {ktpLightbox && member.ktpPhotoUrl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
-          onClick={() => setKtpLightbox(false)}
-        >
-          <img src={member.ktpPhotoUrl} alt="KTP" className="max-h-[90vh] max-w-[90vw] rounded-lg" />
-        </div>
+      {member.ktpPhotoUrl && (
+        <Dialog open={ktpLightbox} onOpenChange={setKtpLightbox}>
+          <DialogContent className="max-w-[min(92vw,720px)]">
+            <DialogHeader>
+              <DialogTitle>Foto KTP</DialogTitle>
+              <DialogDescription>{member.fullName}. Tekan Esc untuk menutup.</DialogDescription>
+            </DialogHeader>
+            <img src={member.ktpPhotoUrl} alt={`Foto KTP ${member.fullName}`} className="max-h-[70vh] w-full rounded-[12px] object-contain" />
+          </DialogContent>
+        </Dialog>
       )}
 
       <Dialog open={portalDialog} onOpenChange={(o) => !o && setPortalDialog(false)}>

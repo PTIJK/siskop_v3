@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { SERIES } from "@/pages/dashboard/chartColors";
 import { Package, Receipt, ShoppingCart, TrendingUp } from "lucide-react";
 import { ApiRequestError } from "@/api/client";
 import { getTokoSalesReport } from "@/api/konsumen";
@@ -147,8 +148,9 @@ export function SalesReportPage() {
                       <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                       <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 11 }} width={70} />
                       <Tooltip content={<TrendTooltip />} />
-                      <Bar dataKey="Omzet" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Laba kotor" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                      <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="Omzet" fill={SERIES.primary} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Laba kotor" fill={SERIES.secondary} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>

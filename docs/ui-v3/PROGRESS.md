@@ -63,7 +63,7 @@ Dashboard, Anggota, Piutang Anggota (`konsumen:read`, fitur `member_receivables`
 | 4 DataTable | selesai | lihat git log |
 | 5 Halaman P1 | selesai | lihat git log |
 | 6 Halaman P2/P3 | selesai | lihat git log |
-| 7 Penutup | belum | |
+| 7 Penutup | selesai | lihat git log |
 
 ## Fase 1: Token (selesai)
 
@@ -176,3 +176,23 @@ Yang TIDAK dikerjakan (jujur):
 Pemeriksaan peramban nyata (Puppeteer, mock /api): merayapi 35 rute tenant dan 5 rute platform pada 1366 dan 390 px dalam keadaan galat; tidak ada kerusakan halaman dan tidak ada gulir horizontal. Dalam keadaan data kosong semua halaman daftar menampilkan keadaan kosong; sisa kerusakan hanya pada halaman yang menerima `[]` padahal API mengembalikan objek (artefak mock, bukan perilaku API nyata).
 
 Gerbang: tsc 0, eslint 0, vitest 196/196, vite build sukses.
+
+## Fase 7: Penutup (selesai)
+
+**Aksesibilitas**
+- `lib/token-contrast.test.ts` membaca nilai token langsung dari `index.css` dan menegaskan kontras WCAG di terang dan gelap: 18 pasangan teks >= 4,5:1, teks status pada badge bertint, angka di segmen KOL, dan batas kolom isian/cincin fokus >= 3:1. 48 pernyataan lulus.
+- **Penyimpangan dari design.md yang disengaja**: `--input` diubah dari `220 12% 78%` (1,7:1 di atas kartu) ke `220 10% 56%` (3,4:1), dan di gelap dari `224 12% 32%` (2,1:1) ke `224 12% 46%` (3,6:1), karena batas kolom isian harus >= 3:1 (WCAG 1.4.11) dan kriteria penerimaan menuntut WCAG 2.2 AA. Efek visual: garis kolom dan tombol outline sedikit lebih tegas. Jika pemilik produk lebih memilih garis lembut, ubah satu nilai itu (dan tes akan memberi tahu).
+- Pemindaian skrip atas semua `<Button>/<button>` ikon-saja: satu tanpa nama (hapus foto KTP) sudah diperbaiki; sisanya sudah ber-`aria-label`/`title`/teks sr-only.
+- KTP lightbox kini Dialog sungguhan (fokus terkurung, Esc, judul dan deskripsi), bukan overlay manual. Pemilih koperasi (TenantPickerDialog) memakai gaya baru.
+- Terverifikasi di peramban: tautan "Lewati ke konten" adalah perhentian Tab pertama dan memindahkan fokus ke konten; setelahnya fokus ke sidebar; `prefers-reduced-motion` menciutkan transisi (1e-5 dtk).
+- Sudah ada dari fase sebelumnya: aria pada dialog (Radix), tabel semantik + aria-label, toast (role status), meter (role meter + nilai), stepper (aria-current=step), nav aktif (aria-current=page), combobox palet/pemilih anggota.
+
+**White-label** (`lib/brand.ts`, `BrandStyle`, `WhitelabelConfigTab`): satu warna merek menimpa `--brand`, `--ring`, dan tint `--accent` (terang dan varian gelap); `--primary` tidak disentuh. Warna dengan kontras teks putih < 4,5:1 ditolak, pesan menyebut kontras terukur ("1,2:1, minimal 4,5:1"), tombol Simpan diblokir, dan warna gagal tidak pernah diterapkan. Pratinjau langsung saat mengetik. Warna tersimpan diterapkan ke seluruh aplikasi oleh `BrandStyle` untuk peran yang boleh membaca konfigurasi (peran lain memakai indigo bawaan karena endpoint konfigurasi memerlukan izin config:read). Diverifikasi di peramban dengan teal #0F766E (5,5:1 lulus), kuning #FFEB3B (1,2:1 ditolak), ungu #7C3AED (pratinjau). 12 tes di `brand.test.ts`.
+- **Logo**: TIDAK dikerjakan. `WhitelabelConfig` dan API tidak punya kolom/unggahan logo; membuatnya berarti mengubah API. Dicatat sebagai pertanyaan terbuka.
+
+**Audit sisa gaya lama**: `slate-/zinc-/gray-/green-/amber-/red-...` di luar situs pemasaran: 0 (sisa yang cocok hanya komentar dan `translate-x`); `bg-white`/`bg-black`: 0; `any`: 0; sidebar tanpa `bg-slate`; gaya inline hanya 15 nilai dinamis (lebar meter, indentasi, warna seri dari token). Heks tersisa hanya di placeholder/tes/pemeriksa warna dan di CSS situs pemasaran.
+- **Situs pemasaran/onboarding** (`features/onboarding`, Landing/Register/Checkout): tidak ada di mockup, jadi bukan ditulis ulang. Namun palet hijau hutannya dipindahkan secara mekanis ke ink + indigo (50 nilai warna di `styles.css` digeser huenya, `theme-color` meta jadi #0d0f15, gambar hero dan kanvas Spline diberi `hue-rotate`). Tata letaknya tidak berubah. Diverifikasi lewat tangkapan layar Landing.
+
+**Keadaan layar**: memuat (skeleton: PageLoading, DataTable, StatCard, panel perhatian, drawer, pemilih anggota), kosong (EmptyState di DataTable, laporan, POS, pencarian), galat (pesan manusiawi + Coba lagi di DataTable, panel beranda, drawer, Langganan, Tutup buku), terkunci (LockedFeature halaman dan inline; item sidebar), hanya-baca (Setor dan tarik, Jurnal manual: penjelasan peran). Halaman lama yang belum disentuh strukturnya mewarisi keadaan lewat DataTable/PageLoading; tidak semua layar lama punya kelima keadaan secara eksplisit (lihat risiko di laporan akhir).
+
+**Tes dan gerbang akhir**: tsc 0, eslint 0, vitest 257/257 (23 berkas; baseline sebelum UI v3: 132), vite build sukses.
