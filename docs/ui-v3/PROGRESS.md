@@ -57,10 +57,25 @@ Dashboard, Anggota, Piutang Anggota (`konsumen:read`, fitur `member_receivables`
 | Fase | Status | Commit |
 |---|---|---|
 | 0 Temuan | selesai | lihat git log |
-| 1 Token | belum | |
+| 1 Token | selesai | lihat git log |
 | 2 Primitif | belum | |
 | 3 Shell | belum | |
 | 4 DataTable | belum | |
 | 5 Halaman P1 | belum | |
 | 6 Halaman P2/P3 | belum | |
 | 7 Penutup | belum | |
+
+## Fase 1: Token (selesai)
+
+Berkas: `apps/frontend/src/index.css`, `apps/frontend/tailwind.config.js`.
+
+- `:root` dan `.dark` diganti sesuai design.md §2.1/§2.2. Token shadcn lama yang masih dipakai (`popover`, `secondary`, `destructive-foreground`) dipertahankan dengan nilai selaras. Token baru: `brand`, `brand-foreground`, `success`, `warning`, `info`, `hero-*`, `sidebar`/`sidebar-foreground`/`sidebar-active`, `chart-1..5`.
+- Token `sidebar-background/primary/accent/border/ring` gaya shadcn dihapus; tidak ada pemakai (dicek dengan grep).
+- Tailwind: warna baru, `fontFamily.sans` Manrope, radius (lg 14 / md 10 / sm 8), skala z-index bernama (sidebar 30 ... toast 70).
+- Manrope 400-800 diimpor global di `index.css` (sebelumnya hanya di MarketingShell).
+- `prefers-reduced-motion` dihormati global; aturan cetak `.print-area` bersifat opt-in lewat `body:has(.print-area)` agar Ctrl+P di halaman lain tidak kosong.
+- Keputusan: `--chart-3..5` ditambahkan (design.md hanya mendefinisikan 1-2) untuk sebaran KOL 5 segmen; nilainya dari token status.
+- Keputusan: situs pemasaran/onboarding (`features/onboarding/styles.css`, kelas `.marketing`) memakai palet hijau hutan sendiri dan BUKAN bagian tema aplikasi. Di luar cakupan "hijau tua" aplikasi; dicatat untuk Fase 7 (diaudit, tidak diubah tanpa mockup acuan).
+- Radius global berubah (sebelumnya 8px): komponen lama otomatis lebih bulat.
+
+Gerbang: tsc 0, eslint 0, vitest 132/132, vite build sukses.
