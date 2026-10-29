@@ -30,7 +30,8 @@ const STATUS: Record<ErrorCode, number> = {
   [ErrorCode.NOT_ASSIGNED_COLLECTOR]: 403,
   [ErrorCode.BATCH_NOT_OPEN]: 409,
   [ErrorCode.STALL_ALREADY_OCCUPIED]: 409,
-  [ErrorCode.NOT_IMPLEMENTED]: 501
+  [ErrorCode.NOT_IMPLEMENTED]: 501,
+  [ErrorCode.PAYMENT_REQUIRED]: 402
 };
 
 /**
@@ -88,6 +89,11 @@ export function featureNotEntitled(message: string, details?: Record<string, unk
 /** Pricing V2 volume limit hit; details carry what the UI needs to show a usage meter. */
 export function quotaExceeded(item: string, limit: number, used: number): AppError {
   return new AppError(ErrorCode.QUOTA_EXCEEDED, `Batas ${item} paket Anda tercapai (${used}/${limit})`, { item, limit, used });
+}
+
+/** The subscription is unpaid, cancelled or missing; the tenant must settle it before continuing. */
+export function paymentRequired(message: string, details?: Record<string, unknown>): AppError {
+  return new AppError(ErrorCode.PAYMENT_REQUIRED, message, details);
 }
 
 export function packageLimitExceeded(message: string): AppError {

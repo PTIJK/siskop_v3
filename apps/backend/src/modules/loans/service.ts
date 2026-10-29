@@ -9,6 +9,7 @@ import { loadOperatingCalendar } from "../../lib/operating-calendar.js";
 import { allocatePayment } from "../../lib/loan-allocation.js";
 import { REGULATORY_CAPS, validateRegulatoryRate, validateRelatedPartyLoanLimit } from "../../lib/regulatory-config.js";
 import { recalculateKOL } from "../../lib/kol.js";
+import { withQuota } from "../../lib/pricing/entitlements.js";
 import { postLoanDisbursement, postLoanPayment } from "../../lib/journal.js";
 import { resolveUnitId } from "../../lib/units.js";
 import { getModalSendiri } from "../reports/capital-service.js";
@@ -51,19 +52,21 @@ export async function listLoanConfigs(tenantId: string) {
 export async function createLoanConfig(tenantId: string, data: CreateLoanConfigInput) {
   validateRegulatoryRate("LOAN", data.rate);
   assertFrequencyMethodCompatible(data);
-  return db.loanConfig.create({
-    data: {
-      tenantId,
-      name: data.name,
-      type: data.type,
-      rateType: data.rateType,
-      rate: data.rate,
-      maxTermMonths: data.maxTermMonths,
-      installmentFrequency: data.installmentFrequency,
-      maxInstallments: data.maxInstallments,
-      isActive: true
-    }
-  });
+  return withQuota(tenantId, "LOAN_TYPES", (tx) =>
+    tx.loanConfig.create({
+      data: {
+        tenantId,
+        name: data.name,
+        type: data.type,
+        rateType: data.rateType,
+        rate: data.rate,
+        maxTermMonths: data.maxTermMonths,
+        installmentFrequency: data.installmentFrequency,
+        maxInstallments: data.maxInstallments,
+        isActive: true
+      }
+    })
+  );
 }
 
 export async function updateLoanConfig(tenantId: string, id: string, data: UpdateLoanConfigInput) {

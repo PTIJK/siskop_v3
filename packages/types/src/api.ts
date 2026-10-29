@@ -41,6 +41,8 @@ export const ErrorCode = {
   STALL_ALREADY_OCCUPIED: "STALL_ALREADY_OCCUPIED",
   // Payment gateway not connected yet (webhook and checkout stubs).
   NOT_IMPLEMENTED: "NOT_IMPLEMENTED",
+  // Subscription unpaid or missing; details: { reason, status }.
+  PAYMENT_REQUIRED: "PAYMENT_REQUIRED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

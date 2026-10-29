@@ -19,6 +19,7 @@ import { signAccessToken } from "../../middleware/auth.js";
 import { unauthorized, conflict, validationError } from "../../lib/errors.js";
 import { deriveUserRole, toPublicUser, type UserWithRole } from "../../lib/user-mapper.js";
 import { getEffectiveUnitIds } from "../../lib/unit-access.js";
+import { assertTenantFeature } from "../../lib/pricing/entitlements.js";
 import { recordAudit } from "../audit-log/service.js";
 
 import { assertFirebaseSession } from "../onboarding/firebase.js";
@@ -76,6 +77,9 @@ export async function sessionFor(user: UserWithRole, firebaseAuthTime?: number):
     // can do nothing, and an empty unitIds claim is rejected at verify time.
     throw unauthorized("Account is not assigned to any unit");
   }
+
+  // Collectors work the field app, which is its own add-on; every other role is unaffected.
+  if (user.role.name === "Kolektor") await assertTenantFeature(user.tenantId, "collector_access");
 
   const claims: AuthClaims = {
     userId: user.id,

@@ -5,6 +5,7 @@ import { AppError, notFound } from "../../lib/errors.js";
 import { generateAccountNumber, generateMemberId } from "../../lib/id-generator.js";
 import { recordAudit } from "../audit-log/service.js";
 import { getDefaultUnitId } from "../../lib/units.js";
+import { withQuota } from "../../lib/pricing/entitlements.js";
 import type { CreateMemberInput, ListMembersQueryInput, UpdateMemberInput } from "./schema.js";
 
 // `Prisma.$extends()`-wrapped clients (see lib/db.ts) don't carry the `omit`
@@ -93,7 +94,7 @@ export async function createMember(tenantId: string, data: CreateMemberInput) {
     getDefaultUnitId(tenantId)
   ]);
 
-  return db.$transaction(async (tx) => {
+  return withQuota(tenantId, "MEMBERS", async (tx) => {
     const member = await tx.member.create({
       data: {
         tenantId,

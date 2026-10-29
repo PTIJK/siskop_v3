@@ -6,6 +6,7 @@ import { AppError, notFound } from "../../lib/errors.js";
 import { postSavingTransaction } from "../../lib/journal.js";
 import { recordAudit } from "../audit-log/service.js";
 import { getDefaultUnitId } from "../../lib/units.js";
+import { withQuota } from "../../lib/pricing/entitlements.js";
 import { validateRegulatoryRate } from "../../lib/regulatory-config.js";
 import type {
   CreateSavingConfigInput,
@@ -30,18 +31,20 @@ export async function listSavingConfigs(tenantId: string) {
 
 export async function createSavingConfig(tenantId: string, data: CreateSavingConfigInput) {
   validateRegulatoryRate("SAVING", data.rate);
-  return db.savingConfig.create({
-    data: {
-      tenantId,
-      name: data.name,
-      type: data.type,
-      rateType: data.rateType,
-      rate: data.rate,
-      periodUnit: data.periodUnit,
-      isDefault: false,
-      isActive: true
-    }
-  });
+  return withQuota(tenantId, "SAVING_TYPES", (tx) =>
+    tx.savingConfig.create({
+      data: {
+        tenantId,
+        name: data.name,
+        type: data.type,
+        rateType: data.rateType,
+        rate: data.rate,
+        periodUnit: data.periodUnit,
+        isDefault: false,
+        isActive: true
+      }
+    })
+  );
 }
 
 export async function updateSavingConfig(tenantId: string, id: string, data: UpdateSavingConfigInput) {

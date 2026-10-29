@@ -1,6 +1,7 @@
 import type { BillingCycle, SubscriptionStatus } from "@prisma/client";
 import { db } from "../src/lib/db.js";
 import { clearCatalogCache, getPublishedCatalog } from "../src/lib/pricing/catalog.js";
+import { clearEntitlementCache } from "../src/lib/pricing/entitlements.js";
 import { buildSubscriptionSnapshot, quote } from "../src/lib/pricing/engine.js";
 import { createInvoice } from "../src/lib/pricing/invoice.js";
 import { loadPricingSeed, parsePricingSeed } from "../src/lib/pricing/seed.js";
@@ -115,3 +116,41 @@ export const paymentsOf = (tenantId: string) =>
 
 export const DAY = 86_400_000;
 export const daysFrom = (base: Date, days: number) => new Date(base.getTime() + days * DAY);
+
+/** Gives an already-registered tenant a stored subscription (no invoice), for enforcement tests. */
+export async function attachSubscription(
+  tenantId: string,
+  opts: {
+    packageCode?: string;
+    status?: SubscriptionStatus;
+    featureKeys?: string[];
+    limitOverrides?: Record<string, number | null>;
+    cycle?: BillingCycle;
+  } = {}
+) {
+  const published = await getPublishedCatalog();
+  const selection = {
+    packageCode: opts.packageCode ?? "enterprise",
+    billingCycle: opts.cycle ?? ("MONTHLY" as BillingCycle),
+    ...(opts.featureKeys ? { featureKeys: opts.featureKeys } : {})
+  };
+  const priced = quote(selection, published);
+  const pkg = await db.subscriptionPackage.findUniqueOrThrow({ where: { code: selection.packageCode } });
+  const sub = await db.tenantSubscription.create({
+    data: {
+      tenantId,
+      packageId: pkg.id,
+      pricingVersion: published.version,
+      billingCycle: selection.billingCycle,
+      selectedFeatureKeys: opts.featureKeys ?? [],
+      snapshot: buildSubscriptionSnapshot(selection, published) as never,
+      amountPerCycle: priced.amountPerCycle,
+      status: opts.status ?? "ACTIVE",
+      startsAt: new Date(),
+      createdVia: "ADMIN",
+      ...(opts.limitOverrides ? { limitOverrides: opts.limitOverrides } : {})
+    }
+  });
+  clearEntitlementCache(tenantId);
+  return sub;
+}

@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { db } from "../lib/db.js";
 import { featureNotEntitled } from "../lib/errors.js";
+import { enforcementMode } from "../lib/pricing/flags.js";
 import { authClaims } from "./auth.js";
 
 /**
@@ -19,6 +20,8 @@ async function tenantPackage(tenantId: string) {
 /** Gates Konfigurasi Akun (COA), Account Mappings, SHU config, and Laporan Regulasi on the "accounting" package module. */
 export async function requireAccountingEntitlement(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
+    // With Pricing V2 on, the central gate (middleware/enforcement.ts) decides from the subscription.
+    if (enforcementMode() === "on") return next();
     const pkg = await tenantPackage(authClaims(req).tenantId);
     if (!pkg?.modules?.includes("accounting")) {
       throw featureNotEntitled("Paket langganan Anda tidak mengaktifkan modul akuntansi");
@@ -32,6 +35,8 @@ export async function requireAccountingEntitlement(req: Request, _res: Response,
 /** Gates writes to WhitelabelConfig on the package's whitelabelEnabled flag. */
 export async function requireWhitelabelEntitlement(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
+    // With Pricing V2 on, the central gate (middleware/enforcement.ts) decides from the subscription.
+    if (enforcementMode() === "on") return next();
     const pkg = await tenantPackage(authClaims(req).tenantId);
     if (!pkg?.whitelabelEnabled) {
       throw featureNotEntitled("Paket langganan Anda tidak mengaktifkan fitur whitelabel");
@@ -51,6 +56,8 @@ export async function requireWhitelabelEntitlement(req: Request, _res: Response,
  */
 export async function requirePasarEntitlement(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
+    // With Pricing V2 on, the central gate (middleware/enforcement.ts) decides from the subscription.
+    if (enforcementMode() === "on") return next();
     const pkg = await tenantPackage(authClaims(req).tenantId);
     if (!pkg?.modules?.includes("pasar")) {
       throw featureNotEntitled("Paket langganan Anda tidak mengaktifkan modul pasar");

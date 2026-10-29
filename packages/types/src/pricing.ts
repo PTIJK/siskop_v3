@@ -100,6 +100,12 @@ export interface TenantSubscriptionInfo {
   features: string[];
   limits: PricingLimits;
   usage: { members: number; users: number; savingTypes: number; loanTypes: number };
+  /** Which Pricing V2 mode the server runs in; the app only locks things when this is "on". */
+  enforcement: "off" | "shadow" | "on";
+  /** The earliest unpaid invoice, or null when nothing is owed. */
+  openInvoice: { number: string; type: "REGISTRATION" | "RENEWAL" | "ADDON" | "SUPPORT"; total: string; dueDate: string } | null;
+  /** The owner's bank-transfer text, shown beside an open invoice. */
+  paymentInstructions: string | null;
 }
 
 // ── Owner console (platform admin) ───────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { tenantAccessRoutes } from "./modules/tenant-access/routes.js";
 import { onboardingRoutes } from "./modules/onboarding/routes.js";
+import { tenantEnforcement } from "./middleware/enforcement.js";
 import { paymentWebhookRoutes } from "./modules/payments/webhook-routes.js";
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import helmet from "helmet";
@@ -91,6 +92,8 @@ export function createApp(): Express {
     res.set("Cache-Control", "private, no-store");
     res.json({ success: true, data: req.workspace ?? null, meta: res.locals.meta });
   });
+  // Pricing V2: payment standing and package features for every tenant route below (off by default).
+  app.use("/api", tenantEnforcement());
   app.use("/api/tenant-domain", tenantDomainRoutes());
   app.use("/api/tenant-access", tenantAccessRoutes());
   app.use("/api/auth", authRoutes());

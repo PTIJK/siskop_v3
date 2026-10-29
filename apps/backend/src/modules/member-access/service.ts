@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import type { Prisma } from '@prisma/client'
 import type { MemberAccessResult } from '@siskop/types'
 import { db } from '../../lib/db.js'
+import { assertTenantFeature } from '../../lib/pricing/entitlements.js'
 import { withoutTenantScope } from '../../lib/tenant-scope.js'
 import { forbidden, unauthorized, validationError } from '../../lib/errors.js'
 import { centralUrl, tenantOrigin } from '../tenant-access/config.js'
@@ -82,6 +83,7 @@ export async function select(sessionId: string, membershipId: string): Promise<M
   })
   if (!grant) throw unauthorized()
   validateGrant(grant)
+  await assertTenantFeature(grant.member.tenantId, 'member_portal')
   const origin = tenantOrigin(grant.member.tenant.slug)
   const attempt = await db.memberLoginAttempt.create({
     data: { grantId: grant.id, origin, expiresAt: grant.session.expiresAt }
