@@ -78,6 +78,13 @@ describe("scheduled job HTTP contracts", () => {
     expect(response.body.data.auditThreshold.failed).toBe(1);
   });
 
+  it("makes a failed billing step retryable", async () => {
+    vi.mocked(runDailyScheduler).mockResolvedValue({ date: new Date().toISOString(), savingsInterest: { checked: 0, posted: 0, skipped: 0, failed: 0 }, loanKol: { checked: 0, failed: 0 }, auditThreshold: { checked: 0, notified: 0, failed: 0 }, auditLogPurge: { deleted: 0, failed: 0 }, billing: { renewals: { checked: 1, created: 0, failed: 1 }, notices: { checked: 0, sent: 0, failed: 0 }, pastDue: { checked: 0, marked: 0, failed: 0 }, purge: { checked: 0, deleted: 0, failed: 0 } } });
+    const response = await request(app()).post("/api/scheduler/run-daily").set("x-scheduler-token", "scheduler-test-only");
+    expect(response.status).toBe(503);
+    expect(response.body.data.billing.renewals.failed).toBe(1);
+  });
+
   it("returns a non-success status when Firebase recovery fails", async () => {
     vi.mocked(identityProvisioner.reconcile).mockRejectedValue(new Error("provider unavailable"));
     const response = await request(app()).post("/api/scheduler/reconcile-identities").set("x-scheduler-token", "scheduler-test-only");

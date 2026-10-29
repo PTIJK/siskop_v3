@@ -433,6 +433,8 @@ model Invoice {
   dueDate        DateTime
   gatewayRef     String?
   paymentUrl     String?
+  // Renewal mail progress: 0 none, 1 invoice mailed, 2 7-day reminder mailed.
+  noticeStage    Int                @default(0)
   createdAt      DateTime           @default(now())
 
   payments Payment[]

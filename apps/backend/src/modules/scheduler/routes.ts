@@ -59,7 +59,8 @@ export function schedulerRoutes(): Router {
         data.savingsInterest.failed > 0 ||
         data.loanKol.failed > 0 ||
         data.auditThreshold.failed > 0 ||
-        data.auditLogPurge.failed > 0;
+        data.auditLogPurge.failed > 0 ||
+        Object.values(data.billing ?? {}).some((step) => step.failed > 0);
       res.status(failed ? 503 : 200).json({
         success: !failed, data, meta: res.locals.meta,
         ...(failed ? { error: { code: ErrorCode.INTERNAL_ERROR, message: "Some daily calculations failed; retry this job." } } : {})

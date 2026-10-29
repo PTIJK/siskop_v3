@@ -27,7 +27,7 @@ export interface CreateInvoiceInput {
   subscriptionId: string;
   type: InvoiceType;
   /** The engine's quote for what is being billed. The invoice copies its amounts. */
-  quote: PricingQuote;
+  quote: Pick<PricingQuote, "subtotal" | "taxRate" | "taxAmount" | "total">;
   dueDate: Date;
   now?: Date;
 }

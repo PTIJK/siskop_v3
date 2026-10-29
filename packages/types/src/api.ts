@@ -39,6 +39,8 @@ export const ErrorCode = {
   // Koperasi pasar plan F5 — Sewa & retribusi. PAYMENT_EXCEEDS_REMAINING
   // (above) is reused for a Charge overpay.
   STALL_ALREADY_OCCUPIED: "STALL_ALREADY_OCCUPIED",
+  // Payment gateway not connected yet (webhook and checkout stubs).
+  NOT_IMPLEMENTED: "NOT_IMPLEMENTED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

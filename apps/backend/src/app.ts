@@ -1,5 +1,6 @@
 import { tenantAccessRoutes } from "./modules/tenant-access/routes.js";
 import { onboardingRoutes } from "./modules/onboarding/routes.js";
+import { paymentWebhookRoutes } from "./modules/payments/webhook-routes.js";
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import helmet from "helmet";
 import cors from "cors";
@@ -85,6 +86,7 @@ export function createApp(): Express {
   });
 
   app.use("/api/onboarding", onboardingRoutes());
+  app.use("/api/webhooks/payments", paymentWebhookRoutes());
   app.get("/api/workspace", (req, res) => {
     res.set("Cache-Control", "private, no-store");
     res.json({ success: true, data: req.workspace ?? null, meta: res.locals.meta });
