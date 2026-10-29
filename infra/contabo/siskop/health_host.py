@@ -25,8 +25,7 @@ def main():
     now = datetime.now(timezone.utc); healthy = True
     try:
         validate_container()
-        values = dict(line.split('=', 1) for line in (ROOT / 'secrets/api.env').read_text().splitlines() if line and not line.startswith('#'))
-        health(values['SISKOP_RELEASE_ID'])
+        health()
         command(['openssl', 'x509', '-in', str(ROOT / 'letsencrypt/live/siskop-api.inovasijayakarsa.id/fullchain.pem'), '-checkend', '604800', '-noout'])
         disk = os.statvfs(ROOT)
         if disk.f_bavail * disk.f_frsize < 5 * 1024 ** 3: healthy = False

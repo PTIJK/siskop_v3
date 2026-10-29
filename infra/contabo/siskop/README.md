@@ -112,3 +112,22 @@ Email delivery was accepted by Resend for the user-approved test recipient. Xend
 Normal Git pushes to `main` use the tested Contabo release path. Do not rerun preparation-only `bootstrap_host.py`, `restore_initial.py`, `configure_runtime.py` or the legacy shared-host ingress installer against the live deployment. In particular, the old Cloud Run service now contains only forwarding configuration; it is no longer a source for API runtime bootstrapping. Use the encrypted runtime recovery manifest and its explicit Secret Manager references when rebuilding.
 
 The public maintenance gate was opened only after the successful coordinated release and authoritative off-host restore proof. Supabase stays read-only. Current database authority and traffic state are recorded in `/srv/siskop/staging/database-authoritative.json` and `traffic-switched.json`, with the deployed build in `release-state/last-deployed.json`.
+
+## API handoff during releases
+
+The deployer starts `siskop-api-candidate` on loopback port 18082 with the same
+resource limits and credentials as the regular API. It checks the published
+catalog and exact release ID before switching the SISKOP proxy to its private
+container IP. Nginx reloads gracefully; the deployer waits for old workers to
+finish before replacing the regular API. After that API passes readiness,
+traffic switches back and the candidate is stopped. No mutation requests are
+retried. Two API instances temporarily share the same database; migrations must
+remain compatible with the previous application version.
+
+Before enabling this deployer on an existing host, install the matching
+`deploy_host.py` and `health_host.py`, create `proxy-state/upstream.conf` containing
+`set $siskop_upstream api:8080;`, and update `proxy/nginx.conf` from `proxy.conf`.
+Validate and gracefully reload only `siskop-proxy-staging`. The health reporter
+checks the API named in `active-api.json` during the handoff. Keep previous host
+files for recovery. An interrupted handoff retains its serving candidate; inspect
+`active-api.json` and recover routing before starting another release.
