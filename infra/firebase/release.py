@@ -186,9 +186,9 @@ def gcloud(*args):
 def check_api(cloud, origin):
     if cloud.public_json(origin + "/api/health").get("success") is not True:
         raise RuntimeError("API health check failed")
-    catalog = cloud.public_json(origin + "/api/onboarding/packages")
-    if catalog.get("success") is not True or not catalog.get("data", {}).get("checkoutAvailable") or not catalog["data"].get("packages"):
-        raise RuntimeError("Database/package checkout readiness check failed")
+    catalog = cloud.public_json(origin + "/api/public/pricing")
+    if catalog.get("success") is not True or not catalog.get("data", {}).get("version") or not catalog["data"].get("packages"):
+        raise RuntimeError("Published pricing catalog readiness check failed")
     if os.environ.get("RELEASE_TENANT_LOGIN_SELECTION_ENABLED", "false") == "true":
         routing = cloud.public_json(origin + "/api/tenant-access/config")
         config = routing.get("data") or {}

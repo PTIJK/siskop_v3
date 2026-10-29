@@ -109,7 +109,7 @@ class ImageRetentionTests(unittest.TestCase):
         cloud.read_lock.return_value = ({"buildId": BUILD}, "8")
         cloud.public_json.side_effect = [
             {"buildId": BUILD, "commit": "commit"}, {"success": True},
-            {"success": True, "data": {"checkoutAvailable": True, "packages": [{}]}}]
+            {"success": True, "data": {"version": 1, "packages": [{}]}}]
         with patch.dict(release.os.environ, {"RELEASE_TENANT_HOSTING": "false", "RELEASE_TENANT_LOGIN_SELECTION_ENABLED": "false"}), \
              patch.object(release, "activate_schedulers") as activate, \
              patch.object(release, "finish_image_retention", side_effect=RuntimeError("retention failed")):

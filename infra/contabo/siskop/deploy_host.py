@@ -72,13 +72,13 @@ def write_private(path, value):
 
 def health(revision):
     values = dict(line.split('=', 1) for line in (ROOT / 'secrets/api.env').read_text().splitlines() if line and not line.startswith('#'))
-    path = '/api/onboarding/packages'
+    path = '/api/public/pricing'
     stamp = str(int(time.time() * 1000))
     signature = base64.urlsafe_b64encode(hmac.new(values['CENTRAL_GATEWAY_SECRET'].encode(), f'central\n{stamp}\nGET\n{path}'.encode(), hashlib.sha256).digest()).decode().rstrip('=')
     request = Request('http://127.0.0.1:18081' + path, headers={'x-siskop-central-time': stamp, 'x-siskop-central-signature': signature})
     with urlopen(request, timeout=10) as response:
         data = json.load(response)
-    if data.get('success') is not True or not data.get('data', {}).get('checkoutAvailable') or not data['data'].get('packages'):
+    if data.get('success') is not True or not data.get('data', {}).get('version') or not data['data'].get('packages'):
         raise ValueError('New SISKOP API failed database readiness')
     # Check the actual process environment, never the desired env file alone.
     observed = command(['docker', 'exec', 'siskop-api-staging', 'node', '-e', 'process.stdout.write(process.env.SISKOP_RELEASE_ID || "")']).decode()
