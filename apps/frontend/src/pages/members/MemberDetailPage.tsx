@@ -180,7 +180,7 @@ export function MemberDetailPage() {
               <p className="text-2xl font-bold">{formatRupiah(totalSavings)}</p>
             </div>
             {can("savings", "create") && (
-              <Button onClick={() => navigate(`/savings/new?memberId=${id}`)}>
+              <Button onClick={() => navigate(`/savings/new?mode=buka&memberId=${id}`)}>
                 <PiggyBank className="mr-2 h-4 w-4" /> Buka Rekening
               </Button>
             )}

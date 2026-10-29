@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { BmppHeadroom, CreateLoanResponse, LoanConfig, Member, PreviewScheduleResult } from "@siskop/types";
 import { apiFetch, apiFetchPage, apiPost, ApiRequestError } from "@/api/client";
-import { formatRupiah } from "@/lib/format";
+import { formatRupiah, formatTanggalPendek } from "@/lib/format";
 import { addMonths, differenceInCalendarDays } from "date-fns";
 import { hitungAngsuranHarian, hitungAngsuranKonvensional, hitungAngsuranSyariah, type LoanCalculation } from "@/lib/loan-calc";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -13,11 +13,17 @@ import { FormError } from "@/components/shared/FormError";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Stepper } from "@/components/shared/Stepper";
+import { GlossaryTerm } from "@/components/shared/GlossaryTerm";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, XCircle, Search, ChevronRight, ChevronLeft } from "lucide-react";
+
+const STEPS = ["Anggota", "Produk dan syarat", "Jadwal", "Tinjau"] as const;
 
 interface MemberResult {
   id: string;
@@ -50,6 +56,8 @@ export function NewLoanPage() {
   const { toast } = useToast();
 
   const [step, setStep] = useState(1);
+  const [reviewed, setReviewed] = useState(false);
+  const [stepError, setStepError] = useState("");
   const [configs, setConfigs] = useState<LoanConfig[]>([]);
   const [memberSearch, setMemberSearch] = useState("");
   const [memberResults, setMemberResults] = useState<MemberResult[]>([]);
@@ -77,6 +85,7 @@ export function NewLoanPage() {
     handleSubmit,
     watch,
     setValue,
+    trigger,
     formState: { errors, isSubmitting }
   } = useForm<Step2Form>({
     resolver: zodResolver(step2Schema),
@@ -279,27 +288,48 @@ export function NewLoanPage() {
 
   const onStep2Submit = (data: Step2Form) => submitLoan(data, false);
 
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Ajukan Pinjaman" breadcrumb={[{ label: "Pinjaman", href: "/loans" }, { label: "Ajukan Pinjaman" }]} />
+  // Step 2 -> 3: the same field checks the single submit used to do, moved to the "Lanjut" button.
+  const goToSchedule = async () => {
+    setStepError("");
+    const valid = await trigger();
+    if (!valid) return;
+    if (isMonthly && !termMonths) {
+      setStepError("Tenor (bulan) wajib diisi");
+      return;
+    }
+    if (!isMonthly && !installmentCount) {
+      setStepError("Jumlah cicilan wajib diisi");
+      return;
+    }
+    setStep(3);
+  };
 
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span className={step >= 1 ? "font-medium text-foreground" : ""}>1. Pilih Anggota</span>
-        <ChevronRight className="h-4 w-4" />
-        <span className={step >= 2 ? "font-medium text-foreground" : ""}>2. Detail Pinjaman</span>
-      </div>
+  const scheduleReady = isMonthly ? calc !== null : schedulePreview !== null;
+  const firstInstallment = schedulePreview?.installments[0]
+    ? Number(schedulePreview.installments[0].principalDue) + Number(schedulePreview.installments[0].interestDue)
+    : null;
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Pinjaman baru"
+        description="Empat langkah: pilih anggota, atur produk dan syarat, periksa jadwal, lalu tinjau dan ajukan."
+        breadcrumb={[{ label: "Pinjaman", href: "/loans" }, { label: "Pinjaman baru" }]}
+      />
+
+      <Stepper steps={STEPS} current={step - 1} />
 
       {step === 1 && (
         <Card className="max-w-xl">
           <CardHeader>
-            <CardTitle className="text-base">Pilih Anggota</CardTitle>
+            <CardTitle>Pilih anggota</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {selectedMember ? (
-              <div className="rounded-md border p-4">
+              <div className="rounded-[14px] border p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="font-medium">{selectedMember.fullName}</p>
+                    <p className="font-extrabold">{selectedMember.fullName}</p>
                     <p className="font-mono text-xs text-muted-foreground">{selectedMember.memberId}</p>
                   </div>
                   <Button
@@ -312,14 +342,14 @@ export function NewLoanPage() {
                   </Button>
                 </div>
                 {hasPokokSaving !== null && (
-                  <div className={`mt-3 flex items-center gap-2 text-sm ${hasPokokSaving ? "text-green-700" : "text-red-700"}`}>
+                  <div className={`mt-3 flex items-center gap-2 text-sm font-semibold ${hasPokokSaving ? "text-success" : "text-destructive"}`}>
                     {hasPokokSaving ? (
                       <>
-                        <CheckCircle className="h-4 w-4" /> Memiliki simpanan pokok aktif
+                        <CheckCircle className="h-4 w-4" aria-hidden="true" /> Memiliki simpanan pokok aktif
                       </>
                     ) : (
                       <>
-                        <XCircle className="h-4 w-4" /> Belum memiliki simpanan pokok
+                        <XCircle className="h-4 w-4" aria-hidden="true" /> Belum memiliki simpanan pokok
                       </>
                     )}
                   </div>
@@ -327,10 +357,11 @@ export function NewLoanPage() {
               </div>
             ) : (
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="pointer-events-none absolute left-3.5 top-[13px] h-[18px] w-[18px] text-muted-foreground" aria-hidden="true" />
                 <Input
                   placeholder="Cari nama anggota..."
-                  className="pl-9"
+                  aria-label="Cari anggota"
+                  className="pl-10"
                   value={memberSearch}
                   onChange={(e) => {
                     setMemberSearch(e.target.value);
@@ -338,15 +369,15 @@ export function NewLoanPage() {
                   }}
                 />
                 {memberResults.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full rounded-md border bg-background shadow-md">
+                  <div className="mt-1 divide-y overflow-hidden rounded-[14px] border bg-card">
                     {memberResults.map((m) => (
                       <button
                         key={m.id}
                         type="button"
-                        className="flex w-full flex-col items-start px-4 py-2.5 text-left hover:bg-muted"
+                        className="flex min-h-[56px] w-full flex-col items-start justify-center px-4 py-2 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
                         onClick={() => selectMember(m)}
                       >
-                        <span className="text-sm font-medium">{m.fullName}</span>
+                        <span className="text-sm font-bold">{m.fullName}</span>
                         <span className="font-mono text-xs text-muted-foreground">{m.memberId}</span>
                       </button>
                     ))}
@@ -368,54 +399,54 @@ export function NewLoanPage() {
               </div>
             )}
             <Button className="w-full" disabled={!canContinue} onClick={() => { if (canContinue) setStep(2); }}>
-              Lanjut <ChevronRight className="ml-1 h-4 w-4" />
+              Lanjut <ChevronRight aria-hidden="true" />
             </Button>
           </CardContent>
         </Card>
       )}
 
-      {step === 2 && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Detail Pinjaman</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit(onStep2Submit)} className="space-y-5">
-                {apiError && <FormError error={apiError} />}
+      {step >= 2 && (
+        <form onSubmit={handleSubmit(onStep2Submit)} noValidate className="space-y-4">
+          {apiError && <FormError error={apiError} />}
 
+          {step === 2 && (
+            <Card className="max-w-2xl">
+              <CardHeader>
+                <CardTitle>Produk dan syarat</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
                 {bmpp?.isRelatedParty && (
-                  <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                    <p className="font-medium">Anggota ini pengurus/pengawas — batas pinjaman pihak terkait berlaku</p>
-                    <p className="text-xs">
-                      Pinjaman aktif {formatRupiah(bmpp.existingPrincipal)} dari batas {formatRupiah(bmpp.limit)} (10% modal
-                      sendiri{bmpp.basis === "UNIT" ? " unit" : ""}, Permenkop UKM 8/2023). Sisa ruang:{" "}
-                      <strong>{formatRupiah(bmpp.headroom)}</strong>.
+                  <div role="note" className="rounded-[12px] border border-warning/50 bg-warning/10 p-3 text-sm">
+                    <p className="font-bold text-warning">Anggota ini pengurus/pengawas: batas pinjaman pihak terkait berlaku</p>
+                    <p className="mt-0.5 text-xs">
+                      Pinjaman aktif {formatRupiah(bmpp.existingPrincipal)} dari batas {formatRupiah(bmpp.limit)} (10% <GlossaryTerm term="Modal Sendiri" />
+                      {bmpp.basis === "UNIT" ? " unit" : ""}, Permenkop UKM 8/2023). Sisa ruang: <strong>{formatRupiah(bmpp.headroom)}</strong>.
                     </p>
                   </div>
                 )}
                 {bmpp && !bmpp.isRelatedParty && Number(bmpp.modalSendiri) > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Batas konsentrasi pinjaman (BMPP 15% modal sendiri{bmpp.basis === "UNIT" ? " unit" : ""}): sisa ruang{" "}
+                    Batas konsentrasi pinjaman (<GlossaryTerm term="BMPP" /> 15% modal sendiri{bmpp.basis === "UNIT" ? " unit" : ""}): sisa ruang{" "}
                     {formatRupiah(bmpp.headroom)} dari {formatRupiah(bmpp.limit)}.
                   </p>
                 )}
 
                 <div className="space-y-1.5">
-                  <Label>Jenis Pembiayaan *</Label>
+                  <Label htmlFor="loan-config">Jenis pembiayaan</Label>
                   <Select
+                    value={watch("loanConfigId") ?? ""}
                     onValueChange={(v) => {
-                      setValue("loanConfigId", v);
+                      setValue("loanConfigId", v, { shouldValidate: true });
                       setSelectedConfig(configs.find((c) => c.id === v) ?? null);
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="loan-config" aria-invalid={errors.loanConfigId ? true : undefined}>
                       <SelectValue placeholder="Pilih jenis" />
                     </SelectTrigger>
                     <SelectContent>
                       {configs.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
-                          {c.name} — {c.rateType} {c.rate}% —{" "}
+                          {c.name} · {c.rateType} {c.rate}% ·{" "}
                           {c.installmentFrequency === "MONTHLY"
                             ? `Maks ${c.maxTermMonths} bln`
                             : `${c.installmentFrequency === "DAILY" ? "Harian" : "Mingguan"}${c.maxInstallments ? `, maks ${c.maxInstallments}x` : ""}`}
@@ -423,20 +454,27 @@ export function NewLoanPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  {errors.loanConfigId && <p className="text-xs text-destructive">{errors.loanConfigId.message}</p>}
+                  {errors.loanConfigId && <p role="alert" className="text-[12.5px] font-semibold text-destructive">{errors.loanConfigId.message}</p>}
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Nominal Pinjaman (Rp) *</Label>
-                  <Input type="number" placeholder="10000000" min="1" {...register("principalAmount")} />
-                  {errors.principalAmount && <p className="text-xs text-destructive">{errors.principalAmount.message}</p>}
+                  <Label htmlFor="loan-principal">Nominal pinjaman</Label>
+                  <MoneyInput
+                    id="loan-principal"
+                    value={principal ?? ""}
+                    onValueChange={(digits) => setValue("principalAmount", digits, { shouldValidate: true })}
+                    error={errors.principalAmount?.message}
+                    quickAmounts={[5_000_000, 10_000_000, 25_000_000, 50_000_000]}
+                  />
                 </div>
 
                 {isMonthly ? (
                   <div className="space-y-1.5">
-                    <Label>Tenor (bulan) *</Label>
+                    <Label htmlFor="loan-term">Tenor (bulan)</Label>
                     <Input
+                      id="loan-term"
                       type="number"
+                      inputMode="numeric"
                       placeholder={`1–${selectedConfig?.maxTermMonths ?? 60}`}
                       min="1"
                       max={selectedConfig?.maxTermMonths}
@@ -445,9 +483,11 @@ export function NewLoanPage() {
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    <Label>Jumlah Cicilan ({selectedConfig?.installmentFrequency === "DAILY" ? "hari" : "minggu"}) *</Label>
+                    <Label htmlFor="loan-count">Jumlah cicilan ({selectedConfig?.installmentFrequency === "DAILY" ? "hari" : "minggu"})</Label>
                     <Input
+                      id="loan-count"
                       type="number"
+                      inputMode="numeric"
                       placeholder={selectedConfig?.maxInstallments ? `1–${selectedConfig.maxInstallments}` : undefined}
                       min="1"
                       max={selectedConfig?.maxInstallments ?? undefined}
@@ -457,115 +497,181 @@ export function NewLoanPage() {
                 )}
 
                 <div className="space-y-1.5">
-                  <Label>Tanggal Cair *</Label>
-                  <Input type="date" {...register("disbursedAt")} />
+                  <Label htmlFor="loan-date">Tanggal cair</Label>
+                  <Input id="loan-date" type="date" {...register("disbursedAt")} />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 rounded-md border p-3">
-                  <div className="col-span-2 text-xs font-medium text-muted-foreground">
-                    Ubah Rate (opsional) — kosongkan untuk memakai rate produk ({selectedConfig?.rate ?? "-"}%)
+                <fieldset className="grid grid-cols-1 gap-4 rounded-[12px] border p-3 sm:grid-cols-2">
+                  <legend className="px-1 text-xs font-semibold text-muted-foreground">
+                    Ubah rate (opsional): kosongkan untuk memakai rate produk ({selectedConfig?.rate ?? "-"}%)
+                  </legend>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loan-rate">Rate (%)</Label>
+                    <Input id="loan-rate" type="number" step="0.01" placeholder={selectedConfig?.rate} {...register("rate")} />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Rate (%)</Label>
-                    <Input type="number" step="0.01" placeholder={selectedConfig?.rate} {...register("rate")} />
+                    <Label htmlFor="loan-rate-note">Catatan {rateOverride && "(wajib)"}</Label>
+                    <Input id="loan-rate-note" placeholder="Alasan perubahan rate" {...register("rateNote")} />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Catatan {rateOverride && "*"}</Label>
-                    <Input placeholder="Alasan perubahan rate" {...register("rateNote")} />
-                  </div>
-                </div>
+                </fieldset>
 
-                <div className="flex gap-3">
+                {stepError && <FormError error={stepError} />}
+
+                <div className="sticky bottom-0 -mx-[18px] -mb-[18px] flex gap-3 rounded-b-[16px] border-t bg-card p-4">
                   <Button type="button" variant="outline" onClick={() => setStep(1)} className="flex-1">
-                    <ChevronLeft className="mr-1 h-4 w-4" /> Kembali
+                    <ChevronLeft aria-hidden="true" /> Kembali
                   </Button>
-                  <Button type="submit" className="flex-1" disabled={isSubmitting}>
-                    {isSubmitting ? "Memproses..." : "Ajukan Pinjaman"}
+                  <Button type="button" className="flex-1" onClick={() => void goToSchedule()}>
+                    Lanjut <ChevronRight aria-hidden="true" />
                   </Button>
                 </div>
-              </form>
-            </CardContent>
-          </Card>
-
-          {calc && (
-            <Card className="bg-muted/30">
-              <CardHeader>
-                <CardTitle className="text-base">Simulasi Angsuran</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="space-y-3 text-sm">
-                  {[
-                    { label: "Pokok Pinjaman", value: formatRupiah(parseFloat(principal)) },
-                    {
-                      label:
-                        selectedConfig?.rateType === "HARIAN"
-                          ? "Bunga Harian"
-                          : selectedConfig?.type === "SYARIAH"
-                            ? "Margin"
-                            : "Bunga",
-                      value: formatRupiah(calc.totalInterest)
-                    },
-                    { label: "Total Kewajiban", value: formatRupiah(calc.totalAmount), bold: true },
-                    { label: "Angsuran per Bulan", value: formatRupiah(calc.monthlyPayment), highlight: true },
-                    { label: "Tenor", value: `${termMonths} bulan` }
-                  ].map((item) => (
-                    <div key={item.label} className={`flex justify-between ${item.bold ? "border-t pt-3 font-semibold" : ""}`}>
-                      <span className="text-muted-foreground">{item.label}</span>
-                      <span className={item.highlight ? "text-lg font-bold text-primary" : ""}>{item.value}</span>
-                    </div>
-                  ))}
-                </dl>
               </CardContent>
             </Card>
           )}
 
-          {!isMonthly && (
-            <Card className="bg-muted/30">
+          {step === 3 && (
+            <Card className="max-w-2xl">
               <CardHeader>
-                <CardTitle className="text-base">Pratinjau Jadwal Cicilan</CardTitle>
+                <CardTitle>Jadwal angsuran</CardTitle>
               </CardHeader>
-              <CardContent>
-                {previewError && <FormError error={previewError} />}
-                {!schedulePreview && !previewError && (
-                  <p className="text-sm text-muted-foreground">Isi nominal dan jumlah cicilan untuk melihat jadwal.</p>
-                )}
-                {schedulePreview && (
+              <CardContent className="space-y-5">
+                {isMonthly ? (
+                  calc ? (
+                    <dl className="divide-y text-sm">
+                      {[
+                        { label: "Pokok pinjaman", value: formatRupiah(parseFloat(principal)) },
+                        {
+                          label:
+                            selectedConfig?.rateType === "HARIAN"
+                              ? "Bunga harian"
+                              : selectedConfig?.type === "SYARIAH"
+                                ? "Margin"
+                                : "Bunga",
+                          value: formatRupiah(calc.totalInterest)
+                        },
+                        { label: "Total kewajiban", value: formatRupiah(calc.totalAmount), bold: true },
+                        { label: "Angsuran per bulan", value: formatRupiah(calc.monthlyPayment), highlight: true },
+                        { label: "Tenor", value: `${termMonths} bulan` }
+                      ].map((item) => (
+                        <div key={item.label} className={`flex justify-between gap-4 py-2.5 ${item.bold ? "font-extrabold" : ""}`}>
+                          <dt className="text-muted-foreground">{item.label}</dt>
+                          <dd className={`tabular-nums ${item.highlight ? "text-xl font-extrabold" : "font-bold"}`}>{item.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Jadwal belum bisa dihitung. Kembali dan lengkapi nominal, tenor, dan jenis pembiayaan.</p>
+                  )
+                ) : (
                   <div className="space-y-3 text-sm">
-                    <div className="flex justify-between border-b pb-3">
-                      <span className="text-muted-foreground">Total Kewajiban</span>
-                      <span className="font-semibold">{formatRupiah(schedulePreview.totalAmount)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total Jasa/Bunga</span>
-                      <span>{formatRupiah(schedulePreview.totalInterest)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Cicilan Pertama</span>
-                      <span className="text-lg font-bold text-primary">
-                        {formatRupiah(
-                          Number(schedulePreview.installments[0]?.principalDue ?? 0) +
-                            Number(schedulePreview.installments[0]?.interestDue ?? 0)
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Jatuh Tempo Pertama</span>
-                      <span>{schedulePreview.installments[0]?.dueDate}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Jatuh Tempo Terakhir</span>
-                      <span>{schedulePreview.installments.at(-1)?.dueDate}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {schedulePreview.installments.length} cicilan, dibulatkan ke Rp500 terdekat (cicilan terakhir
-                      menyerap sisa).
-                    </p>
+                    {previewError && <FormError error={previewError} />}
+                    {!schedulePreview && !previewError && (
+                      <p role="status" className="text-muted-foreground">Menghitung jadwal cicilan…</p>
+                    )}
+                    {schedulePreview && (
+                      <dl className="divide-y">
+                        <div className="flex justify-between gap-4 py-2.5 font-extrabold">
+                          <dt className="text-muted-foreground">Total kewajiban</dt>
+                          <dd className="tabular-nums">{formatRupiah(schedulePreview.totalAmount)}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4 py-2.5">
+                          <dt className="text-muted-foreground">Total jasa/bunga</dt>
+                          <dd className="font-bold tabular-nums">{formatRupiah(schedulePreview.totalInterest)}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4 py-2.5">
+                          <dt className="text-muted-foreground">Cicilan pertama</dt>
+                          <dd className="text-xl font-extrabold tabular-nums">{formatRupiah(firstInstallment ?? 0)}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4 py-2.5">
+                          <dt className="text-muted-foreground">Jatuh tempo pertama</dt>
+                          <dd className="font-bold">{schedulePreview.installments[0]?.dueDate}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4 py-2.5">
+                          <dt className="text-muted-foreground">Jatuh tempo terakhir</dt>
+                          <dd className="font-bold">{schedulePreview.installments.at(-1)?.dueDate}</dd>
+                        </div>
+                      </dl>
+                    )}
+                    {schedulePreview && (
+                      <p className="text-xs text-muted-foreground">
+                        {schedulePreview.installments.length} cicilan, dibulatkan ke Rp500 terdekat (cicilan terakhir menyerap sisa).
+                      </p>
+                    )}
                   </div>
                 )}
+
+                <div className="sticky bottom-0 -mx-[18px] -mb-[18px] flex gap-3 rounded-b-[16px] border-t bg-card p-4">
+                  <Button type="button" variant="outline" onClick={() => setStep(2)} className="flex-1">
+                    <ChevronLeft aria-hidden="true" /> Kembali
+                  </Button>
+                  <Button type="button" className="flex-1" disabled={!scheduleReady} onClick={() => setStep(4)}>
+                    Lanjut <ChevronRight aria-hidden="true" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
-        </div>
+
+          {step === 4 && (
+            <Card className="max-w-2xl">
+              <CardHeader>
+                <CardTitle>Tinjau pengajuan</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <dl className="divide-y rounded-[12px] border px-3 text-sm">
+                  <div className="flex justify-between gap-4 py-2.5">
+                    <dt className="text-muted-foreground">Anggota</dt>
+                    <dd className="text-right font-bold">
+                      {selectedMember?.fullName} <span className="font-mono text-xs font-medium text-muted-foreground">{selectedMember?.memberId}</span>
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2.5">
+                    <dt className="text-muted-foreground">Produk</dt>
+                    <dd className="text-right font-bold">{selectedConfig?.name}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2.5">
+                    <dt className="text-muted-foreground">Nominal</dt>
+                    <dd className="text-right text-lg font-extrabold tabular-nums">{formatRupiah(parseFloat(principal || "0"))}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2.5">
+                    <dt className="text-muted-foreground">{isMonthly ? "Tenor" : "Jumlah cicilan"}</dt>
+                    <dd className="text-right font-bold">{isMonthly ? `${termMonths} bulan` : `${installmentCount} ${selectedConfig?.installmentFrequency === "DAILY" ? "hari" : "minggu"}`}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2.5">
+                    <dt className="text-muted-foreground">{isMonthly ? "Angsuran per bulan" : "Cicilan pertama"}</dt>
+                    <dd className="text-right font-extrabold tabular-nums">
+                      {isMonthly ? formatRupiah(calc?.monthlyPayment ?? 0) : formatRupiah(firstInstallment ?? 0)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2.5">
+                    <dt className="text-muted-foreground">Total kewajiban</dt>
+                    <dd className="text-right font-bold tabular-nums">{formatRupiah(isMonthly ? (calc?.totalAmount ?? 0) : (schedulePreview?.totalAmount ?? 0))}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4 py-2.5">
+                    <dt className="text-muted-foreground">Tanggal cair</dt>
+                    <dd className="text-right font-bold">{disbursedAt ? formatTanggalPendek(disbursedAt) : "-"}</dd>
+                  </div>
+                </dl>
+
+                <div className="flex items-start gap-3 rounded-[12px] border p-3">
+                  <Checkbox id="loan-reviewed" checked={reviewed} onCheckedChange={(v) => setReviewed(v === true)} className="mt-0.5" />
+                  <Label htmlFor="loan-reviewed" className="cursor-pointer text-sm font-semibold leading-snug">
+                    Saya sudah memeriksa data anggota, simpanan pokok, dan syarat pinjaman di atas.
+                  </Label>
+                </div>
+
+                <div className="sticky bottom-0 -mx-[18px] -mb-[18px] flex gap-3 rounded-b-[16px] border-t bg-card p-4">
+                  <Button type="button" variant="outline" onClick={() => setStep(3)} className="flex-1">
+                    <ChevronLeft aria-hidden="true" /> Kembali
+                  </Button>
+                  <Button type="submit" className="flex-1" disabled={!reviewed} loading={isSubmitting}>
+                    {isSubmitting ? "Memproses…" : "Ajukan pinjaman"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </form>
       )}
 
       <Dialog open={bmppWarning !== null} onOpenChange={(open) => !open && setBmppWarning(null)}>

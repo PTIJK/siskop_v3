@@ -61,7 +61,7 @@ Dashboard, Anggota, Piutang Anggota (`konsumen:read`, fitur `member_receivables`
 | 2 Primitif | selesai | lihat git log |
 | 3 Shell | selesai | lihat git log |
 | 4 DataTable | selesai | lihat git log |
-| 5 Halaman P1 | belum | |
+| 5 Halaman P1 | selesai | lihat git log |
 | 6 Halaman P2/P3 | belum | |
 | 7 Penutup | belum | |
 
@@ -135,3 +135,22 @@ Pemeriksaan peramban nyata (Puppeteer + mock /api, Vite 3200, tanpa backend/DB):
 - 390px: tombol menu, tanpa gulir horizontal, tabel jadi kartu, drawer menu dengan tautan >= 44px, Esc menutup.
 
 Gerbang: tsc 0, eslint 0, vitest 171/171, vite build sukses.
+
+## Fase 5: Halaman prioritas 1 (selesai)
+
+**Beranda** (`pages/dashboard/`): `AttentionPanel` + `attention.ts` ("Perlu perhatian hari ini"), `TrendChart` (garis, label di ujung, padat vs putus-putus, tabel pengganti, ringkasan untuk pembaca layar), `KolDistribution` (lima segmen berangka + legenda tertulis), KPI memakai `formatRupiahRingkas` (nilai penuh di tooltip dan teks sr-only), warna grafik dari token. Pemilih unit halaman dihapus karena kini di Topbar.
+Sumber data panel (semua nyata, tidak ada yang dikarang): `/dashboard/summary` (pinjaman macet), `/dashboard/loan-quality` (KOL 2-4 + NPL), `/members/registration-requests?status=PENDING` (jumlah pendaftaran menunggu), `/dashboard/pasar` (batch belum diverifikasi, hanya bila fitur ada), `/config/subscription` (faktur terbuka), `/dashboard/capital` (rasio modal < 10%, konsentrasi simpanan). Tugas muncul hanya bila angkanya > 0 dan peran berizin; diurutkan risiko (mendesak, perlu ditinjau, info). Tidak tersedia di API sehingga TIDAK ditampilkan: "jurnal belum diposting" dan "Transaksi terakhir" (tidak ada endpoint).
+**Anggota**: `MemberDrawer` (klik baris membuka drawer: simpanan per jenis, pinjaman + KOL, Setor/Tarik/Pinjaman baru sesuai izin, "Halaman lengkap"); tombol Detail/Edit tetap. Filter chip Aktif/Nonaktif TIDAK dipasang: `GET /members?isActive=` memakai `z.coerce.boolean()` sehingga "false" terbaca true. Itu bug backend, di luar cakupan presentasi; dicatat untuk tim.
+**Setor dan tarik** (`pages/savings/`): /savings/new kini memuat dua pekerjaan: Setor dan tarik (default) dan Buka rekening (`?mode=buka`, form lama yang digayakan ulang; tautan lama di SavingsPage dan MemberDetailPage diarahkan ke `?mode=buka`). Alur: `MemberPicker` (cari lewat `/savings/by-member`) -> kolom nominal otomatis fokus -> Tinjau -> dialog tinjau -> Posting -> `SavingReceipt` (nomor, tanggal "29 Okt 2026, 21:35 WIB", anggota, jenis, saldo setelah dari server, petugas, Cetak/Bagikan/Transaksi berikutnya). Rekening default: sukarela untuk setor; rekening berisi saldo bukan pokok untuk tarik. Logika murni dites (`saving-flow.test.ts`).
+**Pinjaman baru**: stepper 4 langkah (Anggota, Produk dan syarat, Jadwal, Tinjau) di atas logika yang sama: jadwal memakai `lib/loan-calc` untuk bulanan dan endpoint `preview-schedule` untuk harian/mingguan, nominal memakai MoneyInput, Ajukan aktif setelah centang pemeriksaan, footer lengket. Markup langkah 1 dipertahankan agar 12 tes lama lulus.
+**POS**: tile 96px, di <= 1180px bilah bawah (jumlah barang, total, tombol Bayar 56px) membuka lembar bawah berisi keranjang dan metode bayar (Tunai/Transfer/Kredit Anggota: metode nyata, bukan "Non-tunai" generik); kolom keranjang lengket di desktop.
+**Langganan**: kartu paket + Badge status, `QuotaMeter`, daftar fitur dengan "Tersedia di paket X", keadaan memuat/galat/kosong, dan LockedFeature halaman penuh bila dibuka lewat `?fitur=<key>` (inilah tujuan item terkunci di sidebar dan tugas panel). Riwayat tagihan tidak ditampilkan: API hanya mengembalikan faktur terbuka.
+**Login**: `AuthLayout` baru (dua kolom, panel dua lingkaran bertaut, tautan lewati ke konten) dipakai AuthPage (/login) dan LoginPage (/login/legacy); logika Firebase/pemilihan koperasi/handoff tidak disentuh, hanya markup. Tab "Pengurus dan staf" dan "Anggota". Pemilihan koperasi tetap lewat `TenantPickerDialog` yang sudah ada. Tab Anggota hanya menjelaskan NIK dan menautkan `/anggota/login` (UI login anggota tidak ada di repo frontend ini; tautan itu sudah ada sebelumnya); tidak ada alur NIK baru yang dikarang.
+
+Penyimpangan dari design.md yang disengaja:
+- Dialog tinjau Setor TIDAK menyebut "dibatalkan (void) oleh manajer": tidak ada endpoint void untuk transaksi simpanan (hanya pembalikan jurnal manual). Teks diganti dengan fakta: tercatat langsung dan tidak bisa diubah dari layar ini, hubungi manajer untuk koreksi.
+- "Kasir toko" di sidebar tetap ke `/ksu/toko` (bukan /ksu/units/:id/pos) karena TokoPage menyelesaikan unitnya; POS dicapai dari sana seperti sebelumnya.
+
+Pemeriksaan peramban nyata (Puppeteer + mock /api): Beranda 1366x768 panel penuh terlihat (bawah 763/768 px dengan 5 tugas + "lihat lainnya"; dengan <= 4 tugas lebih longgar); alur setor 4 interaksi, 1,5 dtk otomatis, kolom nominal otomatis fokus, dialog fokus ke Posting, struk lengkap, tarik melebihi saldo ditolak inline, peran baca-saja melihat penjelasan; stepper pinjaman sampai Ajukan; POS 390px bar 56px dan lembar bawah; login 390px tanpa gulir horizontal.
+
+Tes baru: attention (7), saving-flow (11), format (ringkas, jam WIB, NIK). Total 196 lulus. Gerbang: tsc 0, eslint 0, vitest 196/196, vite build sukses.

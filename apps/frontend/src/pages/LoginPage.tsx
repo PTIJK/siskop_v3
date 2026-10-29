@@ -1,9 +1,13 @@
-import { Input } from "@/components/ui/input";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { AlertCircle } from "lucide-react";
 import type { LoginResponse } from "@siskop/types";
 import { apiPost, ApiRequestError } from "@/api/client";
 import { useAuth } from "@/stores/auth";
+import { AuthLayout } from "@/components/layout/AuthLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 /** The tenant subdomain, shown so the user can see which koperasi they are signing in to. */
 function currentSlug(): string | null {
@@ -41,47 +45,35 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-semibold text-slate-900">SISKOP</h1>
-          <p className="mt-1 text-sm text-slate-600">Sistem Informasi Koperasi</p>
-        </div>
+    <AuthLayout>
+      <h1 className="text-[26px] font-extrabold leading-[1.15] tracking-[-0.02em]">Masuk</h1>
+      {slug ? (
+        <p className="mt-1 text-sm text-muted-foreground">
+          Koperasi: <span className="font-bold text-foreground">{slug}</span>
+        </p>
+      ) : (
+        // Without a subdomain the backend cannot identify the tenant, so say
+        // so here rather than letting the user fail on submit.
+        <p className="mt-1 text-sm font-semibold text-warning">
+          Gunakan alamat koperasi Anda, misalnya <span className="font-mono">demo.localhost:3000</span>
+        </p>
+      )}
 
-        <form
-          onSubmit={onSubmit}
-          className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
-        >
-          <h2 className="text-lg font-medium text-slate-900">Masuk</h2>
-          {slug ? (
-            <p className="mt-1 text-sm text-slate-500">
-              Koperasi: <span className="font-medium text-slate-700">{slug}</span>
-            </p>
-          ) : (
-            // Without a subdomain the backend cannot identify the tenant, so say
-            // so here rather than letting the user fail on submit.
-            <p className="mt-1 text-sm text-amber-700">
-              Gunakan alamat koperasi Anda, misalnya{" "}
-              <span className="font-mono">demo.localhost:3000</span>
-            </p>
-          )}
-
-          <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="email">
-            Email
-          </label>
-          <input
+      <form onSubmit={onSubmit} noValidate className="mt-6 space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input
             id="email"
             type="email"
             required
             autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-500"
           />
+        </div>
 
-          <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="password">
-            Kata sandi
-          </label>
+        <div className="space-y-1.5">
+          <Label htmlFor="password">Kata sandi</Label>
           <Input
             id="password"
             type="password"
@@ -89,24 +81,20 @@ export default function LoginPage() {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-500"
           />
+        </div>
 
-          {error && (
-            <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </p>
-          )}
+        {error && (
+          <p role="alert" className="flex items-start gap-2 rounded-[10px] bg-destructive/[0.13] p-3 text-sm font-semibold text-destructive">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            {error}
+          </p>
+        )}
 
-          <button
-            type="submit"
-            disabled={pending}
-            className="mt-6 w-full rounded-md bg-slate-900 px-4 py-2 font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-          >
-            {pending ? "Memproses…" : "Masuk"}
-          </button>
-        </form>
-      </div>
-    </main>
+        <Button type="submit" size="lg" className="w-full" loading={pending}>
+          {pending ? "Memproses…" : "Masuk"}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }

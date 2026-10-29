@@ -83,8 +83,8 @@ function MemberCreditFields({
           <p className="text-xs text-muted-foreground">Memeriksa kelayakan...</p>
         ) : status ? (
           <div className="space-y-1 text-xs">
-            <div className={`flex items-center gap-1.5 ${status.eligible ? "text-green-700" : "text-red-700"}`}>
-              {status.eligible ? <CheckCircle className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+            <div className={`flex items-center gap-1.5 font-semibold ${status.eligible ? "text-success" : "text-destructive"}`}>
+              {status.eligible ? <CheckCircle className="h-3.5 w-3.5" aria-hidden="true" /> : <XCircle className="h-3.5 w-3.5" aria-hidden="true" />}
               {status.eligible ? "Layak menggunakan kredit anggota" : "Tidak memenuhi syarat kredit anggota"}
             </div>
             {!status.hasActiveSaving && <p className="text-muted-foreground">Anggota belum memiliki simpanan aktif.</p>}
@@ -101,15 +101,15 @@ function MemberCreditFields({
   return (
     <div className="space-y-1.5">
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Cari nama anggota..." className="pl-9" value={search} onChange={(e) => void runSearch(e.target.value)} />
+        <Search className="pointer-events-none absolute left-3.5 top-[13px] h-[18px] w-[18px] text-muted-foreground" aria-hidden="true" />
+        <Input placeholder="Cari nama anggota..." aria-label="Cari anggota kredit" className="pl-10" value={search} onChange={(e) => void runSearch(e.target.value)} />
         {results.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full rounded-md border bg-background shadow-md">
+          <div className="absolute z-popover mt-1 w-full overflow-hidden rounded-[14px] border bg-card shadow-md">
             {results.map((m) => (
               <button
                 key={m.id}
                 type="button"
-                className="flex w-full flex-col items-start px-4 py-2.5 text-left hover:bg-muted"
+                className="flex min-h-[56px] w-full flex-col items-start justify-center px-4 py-2 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
                 onClick={() => {
                   onSelect({ id: m.id, fullName: m.fullName });
                   setSearch("");
@@ -123,7 +123,7 @@ function MemberCreditFields({
           </div>
         )}
       </div>
-      {searchError && <p className="text-xs text-destructive">{searchError}</p>}
+      {searchError && <p role="alert" className="text-xs font-semibold text-destructive">{searchError}</p>}
     </div>
   );
 }
@@ -167,15 +167,15 @@ export function POSCart({
   return (
     <Card className="flex h-full flex-col">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <ShoppingCart className="h-4 w-4" />
+        <CardTitle className="flex items-center gap-2">
+          <ShoppingCart className="h-[18px] w-[18px]" aria-hidden="true" />
           Keranjang
         </CardTitle>
       </CardHeader>
 
       <CardContent className="flex-1 space-y-4">
         {isEmpty ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">Belum ada produk di keranjang</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">Keranjang masih kosong. Ketuk produk untuk menambahkannya.</p>
         ) : (
           <div className="space-y-3">
             {lines.map((line) => {
@@ -183,41 +183,41 @@ export function POSCart({
               return (
                 <div key={line.productId} className="flex items-start justify-between gap-2 border-b pb-3 last:border-0">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">{line.name}</p>
-                    <p className="text-xs text-muted-foreground">{formatRupiah(line.unitPrice)} / {line.uom}</p>
+                    <p className="truncate text-sm font-bold text-foreground">{line.name}</p>
+                    <p className="text-xs tabular-nums text-muted-foreground">{formatRupiah(line.unitPrice)} / {line.uom}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <Button
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-7 w-7"
+                      className="h-9 w-9 max-[900px]:h-11 max-[900px]:w-11"
                       onClick={() => onDecrement(line.productId)}
                       aria-label={`Kurangi ${line.name}`}
                     >
-                      <Minus className="h-3 w-3" />
+                      <Minus aria-hidden="true" />
                     </Button>
-                    <span className="w-6 text-center text-sm font-medium">{line.quantity}</span>
+                    <span className="w-7 text-center text-sm font-extrabold tabular-nums">{line.quantity}</span>
                     <Button
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-7 w-7"
+                      className="h-9 w-9 max-[900px]:h-11 max-[900px]:w-11"
                       disabled={atMax}
                       onClick={() => onIncrement(line.productId)}
                       aria-label={`Tambah ${line.name}`}
                     >
-                      <Plus className="h-3 w-3" />
+                      <Plus aria-hidden="true" />
                     </Button>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      className="h-9 w-9 text-destructive hover:text-destructive max-[900px]:h-11 max-[900px]:w-11"
                       onClick={() => onRemove(line.productId)}
                       aria-label={`Hapus ${line.name}`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -227,16 +227,17 @@ export function POSCart({
         )}
 
         <div className="space-y-1.5">
-          <Label>Metode Pembayaran</Label>
+          <Label id="payment-label">Metode pembayaran</Label>
           <RadioGroup
             value={paymentMethod}
             onValueChange={(v) => onPaymentMethodChange(v as PosPaymentMethod)}
+            aria-labelledby="payment-label"
             className="grid grid-cols-1 gap-2 sm:grid-cols-3"
           >
             {PAYMENT_METHODS.map((method) => (
-              <div key={method} className="flex items-center gap-2 rounded-md border p-2">
+              <div key={method} className="flex min-h-11 items-center gap-2 rounded-[10px] border px-3 py-2 has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary">
                 <RadioGroupItem value={method} id={`payment-${method}`} />
-                <Label htmlFor={`payment-${method}`} className="cursor-pointer text-sm font-normal">
+                <Label htmlFor={`payment-${method}`} className="flex-1 cursor-pointer text-sm font-semibold">
                   {PAYMENT_METHOD_LABEL[method]}
                 </Label>
               </div>
@@ -246,7 +247,7 @@ export function POSCart({
 
         {isMemberCredit && (
           <div className="space-y-1.5">
-            <Label>Anggota</Label>
+            <Label>Anggota pemakai kredit</Label>
             <MemberCreditFields
               memberId={creditMemberId}
               memberName={creditMemberName}
@@ -255,20 +256,20 @@ export function POSCart({
               statusPending={creditStatusPending}
             />
             {creditMemberId && !creditStatusPending && creditStatus?.eligible && creditInsufficient && (
-              <p className="text-xs text-destructive">Total keranjang melebihi sisa limit kredit anggota.</p>
+              <p role="alert" className="text-xs font-semibold text-destructive">Total keranjang melebihi sisa limit kredit anggota.</p>
             )}
           </div>
         )}
       </CardContent>
 
       <CardFooter className="flex flex-col items-stretch gap-3 border-t pt-4">
-        <div className="flex items-center justify-between text-base font-semibold">
+        <div className="flex items-center justify-between text-base font-extrabold">
           <span>Total</span>
-          <span className="text-primary">{formatRupiah(total)}</span>
+          <span className="text-[22px] tabular-nums">{formatRupiah(total)}</span>
         </div>
         {isEmpty && <p className="text-xs text-muted-foreground">Tambahkan produk ke keranjang sebelum membayar.</p>}
-        <Button className="w-full" size="lg" disabled={isEmpty || isCheckingOut || creditBlocked} onClick={onCheckout}>
-          {isCheckingOut ? "Memproses..." : "Bayar"}
+        <Button className="h-14 w-full text-base" size="lg" disabled={isEmpty || isCheckingOut || creditBlocked} loading={isCheckingOut} onClick={onCheckout}>
+          {isCheckingOut ? "Memproses…" : "Bayar"}
         </Button>
       </CardFooter>
     </Card>

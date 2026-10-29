@@ -10,35 +10,26 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ReferenceLine
 } from "recharts";
-import {
-  PiggyBank,
-  CreditCard,
-  Users,
-  TrendingUp,
-  AlertTriangle,
-  Sparkles,
-  AlertCircle,
-  Info,
-  CheckCircle2,
-  Wallet,
-  ClipboardList,
-  Store
-} from "lucide-react";
-import type { CapitalDashboard, DashboardSummary, GrowthPoint, LoanQualityDashboard, PasarDashboard } from "@siskop/types";
-import { apiFetch, ApiRequestError } from "@/api/client";
-import { formatRupiah, formatRupiahSingkat } from "@/lib/format";
+import { PiggyBank, CreditCard, Users, TrendingUp, Sparkles, AlertCircle, AlertTriangle, Info, CheckCircle2, Wallet, ClipboardList, Store } from "lucide-react";
+import type { CapitalDashboard, DashboardSummary, GrowthPoint, LoanQualityDashboard, MemberRegistrationRequest, PasarDashboard } from "@siskop/types";
+import { apiFetch, apiFetchPage, ApiRequestError } from "@/api/client";
+import { formatAngkaRingkas, formatRupiah, formatRupiahRingkas } from "@/lib/format";
 import { buildAiSuggestions, type SuggestionTone } from "@/lib/aiSuggestions";
 import { ALL_UNITS } from "@/lib/unit";
 import { useUnitScope } from "@/stores/unit-scope";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatCard } from "@/components/shared/StatCard";
-import { UnitFilter } from "@/components/shared/UnitFilter";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useEntitlements, useSubscription } from "@/hooks/useEntitlements";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SERIES } from "./chartColors";
+import { AttentionPanel } from "./AttentionPanel";
+import { buildAttentionItems } from "./attention";
+import { KolDistribution } from "./KolDistribution";
+import { TrendChart } from "./TrendChart";
 import { ComplianceSection, HealthSection } from "./HealthSection";
 
 const SUGGESTION_ICONS: Record<SuggestionTone, typeof AlertTriangle> = {
@@ -49,10 +40,10 @@ const SUGGESTION_ICONS: Record<SuggestionTone, typeof AlertTriangle> = {
 };
 
 const SUGGESTION_COLORS: Record<SuggestionTone, string> = {
-  danger: "text-red-600",
-  warning: "text-amber-600",
-  info: "text-blue-600",
-  success: "text-green-600"
+  danger: "text-destructive",
+  warning: "text-warning",
+  info: "text-info",
+  success: "text-success"
 };
 
 type ValueFormat = "rupiah" | "count";
@@ -105,7 +96,9 @@ function memberDelta(summary: DashboardSummary): { subtitle?: string; trend?: "u
 export function DashboardPage() {
   const navigate = useNavigate();
   const unitId = useUnitScope((s) => s.unitId);
-  const setUnitId = useUnitScope((s) => s.setUnitId);
+  const { can } = usePermissions();
+  const { isLocked } = useEntitlements();
+  const subscription = useSubscription();
   const unitQuery = unitId === ALL_UNITS ? "" : `?unitId=${encodeURIComponent(unitId)}`;
 
   const summaryQuery = useQuery({
@@ -133,6 +126,14 @@ export function DashboardPage() {
     retry: (count, err) => (err instanceof ApiRequestError && err.code === "FEATURE_NOT_ENTITLED" ? false : count < 3)
   });
 
+  // Self-registrations waiting for review; only asked for roles that can read members.
+  const registrationsQuery = useQuery({
+    queryKey: ["members", "registration-requests", "pending-count"],
+    queryFn: () => apiFetchPage<MemberRegistrationRequest[]>("/members/registration-requests?status=PENDING&page=1&limit=1"),
+    enabled: can("members", "read"),
+    retry: false
+  });
+
   const summary = summaryQuery.data;
   const isLoading = summaryQuery.isPending;
   const growth = (growthQuery.data ?? []).map((g) => ({
@@ -154,145 +155,147 @@ export function DashboardPage() {
     { capital: capitalQuery.data, loanQuality: qualityQuery.data }
   );
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <PageHeader title="Dashboard" description="Ringkasan operasional dan kesehatan koperasi" />
-        <UnitFilter value={unitId} onChange={setUnitId} />
-      </div>
+  const attentionItems = buildAttentionItems({
+    summary,
+    quality: qualityQuery.data,
+    capital: capitalQuery.data,
+    pasar: pasarQuery.data,
+    subscription: subscription.data,
+    pendingRegistrations: registrationsQuery.data?.meta.total,
+    canSeeLoans: can("loans", "read"),
+    route: (href, feature) => (feature && isLocked(feature) ? `/langganan?fitur=${feature}` : href)
+  });
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard
-          title="Total Simpanan"
-          value={summary ? formatRupiah(summary.totalSavings) : "-"}
-          subtitle={
-            summary
-              ? `Modal (pokok+wajib) ${formatRupiahSingkat(summary.savingsEquity)} · dapat ditarik ${formatRupiahSingkat(summary.savingsLiability)}`
-              : undefined
-          }
-          icon={PiggyBank}
-          iconColor="text-blue-600"
-          isLoading={isLoading}
-          onClick={() => navigate("/savings")}
+  return (
+    <div className="space-y-5">
+      <PageHeader title="Beranda" description="Yang perlu diputuskan hari ini, lalu ringkasan keadaan koperasi." />
+
+      <div className="grid grid-cols-1 gap-4 min-[1181px]:grid-cols-[5fr_7fr]">
+        <AttentionPanel
+          items={attentionItems}
+          isLoading={summaryQuery.isPending}
+          isError={summaryQuery.isError}
+          onRetry={() => void summaryQuery.refetch()}
         />
-        <StatCard
-          title="Total Pinjaman Aktif"
-          value={summary ? formatRupiah(summary.totalActiveLoans) : "-"}
-          icon={CreditCard}
-          iconColor="text-purple-600"
-          isLoading={isLoading}
-          onClick={() => navigate("/loans")}
-        />
-        <StatCard
-          title="Jumlah Anggota"
-          value={summary?.memberCount?.toString() ?? "-"}
-          {...(summary ? memberDelta(summary) : {})}
-          icon={Users}
-          iconColor="text-green-600"
-          isLoading={isLoading}
-          onClick={() => navigate("/members")}
-        />
-        <StatCard
-          title="Angsuran Bulan Ini"
-          value={summary ? formatRupiah(summary.monthlyPayments) : "-"}
-          subtitle={summary ? `Bulan lalu: ${formatRupiahSingkat(summary.previous.monthlyPayments)}` : undefined}
-          icon={TrendingUp}
-          iconColor="text-teal-600"
-          isLoading={isLoading}
-          onClick={() => navigate("/loans")}
-        />
-        <StatCard
-          title="Anggota Menunggak (MACET)"
-          value={summary?.overdueCount?.toString() ?? "-"}
-          icon={AlertTriangle}
-          iconColor="text-red-600"
-          isLoading={isLoading}
-          onClick={() => navigate("/loans/overdue")}
-          alert={(summary?.overdueCount ?? 0) > 0}
-        />
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2">
+            <StatCard
+              title="Total simpanan"
+              value={summary ? formatRupiahRingkas(summary.totalSavings) : "-"}
+              valueLabel={summary ? formatRupiah(summary.totalSavings) : undefined}
+              subtitle={summary ? `Modal ${formatRupiahRingkas(summary.savingsEquity)} · dapat ditarik ${formatRupiahRingkas(summary.savingsLiability)}` : undefined}
+              icon={PiggyBank}
+              isLoading={isLoading}
+              onClick={() => navigate("/savings")}
+            />
+            <StatCard
+              title="Pinjaman aktif"
+              value={summary ? formatRupiahRingkas(summary.totalActiveLoans) : "-"}
+              valueLabel={summary ? formatRupiah(summary.totalActiveLoans) : undefined}
+              icon={CreditCard}
+              isLoading={isLoading}
+              onClick={() => navigate("/loans")}
+            />
+            <StatCard
+              title="Jumlah anggota"
+              value={summary?.memberCount?.toString() ?? "-"}
+              {...(summary ? memberDelta(summary) : {})}
+              icon={Users}
+              isLoading={isLoading}
+              onClick={() => navigate("/members")}
+            />
+            <StatCard
+              title="Angsuran bulan ini"
+              value={summary ? formatRupiahRingkas(summary.monthlyPayments) : "-"}
+              valueLabel={summary ? formatRupiah(summary.monthlyPayments) : undefined}
+              subtitle={summary ? `Bulan lalu ${formatRupiahRingkas(summary.previous.monthlyPayments)}` : undefined}
+              icon={TrendingUp}
+              isLoading={isLoading}
+              onClick={() => navigate("/loans")}
+            />
+          </div>
+
+          <TrendChart
+            title="Pencairan dan angsuran"
+            description="12 bulan terakhir"
+            data={growth}
+            series={[
+              { key: "disbursement", name: "Pencairan", color: SERIES.primary },
+              { key: "repayment", name: "Angsuran", color: SERIES.secondary, dashed: true }
+            ]}
+          />
+        </div>
       </div>
 
       {pasarQuery.data && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <StatCard
-            title="Setoran Hari Ini"
+            title="Setoran hari ini"
             value={formatRupiah(pasarQuery.data.setoranHariIni)}
             icon={Wallet}
-            iconColor="text-blue-600"
             onClick={() => navigate("/reports/pasar")}
           />
           <StatCard
-            title="Batch Belum Diverifikasi"
+            title="Batch belum diverifikasi"
             value={pasarQuery.data.batchBelumDiverifikasi.toString()}
             icon={ClipboardList}
-            iconColor="text-amber-600"
             onClick={() => navigate("/reports/pasar")}
             alert={pasarQuery.data.batchBelumDiverifikasi > 0}
           />
           <StatCard
-            title="Total Tunggakan Pasar"
+            title="Total tunggakan pasar"
             value={formatRupiah(pasarQuery.data.totalTunggakan)}
             icon={Store}
-            iconColor="text-red-600"
             onClick={() => navigate("/reports/pasar")}
             alert={Number(pasarQuery.data.totalTunggakan) > 0}
           />
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Rekomendasi AI
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {suggestionsLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-4/5" />
-            </div>
-          ) : (
-            <ul className="space-y-3">
-              {suggestions.map((s) => {
-                const Icon = SUGGESTION_ICONS[s.tone];
-                return (
-                  <li key={s.id} className="flex items-start gap-2.5">
-                    <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${SUGGESTION_COLORS[s.tone]}`} />
-                    <span className="text-sm text-muted-foreground">{s.text}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 gap-4 min-[1181px]:grid-cols-2">
+        {qualityQuery.data ? <KolDistribution quality={qualityQuery.data} /> : <Skeleton className="h-40 rounded-[16px]" />}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-[18px] w-[18px]" aria-hidden="true" />
+              Rekomendasi
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {suggestionsLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-4/5" />
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {suggestions.map((s) => {
+                  const Icon = SUGGESTION_ICONS[s.tone];
+                  return (
+                    <li key={s.id} className="flex items-start gap-2.5">
+                      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${SUGGESTION_COLORS[s.tone]}`} aria-hidden="true" />
+                      <span className="text-sm text-muted-foreground">{s.text}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <HealthSection capital={capitalQuery.data} quality={qualityQuery.data} />
       <ComplianceSection capital={capitalQuery.data} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title="Pencairan vs Angsuran per Bulan" description="12 bulan terakhir">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={growth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barGap={2}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 11 }} width={70} />
-              <Tooltip content={<ChartTooltip />} cursor={{ fillOpacity: 0.3 }} />
-              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="disbursement" name="Pencairan" fill={SERIES.primary} radius={[4, 4, 0, 0]} />
-              <Bar dataKey="repayment" name="Angsuran" fill={SERIES.secondary} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
+      <div className="grid grid-cols-1 gap-4 min-[1181px]:grid-cols-2">
         <ChartCard title="Modal Sendiri" description="Posisi akhir bulan, 12 bulan terakhir">
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={capitalTrend} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 11 }} width={70} />
+              <YAxis tickFormatter={formatAngkaRingkas} tick={{ fontSize: 11 }} width={70} />
               <Tooltip content={<ChartTooltip />} />
               <Line type="monotone" dataKey="value" name="Modal Sendiri" stroke={SERIES.primary} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
             </LineChart>
@@ -304,7 +307,7 @@ export function DashboardPage() {
             <BarChart data={growth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 11 }} width={70} />
+              <YAxis tickFormatter={formatAngkaRingkas} tick={{ fontSize: 11 }} width={70} />
               <Tooltip content={<ChartTooltip />} cursor={{ fillOpacity: 0.3 }} />
               <ReferenceLine y={0} className="stroke-muted-foreground" />
               <Bar dataKey="savingsNetFlow" name="Arus bersih" fill={SERIES.primary} radius={[4, 4, 0, 0]} />

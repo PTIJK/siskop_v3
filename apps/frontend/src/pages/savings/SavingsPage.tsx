@@ -98,11 +98,11 @@ export function SavingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Simpanan"
-        description="Daftar rekening simpanan anggota"
+        description="Rekening simpanan per anggota. Untuk setor atau tarik, buka Setor dan tarik di menu."
         actions={
           can("savings", "create") && (
-            <Button onClick={() => navigate("/savings/new")}>
-              <PiggyBank className="mr-2 h-4 w-4" /> Buka Rekening
+            <Button onClick={() => navigate("/savings/new?mode=buka")}>
+              <PiggyBank aria-hidden="true" /> Buka rekening
             </Button>
           )
         }

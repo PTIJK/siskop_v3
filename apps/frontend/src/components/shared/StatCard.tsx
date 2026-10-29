@@ -8,6 +8,8 @@ interface StatCardProps {
   value: string;
   /** Delta or note, e.g. "Naik 2,1% dari September". Shown with a trend icon and words. */
   subtitle?: string;
+  /** Exact value when `value` is shortened (e.g. "Rp 412,8 jt"): exposed as a tooltip and to screen readers. */
+  valueLabel?: string;
   icon: LucideIcon;
   iconColor?: string;
   trend?: "up" | "down" | "neutral";
@@ -32,6 +34,7 @@ export function StatCard({
   title,
   value,
   subtitle,
+  valueLabel,
   icon: Icon,
   iconColor = "text-accent-foreground",
   trend,
@@ -63,8 +66,9 @@ export function StatCard({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-muted-foreground">{title}</p>
-          <p className={cn("mt-1 text-2xl font-extrabold leading-tight tracking-[-0.02em] tabular-nums", alert && "text-destructive")}>
-            {value}
+          <p className={cn("mt-1 text-2xl font-extrabold leading-tight tracking-[-0.02em] tabular-nums", alert && "text-destructive")} title={valueLabel}>
+            <span aria-hidden={valueLabel ? true : undefined}>{value}</span>
+            {valueLabel ? <span className="sr-only">{valueLabel}</span> : null}
           </p>
           {(subtitle || TrendIcon) && (
             <div className="mt-1 flex items-center gap-1">
