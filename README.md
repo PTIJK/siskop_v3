@@ -40,9 +40,10 @@ curl -X POST http://demo.localhost:3000/api/auth/register -H "Content-Type: appl
 }'
 ```
 
-Public signup now starts at `http://localhost:3000/`: choose an active paid package,
-register using Google or email/password, complete Xendit checkout, then sign in
-after payment confirmation to enter the dashboard. See [landing and Xendit setup](docs/landing-page/README.md).
+Public signup now starts at `http://localhost:3000/`: choose a package, register using
+Google or email/password, and a free package activates at once. A paid package waits for
+the platform owner to confirm the bank transfer against its invoice (Faktur page), then
+the koperasi can sign in. See [Pricing V2 rollout](docs/package-modules/PRICING-V2-ROLLOUT.md).
 
 The legacy curl example above requires `NODE_ENV=development` and the explicit
 `ALLOW_LEGACY_REGISTRATION=true` setting; it is disabled in production. For that

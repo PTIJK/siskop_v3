@@ -12,6 +12,15 @@ export interface DailySchedulerResult {
   auditThreshold: AuditThresholdCheckResult;
   auditLogPurge: AuditLogPurgeResult;
   chargeGeneration: ChargeGenerationResult;
+  billing: BillingJobsResult;
+}
+
+/** Pricing V2 daily billing tick — see modules/billing/jobs.ts. */
+export interface BillingJobsResult {
+  renewals: { checked: number; created: number; failed: number };
+  notices: { checked: number; sent: number; failed: number };
+  pastDue: { checked: number; marked: number; failed: number };
+  purge: { checked: number; deleted: number; failed: number };
 }
 
 /** Koperasi pasar plan F5 daily generator — see modules/market/charge-generator.ts. */

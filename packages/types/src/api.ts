@@ -22,6 +22,8 @@ export const ErrorCode = {
   // Phase-2 SaaS packaging — a tenant's SubscriptionPackage gates these.
   FEATURE_NOT_ENTITLED: "FEATURE_NOT_ENTITLED",
   PACKAGE_LIMIT_EXCEEDED: "PACKAGE_LIMIT_EXCEEDED",
+  // Pricing V2 volume limit (members/users/saving types/loan types); details: { item, limit, used }.
+  QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
   // Konsumen/Toko POS — "Kredit Anggota" (member store credit) eligibility.
   MEMBER_HAS_NO_ACTIVE_SAVING: "MEMBER_HAS_NO_ACTIVE_SAVING",
   MEMBER_CREDIT_LIMIT_EXCEEDED: "MEMBER_CREDIT_LIMIT_EXCEEDED",
@@ -37,6 +39,10 @@ export const ErrorCode = {
   // Koperasi pasar plan F5 — Sewa & retribusi. PAYMENT_EXCEEDS_REMAINING
   // (above) is reused for a Charge overpay.
   STALL_ALREADY_OCCUPIED: "STALL_ALREADY_OCCUPIED",
+  // Payment gateway not connected yet (webhook and checkout stubs).
+  NOT_IMPLEMENTED: "NOT_IMPLEMENTED",
+  // Subscription unpaid or missing; details: { reason, status }.
+  PAYMENT_REQUIRED: "PAYMENT_REQUIRED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

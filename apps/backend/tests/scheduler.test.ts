@@ -77,6 +77,7 @@ describe("POST /api/scheduler/run-daily", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.savingsInterest.checked).toBe(1);
     expect(res.body.data.savingsInterest.posted).toBe(1);
+    expect(res.body.data.billing).toMatchObject({ renewals: { failed: 0 }, notices: { failed: 0 }, pastDue: { failed: 0 }, purge: { failed: 0 } });
 
     // dailyRate = 9%/360 on 1_000_000 = 250.00 (regulatory cap for savings is 9%/year)
     const afterFirstRun = await db.saving.findUnique({ where: { id: saving.id } });

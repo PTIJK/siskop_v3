@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus } from "lucide-react";
+import { TenantSubscriptionDialog } from "./pricing/TenantSubscriptionDialog";
 
 const UNIT_TYPES = ["KSP", "KONSUMEN", "PRODUSEN", "JASA", "PEMASARAN"] as const satisfies readonly CooperativeType[];
 
@@ -61,6 +62,7 @@ export function PlatformTenantsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [apiError, setApiError] = useState("");
   const [managing, setManaging] = useState<PlatformTenantSummary | null>(null);
+  const [subscribing, setSubscribing] = useState<PlatformTenantSummary | null>(null);
   const [managePackageId, setManagePackageId] = useState("");
   const [manageIsActive, setManageIsActive] = useState(true);
   const [manageNextBillingDate, setManageNextBillingDate] = useState("");
@@ -172,9 +174,14 @@ export function PlatformTenantsPage() {
     {
       header: "",
       cell: ({ row }) => (
-        <Button variant="outline" size="sm" onClick={() => openManage(row.original)}>
-          Kelola
-        </Button>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setSubscribing(row.original)}>
+            Langganan
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => openManage(row.original)}>
+            Kelola
+          </Button>
+        </div>
       )
     }
   ];
@@ -315,6 +322,8 @@ export function PlatformTenantsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {subscribing && <TenantSubscriptionDialog tenantId={subscribing.id} tenantName={subscribing.name} onClose={() => setSubscribing(null)} />}
 
       <Dialog open={managing !== null} onOpenChange={(open) => !open && setManaging(null)}>
         <DialogContent>

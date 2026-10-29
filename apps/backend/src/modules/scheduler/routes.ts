@@ -10,8 +10,8 @@ import { verifySchedulerIdentity } from "../../hosting/scheduler-identity.js";
  * Machine-to-machine auth, not a user session: this endpoint is meant to be
  * called by an external scheduler (OS-level cron / Windows Task Scheduler /
  * a host's job scheduler in production) with no logged-in user available.
- * Same shared-secret-header shape as modules/onboarding/xendit.ts's Xendit
- * webhook token — see SCHEDULER_SECRET in .env.example.
+ * A shared-secret header compared in constant time — see SCHEDULER_SECRET in
+ * .env.example.
  */
 function verifySchedulerToken(token: string | undefined): void {
   const expected = process.env.SCHEDULER_SECRET;
@@ -59,7 +59,8 @@ export function schedulerRoutes(): Router {
         data.savingsInterest.failed > 0 ||
         data.loanKol.failed > 0 ||
         data.auditThreshold.failed > 0 ||
-        data.auditLogPurge.failed > 0;
+        data.auditLogPurge.failed > 0 ||
+        Object.values(data.billing ?? {}).some((step) => step.failed > 0);
       res.status(failed ? 503 : 200).json({
         success: !failed, data, meta: res.locals.meta,
         ...(failed ? { error: { code: ErrorCode.INTERNAL_ERROR, message: "Some daily calculations failed; retry this job." } } : {})

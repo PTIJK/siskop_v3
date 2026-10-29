@@ -52,6 +52,15 @@ Vite's dev server binds `host: "0.0.0.0"` (`apps/frontend/vite.config.ts`), not
 127.0.0.1 or ::1 depending on the client, and letting Node resolve the ambiguous string
 `"localhost"` bound only the IPv6 side on this machine, refusing every IPv4 connection.
 
+## Pricing V2 (packages, invoices, enforcement)
+
+Package features, volume limits, invoices and payment standing live in a published
+catalog and per-tenant `TenantSubscription`; read `docs/package-modules/PRICING-V2-ROLLOUT.md`
+before touching them. `PRICING_V2_ENFORCEMENT` (`off` default | `shadow` | `on`) switches
+enforcement. Anything that changes a subscription must call `clearEntitlementCache(tenantId)`.
+Gate a route by adding it to the table in `middleware/enforcement.ts`, not with a new ad-hoc
+check; guard a create with `withQuota`/`assertQuota`.
+
 ## Module ownership
 
 Auth · Dashboard · Members · Savings · Loans · Reports · Config · Platform Admin —

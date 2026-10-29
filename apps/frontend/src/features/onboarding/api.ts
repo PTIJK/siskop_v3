@@ -1,10 +1,11 @@
-import type { ApiResponse } from "@siskop/types";
+import { useQuery } from "@tanstack/react-query";
+import type { ApiResponse, PublicPricingCatalog } from "@siskop/types";
 import { ApiRequestError } from "@/api/client";
 
 // Public onboarding has its own cookie and must never refresh or clear a
 // signed-in dashboard session when an onboarding cookie expires.
-export async function onboardingApi<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`/api/onboarding${path}`, {
+async function publicCall<T>(url: string, body?: unknown): Promise<T> {
+  const response = await fetch(url, {
     method: body === undefined ? "GET" : "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -24,10 +25,17 @@ export async function onboardingApi<T>(path: string, body?: unknown): Promise<T>
     );
   return result.data;
 }
+
+export const onboardingApi = <T>(path: string, body?: unknown) => publicCall<T>(`/api/onboarding${path}`, body);
+export const pricingApi = <T>(path: string, body?: unknown) => publicCall<T>(`/api/public/pricing${path}`, body);
+
+/** The published catalog: public packages, features, add-ons, support plans, VAT rate. Prices exclude VAT. */
+export function usePublicPricing() {
+  return useQuery({ queryKey: ["public-pricing"], queryFn: () => pricingApi<PublicPricingCatalog>(""), staleTime: 60_000 });
+}
+
 export const rupiah = (amount: string) =>
-  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(
-    Number(amount)
-  );
+  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(amount));
 export const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Terjadi kesalahan. Silakan coba lagi.";
 export const unitNames = {

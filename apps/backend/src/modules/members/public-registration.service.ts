@@ -1,6 +1,7 @@
 import { saveKtp } from "../../lib/upload-storage.js";
 import { db } from "../../lib/db.js";
 import { notFound } from "../../lib/errors.js";
+import { tenantHasFeature } from "../../lib/pricing/entitlements.js";
 import type { SniffedFileType } from "../../lib/file-sniff.js";
 import { createTenantNotification } from "../notifications/service.js";
 import type { SubmitRegistrationInput } from "./public-registration.schema.js";
@@ -24,23 +25,26 @@ interface SubmitResult {
  * state page needs to still show the tenant's name/logo for.
  */
 export async function resolveRegistrableTenant(tenantSlug: string): Promise<{ id: string } | null> {
-  return db.tenant.findFirst({
+  const tenant = await db.tenant.findFirst({
     where: { slug: tenantSlug, isActive: true, selfRegistrationEnabled: true },
     select: { id: true }
   });
+  // A package without self_registration closes the page exactly like the switch does.
+  if (tenant && !(await tenantHasFeature(tenant.id, "self_registration"))) return null;
+  return tenant;
 }
 
 export async function getPublicTenantBranding(tenantSlug: string) {
   const tenant = await db.tenant.findFirst({
     where: { slug: tenantSlug, isActive: true },
-    select: { name: true, logoUrl: true, selfRegistrationEnabled: true }
+    select: { id: true, name: true, logoUrl: true, selfRegistrationEnabled: true }
   });
   if (!tenant) throw notFound("Pendaftaran tidak ditemukan");
 
   return {
     tenantName: tenant.name,
     tenantLogoUrl: tenant.logoUrl,
-    selfRegistrationEnabled: tenant.selfRegistrationEnabled
+    selfRegistrationEnabled: tenant.selfRegistrationEnabled && (await tenantHasFeature(tenant.id, "self_registration"))
   };
 }
 

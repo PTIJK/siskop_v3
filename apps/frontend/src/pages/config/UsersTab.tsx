@@ -8,6 +8,8 @@ import { z } from "zod";
 import type { CooperativeUnit, Role, User } from "@siskop/types";
 import { apiFetch, apiPost, apiPut, ApiRequestError } from "@/api/client";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { QuotaBadge } from "@/components/shared/QuotaBadge";
 import { useAuth } from "@/stores/auth";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, type ColumnDef } from "@/components/shared/DataTable";
@@ -44,6 +46,7 @@ export function UsersTab() {
   const [inviteMode, setInviteMode] = useState(false);
   const [invitation, setInvitation] = useState<MembershipInvitationResponse | null>(null);
   const { can } = usePermissions();
+  const { quota } = useEntitlements();
   const currentUser = useAuth((s) => s.user);
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -197,10 +200,13 @@ export function UsersTab() {
         emptyMessage="Belum ada pengguna"
         headerActions={
           can("users", "create") && (
-            <Button onClick={openCreate}>
+            <div className="flex items-center gap-3">
+            <QuotaBadge hint={quota("users")} noun="pengguna" />
+            <Button onClick={openCreate} disabled={quota("users")?.blocked}>
               <Plus className="mr-2 h-4 w-4" />
               Tambah Pengguna
             </Button>
+            </div>
           )
         }
       />

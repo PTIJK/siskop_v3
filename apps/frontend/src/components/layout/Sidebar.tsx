@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useIsMultiUnit } from "@/hooks/useIsMultiUnit";
 import { useAuth } from "@/stores/auth";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import {
   LayoutDashboard,
   Users,
@@ -16,12 +17,14 @@ import {
   X,
   Menu,
   Package as PackageIcon,
+  Tags,
   ShieldCheck,
   Layers,
   PieChart,
   Receipt,
   Wallet,
-  Warehouse
+  Warehouse,
+  Lock
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -42,7 +45,7 @@ const NAV_ITEMS_TOP = [
   // Konsumen/Toko's POS) — top-level rather than nested under Unit Usaha >
   // Konsumen, which would misleadingly imply unit-scoping. Reuses the
   // konsumen permission scope, same gate credit.routes.ts already uses.
-  { label: "Piutang Anggota", href: "/piutang", icon: Receipt, module: "konsumen" as const, action: "read" as const },
+  { label: "Piutang Anggota", href: "/piutang", icon: Receipt, module: "konsumen" as const, action: "read" as const, feature: "member_receivables" },
   // Base feature (not gated by the "accounting" package add-on) — see
   // docs/2026-09-27-beban-umum-design.md. Top-level, not under Konfigurasi:
   // it's a recurring transaction, not a settings screen.
@@ -57,15 +60,15 @@ const NAV_ITEMS_REPORTS = [
     module: "reports" as const,
     action: "read" as const,
     children: [
-      { label: "Laporan Keuangan", href: "/reports" },
-      { label: "Laporan Regulasi", href: "/reports/regulatory" },
-      { label: "Buku Akuntansi", href: "/reports/accounting" },
-      { label: "Kualitas Portofolio", href: "/reports/portfolio" },
+      { label: "Laporan Keuangan", href: "/reports", feature: "reports_financial" },
+      { label: "Laporan Regulasi", href: "/reports/regulatory", feature: "reports_regulatory" },
+      { label: "Buku Akuntansi", href: "/reports/accounting", feature: "accounting_book" },
+      { label: "Kualitas Portofolio", href: "/reports/portfolio", feature: "portfolio_quality" },
       // Always listed (like Laporan Regulasi above), not hidden by entitlement — a
       // non-pasar tenant sees EntitlementNotice on the page itself, same pattern.
-      { label: "Laporan Pasar", href: "/reports/pasar" },
-      { label: "Jurnal Manual", href: "/journal/new" },
-      { label: "Tutup Buku", href: "/journal/close" }
+      { label: "Laporan Pasar", href: "/reports/pasar", feature: "reports_market" },
+      { label: "Jurnal Manual", href: "/journal/new", feature: "manual_journal" },
+      { label: "Tutup Buku", href: "/journal/close", feature: "period_closing" }
     ]
   },
   // Consolidated-reporting-across-units — genuinely KSU-only, unlike Unit
@@ -78,6 +81,7 @@ const NAV_ITEMS_REPORTS = [
     icon: PieChart,
     module: "reports" as const,
     action: "read" as const,
+    feature: "reports_consolidated",
     requiresMultiUnit: true
   }
 ];
@@ -85,13 +89,17 @@ const NAV_ITEMS_REPORTS = [
 interface NavNode {
   label: string;
   href?: string;
+  /** Pricing V2 feature this entry needs; when the server enforces and the package lacks it, the entry is shown locked. */
+  feature?: string;
   icon?: React.ElementType;
   children?: NavNode[];
 }
 
 function NavItemComponent({ item, onClose, level = 0 }: { item: NavNode; onClose?: () => void; level?: number }) {
   const [expanded, setExpanded] = useState(false);
+  const { isLocked } = useEntitlements();
   const isTop = level === 0;
+  const locked = item.feature !== undefined && isLocked(item.feature);
 
   if (item.children && item.children.length > 0) {
     return (
@@ -127,9 +135,10 @@ function NavItemComponent({ item, onClose, level = 0 }: { item: NavNode; onClose
 
   return (
     <NavLink
-      to={item.href!}
+      to={locked ? `/langganan?fitur=${item.feature}` : item.href!}
       end
       onClick={onClose}
+      title={locked ? "Belum termasuk paket Anda" : undefined}
       className={({ isActive }) =>
         cn(
           "flex rounded-md transition-colors",
@@ -147,7 +156,8 @@ function NavItemComponent({ item, onClose, level = 0 }: { item: NavNode; onClose
       }
     >
       {item.icon && <item.icon className={cn("shrink-0", isTop ? "h-4 w-4" : "mt-0.5 h-3 w-3")} />}
-      {item.label}
+      <span className={cn(locked && "text-slate-500")}>{item.label}</span>
+      {locked && <Lock className="ml-auto mt-0.5 h-3 w-3 shrink-0 text-slate-500" aria-label="Terkunci" />}
     </NavLink>
   );
 }
@@ -187,7 +197,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 
   const konsumenChildren: NavNode[] = [];
   if (can("konsumen", "read")) {
-    konsumenChildren.push({ label: "Toko", href: "/ksu/toko" });
+    konsumenChildren.push({ label: "Toko", href: "/ksu/toko", feature: "unit_konsumen" });
   }
 
   // Koperasi pasar plan F3 — gated on market:read like every other Unit Usaha
@@ -195,7 +205,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   // client-chosen, so there's nothing multi-unit-specific about this page).
   const pasarChildren: NavNode[] = [];
   if (can("market", "read")) {
-    pasarChildren.push({ label: "Pasar", href: "/market" });
+    pasarChildren.push({ label: "Pasar", href: "/market", feature: "unit_pasar" });
   }
 
   const unitUsahaChildren: NavNode[] = [];
@@ -251,6 +261,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
                 onClose={onClose}
               />
             )}
+            <NavItemComponent item={{ label: "Langganan", href: "/langganan", icon: PackageIcon }} onClose={onClose} />
           </>
         )}
 
@@ -262,6 +273,8 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
             {[
               { href: "/platform/tenants", icon: Landmark, label: "Koperasi" },
               { href: "/platform/packages", icon: PackageIcon, label: "Paket Langganan" },
+              { href: "/platform/pricing", icon: Tags, label: "Harga & Paket" },
+              { href: "/platform/invoices", icon: Receipt, label: "Faktur" },
               { href: "/platform/admins", icon: ShieldCheck, label: "Admin Platform" }
             ].map((item) => (
               <NavLink

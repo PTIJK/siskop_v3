@@ -1,18 +1,26 @@
-import type { PublicPackage } from "@siskop/types";
+import type { PublicPricingCatalog } from "@siskop/types";
 import { Check } from "lucide-react";
 
-export function PackageFeatures({ pkg }: { pkg: PublicPackage }) {
+type Catalog = Pick<PublicPricingCatalog, "features" | "settings">;
+const count = (n: number | null, noun: string) => (n === null ? `${noun} tanpa batas` : `${n.toLocaleString("id-ID")} ${noun}`);
+
+/** The short feature list on a package card: limits first, then the standout priced features. */
+export function PackageFeatures({ pkg, catalog, max = 4 }: { pkg: PublicPricingCatalog["packages"][number]; catalog: Catalog; max?: number }) {
+  const limits = pkg.isCustom ? catalog.settings.customBaseLimits : pkg.limits;
+  const standout = pkg.isCustom
+    ? []
+    : catalog.features.filter((f) => pkg.features.includes(f.key) && Number(f.customPrice) > 0 && f.parentKey !== null).map((f) => f.name);
+  const items = [
+    pkg.isCustom ? "Pilih fitur sesuai kebutuhan" : "Simpanan & pinjaman",
+    count(limits.members, "anggota"),
+    count(limits.users, "pengguna"),
+    `${count(limits.savingTypes, "jenis simpanan")} · ${count(limits.loanTypes, "jenis pinjaman")}`,
+    ...standout.slice(0, max),
+    ...(standout.length > max ? [`+${standout.length - max} fitur lainnya`] : [])
+  ];
   return (
     <ul className='package-features'>
-      {[
-        `${pkg.maxMembers.toLocaleString("id-ID")} anggota`,
-        `${pkg.maxUsers.toLocaleString("id-ID")} pengguna`,
-        "Simpanan & pinjaman",
-        ...(pkg.modules.includes("accounting") ? ["Akuntansi & laporan"] : []),
-        ...(pkg.whitelabelEnabled ? ["Identitas koperasi Anda"] : []),
-        ...(pkg.customSubdomainEnabled ? ["Ubah subdomain setiap 365 hari"] : []),
-        ...(pkg.maxSavingConfigs !== null ? [`${pkg.maxSavingConfigs} jenis simpanan`] : [])
-      ].map((item) => (
+      {items.map((item) => (
         <li key={item}>
           <Check aria-hidden='true' />
           {item}

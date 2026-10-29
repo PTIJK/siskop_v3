@@ -2,6 +2,7 @@ import type { User } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { conflict, notFound, validationError } from "../../lib/errors.js";
 import { toPublicUser } from "../../lib/user-mapper.js";
+import { assertQuota, precheckQuota } from "../../lib/pricing/entitlements.js";
 import type { CreateUserInput, UpdateUserInput } from "./schema.js";
 import { withManagedIdentity } from "../identity-provisioning/service.js";
 
@@ -30,8 +31,11 @@ export async function createUser(tenantId: string, data: CreateUserInput): Promi
   if (duplicate) throw conflict(`Email ${data.email} sudah digunakan`);
 
   await assertUnitsBelongToTenant(tenantId, data.unitIds);
+  // Before any external login account exists: refuse now rather than strand one.
+  await precheckQuota(tenantId, "USERS");
 
   const created = await withManagedIdentity(data, async (identity, tx) => {
+    await assertQuota(tx, tenantId, "USERS");
     const user = await tx.user.create({
       data: { tenantId, roleId: data.roleId, name: data.name, ...identity }
     });
@@ -73,6 +77,8 @@ export async function updateUser(
   }
 
   const updated = await db.$transaction(async (tx) => {
+    // Switching a user back on takes a seat, so it is checked like a new user.
+    if (data.isActive === true && !user.isActive) await assertQuota(tx, tenantId, "USERS");
     if (data.unitIds !== undefined) {
       await tx.userUnit.deleteMany({ where: { userId: id } });
       await tx.userUnit.createMany({ data: data.unitIds.map((unitId) => ({ userId: id, unitId })) });

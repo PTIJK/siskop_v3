@@ -14,6 +14,7 @@ vi.mock("@/stores/auth", () => ({
 vi.mock("@/features/tenant-access/api", () => ({ useTenantAccessConfig: () => ({ data: { enabled: false } }) }));
 vi.mock("@/features/workspace-domain/host", () => ({ tenantSlug: () => "demo" }));
 vi.mock("./Sidebar", () => ({ Sidebar: () => <aside>Navigation</aside> }));
+vi.mock("./AccessBanner", () => ({ AccessBanner: () => null }));
 vi.mock("./Topbar", () => ({ Topbar: () => <header>Page header</header> }));
 vi.mock("../ui/toaster", () => ({ Toaster: () => null }));
 vi.mock("@/features/tenant-access/HandoffSessionGate", () => ({ HandoffSessionGate: () => null }));

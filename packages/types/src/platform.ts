@@ -46,8 +46,9 @@ export interface SubscriptionPackage {
   /** Rupiah, per billing period — a Decimal on the wire, same convention as other money fields. */
   price: string;
   modules: EntitlementModule[];
-  maxUsers: number;
-  maxMembers: number;
+  /** Null = unlimited. */
+  maxUsers: number | null;
+  maxMembers: number | null;
   maxSavingConfigs: number | null;
   whitelabelEnabled: boolean;
   customSubdomainEnabled: boolean;
@@ -59,8 +60,9 @@ export interface CreatePackageRequest {
   name: string;
   price: number;
   modules: EntitlementModule[];
-  maxUsers: number;
-  maxMembers: number;
+  /** Null = unlimited. */
+  maxUsers: number | null;
+  maxMembers: number | null;
   maxSavingConfigs?: number | null;
   whitelabelEnabled?: boolean;
   customSubdomainEnabled?: boolean;

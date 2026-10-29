@@ -208,17 +208,265 @@ enum CalkSection {
 model SubscriptionPackage {
   id                     String   @id @default(cuid())
   name                   String
+  // Pricing V2 columns. Legacy rows keep code = null and stay hidden from the
+  // new catalog (isPublic defaults false); the pricing seed upserts by code.
+  code                   String?  @unique
+  isCustom               Boolean  @default(false)
+  isPublic               Boolean  @default(false)
+  sortOrder              Int      @default(0)
+  priceMonthly           Decimal? @db.Decimal(15, 2)
+  priceYearly            Decimal? @db.Decimal(15, 2)
+  // Deprecated by priceMonthly; mirrored (0 when free) until the old columns are dropped.
   price                  Decimal  @db.Decimal(15, 2)
+  // Deprecated by PackageFeature; dropped one release after enforcement goes live.
   modules                String[]
-  maxUsers               Int
-  maxMembers             Int
+  // Null limit = unlimited.
+  maxUsers               Int?
+  maxMembers             Int?
+  maxSavingTypes         Int?
+  maxLoanTypes           Int?
+  // Deprecated by maxSavingTypes and the whitelabel feature.
   maxSavingConfigs       Int?
   whitelabelEnabled      Boolean  @default(false)
   customSubdomainEnabled Boolean  @default(false)
   isActive               Boolean  @default(true)
   createdAt              DateTime @default(now())
 
-  tenants Tenant[]
+  tenants       Tenant[]
+  features      PackageFeature[]
+  subscriptions TenantSubscription[]
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+enum SubscriptionCreatedVia {
+  REGISTRATION
+  ADMIN
+  MIGRATION
+}
+
+enum VolumeItem {
+  MEMBERS
+  USERS
+  SAVING_TYPES
+  LOAN_TYPES
+}
+
+enum AddonPeriod {
+  MONTHLY
+  YEARLY
+}
+
+enum InvoiceType {
+  REGISTRATION
+  RENEWAL
+  ADDON
+  SUPPORT
+}
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  EXPIRED
+  VOID
+}
+
+// ── PRICING V2 catalog (platform-level: no tenantId, read-only to tenants) ────
+// These live tables are the owner's working draft. Publishing writes an
+// immutable PricingVersion snapshot; the engine reads only that snapshot.
+model Feature {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  name        String
+  parentId    String?
+  parent      Feature?  @relation("FeatureTree", fields: [parentId], references: [id])
+  children    Feature[] @relation("FeatureTree")
+  requires    String[]
+  // Custom package price in IDR per month; 0 = included free in Custom.
+  customPrice Decimal   @default(0) @db.Decimal(15, 2)
+  // Features sharing a priceGroup are charged once for the group.
+  priceGroup  String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+
+  packages PackageFeature[]
+}
+
+model PackageFeature {
+  id        String              @id @default(cuid())
+  packageId String
+  featureId String
+  included  Boolean             @default(true)
+  package   SubscriptionPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  feature   Feature             @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, featureId])
+}
+
+model VolumeAddon {
+  id      String      @id @default(cuid())
+  itemKey VolumeItem  @unique
+  stepQty Int
+  price   Decimal     @db.Decimal(15, 2)
+  period  AddonPeriod @default(YEARLY)
+}
+
+model SupportPlan {
+  id            String  @id @default(cuid())
+  code          String  @unique
+  name          String
+  yearlyCost    Decimal @db.Decimal(15, 2)
+  remote        Boolean @default(false)
+  onsite        Boolean @default(false)
+  visitsPerYear Int     @default(0)
+  slaHours      Int?
+  aiSupport     Boolean @default(false)
+
+  subscriptions TenantSubscription[]
+}
+
+// Single row (id = "singleton").
+model PricingSetting {
+  id                             String         @id @default("singleton")
+  yearlyMultiplier               Int            @default(10)
+  enabledCycles                  BillingCycle[]
+  defaultPackageCode             String
+  customEnabled                  Boolean        @default(true)
+  customBaseLimits               Json
+  addonsOnFixedPackages          Boolean        @default(true)
+  paymentGraceDays               Int            @default(7)
+  unpaidRegistrationPurgeDays    Int            @default(14)
+  // Owner input: null until the owner enters the VAT rate (for example 0.11). Never defaulted.
+  taxRate                        Decimal?       @db.Decimal(6, 4)
+  invoiceNumberFormat            String         @default("INV-YYYYMM-NNNN")
+  paymentProvider                String         @default("manual")
+  // Owner input: bank transfer text shown on invoices.
+  paymentInstructions            String?
+  oneFreeTenantPerRegistrationNo Boolean        @default(false)
+  updatedAt                      DateTime       @updatedAt
+}
+
+model PricingVersion {
+  id          String   @id @default(cuid())
+  version     Int      @unique
+  snapshot    Json
+  publishedBy String?
+  publishedAt DateTime @default(now())
+}
+
+model PricingAuditLog {
+  id       String   @id @default(cuid())
+  actorId  String?
+  entity   String
+  entityId String?
+  action   String
+  before   Json?
+  after    Json?
+  at       DateTime @default(now())
+
+  @@index([entity, at])
+}
+
+// One current subscription per tenant; history lives in PricingAuditLog.
+model TenantSubscription {
+  id                  String                 @id @default(cuid())
+  tenantId            String                 @unique
+  tenant              Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  packageId           String
+  package             SubscriptionPackage    @relation(fields: [packageId], references: [id])
+  pricingVersion      Int
+  billingCycle        BillingCycle
+  supportPlanId       String?
+  supportPlan         SupportPlan?           @relation(fields: [supportPlanId], references: [id])
+  selectedFeatureKeys String[]
+  addons              Json                   @default("{}")
+  // Effective features, limits and unit prices at subscription time.
+  snapshot            Json
+  amountPerCycle      Decimal                @db.Decimal(15, 2)
+  status              SubscriptionStatus
+  startsAt            DateTime
+  nextBillingDate     DateTime?
+  createdVia          SubscriptionCreatedVia
+  limitOverrides      Json?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  invoices Invoice[]
+
+  @@index([packageId])
+}
+
+model PaymentGatewayConfig {
+  id                 String   @id @default(cuid())
+  provider           String   @unique
+  environment        String   @default("sandbox")
+  credentials        Json?
+  enabledMethods     String[]
+  webhookSecret      String?
+  invoiceExpiryHours Int      @default(72)
+  status             String   @default("DISCONNECTED")
+}
+
+model Invoice {
+  id             String             @id @default(cuid())
+  tenantId       String
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscriptionId String
+  subscription   TenantSubscription @relation(fields: [subscriptionId], references: [id])
+  number         String             @unique
+  type           InvoiceType
+  subtotal       Decimal            @db.Decimal(15, 2)
+  taxRate        Decimal?           @db.Decimal(6, 4)
+  taxAmount      Decimal            @default(0) @db.Decimal(15, 2)
+  total          Decimal            @db.Decimal(15, 2)
+  status         InvoiceStatus      @default(OPEN)
+  dueDate        DateTime
+  gatewayRef     String?
+  paymentUrl     String?
+  // Renewal mail progress: 0 none, 1 invoice mailed, 2 7-day reminder mailed.
+  noticeStage    Int                @default(0)
+  createdAt      DateTime           @default(now())
+
+  payments Payment[]
+
+  @@index([tenantId])
+  @@index([status, dueDate])
+}
+
+model Payment {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id])
+  gatewayTxnId String?
+  method       String
+  amount       Decimal  @db.Decimal(15, 2)
+  paidAt       DateTime
+
+  @@index([tenantId])
+  @@index([invoiceId])
+}
+
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  eventId     String
+  payload     Json
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([provider, eventId])
 }
 
 // Platform recovery ledger for Firebase creates; contains no passwords or tokens.
@@ -231,6 +479,12 @@ model IdentityProvisioning {
   @@index([status, createdAt])
 }
 
+// DEPRECATED (Pricing V2, Phase 4): OnboardingOrder, CheckoutAttempt and
+// RegistrationEmail belonged to the retired Xendit checkout. Registration now
+// creates a TenantSubscription and Invoice instead and nothing reads or writes
+// these tables. Kept for one release so unpaid legacy orders can be reviewed;
+// drop them in a later migration.
+//
 // Platform onboarding records, accessed only through a signed order cookie or
 // an authenticated provider callback. Amount/name are immutable checkout snapshots.
 model OnboardingOrder {
@@ -297,6 +551,9 @@ model Tenant {
   logoUrl                    String?
   packageId                  String?
   package                    SubscriptionPackage? @relation(fields: [packageId], references: [id])
+  subscription               TenantSubscription?
+  invoices                   Invoice[]
+  payments                   Payment[]
   isActive                   Boolean              @default(true)
   nextBillingDate            DateTime?
   billingReminder30SentAt    DateTime?
@@ -1273,14 +1530,14 @@ model JournalLine {
 // CLOSING, sourceId = this row) moved income and expense into equity. One row per year;
 // reopening posts mirror entries and sets reopenedAt, closing again clears it.
 model FiscalYearClose {
-  id             String    @id @default(cuid())
-  tenantId       String
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  year           Int
-  closedAt       DateTime  @default(now())
-  closedById     String
-  reopenedAt     DateTime?
-  reopenedById   String?
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  year         Int
+  closedAt     DateTime  @default(now())
+  closedById   String
+  reopenedAt   DateTime?
+  reopenedById String?
 
   @@unique([tenantId, year])
   @@index([tenantId])

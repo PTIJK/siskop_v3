@@ -4,6 +4,7 @@ import { db } from "../../lib/db.js";
 import { AppError, conflict, notFound } from "../../lib/errors.js";
 import { generateAccountNumber, generateMemberId } from "../../lib/id-generator.js";
 import { getDefaultUnitId } from "../../lib/units.js";
+import { withQuota } from "../../lib/pricing/entitlements.js";
 import type { ListRegistrationRequestsQueryInput, RejectRegistrationRequestInput } from "./registration.schema.js";
 
 const registrationRequestSelect = {
@@ -86,7 +87,7 @@ export async function approveRegistrationRequest(tenantId: string, id: string, r
     getDefaultUnitId(tenantId)
   ]);
 
-  return db.$transaction(async (tx) => {
+  return withQuota(tenantId, "MEMBERS", async (tx) => {
     const member = await tx.member.create({
       data: {
         tenantId,

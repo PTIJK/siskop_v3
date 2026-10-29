@@ -6,6 +6,7 @@ import { db } from "../../lib/db.js";
 import { unauthorized, notFound, validationError } from "../../lib/errors.js";
 import { signMemberAccessToken } from "../../middleware/member-auth.js";
 import { slugFromHost } from "../auth/tenant-host.js";
+import { assertTenantFeature } from "../../lib/pricing/entitlements.js";
 
 const BCRYPT_ROUNDS = 10;
 
@@ -92,6 +93,8 @@ export async function loginMember(host: string | undefined, nik: string, passwor
   const ok = await bcrypt.compare(password, hash);
 
   if (!member || !ok || !member.isActive || !member.passwordHash) throw unauthorized();
+  // After the password check, so a wrong password never reveals the package.
+  await assertTenantFeature(tenant.id, "member_portal");
 
   const claims: MemberAuthClaims = { memberId: member.id, tenantId: member.tenantId, role: "member" };
   await db.member.update({ where: { id: member.id, tenantId: member.tenantId }, data: { lastLoginAt: new Date() } });
@@ -118,6 +121,7 @@ export async function refreshMemberSession(token: string, expectedTenantId?: str
 
   const tenant = await db.tenant.findUnique({ where: { id: member.tenantId } });
   if (!tenant?.isActive) throw unauthorized("Invalid or expired refresh token");
+  await assertTenantFeature(tenant.id, "member_portal");
 
   const claims: MemberAuthClaims = { memberId: member.id, tenantId: member.tenantId, role: "member" };
   return issue(claims);

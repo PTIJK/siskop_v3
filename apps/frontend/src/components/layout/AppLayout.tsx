@@ -4,6 +4,7 @@ import { Outlet, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/stores/auth";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { AccessBanner } from "./AccessBanner";
 import { Toaster } from "../ui/toaster";
 import { HandoffSessionGate } from "@/features/tenant-access/HandoffSessionGate";
 import { Suspense } from "react";
@@ -49,6 +50,7 @@ export function AppLayout() {
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar />
+        <AccessBanner />
         <main className="flex-1 overflow-y-auto p-6">
           {/* Keep the navigation shell visible when a lazy route is loading. */}
           <Suspense fallback={<PageLoading />}>

@@ -2,6 +2,10 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePlatformAdmin } from "../../middleware/rbac.js";
 import { requireParam } from "../../lib/http.js";
+import { invoiceAdminRoutes } from "../billing/admin-routes.js";
+import { pricingAdminRoutes } from "../pricing-admin/routes.js";
+import { tenantSubscriptionSchema } from "../pricing-admin/schema.js";
+import { getTenantSubscription, setTenantSubscription } from "../pricing-admin/service.js";
 import {
   createPackageSchema,
   createPlatformAdminSchema,
@@ -33,6 +37,28 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
 export function platformRoutes(): Router {
   const router = Router();
   router.use(requireAuth, requirePlatformAdmin);
+
+  // Pricing V2 owner console (catalog draft, publish, history).
+  router.use("/pricing", pricingAdminRoutes());
+
+  // Subscription invoices: list, mark paid, void, reissue.
+  router.use("/invoices", invoiceAdminRoutes());
+
+  router.get(
+    "/tenants/:id/subscription",
+    handle(async (req, res) => {
+      const data = await getTenantSubscription(requireParam(req, "id"));
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.put(
+    "/tenants/:id/subscription",
+    handle(async (req, res) => {
+      const data = await setTenantSubscription(authClaims(req).userId, requireParam(req, "id"), tenantSubscriptionSchema.parse(req.body));
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
 
   router.get(
     "/tenants",

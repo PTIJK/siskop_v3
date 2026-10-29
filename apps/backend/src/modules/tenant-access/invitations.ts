@@ -1,6 +1,7 @@
 import { db } from '../../lib/db.js'
 import { conflict, forbidden, notFound } from '../../lib/errors.js'
 import { verifyFirebaseIdentity } from '../onboarding/firebase.js'
+import { assertQuota } from '../../lib/pricing/entitlements.js'
 import { centralUrl } from './config.js'
 import { digest, secretValue } from './service.js'
 import type { MembershipInvitationResponse } from '@siskop/types'
@@ -52,6 +53,8 @@ export async function acceptInvitation(token: string, idToken: string) {
         where: { identityId_tenantId: { identityId: identity.id, tenantId: invitation.membership.tenantId } }
       })
       if (existing) throw conflict('Akun ini sudah memiliki keanggotaan di koperasi tersebut.')
+      // An invited user is inactive until accepted, so accepting is what takes the seat.
+      await assertQuota(tx, invitation.membership.tenantId, 'USERS')
       const used = await tx.membershipInvitation.updateMany({
         where: { id: invitation.id, acceptedAt: null, expiresAt: { gt: new Date() } },
         data: { acceptedAt: new Date() }

@@ -56,6 +56,9 @@ const MarketPage = lazy(() =>
 const ConfigPage = lazy(() =>
   import("@/pages/config/ConfigPage").then((module) => ({ default: module.ConfigPage }))
 );
+const SubscriptionPage = lazy(() =>
+  import("@/pages/config/SubscriptionPage").then((module) => ({ default: module.SubscriptionPage }))
+);
 const YearClosePage = lazy(() =>
   import("@/pages/journal/YearClosePage").then((module) => ({ default: module.YearClosePage }))
 );
@@ -90,6 +93,12 @@ const PlatformTenantsPage = lazy(() =>
 );
 const PlatformPackagesPage = lazy(() =>
   import("@/pages/platform/PlatformPackagesPage").then((module) => ({ default: module.PlatformPackagesPage }))
+);
+const PlatformPricingPage = lazy(() =>
+  import("@/pages/platform/PlatformPricingPage").then((module) => ({ default: module.PlatformPricingPage }))
+);
+const PlatformInvoicesPage = lazy(() =>
+  import("@/pages/platform/PlatformInvoicesPage").then((module) => ({ default: module.PlatformInvoicesPage }))
 );
 const PlatformAdminsPage = lazy(() =>
   import("@/pages/platform/PlatformAdminsPage").then((module) => ({ default: module.PlatformAdminsPage }))
@@ -189,6 +198,7 @@ export default function App() {
               <Route path='/journal/close' element={<YearClosePage />} />
 
               <Route path='/config' element={<ConfigPage />} />
+              <Route path='/langganan' element={<SubscriptionPage />} />
               <Route path='/profile' element={<ProfilePage />} />
 
               {/* KSU (multi-unit) routes — reachable only when the tenant has
@@ -243,6 +253,8 @@ export default function App() {
 
               <Route path='/platform/tenants' element={<PlatformTenantsPage />} />
               <Route path='/platform/packages' element={<PlatformPackagesPage />} />
+              <Route path='/platform/pricing' element={<PlatformPricingPage />} />
+              <Route path='/platform/invoices' element={<PlatformInvoicesPage />} />
               <Route path='/platform/admins' element={<PlatformAdminsPage />} />
             </Route>
 
