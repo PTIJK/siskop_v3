@@ -175,7 +175,7 @@ export function PortfolioQualityPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Kualitas Portofolio"
+        title="Kualitas portofolio"
         description="Pinjaman beredar menurut umur tunggakan (PAR), rasio NPL, dan efisiensi penagihan"
         actions={<UnitFilter value={unitId} onChange={setUnitId} />}
       />

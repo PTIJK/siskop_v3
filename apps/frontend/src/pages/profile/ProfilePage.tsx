@@ -88,7 +88,7 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Profil Saya" description="Kelola informasi akun dan password Anda" />
+      <PageHeader title="Profil saya" description="Kelola informasi akun dan password Anda" />
 
       <div className="flex items-center gap-4">
         <Avatar className="h-14 w-14">

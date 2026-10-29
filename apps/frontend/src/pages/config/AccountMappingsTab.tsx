@@ -214,7 +214,7 @@ export function AccountMappingsTab() {
       <ConfirmDialog
         open={autoMapOpen}
         onOpenChange={setAutoMapOpen}
-        title="Petakan Otomatis"
+        title="Petakan otomatis"
         description="Membuat pemetaan akun default untuk setiap konfigurasi simpanan/pinjaman (dan penjualan toko bila ada unit Toko). Akun standar koperasi yang belum ada ikut ditambahkan. Pemetaan dan akun yang sudah ada tidak akan diubah — aman dijalankan lebih dari sekali."
         confirmLabel="Petakan Otomatis"
         onConfirm={autoMap}

@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiPost, ApiRequestError } from "@/api/client";
 import { formatRupiah, formatTanggalPendek } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +64,18 @@ export function SavingDetailPage() {
   };
 
   if (isPending) return <PageLoading />;
-  if (!saving) return <p className="text-center text-muted-foreground">Rekening tidak ditemukan</p>;
+  if (!saving) {
+    return (
+      <div className="space-y-5">
+        <PageHeader title="Rekening simpanan" breadcrumb={[{ label: "Simpanan", href: "/savings" }, { label: "Rekening simpanan" }]} />
+        <Card>
+          <CardContent>
+            <EmptyState title="Rekening tidak ditemukan" description="Tautannya mungkin sudah tidak berlaku, atau datanya sudah dihapus. Kembali ke daftar untuk memilih lagi." action={<Button asChild variant="outline"><Link to="/savings">Kembali ke daftar</Link></Button>} />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const isPOKOK = saving.savingConfig.type === "POKOK";
 
@@ -95,10 +107,10 @@ export function SavingDetailPage() {
           {can("savings", "create") && (
             <div className="mt-5 flex gap-3">
               <Button variant="outline" onClick={() => setAction("deposit")}>
-                <ArrowDownCircle className="mr-2 h-4 w-4 text-green-600" /> Setor
+                <ArrowDownCircle className="mr-2 h-4 w-4 text-success" /> Setor
               </Button>
               <Button variant="outline" onClick={() => setAction("withdraw")}>
-                <ArrowUpCircle className="mr-2 h-4 w-4 text-orange-600" /> Tarik
+                <ArrowUpCircle className="mr-2 h-4 w-4 text-warning" /> Tarik
               </Button>
             </div>
           )}
@@ -114,7 +126,7 @@ export function SavingDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             {action === "withdraw" && isPOKOK && (
-              <div className="flex items-start gap-2 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">
+              <div className="flex items-start gap-2 rounded-md bg-warning/10 p-3 text-sm text-warning">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 Simpanan pokok tidak dapat ditarik jika ada pinjaman aktif.
               </div>

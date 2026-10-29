@@ -85,7 +85,7 @@ export function SalesReportPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Laporan Toko" description="Penjualan, laba kotor, produk terlaris, dan stok unit ini" />
+      <PageHeader title="Laporan toko" description="Penjualan, laba kotor, produk terlaris, dan stok unit ini" />
 
       <Card>
         <CardContent className="pt-5">
@@ -112,13 +112,13 @@ export function SalesReportPage() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard title="Omzet" value={formatRupiah(data.ringkasan.omzet)} icon={ShoppingCart} />
-            <StatCard title="Harga Pokok (HPP)" value={formatRupiah(data.ringkasan.hpp)} icon={Package} />
+            <StatCard title="Harga pokok (HPP)" value={formatRupiah(data.ringkasan.hpp)} icon={Package} />
             <StatCard
-              title="Laba Kotor"
+              title="Laba kotor"
               value={formatRupiah(data.ringkasan.labaKotor)}
               subtitle={`Margin ${data.ringkasan.marginPercent.toLocaleString("id-ID")}%`}
               icon={TrendingUp}
-              iconColor="text-green-600"
+              iconColor="text-success"
             />
             <StatCard
               title="Transaksi"

@@ -163,7 +163,7 @@ export function BukuBesarTab({ initial }: { initial?: DrilldownTarget | null }) 
       ) : (
         <ReportResultCard
           reportName="Buku Besar"
-          title="Buku Besar"
+          title="Buku besar"
           subtitle={data ? [formatPeriode(data.periode.from, data.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
           actions={data && <ExportMenu pdfViaExport report="buku-besar" query={query} stem={`buku-besar-${f.from}_${f.to}`} />}
           isLoading={overview.isLoading}

@@ -44,7 +44,7 @@ export function PerubahanEkuitasTab() {
 
       <ReportResultCard
         reportName="Perubahan Ekuitas"
-        title="Laporan Perubahan Ekuitas"
+        title="Laporan perubahan ekuitas"
         subtitle={data ? [formatPeriode(data.periode.from, data.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
         actions={data && <ExportMenu report="perubahan-ekuitas" query={query} stem={`perubahan-ekuitas-${data.periode.from}_${data.periode.to}`} pdfPath={`/reports/regulatory/perubahan-ekuitas/pdf?${query}`} />}
         isLoading={report.isLoading}

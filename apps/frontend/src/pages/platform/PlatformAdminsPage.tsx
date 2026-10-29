@@ -142,7 +142,7 @@ export function PlatformAdminsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Admin Platform" description="Kelola pengguna dengan akses administrasi seluruh platform" />
+      <PageHeader title="Admin platform" description="Kelola pengguna dengan akses administrasi seluruh platform" />
 
       <DataTable
         columns={columns}

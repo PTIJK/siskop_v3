@@ -17,7 +17,7 @@ export function AccountingBooksPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Buku Akuntansi"
+        title="Buku akuntansi"
         description="Jurnal Umum, Jurnal Penyesuaian, Neraca Saldo, dan Buku Besar langsung dari buku besar koperasi"
       />
 

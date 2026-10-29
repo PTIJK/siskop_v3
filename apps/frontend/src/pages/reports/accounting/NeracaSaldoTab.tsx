@@ -50,7 +50,7 @@ export function NeracaSaldoTab() {
 
       <ReportResultCard
         reportName="Neraca Saldo"
-        title="Neraca Saldo"
+        title="Neraca saldo"
         subtitle={
           data
             ? [

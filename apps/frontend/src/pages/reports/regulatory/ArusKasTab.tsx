@@ -85,7 +85,7 @@ export function ArusKasTab() {
       ) : (
         <ReportResultCard
           reportName="Arus Kas"
-          title="Laporan Arus Kas"
+          title="Laporan arus kas"
           subtitle={data ? [formatPeriode(data.periode.from, data.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
           actions={
             data && (
@@ -107,9 +107,9 @@ export function ArusKasTab() {
                   <p className="text-sm font-semibold tabular-nums">{formatRupiah(data.saldoKasAwal)}</p>
                 </CardContent>
               </Card>
-              <ActivitySection title="Aktivitas Operasi" section={data.aktivitasOperasi} />
-              <ActivitySection title="Aktivitas Investasi" section={data.aktivitasInvestasi} />
-              <ActivitySection title="Aktivitas Pendanaan" section={data.aktivitasPendanaan} />
+              <ActivitySection title="Aktivitas operasi" section={data.aktivitasOperasi} />
+              <ActivitySection title="Aktivitas investasi" section={data.aktivitasInvestasi} />
+              <ActivitySection title="Aktivitas pendanaan" section={data.aktivitasPendanaan} />
               <Card>
                 <CardContent className="space-y-1 py-4">
                   <div className="flex items-center justify-between text-sm">

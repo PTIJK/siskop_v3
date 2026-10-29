@@ -104,11 +104,11 @@ export function SavingStatement({ savingId }: { savingId: string }) {
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Total Kredit (masuk)</dt>
-                <dd className="font-semibold tabular-nums text-green-700">{formatRupiahRinci(statement.totalCredit)}</dd>
+                <dd className="font-semibold tabular-nums text-success">{formatRupiahRinci(statement.totalCredit)}</dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Total Debit (keluar)</dt>
-                <dd className="font-semibold tabular-nums text-orange-700">{formatRupiahRinci(statement.totalDebit)}</dd>
+                <dd className="font-semibold tabular-nums text-warning">{formatRupiahRinci(statement.totalDebit)}</dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Saldo Akhir</dt>
@@ -150,8 +150,8 @@ export function SavingStatement({ savingId }: { savingId: string }) {
                           {[r.note, r.createdByName ?? (r.type === "INTEREST" ? "Sistem" : null)].filter(Boolean).join(" · ") || "-"}
                         </div>
                       </TableCell>
-                      <TableCell className={`text-right tabular-nums ${Number(r.debit) ? "text-orange-700" : "text-muted-foreground"}`}>{amountOrDash(r.debit)}</TableCell>
-                      <TableCell className={`text-right tabular-nums ${Number(r.credit) ? "text-green-700" : "text-muted-foreground"}`}>{amountOrDash(r.credit)}</TableCell>
+                      <TableCell className={`text-right tabular-nums ${Number(r.debit) ? "text-warning" : "text-muted-foreground"}`}>{amountOrDash(r.debit)}</TableCell>
+                      <TableCell className={`text-right tabular-nums ${Number(r.credit) ? "text-success" : "text-muted-foreground"}`}>{amountOrDash(r.credit)}</TableCell>
                       <TableCell className="text-right font-medium tabular-nums">{formatRupiahRinci(r.balance)}</TableCell>
                     </TableRow>
                   ))
@@ -161,8 +161,8 @@ export function SavingStatement({ savingId }: { savingId: string }) {
                 <TableRow>
                   <TableCell className="text-sm">{formatTanggalPendek(`${statement.period.to}T00:00:00`)}</TableCell>
                   <TableCell className="text-sm font-semibold">Saldo Akhir</TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums text-orange-700">{formatRupiahRinci(statement.totalDebit)}</TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums text-green-700">{formatRupiahRinci(statement.totalCredit)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums text-warning">{formatRupiahRinci(statement.totalDebit)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums text-success">{formatRupiahRinci(statement.totalCredit)}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">{formatRupiahRinci(statement.closingBalance)}</TableCell>
                 </TableRow>
               </TableFooter>

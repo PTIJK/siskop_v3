@@ -115,7 +115,7 @@ export function LabaRugiTab() {
 
       <ReportResultCard
         reportName="Laporan Hasil Usaha"
-        title="Laporan Hasil Usaha"
+        title="Laporan hasil usaha"
         subtitle={
           data
             ? [

@@ -183,7 +183,7 @@ export function PlatformPackagesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Paket Langganan" description="Kelola paket langganan yang tersedia untuk koperasi" />
+      <PageHeader title="Paket langganan" description="Kelola paket langganan yang tersedia untuk koperasi" />
 
       <DataTable
         columns={columns}

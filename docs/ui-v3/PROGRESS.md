@@ -62,7 +62,7 @@ Dashboard, Anggota, Piutang Anggota (`konsumen:read`, fitur `member_receivables`
 | 3 Shell | selesai | lihat git log |
 | 4 DataTable | selesai | lihat git log |
 | 5 Halaman P1 | selesai | lihat git log |
-| 6 Halaman P2/P3 | belum | |
+| 6 Halaman P2/P3 | selesai | lihat git log |
 | 7 Penutup | belum | |
 
 ## Fase 1: Token (selesai)
@@ -154,3 +154,25 @@ Penyimpangan dari design.md yang disengaja:
 Pemeriksaan peramban nyata (Puppeteer + mock /api): Beranda 1366x768 panel penuh terlihat (bawah 763/768 px dengan 5 tugas + "lihat lainnya"; dengan <= 4 tugas lebih longgar); alur setor 4 interaksi, 1,5 dtk otomatis, kolom nominal otomatis fokus, dialog fokus ke Posting, struk lengkap, tarik melebihi saldo ditolak inline, peran baca-saja melihat penjelasan; stepper pinjaman sampai Ajukan; POS 390px bar 56px dan lembar bawah; login 390px tanpa gulir horizontal.
 
 Tes baru: attention (7), saving-flow (11), format (ringkas, jam WIB, NIK). Total 196 lulus. Gerbang: tsc 0, eslint 0, vitest 196/196, vite build sukses.
+
+## Fase 6: Halaman prioritas 2 dan 3 (selesai)
+
+- **Sapuan warna lama**: 18 berkas memakai hijau/merah/kuning/oranye/biru/abu bawaan Tailwind; semuanya dipetakan ke token (success, destructive, warning, info, muted, border), varian `dark:` yang berlebihan dibuang. `grep` untuk `(slate|gray|zinc|green|emerald|amber|yellow|orange|red|blue|purple|teal)-NNN` di luar situs pemasaran kini kosong.
+- **Hub Pengaturan** (`pages/config/ConfigPage.tsx`): 14 tab menjadi navigasi samping dalam 4 grup (Koperasi, Akuntansi, Akses dan keamanan, Tampilan dan alamat); bagian aktif di `?tab=`; <= 900px memakai satu pemilih bawaan (`<select>` dengan optgroup). Isi form tiap bagian tidak berubah. Judul halaman "Konfigurasi" menjadi "Pengaturan" (sama dengan menu).
+- **Tutup buku**: konsekuensi ditulis dengan bahasa biasa (pendapatan dan beban dinolkan ke ekuitas, jurnal manual tahun itu dikunci, bisa dibuka kembali lewat jurnal pembalik), tombol akhir `destructive` dan baru aktif setelah tahun diketik. Status memakai Badge bermarka.
+- **Jurnal manual**: "Tinjau dan catat jurnal" membuka konfirmasi dua langkah yang menyebut jenis, tanggal, total, dan bahwa jurnal tidak bisa diubah/dihapus (koreksi lewat jurnal pembalik). Peran tanpa izin melihat EmptyState terkunci.
+- **Laporan**: `ReportResultCard` memakai EmptyState (belum memilih periode, tidak ada data); judul laporan sentence case.
+- **Keadaan lintas halaman**: `PageLoading` kini kerangka berbentuk halaman (judul, tiga ubin, tabel), bukan spinner; halaman detail Anggota/Simpanan/Pinjaman yang tidak ditemukan memakai EmptyState dengan tautan kembali; Unit Usaha tidak ditemukan; judul 25 halaman dibuat sentence case.
+- **PageHeader**: tingkat judul dari konteks, halaman di dalam tab unit usaha memakai h2 sehingga hanya ada satu h1.
+- **Pendaftaran mandiri publik** (`PublicRegistrationPage`): landmark `main`, h1, label terhubung ke input (7 kolom), pesan galat `role=alert`, target sentuh 44px.
+- **Primitif lain**: AlertDialog, Select, Dropdown, Tooltip, Tabs, Textarea mengikuti token, radius, skala z-index; TabsList bisa digulir mendatar di layar sempit.
+- **Platform Admin, Rekening Koran, Kolektor pasar, Laporan Pasar, Piutang, Beban umum, Unit usaha, dll.**: memakai sistem lewat primitif, DataTable, PageHeader, dan sapuan token di atas; struktur halamannya tidak ditulis ulang.
+
+Yang TIDAK dikerjakan (jujur):
+- **Portal anggota mobile**: tidak ada UI portal anggota di repo frontend ini (hanya tautan `/anggota/login`); tidak dibuat dari nol karena itu fitur baru, bukan lapisan presentasi.
+- **Kolektor pasar mobile** (`/market`, 923 baris) dan **Rekening Koran/cetak**: dapat tampilan baru dari token dan primitif tetapi tata letaknya belum dirancang ulang khusus ponsel; perlu uji manual di perangkat.
+- Situs pemasaran/onboarding (`features/onboarding`: Landing, Register, Checkout) tetap memakai gaya hijau hutan sendiri; bukan bagian dari mockup. Lihat Fase 7.
+
+Pemeriksaan peramban nyata (Puppeteer, mock /api): merayapi 35 rute tenant dan 5 rute platform pada 1366 dan 390 px dalam keadaan galat; tidak ada kerusakan halaman dan tidak ada gulir horizontal. Dalam keadaan data kosong semua halaman daftar menampilkan keadaan kosong; sisa kerusakan hanya pada halaman yang menerima `[]` padahal API mengembalikan objek (artefak mock, bukan perilaku API nyata).
+
+Gerbang: tsc 0, eslint 0, vitest 196/196, vite build sukses.

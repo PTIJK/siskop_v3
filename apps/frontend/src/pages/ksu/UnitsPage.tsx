@@ -28,7 +28,7 @@ export function UnitsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Unit Usaha"
+        title="Unit usaha"
         description="Kelola unit usaha koperasi serba usaha (KSU)"
         actions={
           can("config", "update") && (

@@ -107,7 +107,7 @@ export function ShuConfigTab() {
             ))}
           </div>
 
-          <p className={`text-sm font-medium ${Math.abs(total - 100) < 0.01 ? "text-green-700" : "text-destructive"}`}>
+          <p className={`text-sm font-medium ${Math.abs(total - 100) < 0.01 ? "text-success" : "text-destructive"}`}>
             Total: {total}%
           </p>
 

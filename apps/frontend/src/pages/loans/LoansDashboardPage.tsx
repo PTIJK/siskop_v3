@@ -69,7 +69,7 @@ function LoansTable({
     { header: "Angsuran/bln", cell: ({ row }) => formatRupiah(row.original.monthlyPayment) },
     {
       header: "Sisa",
-      cell: ({ row }) => <span className="font-semibold text-orange-600">{formatRupiah(row.original.remainingAmount)}</span>
+      cell: ({ row }) => <span className="font-semibold text-warning">{formatRupiah(row.original.remainingAmount)}</span>
     },
     { header: "Tenor", cell: ({ row }) => `${row.original.termMonths} bln` },
     { header: "Status", cell: ({ row }) => <Badge variant="outline">{row.original.status}</Badge> },
@@ -124,14 +124,14 @@ export function LoansDashboardPage() {
 
       {overdueCount > 0 && (
         <div
-          className="flex cursor-pointer items-center gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3"
+          className="flex cursor-pointer items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3"
           onClick={() => navigate("/loans/overdue")}
         >
-          <AlertTriangle className="h-5 w-5 text-red-600" />
+          <AlertTriangle className="h-5 w-5 text-destructive" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-red-800">{overdueCount} anggota memiliki pinjaman bermasalah (MACET/DIRAGUKAN)</p>
+            <p className="text-sm font-medium text-destructive">{overdueCount} anggota memiliki pinjaman bermasalah (MACET/DIRAGUKAN)</p>
           </div>
-          <span className="text-xs text-red-600 underline">Lihat detail →</span>
+          <span className="text-xs text-destructive underline">Lihat detail →</span>
         </div>
       )}
 

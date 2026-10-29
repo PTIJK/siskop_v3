@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiPost, ApiRequestError } from "@/api/client";
 import { formatRupiah, formatTanggalPendek } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { KOLBadge } from "@/components/shared/KOLBadge";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -123,7 +124,18 @@ export function LoanDetailPage() {
   };
 
   if (isPending) return <PageLoading />;
-  if (!loan) return <p className="text-center text-muted-foreground">Pinjaman tidak ditemukan</p>;
+  if (!loan) {
+    return (
+      <div className="space-y-5">
+        <PageHeader title="Pinjaman" breadcrumb={[{ label: "Pinjaman", href: "/loans" }, { label: "Pinjaman" }]} />
+        <Card>
+          <CardContent>
+            <EmptyState title="Pinjaman tidak ditemukan" description="Tautannya mungkin sudah tidak berlaku, atau datanya sudah dihapus. Kembali ke daftar untuk memilih lagi." action={<Button asChild variant="outline"><Link to="/loans">Kembali ke daftar</Link></Button>} />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const total = parseFloat(loan.totalAmount);
   const remaining = parseFloat(loan.remainingAmount);
@@ -132,7 +144,7 @@ export function LoanDetailPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Detail Pinjaman" breadcrumb={[{ label: "Pinjaman", href: "/loans" }, { label: loan.loanConfig.name }]} />
+      <PageHeader title="Detail pinjaman" breadcrumb={[{ label: "Pinjaman", href: "/loans" }, { label: loan.loanConfig.name }]} />
 
       <Card>
         <CardContent className="pt-6">
@@ -171,7 +183,7 @@ export function LoanDetailPage() {
               <div>
                 <div className="mb-1 flex justify-between text-xs">
                   <span>Dibayar: {formatRupiah(paid)}</span>
-                  <span className="text-orange-600">Sisa: {formatRupiah(remaining)}</span>
+                  <span className="text-warning">Sisa: {formatRupiah(remaining)}</span>
                 </div>
                 <Progress value={progress} className="h-2" />
                 <p className="mt-0.5 text-right text-xs text-muted-foreground">{progress}% lunas</p>
@@ -253,8 +265,8 @@ export function LoanDetailPage() {
                 loan.payments.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell>{formatTanggalPendek(p.paidAt)}</TableCell>
-                    <TableCell className="text-right font-semibold text-green-700">{formatRupiah(p.amount)}</TableCell>
-                    <TableCell className="text-right text-red-600">{formatRupiah(p.penalty)}</TableCell>
+                    <TableCell className="text-right font-semibold text-success">{formatRupiah(p.amount)}</TableCell>
+                    <TableCell className="text-right text-destructive">{formatRupiah(p.penalty)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{p.note ?? "-"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{p.createdByUser?.name ?? "-"}</TableCell>
                   </TableRow>

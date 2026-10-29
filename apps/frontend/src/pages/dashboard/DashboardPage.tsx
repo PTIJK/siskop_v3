@@ -290,7 +290,7 @@ export function DashboardPage() {
       <ComplianceSection capital={capitalQuery.data} />
 
       <div className="grid grid-cols-1 gap-4 min-[1181px]:grid-cols-2">
-        <ChartCard title="Modal Sendiri" description="Posisi akhir bulan, 12 bulan terakhir">
+        <ChartCard title="Modal sendiri" description="Posisi akhir bulan, 12 bulan terakhir">
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={capitalTrend} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
@@ -302,7 +302,7 @@ export function DashboardPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Arus Bersih Simpanan" description="Setoran dan bunga dikurangi penarikan, per bulan">
+        <ChartCard title="Arus bersih simpanan" description="Setoran dan bunga dikurangi penarikan, per bulan">
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={growth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
@@ -315,7 +315,7 @@ export function DashboardPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Anggota Baru per Bulan" description="12 bulan terakhir">
+        <ChartCard title="Anggota baru per bulan" description="12 bulan terakhir">
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={growth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />

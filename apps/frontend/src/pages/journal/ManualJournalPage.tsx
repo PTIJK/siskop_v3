@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAccessibleUnits } from "@/hooks/useAccessibleUnits";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FormError } from "@/components/shared/FormError";
 import { BalanceChip } from "@/components/reports/BalanceChip";
@@ -18,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Undo2 } from "lucide-react";
+import { Lock, Plus, Trash2, Undo2 } from "lucide-react";
 import { todayLocal } from "@/pages/reports/regulatory/period";
 import { summarizeLines, toRequestLines, type DraftLine } from "./journalForm";
 
@@ -45,6 +46,7 @@ export function ManualJournalPage() {
   const [saving, setSaving] = useState(false);
   const [lastEntry, setLastEntry] = useState<JournalEntryDetail | null>(null);
   const [reverseOpen, setReverseOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const postable = useMemo(() => (accounts ?? []).filter((a) => a.isActive && !a.isHeader), [accounts]);
   const summary = summarizeLines(lines);
@@ -78,6 +80,7 @@ export function ManualJournalPage() {
       setApiError(err instanceof ApiRequestError ? err.message : "Terjadi kesalahan");
     } finally {
       setSaving(false);
+      setConfirmOpen(false);
     }
   };
 
@@ -101,8 +104,12 @@ export function ManualJournalPage() {
   if (!can("accounting", "create")) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Jurnal Manual" description="Jurnal umum dan penyesuaian" />
-        <p className="text-sm text-muted-foreground">Anda tidak memiliki izin untuk mencatat jurnal manual.</p>
+        <PageHeader title="Jurnal manual" description="Jurnal umum dan penyesuaian" />
+        <Card>
+          <CardContent>
+            <EmptyState icon={Lock} title="Peran Anda tidak bisa mencatat jurnal manual" description="Mencatat jurnal membutuhkan izin akuntansi. Hubungi manajer jika Anda perlu akses ini." />
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -111,7 +118,7 @@ export function ManualJournalPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Jurnal Manual"
+        title="Jurnal manual"
         description="Catat jurnal umum atau jurnal penyesuaian akhir periode. Jurnal tidak dapat diubah; koreksi dengan jurnal pembalik."
       />
 
@@ -226,7 +233,7 @@ export function ManualJournalPage() {
             </TableBody>
           </Table>
 
-          {summary.error && <p className="text-xs text-destructive">{summary.error}</p>}
+          {summary.error && <p role="alert" className="text-xs font-semibold text-destructive">{summary.error}</p>}
           <FormError error={apiError} />
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -240,8 +247,8 @@ export function ManualJournalPage() {
                 <BalanceChip balanced={summary.difference === 0} difference={summary.difference / 100} />
               )}
             </div>
-            <Button onClick={submit} disabled={!ready || saving}>
-              {saving ? "Menyimpan..." : "Catat Jurnal"}
+            <Button onClick={() => setConfirmOpen(true)} disabled={!ready || saving}>
+              Tinjau dan catat jurnal
             </Button>
           </div>
         </CardContent>
@@ -290,6 +297,16 @@ export function ManualJournalPage() {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={(open) => !saving && setConfirmOpen(open)}
+        title="Catat jurnal ini?"
+        description={`Jurnal ${entryType === "UMUM" ? "umum" : "penyesuaian"} tanggal ${formatTanggalIndonesia(entryDate)} dengan total debit dan kredit ${formatRupiah(summary.totalDebit / 100)} akan langsung masuk ke buku besar. Jurnal yang sudah dicatat tidak bisa diubah atau dihapus; jika salah, koreksi dengan jurnal pembalik.`}
+        confirmLabel="Catat jurnal"
+        isLoading={saving}
+        onConfirm={submit}
+      />
 
       <ConfirmDialog
         open={reverseOpen}

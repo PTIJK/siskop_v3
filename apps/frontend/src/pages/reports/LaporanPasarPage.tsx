@@ -95,7 +95,7 @@ export function LaporanPasarPage() {
   if (isNotEntitled(rekapQuery.error)) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Laporan Pasar" description="Rekap kolektor dan tunggakan sewa/retribusi/angsuran" />
+        <PageHeader title="Laporan pasar" description="Rekap kolektor dan tunggakan sewa/retribusi/angsuran" />
         <EntitlementNotice message={rekapQuery.error.message} />
       </div>
     );
@@ -110,7 +110,7 @@ export function LaporanPasarPage() {
       header: "Selisih",
       cell: ({ row }) =>
         row.original.selisih !== null ? (
-          <span className={Number(row.original.selisih) < 0 ? "text-destructive" : "text-green-700"}>
+          <span className={Number(row.original.selisih) < 0 ? "text-destructive" : "text-success"}>
             {formatRupiah(row.original.selisih)}
           </span>
         ) : (
@@ -156,7 +156,7 @@ export function LaporanPasarPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Laporan Pasar" description="Rekap kolektor dan tunggakan sewa/retribusi/angsuran" />
+      <PageHeader title="Laporan pasar" description="Rekap kolektor dan tunggakan sewa/retribusi/angsuran" />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>

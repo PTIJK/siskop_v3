@@ -802,7 +802,7 @@ export function MarketPage() {
       <ConfirmDialog
         open={!!endingContractId}
         onOpenChange={(open) => !open && setEndingContractId(null)}
-        title="Selesaikan Kontrak"
+        title="Selesaikan kontrak"
         description="Kios akan menjadi kosong dan dapat disewakan ke pedagang lain. Lanjutkan?"
         confirmLabel="Selesaikan"
         onConfirm={endContract}
