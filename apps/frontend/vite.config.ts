@@ -2,8 +2,26 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
+// Production hosting rewrites /anggota/** to the separate member app
+// (firebase.json). In dev that app runs on its own port (apps/mobile, 3002), so
+// hand the request over to it, keeping the hostname so the tenant subdomain
+// survives.
+const MEMBER_APP_DEV_PORT = 3002;
+const memberAppRedirect = {
+  name: "member-app-dev-redirect",
+  configureServer(server: import("vite").ViteDevServer) {
+    server.middlewares.use((req, res, next) => {
+      if (!req.url || !/^\/anggota(\/|\?|$)/.test(req.url)) return next();
+      const hostname = (req.headers.host ?? "localhost").replace(/:\d+$/, "");
+      res.statusCode = 302;
+      res.setHeader("Location", `http://${hostname}:${MEMBER_APP_DEV_PORT}${req.url}`);
+      res.end();
+    });
+  }
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), memberAppRedirect],
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   server: {
     port: 3000,

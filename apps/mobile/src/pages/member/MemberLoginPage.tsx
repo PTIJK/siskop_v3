@@ -12,6 +12,8 @@ import { memberApiPost, ApiRequestError } from '@/api/memberClient'
 import { useMemberAuth } from '@/stores/memberAuth'
 
 import { memberAccess, memberTenantUrl } from '@/api/memberAccess'
+import { MemberAuthLayout } from '@/components/layout/MemberAuthLayout'
+import { alertClass, inputClass, labelClass, outlineButtonClass, primaryButtonClass } from '@/lib/ui'
 import { MemberTenantDialog } from './MemberTenantDialog'
 
 export default function MemberLoginPage() {
@@ -103,102 +105,99 @@ export default function MemberLoginPage() {
     }
   }
 
+  const footer = (
+    <>
+      Petugas koperasi?{' '}
+      <a href='/login' className='font-bold text-foreground underline underline-offset-2'>
+        Masuk di sini
+      </a>
+    </>
+  )
+
   return (
-    <main className='flex min-h-screen items-center justify-center bg-slate-50 p-4'>
-      <div className='w-full max-w-sm'>
-        <div className='mb-6 text-center'>
-          <h1 className='text-2xl font-semibold text-slate-900'>SISKOP</h1>
-          <p className='mt-1 text-sm text-slate-600'>Portal Anggota</p>
-        </div>
-
-        {loadingWorkspace ? (
-          <p role='status'>Memuat koperasi…</p>
-        ) : workspaceError ? (
-          <div role='alert'>
-            <p>{workspaceError}</p>
-            <button onClick={() => window.location.reload()}>Coba lagi</button>
-          </div>
+    <MemberAuthLayout
+      title='Masuk Anggota'
+      footer={footer}
+      description={
+        workspace ? (
+          <>
+            Koperasi: <span className='font-bold text-foreground'>{workspace.name}</span>
+          </>
         ) : (
-          <form onSubmit={onSubmit} className='rounded-lg border border-slate-200 bg-white p-6 shadow-sm'>
-            <h2 className='text-lg font-medium text-slate-900'>Masuk Anggota</h2>
-            {workspace ? (
-              <p className='mt-1 text-sm text-slate-500'>
-                Koperasi: <span className='font-medium text-slate-700'>{workspace.name}</span>
-              </p>
-            ) : (
-              <p className='mt-1 text-sm text-slate-500'>
-                Masukkan NIK dan kata sandi untuk membuka koperasi Anda.
-              </p>
-            )}
-
-            <label className='mt-4 block text-sm font-medium text-slate-700' htmlFor='nik'>
-              NIK
-            </label>
-            <input
-              id='nik'
-              type='text'
-              inputMode='numeric'
-              pattern='[0-9]{16}'
-              maxLength={16}
-              disabled={pending}
-              required
-              autoComplete='username'
-              value={nik}
-              onChange={(e) => setNik(e.target.value)}
-              className='mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-500'
-            />
-
-            <label className='mt-4 block text-sm font-medium text-slate-700' htmlFor='password'>
-              Kata sandi
-            </label>
-            <PasswordInput
-              id='password'
-              disabled={pending}
-              required
-              autoComplete='current-password'
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className='mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-500'
-            />
-            <p className='mt-1 text-xs text-slate-500'>
-              Kata sandi awal adalah tanggal lahir Anda (format DDMMYYYY), diaktifkan oleh petugas koperasi.
-            </p>
-
-            {error && memberships.length === 0 && (
-              <p role='alert' className='mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700'>
-                {error}
-              </p>
-            )}
-
-            <button
-              type='submit'
-              disabled={pending}
-              className='mt-6 w-full rounded-md bg-slate-900 px-4 py-2 font-medium text-white hover:bg-slate-800 disabled:opacity-60'
-            >
-              {pending ? 'Memproses…' : 'Masuk'}
-            </button>
-          </form>
-        )}
-
-        <p className='mt-4 text-center text-sm text-slate-600'>
-          Petugas koperasi?{' '}
-          <a href='/login' className='font-medium text-slate-900 underline'>
-            Masuk di sini
-          </a>
+          'Masukkan NIK dan kata sandi untuk membuka koperasi Anda.'
+        )
+      }
+    >
+      {loadingWorkspace ? (
+        <p role='status' className='text-sm text-muted-foreground'>
+          Memuat koperasi…
         </p>
-        {memberships.length > 0 && (
-          <MemberTenantDialog
-            memberships={memberships}
-            pending={pending}
-            error={error}
-            onSelect={selectMembership}
-            onClose={() => {
-              setMemberships([])
-              setError(null)
-            }}
+      ) : workspaceError ? (
+        <div role='alert' className='space-y-3'>
+          <p className={alertClass}>{workspaceError}</p>
+          <button type='button' className={outlineButtonClass} onClick={() => window.location.reload()}>
+            Coba lagi
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={onSubmit}>
+          <label className={labelClass} htmlFor='nik'>
+            NIK
+          </label>
+          <input
+            id='nik'
+            type='text'
+            inputMode='numeric'
+            pattern='[0-9]{16}'
+            maxLength={16}
+            disabled={pending}
+            required
+            autoComplete='username'
+            value={nik}
+            onChange={(e) => setNik(e.target.value)}
+            className={inputClass}
           />
-        )}
-      </div>
-    </main>
+
+          <label className={`${labelClass} mt-4`} htmlFor='password'>
+            Kata sandi
+          </label>
+          <PasswordInput
+            id='password'
+            disabled={pending}
+            required
+            autoComplete='current-password'
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={inputClass}
+          />
+          <p className='mt-1.5 text-xs text-muted-foreground'>
+            Kata sandi awal adalah tanggal lahir Anda (format DDMMYYYY), diaktifkan oleh petugas koperasi.
+          </p>
+
+          {error && memberships.length === 0 && (
+            <p role='alert' className={`${alertClass} mt-4`}>
+              {error}
+            </p>
+          )}
+
+          <button type='submit' disabled={pending} className={`${primaryButtonClass} mt-6`}>
+            {pending ? 'Memproses…' : 'Masuk'}
+          </button>
+        </form>
+      )}
+
+      {memberships.length > 0 && (
+        <MemberTenantDialog
+          memberships={memberships}
+          pending={pending}
+          error={error}
+          onSelect={selectMembership}
+          onClose={() => {
+            setMemberships([])
+            setError(null)
+          }}
+        />
+      )}
+    </MemberAuthLayout>
   )
 }

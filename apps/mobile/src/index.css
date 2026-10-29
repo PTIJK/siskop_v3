@@ -1,30 +1,93 @@
+@import "@fontsource/manrope/latin-400.css";
+@import "@fontsource/manrope/latin-500.css";
+@import "@fontsource/manrope/latin-600.css";
+@import "@fontsource/manrope/latin-700.css";
+@import "@fontsource/manrope/latin-800.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Tokens copied verbatim from apps/frontend/src/index.css — the mobile app
-   must reuse the desktop app's exact visual identity (colors), not a new
-   palette. See docs/07-System-Architecture-SISKOP-Mobile-Version.md §4. */
+/* UI v3 tokens, copied from apps/frontend/src/index.css (docs/ui-v3/design.md §2).
+   The mobile app must reuse the desktop app's exact visual identity. HSL channels
+   only; use as hsl(var(--x)). */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 220 20% 98%;
+    --foreground: 224 30% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
+    --card-foreground: 224 30% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 30% 11%;
+    --primary: 224 30% 12%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 16% 95%;
+    --secondary-foreground: 224 30% 12%;
+    --muted: 220 16% 95%;
+    --muted-foreground: 220 10% 38%;
+    --accent: 233 80% 96%;
+    --accent-foreground: 233 55% 32%;
+    --brand: 233 62% 50%;
+    --brand-foreground: 0 0% 100%;
+    --destructive: 4 66% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 150 62% 26%;
+    --warning: 34 92% 30%;
+    --info: 212 62% 36%;
+    --border: 220 14% 90%;
+    /* 56% gives 3.4:1 on a card, the WCAG 1.4.11 floor for a field boundary. */
+    --input: 220 10% 56%;
+    --ring: 233 62% 50%;
+    --radius: 14px;
+
+    --hero: 0 0% 100%;
+    --hero-foreground: 224 30% 11%;
+    --hero-muted: 220 10% 40%;
+    --hero-line: 220 14% 91%;
+
+    --chart-1: 224 30% 12%;
+    --chart-2: 30 85% 38%;
+    --chart-3: 233 62% 50%;
+    --chart-4: 150 62% 26%;
+    --chart-5: 4 66% 42%;
+  }
+
+  .dark {
+    --background: 224 22% 7%;
+    --foreground: 220 20% 94%;
+    --card: 224 20% 10%;
+    --card-foreground: 220 20% 94%;
+    --popover: 224 20% 10%;
+    --popover-foreground: 220 20% 94%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 224 30% 10%;
+    --secondary: 224 16% 15%;
+    --secondary-foreground: 220 20% 94%;
+    --muted: 224 16% 15%;
+    --muted-foreground: 220 12% 68%;
+    --accent: 233 40% 20%;
+    --accent-foreground: 233 85% 88%;
+    --brand: 233 85% 74%;
+    --brand-foreground: 224 30% 10%;
+    --destructive: 4 80% 68%;
+    --destructive-foreground: 224 30% 10%;
+    --success: 150 55% 60%;
+    --warning: 38 90% 62%;
+    --info: 208 80% 72%;
+    --border: 224 14% 19%;
+    --input: 224 12% 46%;
+    --ring: 233 85% 74%;
+
+    --hero: 224 20% 10%;
+    --hero-foreground: 220 20% 94%;
+    --hero-muted: 220 12% 68%;
+    --hero-line: 224 14% 19%;
+
+    --chart-1: 233 85% 78%;
+    --chart-2: 36 90% 62%;
+    --chart-3: 233 85% 74%;
+    --chart-4: 150 55% 60%;
+    --chart-5: 4 80% 68%;
   }
 }
 
@@ -32,11 +95,35 @@
   * {
     @apply border-border;
   }
+  html {
+    font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
   body {
     @apply bg-background text-foreground;
-    /* Safe-area support for notched phones — docs/07 §6, not present in
-       apps/frontend at all today. */
+    line-height: 1.45;
+    /* Safe-area support for notched phones — docs/07 §6. */
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+  .money {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+/* design.md §5: no motion when the user asks for none. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

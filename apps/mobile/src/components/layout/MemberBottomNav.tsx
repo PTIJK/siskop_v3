@@ -14,8 +14,9 @@ const TABS = [
 export function MemberBottomNav() {
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      aria-label="Menu anggota"
+      className="fixed inset-x-0 bottom-0 z-40 flex gap-1 border-t bg-card px-2 pt-1.5"
+      style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}
     >
       {TABS.map((tab) => (
         <NavLink
@@ -23,12 +24,12 @@ export function MemberBottomNav() {
           to={tab.href}
           className={({ isActive }) =>
             cn(
-              "flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium",
-              isActive ? "text-primary" : "text-muted-foreground"
+              "flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-[12px] text-[11px] font-bold transition-colors",
+              isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted"
             )
           }
         >
-          <tab.icon className="h-5 w-5" />
+          <tab.icon className="h-5 w-5" aria-hidden="true" />
           {tab.label}
         </NavLink>
       ))}

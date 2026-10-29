@@ -70,7 +70,7 @@ export function CardList<T>({
             placeholder={search.placeholder ?? "Cari..."}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full rounded-md border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
+            className="h-12 w-full rounded-md border border-input bg-card pl-9 pr-3 text-base placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
       )}
@@ -78,23 +78,25 @@ export function CardList<T>({
       {isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse rounded-lg border bg-muted" />
+            <div key={i} className="h-[72px] animate-pulse rounded-[16px] border bg-muted" />
           ))}
         </div>
       ) : isError ? (
-        <div className="flex flex-col items-center gap-2 rounded-lg border py-10 text-center text-destructive">
-          <AlertTriangle className="h-6 w-6" />
-          <p className="text-sm">{errorMessage}</p>
+        <div role="alert" className="flex flex-col items-center gap-2 rounded-[16px] border bg-card py-10 text-center text-destructive">
+          <AlertTriangle className="h-6 w-6" aria-hidden="true" />
+          <p className="text-sm font-semibold">{errorMessage}</p>
           {onRetry && (
-            <button onClick={onRetry} className="rounded-md border px-3 py-1.5 text-xs font-medium">
+            <button onClick={onRetry} className="mt-1 min-h-11 rounded-md border border-input bg-card px-4 text-[13px] font-bold text-foreground hover:bg-muted">
               Coba lagi
             </button>
           )}
         </div>
       ) : items.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-lg border py-10 text-center text-muted-foreground">
-          <Inbox className="h-6 w-6" />
-          <p className="text-sm">{emptyMessage}</p>
+        <div className="flex flex-col items-center gap-2 rounded-[16px] border bg-card py-10 text-center text-muted-foreground">
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-accent-foreground">
+            <Inbox className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <p className="text-sm font-semibold">{emptyMessage}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -103,8 +105,8 @@ export function CardList<T>({
               key={keyExtractor(item)}
               onClick={() => onItemClick?.(item)}
               className={cn(
-                "rounded-lg border bg-card p-3",
-                onItemClick && "cursor-pointer active:bg-accent"
+                "rounded-[16px] border bg-card p-3.5",
+                onItemClick && "cursor-pointer transition-colors active:bg-muted"
               )}
             >
               {renderCard(item)}
@@ -123,21 +125,21 @@ export function CardList<T>({
             <button
               disabled={pagination.page <= 1}
               onClick={() => pagination.onPageChange(pagination.page - 1)}
-              className="rounded-md border p-1.5 disabled:opacity-40"
+              className="flex h-11 w-11 items-center justify-center rounded-md border border-input bg-card disabled:opacity-45"
               aria-label="Halaman sebelumnya"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </button>
-            <span>
+            <span className="money font-semibold">
               {pagination.page} / {totalPages}
             </span>
             <button
               disabled={pagination.page >= totalPages}
               onClick={() => pagination.onPageChange(pagination.page + 1)}
-              className="rounded-md border p-1.5 disabled:opacity-40"
+              className="flex h-11 w-11 items-center justify-center rounded-md border border-input bg-card disabled:opacity-45"
               aria-label="Halaman berikutnya"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         </div>

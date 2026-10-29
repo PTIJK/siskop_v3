@@ -4,8 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { memberApiFetchPage } from "@/api/memberClient";
 import { formatRupiahSingkat } from "@/lib/format";
 import { CardList } from "@/components/shared/CardList";
-import { Badge } from "@/components/shared/Badge";
 import { KOLBadge } from "@/components/shared/KOLBadge";
+import { LoanStatusBadge } from "@/components/shared/LoanStatusBadge";
 
 interface MyLoanRow {
   id: string;
@@ -28,7 +28,7 @@ export function MemberLoansPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Pinjaman Saya</h1>
+      <h1 className="text-[26px] font-extrabold leading-tight tracking-[-0.02em]">Pinjaman Saya</h1>
 
       <CardList
         items={query.data?.items ?? []}
@@ -43,13 +43,16 @@ export function MemberLoansPage() {
         renderCard={(l) => (
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{l.loanConfig.name}</p>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                <Badge variant="outline">{l.status}</Badge>
+              <p className="truncate text-sm font-bold">{l.loanConfig.name}</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <LoanStatusBadge status={l.status} />
                 <KOLBadge category={l.kolCategory} />
               </div>
             </div>
-            <p className="shrink-0 text-sm font-bold text-orange-700">{formatRupiahSingkat(l.remainingAmount)}</p>
+            <div className="shrink-0 text-right">
+              <p className="money text-base font-extrabold">{formatRupiahSingkat(l.remainingAmount)}</p>
+              <p className="text-xs text-muted-foreground">sisa</p>
+            </div>
           </div>
         )}
       />

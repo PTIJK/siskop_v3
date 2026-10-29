@@ -26,15 +26,13 @@ export function MemberSavingDetailPage() {
   });
 
   if (isPending) return <PageLoading />;
-  if (!saving) return <p className="text-center text-sm text-muted-foreground">Rekening tidak ditemukan</p>;
+  if (!saving) return <p className="py-10 text-center text-sm font-semibold text-muted-foreground">Rekening tidak ditemukan</p>;
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold">{saving.savingConfig.name}</h1>
-      </div>
+      <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.02em]">{saving.savingConfig.name}</h1>
 
-      <div className="rounded-lg border bg-card p-4">
+      <div className="rounded-[16px] border bg-card p-[18px]">
         <div className="flex flex-wrap gap-1.5">
           <Badge variant="secondary">{saving.savingConfig.type}</Badge>
           <Badge variant="outline">
@@ -42,8 +40,8 @@ export function MemberSavingDetailPage() {
           </Badge>
         </div>
         <div className="mt-3">
-          <p className="text-xs text-muted-foreground">Saldo</p>
-          <p className="text-2xl font-bold text-primary">{formatRupiah(saving.balance)}</p>
+          <p className="text-xs font-semibold text-muted-foreground">Saldo</p>
+          <p className="money text-[28px] font-extrabold leading-tight tracking-[-0.02em]">{formatRupiah(saving.balance)}</p>
           <p className="mt-1 text-xs text-muted-foreground">Sejak {formatTanggalPendek(saving.createdAt)}</p>
         </div>
       </div>

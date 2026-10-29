@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import type { MemberLoginResponse } from '@siskop/types'
 import { memberAccess, memberCentralUrl, memberTenantUrl } from '@/api/memberAccess'
 import { useMemberAuth } from '@/stores/memberAuth'
+import { MemberAuthLayout } from '@/components/layout/MemberAuthLayout'
+import { alertClass, outlineButtonClass } from '@/lib/ui'
 
 export function MemberHandoffPage({ mode }: { mode: 'start' | 'authorize' | 'callback' }) {
   const started = useRef(false)
@@ -42,24 +44,21 @@ export function MemberHandoffPage({ mode }: { mode: 'start' | 'authorize' | 'cal
     })().catch((e) => setError(e instanceof Error ? e.message : 'Tidak dapat masuk. Silakan coba lagi.'))
   }, [mode, navigate])
   return (
-    <main className='flex min-h-screen items-center justify-center bg-slate-50 p-6'>
-      <div className='w-full max-w-sm rounded-lg border bg-white p-6 shadow-sm'>
-        <h1 className='text-xl font-semibold'>Membuka portal anggota</h1>
-        {error ? (
-          <>
-            <p role='alert' className='mt-4 text-sm text-red-700'>
-              {error}
-            </p>
-            <a className='mt-4 block underline' href={memberCentralUrl()}>
-              Kembali ke halaman masuk
-            </a>
-          </>
-        ) : (
-          <p role='status' className='mt-4 text-sm text-slate-600'>
-            Mohon tunggu…
+    <MemberAuthLayout title='Membuka portal anggota'>
+      {error ? (
+        <div className='space-y-4'>
+          <p role='alert' className={alertClass}>
+            {error}
           </p>
-        )}
-      </div>
-    </main>
+          <a className={outlineButtonClass} href={memberCentralUrl()}>
+            Kembali ke halaman masuk
+          </a>
+        </div>
+      ) : (
+        <p role='status' className='text-sm text-muted-foreground'>
+          Mohon tunggu…
+        </p>
+      )}
+    </MemberAuthLayout>
   )
 }
