@@ -6,6 +6,8 @@ import { z } from "zod";
 import type { LoanConfig } from "@siskop/types";
 import { apiFetch, apiPost, apiPut, ApiRequestError } from "@/api/client";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { QuotaBadge } from "@/components/shared/QuotaBadge";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, type ColumnDef } from "@/components/shared/DataTable";
 import { FormError } from "@/components/shared/FormError";
@@ -30,6 +32,7 @@ type FormValues = z.infer<typeof schema>;
 
 export function LoanConfigsTab() {
   const { can } = usePermissions();
+  const { quota } = useEntitlements();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<LoanConfig | null>(null);
@@ -135,10 +138,13 @@ export function LoanConfigsTab() {
         emptyMessage="Belum ada konfigurasi pinjaman"
         headerActions={
           can("config", "update") && (
-            <Button onClick={openCreate}>
+            <div className="flex items-center gap-3">
+            <QuotaBadge hint={quota("loanTypes")} noun="jenis" />
+            <Button onClick={openCreate} disabled={quota("loanTypes")?.blocked}>
               <Plus className="mr-2 h-4 w-4" />
               Tambah Pinjaman
             </Button>
+            </div>
           )
         }
       />

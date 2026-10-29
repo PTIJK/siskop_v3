@@ -7,6 +7,8 @@ import type { SavingConfig } from "@siskop/types";
 import { apiFetch, apiPost, apiPut, ApiRequestError } from "@/api/client";
 import { calculateSavingInterest, calculateDailySavingInterest, SAVING_PERIOD_LABELS } from "@/lib/saving-calc";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { QuotaBadge } from "@/components/shared/QuotaBadge";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, type ColumnDef } from "@/components/shared/DataTable";
 import { FormError } from "@/components/shared/FormError";
@@ -31,6 +33,7 @@ const SIMULATION_BALANCE = 1_000_000;
 
 export function SavingConfigsTab() {
   const { can } = usePermissions();
+  const { quota } = useEntitlements();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<SavingConfig | null>(null);
@@ -124,10 +127,13 @@ export function SavingConfigsTab() {
         emptyMessage="Belum ada konfigurasi simpanan"
         headerActions={
           can("config", "update") && (
-            <Button onClick={openCreate}>
+            <div className="flex items-center gap-3">
+            <QuotaBadge hint={quota("savingTypes")} noun="jenis" />
+            <Button onClick={openCreate} disabled={quota("savingTypes")?.blocked}>
               <Plus className="mr-2 h-4 w-4" />
               Tambah Simpanan
             </Button>
+            </div>
           )
         }
       />

@@ -5,6 +5,8 @@ import type { Member } from "@siskop/types";
 import { apiFetchPage } from "@/api/client";
 import { formatTanggalPendek } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { QuotaBadge } from "@/components/shared/QuotaBadge";
 import { DataTable, type ColumnDef } from "@/components/shared/DataTable";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -102,6 +104,7 @@ function MembersListTab() {
 export function MembersPage() {
   const navigate = useNavigate();
   const { can } = usePermissions();
+  const { quota } = useEntitlements();
   const canReviewRegistrations = can("members", "create");
 
   return (
@@ -112,8 +115,9 @@ export function MembersPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {canReviewRegistrations && <GenerateQrModal />}
+            {can("members", "create") && <QuotaBadge hint={quota("members")} noun="anggota" />}
             {can("members", "create") && (
-              <Button onClick={() => navigate("/members/new")}>
+              <Button onClick={() => navigate("/members/new")} disabled={quota("members")?.blocked}>
                 <UserPlus className="mr-2 h-4 w-4" />
                 Tambah Anggota
               </Button>
