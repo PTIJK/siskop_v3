@@ -1,8 +1,11 @@
 import type { Request, Response, NextFunction } from "express";
+import type { SubscriptionPackage } from "@prisma/client";
 import { db } from "../lib/db.js";
 import { featureNotEntitled } from "../lib/errors.js";
+import { getTenantEntitlements } from "../lib/pricing/entitlements.js";
 import { enforcementMode } from "../lib/pricing/flags.js";
 import { authClaims } from "./auth.js";
+import { featuresForRequest } from "./enforcement.js";
 
 /**
  * A tenant with no `packageId` (self-service registrations, or tenants seeded
@@ -17,13 +20,30 @@ async function tenantPackage(tenantId: string) {
   return tenant?.package ?? null;
 }
 
+/**
+ * Legacy flags only exist on packages made by the old platform form. A Pricing
+ * V2 catalog package (one with a `code`) never carries them, yet the
+ * subscription dialog and registration point Tenant.packageId at one, so for
+ * that tenant the subscription is the only record: it must grant every
+ * feature the central enforcement map lists for this route.
+ */
+async function legacyEntitled(req: Request, flag: (pkg: SubscriptionPackage) => boolean): Promise<boolean> {
+  const { tenantId } = authClaims(req);
+  const pkg = await tenantPackage(tenantId);
+  if (!pkg) return false;
+  if (pkg.code === null) return flag(pkg);
+  const ent = await getTenantEntitlements(tenantId);
+  if (!ent) return false;
+  const path = `${req.baseUrl}${req.path}`.replace(/^\/api(?=\/|$)/, "");
+  return featuresForRequest(req.method, path).every((key) => ent.hasFeature(key));
+}
+
 /** Gates Konfigurasi Akun (COA), Account Mappings, SHU config, and Laporan Regulasi on the "accounting" package module. */
 export async function requireAccountingEntitlement(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
     // With Pricing V2 on, the central gate (middleware/enforcement.ts) decides from the subscription.
     if (enforcementMode() === "on") return next();
-    const pkg = await tenantPackage(authClaims(req).tenantId);
-    if (!pkg?.modules?.includes("accounting")) {
+    if (!(await legacyEntitled(req, (pkg) => pkg.modules.includes("accounting")))) {
       throw featureNotEntitled("Paket langganan Anda tidak mengaktifkan modul akuntansi");
     }
     next();
@@ -37,8 +57,7 @@ export async function requireWhitelabelEntitlement(req: Request, _res: Response,
   try {
     // With Pricing V2 on, the central gate (middleware/enforcement.ts) decides from the subscription.
     if (enforcementMode() === "on") return next();
-    const pkg = await tenantPackage(authClaims(req).tenantId);
-    if (!pkg?.whitelabelEnabled) {
+    if (!(await legacyEntitled(req, (pkg) => pkg.whitelabelEnabled))) {
       throw featureNotEntitled("Paket langganan Anda tidak mengaktifkan fitur whitelabel");
     }
     next();
@@ -58,8 +77,7 @@ export async function requirePasarEntitlement(req: Request, _res: Response, next
   try {
     // With Pricing V2 on, the central gate (middleware/enforcement.ts) decides from the subscription.
     if (enforcementMode() === "on") return next();
-    const pkg = await tenantPackage(authClaims(req).tenantId);
-    if (!pkg?.modules?.includes("pasar")) {
+    if (!(await legacyEntitled(req, (pkg) => pkg.modules.includes("pasar")))) {
       throw featureNotEntitled("Paket langganan Anda tidak mengaktifkan modul pasar");
     }
     next();

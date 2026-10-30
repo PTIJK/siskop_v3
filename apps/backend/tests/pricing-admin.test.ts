@@ -1,5 +1,5 @@
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../src/lib/db.js";
 import { withoutTenantScope } from "../src/lib/tenant-scope.js";
 import { clearCatalogCache } from "../src/lib/pricing/catalog.js";
@@ -567,5 +567,36 @@ describe("tenant subscription (platform admin)", () => {
     const t = await setupTenant({ slug: "t-z", registrationNo: "REG-Z", adminEmail: "z@demo.test" });
     const res = await request(app()).put(tenantSub(t.user.tenantId)).set("Authorization", `Bearer ${t.accessToken}`).send({ packageCode: "small", billingCycle: "MONTHLY" });
     expect(res.status).toBe(403);
+  });
+
+  // A catalog package carries no legacy `modules` flags, so with enforcement
+  // off or shadow the legacy accounting gate must ask the subscription instead.
+  describe("legacy-gated routes after a package change", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it.each(["off", "shadow"])("keeps the Chart of Accounts open after medium -> enterprise (enforcement %s)", async (mode) => {
+      vi.stubEnv("PRICING_V2_ENFORCEMENT", mode);
+      const t = await setupTenant({ slug: "t-coa", registrationNo: "REG-COA", adminEmail: "coa@demo.test" });
+      await putSub(t.user.tenantId, { packageCode: "medium", billingCycle: "MONTHLY" });
+      await putSub(t.user.tenantId, { packageCode: "enterprise", billingCycle: "MONTHLY" });
+
+      const res = await request(app()).get("/api/config/accounts").set("Authorization", `Bearer ${t.accessToken}`);
+
+      expect(res.status).toBe(200);
+    });
+
+    it("still refuses a route the subscription does not include", async () => {
+      vi.stubEnv("PRICING_V2_ENFORCEMENT", "off");
+      const t = await setupTenant({ slug: "t-nocoa", registrationNo: "REG-NOCOA", adminEmail: "nocoa@demo.test" });
+      await putSub(t.user.tenantId, { packageCode: "small", billingCycle: "MONTHLY" });
+
+      // manual_journal is in medium and enterprise only.
+      const res = await request(app()).post("/api/journal").set("Authorization", `Bearer ${t.accessToken}`).send({});
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe("FEATURE_NOT_ENTITLED");
+    });
   });
 });
