@@ -3,11 +3,11 @@
   position: sticky;
   top: 12px;
   height: 68px;
-  margin-top: 12px;
+  margin-top: 0;
   padding: 0 14px 0 22px;
   border: 1px solid var(--rule);
   border-radius: 999px;
-  background: #0d0f15b8;
+  background: #ffffffd9;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -43,8 +43,8 @@
   height: 900px;
   pointer-events: none;
   background:
-    radial-gradient(60% 55% at 50% 0%, #8f9bf338, transparent 70%),
-    radial-gradient(35% 40% at 85% 25%, #5c6be022, transparent 70%);
+    radial-gradient(60% 55% at 50% 0%, #4f5fd91f, transparent 70%),
+    radial-gradient(35% 40% at 85% 25%, #7b88f51a, transparent 70%);
 }
 .landing h1,
 .landing h2,
@@ -68,7 +68,7 @@
   padding: 5px 16px 5px 5px;
   border: 1px solid var(--rule);
   border-radius: 999px;
-  background: #151923aa;
+  background: #ffffffcc;
   color: var(--muted-mint);
   font-size: 14px;
 }
@@ -89,7 +89,7 @@
   letter-spacing: -0.055em;
 }
 .lp-hero h1 span {
-  background: linear-gradient(100deg, #c7ceff, var(--lime) 55%, #6b7af0);
+  background: linear-gradient(100deg, #2b3a9e, #4f5fd9 55%, #7b88f5);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -111,7 +111,7 @@
   padding: 0 28px;
   font-size: 16px;
   font-weight: 600;
-  box-shadow: 0 8px 40px -8px #8f9bf399;
+  box-shadow: 0 8px 40px -8px #4f5fd959;
 }
 .lp-ghost {
   display: inline-flex;
@@ -126,7 +126,7 @@
 }
 .lp-ghost:hover {
   border-color: var(--lime);
-  background: #8f9bf31a;
+  background: #4f5fd914;
 }
 .lp-micro {
   margin-top: 14px;
@@ -142,15 +142,15 @@
   padding: 10px;
   border: 1px solid var(--rule);
   border-radius: 26px;
-  background: linear-gradient(180deg, #1b2030aa, #0d0f1500);
-  box-shadow: 0 40px 120px -40px #8f9bf366;
+  background: linear-gradient(180deg, #eef0fa, #ffffff00);
+  box-shadow: 0 40px 120px -40px #4f5fd940;
   -webkit-mask-image: linear-gradient(#000 78%, transparent);
   mask-image: linear-gradient(#000 78%, transparent);
 }
 .product-preview {
   border: 1px solid var(--rule);
   border-radius: 18px;
-  background: #0f121a;
+  background: #f8f9fc;
   overflow: hidden;
   text-align: left;
 }
@@ -167,7 +167,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #2c3347;
+  background: #d5d9e6;
 }
 .preview-bar span {
   margin-left: 12px;
@@ -196,14 +196,14 @@
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #787f91;
+  color: #6b7287;
 }
 .preview-body aside span {
   padding: 7px 12px;
   border-radius: 8px;
 }
 .preview-body aside span[data-active="true"] {
-  background: #8f9bf326;
+  background: #4f5fd91a;
   color: var(--mint);
   font-weight: 600;
 }
@@ -236,7 +236,7 @@
   padding: 14px;
   border: 1px solid var(--rule);
   border-radius: 16px;
-  background: #151923;
+  background: #ffffff;
 }
 .preview-attention h4 {
   font-size: 14px;
@@ -273,15 +273,15 @@
 }
 .preview-attention b[data-tone="bad"] {
   background: #f8717121;
-  color: #fca5a5;
+  color: #b42318;
 }
 .preview-attention b[data-tone="warn"] {
   background: #fbbf2420;
-  color: #fcd34d;
+  color: #a15c07;
 }
 .preview-attention b[data-tone="info"] {
   background: #60a5fa20;
-  color: #93c5fd;
+  color: #1d4ed8;
 }
 .preview-attention li > span {
   display: flex;
@@ -300,13 +300,13 @@
   font-weight: 700;
 }
 .preview-attention em[data-tone="bad"] {
-  color: #fca5a5;
+  color: #b42318;
 }
 .preview-attention em[data-tone="warn"] {
-  color: #fcd34d;
+  color: #a15c07;
 }
 .preview-attention em[data-tone="info"] {
-  color: #93c5fd;
+  color: #1d4ed8;
 }
 .preview-attention i {
   font-style: normal;
@@ -331,7 +331,7 @@
   padding: 11px 13px;
   border: 1px solid var(--rule);
   border-radius: 14px;
-  background: #151923;
+  background: #ffffff;
 }
 .preview-stats small {
   font-size: 11px;
@@ -355,7 +355,7 @@
   padding: 11px 13px;
   border: 1px solid var(--rule);
   border-radius: 14px;
-  background: #151923;
+  background: #ffffff;
 }
 .preview-trend small {
   font-size: 11px;
@@ -377,7 +377,7 @@
   stroke: var(--lime);
 }
 .preview-trend .line-b {
-  stroke: #fcd34d;
+  stroke: #d97706;
   stroke-dasharray: 5 4;
 }
 .preview-kol {
@@ -387,7 +387,7 @@
   padding: 11px 13px;
   border: 1px solid var(--rule);
   border-radius: 14px;
-  background: #151923;
+  background: #ffffff;
 }
 .preview-kol small {
   font-size: 11px;
@@ -420,7 +420,8 @@
   background: #f87171;
 }
 .preview-kol span[data-kol="5"] {
-  background: #f1f3f7;
+  background: #0f1220;
+  color: #ffffff;
 }
 
 .lp-chips {
@@ -468,7 +469,7 @@
   padding: 22px;
   border: 1px solid var(--rule);
   border-radius: 18px;
-  background: #151923aa;
+  background: #ffffffcc;
   color: var(--muted-mint);
   line-height: 1.7;
 }
@@ -515,7 +516,7 @@
   padding: 28px;
   border: 1px solid var(--rule);
   border-radius: 24px;
-  background: linear-gradient(160deg, #1b2030, #11141d);
+  background: linear-gradient(160deg, #ffffff, #f4f5fb);
   transition: border-color 0.25s, transform 0.25s;
 }
 .bento-card::after {
@@ -526,7 +527,7 @@
   width: 200px;
   height: 200px;
   border-radius: 50%;
-  background: radial-gradient(#8f9bf330, transparent 70%);
+  background: radial-gradient(#4f5fd91a, transparent 70%);
   pointer-events: none;
 }
 .bento-card:hover {
@@ -543,7 +544,7 @@
   margin-bottom: auto;
   border: 1px solid var(--rule);
   border-radius: 14px;
-  background: #8f9bf31f;
+  background: #4f5fd914;
   color: var(--lime);
 }
 .bento-icon svg {
@@ -596,8 +597,8 @@
   border-radius: 32px;
   text-align: center;
   background:
-    radial-gradient(60% 90% at 50% 120%, #8f9bf345, transparent 70%),
-    linear-gradient(180deg, #1b2030, #11141d);
+    radial-gradient(60% 90% at 50% 120%, #4f5fd926, transparent 70%),
+    linear-gradient(180deg, #f4f5fb, #ffffff);
 }
 .lp-cta > svg {
   width: 40px;
@@ -705,4 +706,66 @@
   .lp-ghost {
     transition: none;
   }
+}
+
+/* Light theme: the landing page is white; register and checkout keep the dark marketing tokens. */
+.marketing:has(.landing) {
+  --background: 0 0% 100%;
+  --foreground: 228 30% 10%;
+  --primary: 233 70% 52%;
+  --primary-foreground: 0 0% 100%;
+  --muted: 228 25% 96%;
+  --muted-foreground: 228 12% 38%;
+  --border: 228 20% 89%;
+  --input: 228 20% 80%;
+  --ring: 233 70% 52%;
+  --card: 0 0% 100%;
+  --card-foreground: 228 30% 10%;
+  --accent: 228 25% 95%;
+  --accent-foreground: 228 30% 10%;
+  --forest: #ffffff;
+  --mint: #0f1220;
+  --lime: #4f5fd9;
+  --muted-mint: #4b5266;
+  --rule: #e4e7ef;
+}
+.marketing:has(.landing) .mobile-nav {
+  background: #ffffff;
+  box-shadow: 0 20px 40px #0f122014;
+}
+.marketing:has(.landing) .marketing-header {
+  box-shadow: 0 4px 24px #0f12200d;
+}
+.marketing:has(.landing) .package-band {
+  border-color: var(--rule);
+  background: linear-gradient(110deg, #ffffff, #f6f7fb);
+}
+.marketing:has(.landing) .package-features li {
+  color: var(--muted-mint);
+}
+.marketing:has(.landing) .cycle-toggle {
+  border-color: var(--rule);
+}
+.marketing:has(.landing) .cycle-toggle button[aria-pressed="true"],
+.marketing:has(.landing) .cycle-toggle button[aria-pressed="true"] small {
+  color: #ffffff;
+}
+.marketing:has(.landing) .how-section li {
+  border-top-color: #cfd4e3;
+}
+.marketing:has(.landing) .step-number {
+  color: #b3bad0;
+}
+.marketing:has(.landing) .cooperative-types a {
+  border-right-color: #cfd4e3;
+}
+.marketing:has(.landing) .catalog-empty,
+.marketing:has(.landing) .marketing-footer {
+  border-color: var(--rule);
+}
+.marketing:has(.landing) .lp-hero h1 span {
+  filter: none;
+}
+.marketing:has(.landing) {
+  padding-top: 12px;
 }
