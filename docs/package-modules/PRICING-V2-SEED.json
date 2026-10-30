@@ -1,0 +1,94 @@
+{
+  "_notes": [
+    "Source: two screenshots of Pricing_Metrix_Guideline.xlsx (the attached xlsx itself was empty). Re-check every cell against the original workbook before first publish.",
+    "customPrice: 0 = included free for Custom; a number = Custom add-on price in IDR per month; null never used.",
+    "requires[] is INFERRED from the matrix pattern, not stated in the sheet. Confirm with product owner.",
+    "All prices exclude VAT. VAT rate comes from settings.taxRate (owner enters it; no default)."
+  ],
+  "version": 1,
+  "currency": "IDR",
+  "settings": {
+    "yearlyMultiplier": 10,
+    "enabledCycles": ["MONTHLY", "YEARLY"],
+    "defaultPackageCode": "free",
+    "customEnabled": true,
+    "customBaseLimits": { "members": 50, "users": 1, "savingTypes": 2, "loanTypes": 2 },
+    "addonsOnFixedPackages": true,
+    "paymentGraceDays": 7,
+    "unpaidRegistrationPurgeDays": 14,
+    "taxRate": null,
+    "invoiceNumberFormat": "INV-YYYYMM-NNNN",
+    "paymentProvider": "manual",
+    "paymentInstructions": null,
+    "oneFreeTenantPerRegistrationNo": false
+  },
+  "packages": [
+    { "code": "free", "name": "Free", "isCustom": false, "isPublic": true, "sortOrder": 1, "priceMonthly": null, "priceYearly": null,
+      "limits": { "members": 50, "users": 1, "savingTypes": 2, "loanTypes": 2 } },
+    { "code": "small", "name": "Small", "isCustom": false, "isPublic": true, "sortOrder": 2, "priceMonthly": 500000, "priceYearly": 5000000,
+      "limits": { "members": 500, "users": 10, "savingTypes": 10, "loanTypes": 10 } },
+    { "code": "medium", "name": "Medium", "isCustom": false, "isPublic": true, "sortOrder": 3, "priceMonthly": 1000000, "priceYearly": 10000000,
+      "limits": { "members": 2000, "users": 20, "savingTypes": null, "loanTypes": null } },
+    { "code": "enterprise", "name": "Enterprise", "isCustom": false, "isPublic": true, "sortOrder": 4, "priceMonthly": 2350000, "priceYearly": 23500000,
+      "limits": { "members": 3000, "users": null, "savingTypes": null, "loanTypes": null } },
+    { "code": "custom", "name": "Custom", "isCustom": true, "isPublic": true, "sortOrder": 5, "priceMonthly": null, "priceYearly": null,
+      "limits": "dynamic: settings.customBaseLimits + volume add-ons" }
+  ],
+  "_limitsNote": "null limit = unlimited",
+  "features": [
+    { "key": "dashboard", "name": "Dashboard", "parentKey": null, "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "members", "name": "Anggota", "parentKey": null, "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "member_receivables", "name": "Piutang Anggota", "parentKey": null, "requires": [], "customPrice": 50000, "includedIn": ["medium", "enterprise"] },
+
+    { "key": "unit_business", "name": "Unit Usaha", "parentKey": null, "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "unit_ksp", "name": "KSP", "parentKey": "unit_business", "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "unit_konsumen", "name": "Konsumen", "parentKey": "unit_business", "requires": [], "customPrice": 150000, "includedIn": ["medium", "enterprise"] },
+    { "key": "unit_pasar", "name": "Pasar", "parentKey": "unit_business", "requires": [], "customPrice": 150000, "includedIn": ["medium", "enterprise"] },
+
+    { "key": "reports", "name": "Laporan", "parentKey": null, "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "reports_financial", "name": "Laporan keuangan", "parentKey": "reports", "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "reports_regulatory", "name": "Laporan regulasi", "parentKey": "reports", "requires": [], "customPrice": 100000, "includedIn": ["small", "medium", "enterprise"] },
+    { "key": "accounting_book", "name": "Buku Akuntansi", "parentKey": "reports", "requires": [], "customPrice": 150000, "includedIn": ["small", "medium", "enterprise"] },
+    { "key": "portfolio_quality", "name": "Kualitas portofolio", "parentKey": "reports", "requires": [], "customPrice": 200000, "includedIn": ["enterprise"] },
+    { "key": "reports_market", "name": "Laporan pasar", "parentKey": "reports", "requires": ["unit_pasar"], "customPrice": 100000, "includedIn": ["medium", "enterprise"] },
+    { "key": "manual_journal", "name": "Jurnal manual", "parentKey": "reports", "requires": ["accounting_book"], "customPrice": 150000, "includedIn": ["medium", "enterprise"] },
+    { "key": "period_closing", "name": "Tutup buku", "parentKey": "reports", "requires": ["accounting_book"], "customPrice": 100000, "includedIn": ["small", "medium", "enterprise"] },
+
+    { "key": "reports_consolidated", "name": "Laporan konsolidasi", "parentKey": null, "requires": ["config_branch_units"], "customPrice": 150000, "includedIn": ["medium", "enterprise"] },
+
+    { "key": "config", "name": "Konfigurasi", "parentKey": null, "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "config_saving", "name": "Simpanan", "parentKey": "config", "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "config_loan", "name": "Pinjaman", "parentKey": "config", "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "config_branch_units", "name": "Unit koperasi", "parentKey": "config", "requires": [], "customPrice": 50000, "includedIn": ["small", "medium", "enterprise"] },
+    { "key": "config_holidays", "name": "Hari libur", "parentKey": "config", "requires": [], "customPrice": 50000, "includedIn": ["enterprise"] },
+    { "key": "config_roles", "name": "Role & izin", "parentKey": "config", "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "config_users", "name": "Pengguna", "parentKey": "config", "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "config_coa", "name": "Chart of Account", "parentKey": "config", "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "coa_standard_template", "name": "Buat COA Standar", "parentKey": "config_coa", "requires": ["config_coa"], "customPrice": 250000, "includedIn": ["enterprise"] },
+    { "key": "config_account_mapping", "name": "Pemetaan Akun", "parentKey": "config", "requires": ["config_coa"], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "auto_mapping", "name": "Petakan otomatis", "parentKey": "config_account_mapping", "requires": ["config_account_mapping"], "customPrice": 250000, "includedIn": ["enterprise"] },
+    { "key": "config_shu", "name": "Konfigurasi SHU", "parentKey": "config", "requires": [], "customPrice": 0, "includedIn": ["free", "small", "medium", "enterprise"] },
+    { "key": "whitelabel", "name": "Whitelabel", "parentKey": "config", "requires": [], "customPrice": 1000000, "priceGroup": "whitelabel_workspace", "includedIn": ["enterprise"] },
+    { "key": "workspace_address", "name": "Alamat Workspace", "parentKey": "config", "requires": [], "customPrice": 1000000, "priceGroup": "whitelabel_workspace", "includedIn": ["enterprise"] },
+    { "key": "paid_in_capital", "name": "Modal Disetor", "parentKey": "config", "requires": [], "customPrice": 50000, "includedIn": ["small", "medium", "enterprise"] },
+    { "key": "self_registration", "name": "Pendaftaran Mandiri", "parentKey": "config", "requires": [], "customPrice": 100000, "includedIn": ["medium", "enterprise"] },
+    { "key": "audit_trail", "name": "Jejak Audit", "parentKey": "config", "requires": [], "customPrice": 100000, "includedIn": ["enterprise"] },
+
+    { "key": "member_portal", "name": "Akses anggota", "parentKey": null, "requires": [], "customPrice": 200000, "includedIn": ["medium", "enterprise"] },
+    { "key": "collector_access", "name": "Akses kolektor", "parentKey": null, "requires": [], "customPrice": 200000, "includedIn": ["medium", "enterprise"] },
+    { "key": "ai_chatbot", "name": "AI Chatbot", "parentKey": null, "requires": [], "customPrice": 2000000, "includedIn": ["enterprise"] },
+    { "key": "ocr", "name": "OCR", "parentKey": null, "requires": [], "customPrice": 1000000, "includedIn": ["enterprise"] }
+  ],
+  "_priceGroupNote": "Features sharing a priceGroup are charged once for the group (whitelabel + workspace_address = 1,000,000 total).",
+  "volumeAddons": [
+    { "itemKey": "MEMBERS", "stepQty": 100, "price": 500000, "period": "YEARLY" },
+    { "itemKey": "USERS", "stepQty": 1, "price": 20000, "period": "YEARLY" },
+    { "itemKey": "SAVING_TYPES", "stepQty": 1, "price": 5000, "period": "YEARLY" },
+    { "itemKey": "LOAN_TYPES", "stepQty": 1, "price": 5000, "period": "YEARLY" }
+  ],
+  "supportPlans": [
+    { "code": "SP0", "name": "SP.0", "yearlyCost": 0, "remote": false, "onsite": false, "visitsPerYear": 0, "slaHours": null, "aiSupport": false },
+    { "code": "SP1", "name": "SP.1", "yearlyCost": 5000000, "remote": true, "onsite": true, "visitsPerYear": 4, "slaHours": 6, "aiSupport": false },
+    { "code": "SP2", "name": "SP.2", "yearlyCost": 15000000, "remote": true, "onsite": true, "visitsPerYear": 12, "slaHours": 3, "aiSupport": true }
+  ]
+}
