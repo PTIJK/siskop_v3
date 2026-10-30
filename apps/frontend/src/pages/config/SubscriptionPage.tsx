@@ -3,20 +3,24 @@ import type { PricingLimits, TenantSubscriptionInfo } from "@siskop/types";
 import { Check, Lock } from "lucide-react";
 import { usePublicPricing } from "@/features/onboarding/api";
 import { useSubscription } from "@/hooks/useEntitlements";
-import { formatRupiah, formatTanggalIndonesia } from "@/lib/format";
-import { unlockingPackages, usageMeter } from "@/lib/entitlements";
+import { formatRupiah, formatTanggalPendek } from "@/lib/format";
+import { unlockingPackages } from "@/lib/entitlements";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { PageLoading } from "@/components/shared/LoadingSpinner";
-import { Badge } from "@/components/ui/badge";
+import { LockedFeature } from "@/components/shared/LockedFeature";
+import { QuotaMeter } from "@/components/shared/QuotaMeter";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Package } from "lucide-react";
 
-const STATUS: Record<TenantSubscriptionInfo["status"], { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  ACTIVE: { label: "Aktif", variant: "default" },
-  PENDING_PAYMENT: { label: "Menunggu pembayaran", variant: "secondary" },
-  PAST_DUE: { label: "Terlambat bayar", variant: "destructive" },
-  CANCELLED: { label: "Dihentikan", variant: "outline" }
+const STATUS: Record<TenantSubscriptionInfo["status"], { label: string; variant: NonNullable<BadgeProps["variant"]> }> = {
+  ACTIVE: { label: "Aktif", variant: "ok" },
+  PENDING_PAYMENT: { label: "Menunggu pembayaran", variant: "warn" },
+  PAST_DUE: { label: "Terlambat bayar", variant: "bad" },
+  CANCELLED: { label: "Dihentikan", variant: "info" }
 };
 
 const METERS: { key: keyof PricingLimits; label: string }[] = [
@@ -28,55 +32,115 @@ const METERS: { key: keyof PricingLimits; label: string }[] = [
 
 const INVOICE_TYPE = { REGISTRATION: "Pendaftaran", RENEWAL: "Perpanjangan", ADDON: "Add-on", SUPPORT: "Dukungan" } as const;
 
+function SubscriptionSkeleton() {
+  return (
+    <div className="space-y-4" role="status" aria-busy="true">
+      <span className="sr-only">Memuat langganan</span>
+      <Skeleton className="h-24 w-full rounded-[16px]" />
+      <Skeleton className="h-40 w-full rounded-[16px]" />
+      <Skeleton className="h-56 w-full rounded-[16px]" />
+    </div>
+  );
+}
+
 export function SubscriptionPage() {
-  const { data: info, isPending } = useSubscription();
+  const { data: info, isPending, isError, refetch } = useSubscription();
   const catalog = usePublicPricing();
   const [params] = useSearchParams();
   const highlight = params.get("fitur");
 
-  if (isPending) return <PageLoading />;
+  const header = <PageHeader title="Langganan" description="Paket, pemakaian, dan tagihan koperasi Anda." />;
+
+  if (isPending) {
+    return (
+      <div className="space-y-5">
+        {header}
+        <SubscriptionSkeleton />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-5">
+        {header}
+        <Card>
+          <CardContent role="alert">
+            <EmptyState
+              title="Langganan belum bisa dimuat"
+              description="Periksa koneksi Anda, lalu coba lagi."
+              action={
+                <Button variant="outline" onClick={() => void refetch()}>
+                  Coba lagi
+                </Button>
+              }
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!info) {
     return (
-      <div className="space-y-6">
-        <PageHeader title="Langganan" description="Paket, pemakaian, dan tagihan koperasi Anda." />
-        <p className="text-sm text-muted-foreground">Koperasi ini belum memiliki langganan. Hubungi tim SISKOP untuk mengaktifkannya.</p>
+      <div className="space-y-5">
+        {header}
+        <Card>
+          <CardContent>
+            <EmptyState
+              icon={Package}
+              title="Koperasi ini belum memiliki langganan"
+              description="Hubungi tim SISKOP untuk mengaktifkannya."
+            />
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   const status = STATUS[info.status];
   const features = catalog.data?.features ?? [];
+  const lockedFeature = highlight ? features.find((f) => f.key === highlight) : undefined;
+  const lockedHere = highlight !== null && !info.features.includes(highlight);
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Langganan" description="Paket, pemakaian, dan tagihan koperasi Anda." />
+    <div className="space-y-5">
+      {header}
+
+      {lockedFeature && lockedHere ? (
+        <LockedFeature
+          featureName={lockedFeature.name}
+          packageName={info.packageName}
+          description="Fitur ini belum aktif untuk koperasi Anda."
+          unlockedBy={catalog.data ? unlockingPackages(catalog.data, lockedFeature.key) : undefined}
+        />
+      ) : null}
 
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center gap-3">
-            <CardTitle>{info.packageName}</CardTitle>
+            <CardTitle className="text-lg">Paket {info.packageName}</CardTitle>
             <Badge variant={status.variant}>{status.label}</Badge>
           </div>
           <CardDescription>
             Ditagih {info.billingCycle === "MONTHLY" ? "bulanan" : "tahunan"}
-            {info.nextBillingDate ? ` · tagihan berikutnya ${formatTanggalIndonesia(info.nextBillingDate)}` : " · tanpa tagihan berulang"}
+            {info.nextBillingDate ? ` · tagihan berikutnya ${formatTanggalPendek(info.nextBillingDate)}` : " · tanpa tagihan berulang"}
           </CardDescription>
         </CardHeader>
       </Card>
 
       {info.openInvoice && (
-        <Card className="border-amber-300">
+        <Card className="border-warning/50">
           <CardHeader>
-            <CardTitle className="text-base">Faktur yang harus dibayar</CardTitle>
+            <CardTitle>Tagihan yang harus dibayar</CardTitle>
             <CardDescription>
-              {info.openInvoice.number} · {INVOICE_TYPE[info.openInvoice.type]} · jatuh tempo {formatTanggalIndonesia(info.openInvoice.dueDate)}
+              {info.openInvoice.number} · {INVOICE_TYPE[info.openInvoice.type]} · jatuh tempo {formatTanggalPendek(info.openInvoice.dueDate)}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-2xl font-semibold">{formatRupiah(info.openInvoice.total)}</p>
+            <p className="text-[28px] font-extrabold tracking-tight tabular-nums">{formatRupiah(info.openInvoice.total)}</p>
             <div>
-              <p className="text-sm font-medium">Cara pembayaran</p>
+              <p className="text-sm font-bold">Cara pembayaran</p>
               <p className="whitespace-pre-line text-sm text-muted-foreground">
                 {info.paymentInstructions ?? "Petunjuk pembayaran akan dikirim oleh tim SISKOP."}
               </p>
@@ -88,53 +152,65 @@ export function SubscriptionPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Pemakaian</CardTitle>
+          <CardTitle>Pemakaian kuota</CardTitle>
+          <CardDescription>Data lama tetap aman. Yang dibatasi hanya penambahan baru setelah kuota penuh.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          {METERS.map(({ key, label }) => {
-            const meter = usageMeter(info.usage[key], info.limits[key]);
-            return (
-              <div key={key} className="space-y-1.5">
-                <div className="flex items-baseline justify-between text-sm">
-                  <span>{label}</span>
-                  <span className={cn("tabular-nums", (meter.state === "full" || meter.state === "over") && "font-medium text-destructive")}>
-                    {meter.limit === null ? `${meter.used} · tanpa batas` : `${meter.used}/${meter.limit}`}
-                  </span>
-                </div>
-                {meter.limit !== null && <Progress value={meter.ratio * 100} className="h-2" aria-label={label} />}
-                {meter.state === "over" && <p className="text-xs text-destructive">Melebihi batas paket: data lama tetap aman, tetapi penambahan baru ditolak.</p>}
-              </div>
-            );
-          })}
+          {METERS.map(({ key, label }) => (
+            <QuotaMeter key={key} label={label} used={info.usage[key]} limit={info.limits[key]} />
+          ))}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Fitur</CardTitle>
+          <CardTitle>Fitur</CardTitle>
           <CardDescription>Fitur yang belum termasuk paket Anda menunjukkan paket yang membukanya.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ul className="divide-y">
-            {features.map((f) => {
-              const included = info.features.includes(f.key);
-              const where = included || !catalog.data ? [] : unlockingPackages(catalog.data, f.key);
-              return (
-                <li
-                  key={f.key}
-                  className={cn("flex items-center gap-3 py-2 text-sm", f.parentKey && "pl-6", highlight === f.key && "rounded bg-amber-50 px-2")}
-                >
-                  {included ? <Check className="h-4 w-4 shrink-0 text-emerald-600" aria-label="Termasuk" /> : <Lock className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="Terkunci" />}
-                  <span className={cn("flex-1", !included && "text-muted-foreground")}>{f.name}</span>
-                  {!included && (
-                    <span className="text-xs text-muted-foreground">
-                      {where.length > 0 ? `Tersedia di paket ${where.join(", ")}` : "Tersedia di paket Custom"}
+          {catalog.isPending ? (
+            <div className="space-y-2" role="status" aria-busy="true">
+              <span className="sr-only">Memuat daftar fitur</span>
+              <Skeleton className="h-6 w-full" />
+              <Skeleton className="h-6 w-5/6" />
+              <Skeleton className="h-6 w-4/6" />
+            </div>
+          ) : catalog.isError ? (
+            <p role="alert" className="text-sm text-muted-foreground">
+              Daftar fitur belum bisa dimuat.{" "}
+              <button type="button" onClick={() => void catalog.refetch()} className="font-bold underline">
+                Coba lagi
+              </button>
+            </p>
+          ) : (
+            <ul className="divide-y">
+              {features.map((f) => {
+                const included = info.features.includes(f.key);
+                const where = included || !catalog.data ? [] : unlockingPackages(catalog.data, f.key);
+                return (
+                  <li
+                    key={f.key}
+                    className={cn("flex items-center gap-3 py-2.5 text-sm", f.parentKey && "pl-6", highlight === f.key && "-mx-2 rounded-[10px] bg-accent px-2")}
+                  >
+                    {included ? (
+                      <Check className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                    ) : (
+                      <Lock className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    )}
+                    <span className={cn("flex-1 font-semibold", !included && "font-medium text-muted-foreground")}>
+                      {f.name}
+                      <span className="sr-only">{included ? " (termasuk)" : " (terkunci)"}</span>
                     </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                    {!included && (
+                      <span className="text-xs text-muted-foreground">
+                        {where.length > 0 ? `Tersedia di paket ${where.join(", ")}` : "Tersedia di paket Custom"}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </CardContent>
       </Card>
     </div>

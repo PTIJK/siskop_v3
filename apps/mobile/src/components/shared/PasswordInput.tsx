@@ -9,12 +9,12 @@ export const PasswordInput = forwardRef<HTMLInputElement, Omit<ComponentProps<"i
     const [visible, setVisible] = useState(false);
     return <div className="relative w-full">
       <input {...props} ref={ref} id={inputId} type={visible ? "text" : "password"} disabled={disabled}
-        style={{ ...style, paddingInlineEnd: "2.75rem" }} />
+        style={{ ...style, paddingInlineEnd: "3rem" }} />
       <button type="button" disabled={disabled} aria-controls={inputId} aria-pressed={visible}
         aria-label={visible ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
-        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-slate-500 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 disabled:opacity-50"
+        className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-45"
         onClick={() => setVisible(value => !value)}>
-        {visible ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+        {visible ? <EyeOff className="h-[18px] w-[18px]" aria-hidden="true" /> : <Eye className="h-[18px] w-[18px]" aria-hidden="true" />}
       </button>
     </div>;
   }

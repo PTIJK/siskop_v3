@@ -116,7 +116,7 @@ export function TenantPickerDialog({
                 <Label
                   key={item.tenantId}
                   htmlFor={`tenant-${item.tenantId}`}
-                  className='flex cursor-pointer items-center gap-3 rounded-md border p-3'
+                  className='flex min-h-[56px] cursor-pointer items-center gap-3 rounded-[12px] border p-3 has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary'
                 >
                   <RadioGroupItem id={`tenant-${item.tenantId}`} value={item.tenantId} />
                   <span className='flex min-w-0 flex-col gap-1'>

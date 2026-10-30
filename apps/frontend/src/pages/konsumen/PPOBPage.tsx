@@ -99,16 +99,16 @@ export function PPOBPage() {
     <div className="space-y-6">
       <PageHeader title="PPOB" description="Bayar tagihan listrik, pulsa, BPJS, dan air" />
 
-      <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+      <div className="flex items-start gap-2 rounded-md border border-info/40 bg-info/10 px-3 py-2 text-sm text-info">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <p>Menggunakan penyedia simulasi — integrasi penyedia riil akan ditambahkan kemudian.</p>
       </div>
 
       {receipt && (
-        <Card className="border-green-600/30 bg-green-50 dark:bg-green-950/20">
+        <Card className="border-success/40 bg-success/10">
           <CardContent className="flex items-center justify-between gap-4 py-4">
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-6 w-6 text-green-600" />
+              <CheckCircle2 className="h-6 w-6 text-success" />
               <div>
                 <p className="text-sm font-medium text-foreground">Transaksi #{receipt.id} berhasil</p>
                 <p className="text-sm text-muted-foreground">Status: {receipt.status}</p>

@@ -6,9 +6,9 @@ import { downloadFile, openPdf } from "@/lib/pdf";
 import { formatRupiahRinci, formatTanggalPendek } from "@/lib/format";
 
 const TYPE_META: Record<SavingTransactionType, { label: string; icon: typeof ArrowDownCircle; colorClass: string }> = {
-  DEPOSIT: { label: "Setoran", icon: ArrowDownCircle, colorClass: "text-green-600" },
-  INTEREST: { label: "Bunga", icon: TrendingUp, colorClass: "text-blue-600" },
-  WITHDRAWAL: { label: "Penarikan", icon: ArrowUpCircle, colorClass: "text-orange-600" }
+  DEPOSIT: { label: "Setoran", icon: ArrowDownCircle, colorClass: "text-success" },
+  INTEREST: { label: "Bunga", icon: TrendingUp, colorClass: "text-info" },
+  WITHDRAWAL: { label: "Penarikan", icon: ArrowUpCircle, colorClass: "text-warning" }
 };
 
 function ymd(date: Date): string {
@@ -56,70 +56,70 @@ export function SavingStatementList({ basePath, queryKey, fetchStatement, getTok
 
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold">Riwayat Transaksi</h2>
+      <h2 className="text-[15px] font-extrabold tracking-tight">Riwayat Transaksi</h2>
 
       <div className="grid grid-cols-2 gap-2">
-        <label className="space-y-1 text-xs text-muted-foreground">
+        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
           Dari
           <input
             type="date"
             value={from}
             max={to}
             onChange={(e) => setFrom(e.target.value)}
-            className="block w-full rounded-md border bg-background px-2 py-1.5 text-sm text-foreground"
+            className="block h-11 w-full rounded-md border border-input bg-card px-2 text-sm text-foreground"
           />
         </label>
-        <label className="space-y-1 text-xs text-muted-foreground">
+        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
           Sampai
           <input
             type="date"
             value={to}
             min={from}
             onChange={(e) => setTo(e.target.value)}
-            className="block w-full rounded-md border bg-background px-2 py-1.5 text-sm text-foreground"
+            className="block h-11 w-full rounded-md border border-input bg-card px-2 text-sm text-foreground"
           />
         </label>
       </div>
 
       {!validPeriod ? (
-        <p className="rounded-lg border py-6 text-center text-sm text-muted-foreground">Tanggal awal harus sebelum tanggal akhir</p>
+        <p className="rounded-[16px] border bg-card py-6 text-center text-sm text-muted-foreground">Tanggal awal harus sebelum tanggal akhir</p>
       ) : error ? (
-        <p className="rounded-lg border py-6 text-center text-sm text-destructive">
+        <p className="rounded-[16px] border bg-card py-6 text-center text-sm text-destructive">
           {error instanceof Error ? error.message : "Gagal memuat riwayat transaksi"}
         </p>
       ) : isPending || !statement ? (
-        <p className="rounded-lg border py-6 text-center text-sm text-muted-foreground">Memuat...</p>
+        <p className="rounded-[16px] border bg-card py-6 text-center text-sm text-muted-foreground">Memuat...</p>
       ) : (
         <>
-          <dl className="grid grid-cols-2 gap-3 rounded-lg border bg-card p-3 text-xs">
+          <dl className="grid grid-cols-2 gap-3 rounded-[16px] border bg-card p-3.5 text-xs">
             <div>
               <dt className="text-muted-foreground">Saldo Awal</dt>
-              <dd className="text-sm font-semibold tabular-nums">{formatRupiahRinci(statement.openingBalance)}</dd>
+              <dd className="money text-sm font-bold">{formatRupiahRinci(statement.openingBalance)}</dd>
             </div>
             <div>
               <dt className="text-muted-foreground">Saldo Akhir</dt>
-              <dd className="text-sm font-semibold tabular-nums text-primary">{formatRupiahRinci(statement.closingBalance)}</dd>
+              <dd className="money text-sm font-extrabold">{formatRupiahRinci(statement.closingBalance)}</dd>
             </div>
             <div>
               <dt className="text-muted-foreground">Kredit (masuk)</dt>
-              <dd className="text-sm font-semibold tabular-nums text-green-700">{formatRupiahRinci(statement.totalCredit)}</dd>
+              <dd className="money text-sm font-bold text-success">{formatRupiahRinci(statement.totalCredit)}</dd>
             </div>
             <div>
               <dt className="text-muted-foreground">Debit (keluar)</dt>
-              <dd className="text-sm font-semibold tabular-nums text-orange-700">{formatRupiahRinci(statement.totalDebit)}</dd>
+              <dd className="money text-sm font-bold text-warning">{formatRupiahRinci(statement.totalDebit)}</dd>
             </div>
           </dl>
 
           <div className="flex gap-2">
             <button
               onClick={() => handleExport("pdf")}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs font-medium"
+              className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border border-input bg-card text-[13px] font-bold hover:bg-muted"
             >
               <FileDown className="h-3.5 w-3.5" /> PDF
             </button>
             <button
               onClick={() => handleExport("csv")}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs font-medium"
+              className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border border-input bg-card text-[13px] font-bold hover:bg-muted"
             >
               <FileSpreadsheet className="h-3.5 w-3.5" /> CSV
             </button>
@@ -127,7 +127,7 @@ export function SavingStatementList({ basePath, queryKey, fetchStatement, getTok
           {exportError && <p className="text-center text-xs text-destructive">{exportError}</p>}
 
           {statement.rows.length === 0 ? (
-            <p className="rounded-lg border py-6 text-center text-sm text-muted-foreground">Tidak ada transaksi pada periode ini</p>
+            <p className="rounded-[16px] border bg-card py-6 text-center text-sm text-muted-foreground">Tidak ada transaksi pada periode ini</p>
           ) : (
             <div className="space-y-2">
               {statement.rows.map((r) => {
@@ -136,24 +136,24 @@ export function SavingStatementList({ basePath, queryKey, fetchStatement, getTok
                 const isDebit = r.type === "WITHDRAWAL";
                 const detail = [r.note, r.createdByName].filter(Boolean).join(" · ");
                 return (
-                  <div key={r.id} className="rounded-lg border bg-card p-3">
+                  <div key={r.id} className="rounded-[16px] border bg-card p-3.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-start gap-2">
                         <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${meta.colorClass}`} />
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-medium">{meta.label}</span>
+                            <span className="text-xs font-bold">{meta.label}</span>
                             <span className="text-xs text-muted-foreground">{formatTanggalPendek(r.date)}</span>
                           </div>
                           {detail && <p className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</p>}
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className={`text-sm font-semibold tabular-nums ${isDebit ? "text-orange-700" : "text-green-700"}`}>
+                        <p className={`money text-sm font-extrabold ${isDebit ? "text-warning" : "text-success"}`}>
                           <span className="mr-1 text-[10px] font-medium uppercase">{isDebit ? "Db" : "Cr"}</span>
                           {formatRupiahRinci(isDebit ? r.debit : r.credit)}
                         </p>
-                        <p className="text-xs tabular-nums text-muted-foreground">Saldo {formatRupiahRinci(r.balance)}</p>
+                        <p className="money text-xs text-muted-foreground">Saldo {formatRupiahRinci(r.balance)}</p>
                       </div>
                     </div>
                   </div>

@@ -291,14 +291,14 @@ export function ReportsPage() {
                       <TableRow>
                         <TableCell>Setoran</TableCell>
                         <TableCell className="text-right">{financialReport.transaksiSimpanan.deposit.count}</TableCell>
-                        <TableCell className="text-right font-semibold text-green-700">
+                        <TableCell className="text-right font-semibold text-success">
                           {formatRupiahOrDash(financialReport.transaksiSimpanan.deposit.total)}
                         </TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell>Penarikan</TableCell>
                         <TableCell className="text-right">{financialReport.transaksiSimpanan.withdrawal.count}</TableCell>
-                        <TableCell className="text-right font-semibold text-orange-700">
+                        <TableCell className="text-right font-semibold text-warning">
                           {formatRupiahOrDash(financialReport.transaksiSimpanan.withdrawal.total)}
                         </TableCell>
                       </TableRow>
@@ -329,7 +329,7 @@ export function ReportsPage() {
                       <TableRow>
                         <TableCell>Angsuran Diterima</TableCell>
                         <TableCell className="text-right">{financialReport.pinjaman.angsuranDiterima.count}</TableCell>
-                        <TableCell className="text-right font-semibold text-green-700">
+                        <TableCell className="text-right font-semibold text-success">
                           {formatRupiahOrDash(financialReport.pinjaman.angsuranDiterima.total)}
                         </TableCell>
                       </TableRow>

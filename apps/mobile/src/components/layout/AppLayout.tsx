@@ -34,7 +34,7 @@ export function AppLayout() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <Topbar />
-      <main className="flex-1 overflow-y-auto p-4 pb-20">
+      <main className="flex-1 overflow-y-auto p-4 pb-24">
         <Outlet />
       </main>
       <BottomNav />

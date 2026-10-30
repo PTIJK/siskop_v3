@@ -4,6 +4,7 @@ import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Search, PackageSearch } from "lucide-react";
 
 /**
@@ -33,10 +34,11 @@ export function ProductSearchGrid({
   return (
     <div className="space-y-4">
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-3.5 top-[13px] h-[18px] w-[18px] text-muted-foreground" aria-hidden="true" />
         <Input
           placeholder="Cari nama atau SKU produk..."
-          className="pl-9"
+          aria-label="Cari produk"
+          className="pl-10"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -44,9 +46,12 @@ export function ProductSearchGrid({
 
       {filtered.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-            <PackageSearch className="h-10 w-10" />
-            <p className="text-sm">Produk tidak ditemukan</p>
+          <CardContent>
+            <EmptyState
+              icon={PackageSearch}
+              title={products.length === 0 ? "Belum ada produk di toko ini" : "Produk tidak ditemukan"}
+              description={products.length === 0 ? "Tambahkan produk di tab Produk agar bisa dijual dari kasir." : "Coba kata kunci lain, atau cari dengan SKU."}
+            />
           </CardContent>
         </Card>
       ) : (
@@ -65,14 +70,14 @@ export function ProductSearchGrid({
                 disabled={disabled}
                 onClick={() => onAdd(product)}
                 className={cn(
-                  "flex flex-col items-start gap-1 rounded-md border p-3 text-left transition-colors hover:border-primary hover:bg-muted/50",
+                  "flex min-h-[96px] flex-col items-start gap-1 rounded-[14px] border bg-card p-3 text-left transition-colors hover:border-primary hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   disabled && "cursor-not-allowed opacity-50 hover:border-input hover:bg-transparent"
                 )}
               >
-                <span className="line-clamp-2 text-sm font-medium text-foreground">{product.name}</span>
+                <span className="line-clamp-2 text-sm font-bold text-foreground">{product.name}</span>
                 <span className="font-mono text-[11px] text-muted-foreground">{product.sku}</span>
-                <span className="mt-1 text-sm font-semibold text-primary">{formatRupiah(product.sellPrice)}</span>
-                <span className={cn("text-xs text-muted-foreground", (isOutOfStock || isAtMax) && "text-destructive")}>
+                <span className="mt-1 text-sm font-extrabold tabular-nums">{formatRupiah(product.sellPrice)}</span>
+                <span className={cn("text-xs text-muted-foreground", (isOutOfStock || isAtMax) && "font-bold text-destructive")}>
                   {isOutOfStock
                     ? "Stok habis"
                     : isAtMax

@@ -118,7 +118,7 @@ export function ExpensesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Beban Umum" description="Catat pengeluaran administrasi koperasi — gaji, sewa, dan beban umum lainnya" />
+      <PageHeader title="Beban umum" description="Catat pengeluaran administrasi koperasi — gaji, sewa, dan beban umum lainnya" />
 
       <DataTable
         columns={columns}

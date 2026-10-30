@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Member, PortalAccessResponse, StallContractSummary } from "@siskop/types";
 import { apiFetch, apiPost, ApiRequestError } from "@/api/client";
@@ -8,6 +8,7 @@ import { formatRupiah, formatTanggalIndonesia } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { KOLBadge } from "@/components/shared/KOLBadge";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { CreditRepaymentDialog } from "@/components/konsumen/CreditRepaymentDialog";
@@ -15,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Edit, PiggyBank, CreditCard, ArrowDownCircle, ArrowUpCircle, Smartphone, Store, Building2 } from "lucide-react";
 
 interface MemberDetail extends Member {
@@ -87,7 +88,18 @@ export function MemberDetailPage() {
   }
 
   if (isPending) return <PageLoading />;
-  if (!member) return <p className="text-center text-muted-foreground">Anggota tidak ditemukan</p>;
+  if (!member) {
+    return (
+      <div className="space-y-5">
+        <PageHeader title="Anggota" breadcrumb={[{ label: "Anggota", href: "/members" }, { label: "Anggota" }]} />
+        <Card>
+          <CardContent>
+            <EmptyState title="Anggota tidak ditemukan" description="Tautannya mungkin sudah tidak berlaku, atau datanya sudah dihapus. Kembali ke daftar untuk memilih lagi." action={<Button asChild variant="outline"><Link to="/members">Kembali ke daftar</Link></Button>} />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const activeLoan = member.loans[0];
   const totalSavings = member.savings.reduce((sum, s) => sum + parseFloat(s.balance), 0);
@@ -180,7 +192,7 @@ export function MemberDetailPage() {
               <p className="text-2xl font-bold">{formatRupiah(totalSavings)}</p>
             </div>
             {can("savings", "create") && (
-              <Button onClick={() => navigate(`/savings/new?memberId=${id}`)}>
+              <Button onClick={() => navigate(`/savings/new?mode=buka&memberId=${id}`)}>
                 <PiggyBank className="mr-2 h-4 w-4" /> Buka Rekening
               </Button>
             )}
@@ -266,7 +278,7 @@ export function MemberDetailPage() {
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Sisa</dt>
-                    <dd className="font-semibold text-orange-600">{formatRupiah(activeLoan.remainingAmount)}</dd>
+                    <dd className="font-semibold text-warning">{formatRupiah(activeLoan.remainingAmount)}</dd>
                   </div>
                 </dl>
               </CardContent>
@@ -305,7 +317,7 @@ export function MemberDetailPage() {
                     </div>
                     <div>
                       <dt className="text-xs text-muted-foreground">Terpakai</dt>
-                      <dd className="font-semibold text-orange-600">{formatRupiah(creditStatus.outstandingBalance)}</dd>
+                      <dd className="font-semibold text-warning">{formatRupiah(creditStatus.outstandingBalance)}</dd>
                     </div>
                     <div>
                       <dt className="text-xs text-muted-foreground">Sisa Limit</dt>
@@ -388,13 +400,16 @@ export function MemberDetailPage() {
         />
       )}
 
-      {ktpLightbox && member.ktpPhotoUrl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
-          onClick={() => setKtpLightbox(false)}
-        >
-          <img src={member.ktpPhotoUrl} alt="KTP" className="max-h-[90vh] max-w-[90vw] rounded-lg" />
-        </div>
+      {member.ktpPhotoUrl && (
+        <Dialog open={ktpLightbox} onOpenChange={setKtpLightbox}>
+          <DialogContent className="max-w-[min(92vw,720px)]">
+            <DialogHeader>
+              <DialogTitle>Foto KTP</DialogTitle>
+              <DialogDescription>{member.fullName}. Tekan Esc untuk menutup.</DialogDescription>
+            </DialogHeader>
+            <img src={member.ktpPhotoUrl} alt={`Foto KTP ${member.fullName}`} className="max-h-[70vh] w-full rounded-[12px] object-contain" />
+          </DialogContent>
+        </Dialog>
       )}
 
       <Dialog open={portalDialog} onOpenChange={(o) => !o && setPortalDialog(false)}>

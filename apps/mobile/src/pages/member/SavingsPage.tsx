@@ -28,7 +28,7 @@ export function MemberSavingsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Simpanan Saya</h1>
+      <h1 className="text-[26px] font-extrabold leading-tight tracking-[-0.02em]">Simpanan Saya</h1>
 
       <CardList
         items={query.data?.items ?? []}
@@ -43,12 +43,12 @@ export function MemberSavingsPage() {
         renderCard={(s) => (
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{s.savingConfig.name}</p>
-              <Badge variant="secondary">{s.savingConfig.type}</Badge>
+              <p className="truncate text-sm font-bold">{s.savingConfig.name}</p>
+              <Badge variant="secondary" className="mt-1.5">{s.savingConfig.type}</Badge>
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1">
-              <p className="text-sm font-bold">{formatRupiahSingkat(s.balance)}</p>
-              <Badge variant={s.isActive ? "default" : "secondary"}>{s.isActive ? "Aktif" : "Nonaktif"}</Badge>
+              <p className="money text-base font-extrabold">{formatRupiahSingkat(s.balance)}</p>
+              <Badge variant={s.isActive ? "ok" : "secondary"}>{s.isActive ? "Aktif" : "Nonaktif"}</Badge>
             </div>
           </div>
         )}

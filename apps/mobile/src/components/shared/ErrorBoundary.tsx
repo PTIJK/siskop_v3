@@ -22,12 +22,12 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center">
           <div>
-            <h2 className="text-lg font-semibold">Terjadi Kesalahan</h2>
+            <h2 className="text-[22px] font-extrabold leading-tight tracking-[-0.02em]">Terjadi Kesalahan</h2>
             <p className="mt-1 text-sm text-muted-foreground">Mohon maaf, terjadi kesalahan yang tidak terduga.</p>
           </div>
           <button
             onClick={() => window.location.reload()}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Muat Ulang
           </button>

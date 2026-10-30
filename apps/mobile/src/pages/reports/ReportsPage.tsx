@@ -20,8 +20,8 @@ const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
 function ReportCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+    <div className="rounded-[16px] border bg-card p-4">
+      <h3 className="mb-2 text-sm font-bold">{title}</h3>
       {children}
     </div>
   );
@@ -34,7 +34,7 @@ function Row({ label, sub, value, valueClass }: { label: string; sub?: string; v
         <p className="truncate">{label}</p>
         {sub && <p className="truncate text-xs text-muted-foreground">{sub}</p>}
       </div>
-      <span className={cn("shrink-0 font-semibold", valueClass)}>{value}</span>
+      <span className={cn("shrink-0 font-bold", valueClass)}>{value}</span>
     </div>
   );
 }
@@ -104,14 +104,14 @@ export function ReportsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">Laporan</h1>
-        <Link to="/reports/regulatory" className="text-xs font-medium text-primary">
+        <h1 className="text-[26px] font-extrabold leading-tight tracking-[-0.02em]">Laporan</h1>
+        <Link to="/reports/regulatory" className="text-xs font-semibold text-primary">
           Laporan Regulasi →
         </Link>
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
-        <p className="mb-2 text-xs font-medium text-muted-foreground">Periode</p>
+      <div className="rounded-[16px] border bg-card p-4">
+        <p className="mb-2 text-xs font-semibold text-muted-foreground">Periode</p>
         <div className="flex gap-1 rounded-md bg-muted p-1">
           {[
             { value: "range", label: "Range" },
@@ -122,8 +122,8 @@ export function ReportsPage() {
               key={opt.value}
               onClick={() => setPeriodType(opt.value as PeriodType)}
               className={cn(
-                "flex-1 rounded-sm px-2 py-1.5 text-xs font-medium",
-                periodType === opt.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+                "flex-1 rounded-sm px-2 py-1.5 text-xs font-semibold",
+                periodType === opt.value ? "bg-background text-foreground " : "text-muted-foreground"
               )}
             >
               {opt.label}
@@ -165,12 +165,12 @@ export function ReportsPage() {
           <button
             onClick={fetchReport}
             disabled={isLoading}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
           >
             <FileText className="h-4 w-4" /> {isLoading ? "Memuat..." : "Tampilkan"}
           </button>
           {hasReport && (
-            <button onClick={downloadPDF} className="flex items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium">
+            <button onClick={downloadPDF} className="flex items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold">
               <Download className="h-4 w-4" />
             </button>
           )}
@@ -191,8 +191,8 @@ export function ReportsPage() {
               setRatReport(null);
             }}
             className={cn(
-              "flex-1 rounded-sm px-2 py-1.5 text-xs font-medium",
-              tab === t.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+              "flex-1 rounded-sm px-2 py-1.5 text-xs font-semibold",
+              tab === t.value ? "bg-background text-foreground " : "text-muted-foreground"
             )}
           >
             {t.label}
@@ -210,15 +210,15 @@ export function ReportsPage() {
             </p>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border bg-card p-3">
+              <div className="rounded-[16px] border bg-card p-3">
                 <p className="text-xs text-muted-foreground">Saldo Akhir Simpanan</p>
                 <p className="mt-1 text-base font-bold">{formatRupiahSingkat(financialReport.saldoAkhirSimpanan)}</p>
               </div>
-              <div className="rounded-lg border bg-card p-3">
+              <div className="rounded-[16px] border bg-card p-3">
                 <p className="text-xs text-muted-foreground">Sisa Pinjaman Outstanding</p>
                 <p className="mt-1 text-base font-bold">{formatRupiahSingkat(financialReport.sisaPinjamanOutstanding)}</p>
               </div>
-              <div className="col-span-2 rounded-lg border bg-card p-3">
+              <div className="col-span-2 rounded-[16px] border bg-card p-3">
                 <p className="text-xs text-muted-foreground">Angsuran Diterima</p>
                 <p className="mt-1 text-base font-bold">{formatRupiahSingkat(financialReport.pinjaman.angsuranDiterima.total)}</p>
               </div>
@@ -235,13 +235,13 @@ export function ReportsPage() {
                 label="Setoran"
                 sub={`${financialReport.transaksiSimpanan.deposit.count} transaksi`}
                 value={formatRupiahSingkat(financialReport.transaksiSimpanan.deposit.total)}
-                valueClass="text-green-700"
+                valueClass="text-success"
               />
               <Row
                 label="Penarikan"
                 sub={`${financialReport.transaksiSimpanan.withdrawal.count} transaksi`}
                 value={formatRupiahSingkat(financialReport.transaksiSimpanan.withdrawal.total)}
-                valueClass="text-orange-700"
+                valueClass="text-warning"
               />
             </ReportCard>
 
@@ -255,7 +255,7 @@ export function ReportsPage() {
                 label="Angsuran Diterima"
                 sub={`${financialReport.pinjaman.angsuranDiterima.count} angsuran`}
                 value={formatRupiahSingkat(financialReport.pinjaman.angsuranDiterima.total)}
-                valueClass="text-green-700"
+                valueClass="text-success"
               />
             </ReportCard>
           </div>
@@ -275,7 +275,7 @@ export function ReportsPage() {
               { label: "Jml. Pinjaman Diberikan", value: `${ratReport.pinjaman.diberikan.count}` },
               { label: "Pinjaman Lunas", value: `${ratReport.pinjaman.lunas}` }
             ].map((item) => (
-              <div key={item.label} className="rounded-lg border bg-card p-3">
+              <div key={item.label} className="rounded-[16px] border bg-card p-3">
                 <p className="text-xs text-muted-foreground">{item.label}</p>
                 <p className="mt-1 text-base font-bold">{item.value}</p>
               </div>
@@ -292,7 +292,7 @@ export function ReportsPage() {
             {ratReport.kolDistribution.map((k, i) => (
               <div key={i} className="flex items-center justify-between border-b py-2 text-sm last:border-b-0">
                 <KOLBadge category={k.category} />
-                <span className="font-semibold">
+                <span className="font-bold">
                   {k.count} ({k.percentage})
                 </span>
               </div>

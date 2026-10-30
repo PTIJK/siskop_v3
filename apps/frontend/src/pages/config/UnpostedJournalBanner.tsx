@@ -59,10 +59,10 @@ export function UnpostedJournalBanner() {
 
   return (
     <>
-      <Card className="border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-950/20">
+      <Card className="border-warning/50 bg-warning/10">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
             <div className="text-sm">
               <p className="font-medium text-foreground">
                 {data.repostableCount} transaksi toko belum terposting ke jurnal

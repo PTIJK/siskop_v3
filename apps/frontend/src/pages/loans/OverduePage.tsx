@@ -23,8 +23,8 @@ interface OverdueLoan {
 const KOL_ORDER: KOLCategory[] = ["MACET", "DIRAGUKAN", "KURANG_LANCAR", "DALAM_PERHATIAN"];
 
 const ROW_TINT: Record<string, string> = {
-  MACET: "bg-red-50 hover:bg-red-100",
-  DIRAGUKAN: "bg-orange-50 hover:bg-orange-100"
+  MACET: "bg-destructive/10 hover:bg-destructive/10",
+  DIRAGUKAN: "bg-warning/10 hover:bg-warning/10"
 };
 
 export function OverduePage() {
@@ -57,7 +57,7 @@ export function OverduePage() {
     {
       header: "Hari Terlambat",
       cell: ({ row }) => (
-        <span className={cn("font-semibold", row.original.daysOverdue > 180 ? "text-red-600" : "text-orange-600")}>
+        <span className={cn("font-semibold", row.original.daysOverdue > 180 ? "text-destructive" : "text-warning")}>
           {row.original.daysOverdue} hari
         </span>
       )
@@ -86,15 +86,15 @@ export function OverduePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Anggota Menunggak"
+        title="Anggota menunggak"
         description="Pinjaman dengan status bermasalah (non-LANCAR)"
         breadcrumb={[{ label: "Pinjaman", href: "/loans" }, { label: "Menunggak" }]}
       />
 
       {rows.length > 0 && (
-        <div className="flex items-center gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3">
-          <AlertTriangle className="h-5 w-5 text-red-600" />
-          <p className="text-sm font-medium text-red-800">{rows.length} pinjaman memerlukan perhatian segera</p>
+        <div className="flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
+          <AlertTriangle className="h-5 w-5 text-destructive" />
+          <p className="text-sm font-medium text-destructive">{rows.length} pinjaman memerlukan perhatian segera</p>
         </div>
       )}
 

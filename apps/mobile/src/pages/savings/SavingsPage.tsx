@@ -47,7 +47,7 @@ export function SavingsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Simpanan</h1>
+      <h1 className="text-[26px] font-extrabold leading-tight tracking-[-0.02em]">Simpanan</h1>
 
       <select
         value={typeFilter}
@@ -78,8 +78,8 @@ export function SavingsPage() {
         renderCard={(s) => (
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{s.member.fullName}</p>
-              <p className="truncate font-mono text-xs text-muted-foreground">{s.member.memberId}</p>
+              <p className="truncate text-sm font-semibold">{s.member.fullName}</p>
+              <p className="truncate money text-xs text-muted-foreground">{s.member.memberId}</p>
               <div className="mt-1 flex items-center gap-1.5">
                 <span className="truncate text-xs text-muted-foreground">{s.savingConfig.name}</span>
                 <Badge variant="secondary">{s.savingConfig.type}</Badge>
@@ -87,7 +87,7 @@ export function SavingsPage() {
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1">
               <p className="text-sm font-bold">{formatRupiahSingkat(s.balance)}</p>
-              <Badge variant={s.isActive ? "default" : "secondary"}>{s.isActive ? "Aktif" : "Nonaktif"}</Badge>
+              <Badge variant={s.isActive ? "ok" : "secondary"}>{s.isActive ? "Aktif" : "Nonaktif"}</Badge>
             </div>
           </div>
         )}

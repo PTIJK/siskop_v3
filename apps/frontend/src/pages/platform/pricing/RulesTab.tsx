@@ -99,12 +99,12 @@ function RulesForm({ initial, packages }: { initial: PricingCatalogSettings; pac
         <div className="space-y-1">
           <Label htmlFor="r-tax">Tarif PPN (%)</Label>
           <Input id="r-tax" inputMode="decimal" className="w-32" placeholder="mis. 11" value={taxPercent} onChange={(e) => setTaxPercent(e.target.value)} />
-          {taxPercent.trim() === "" && <p className="text-xs text-amber-600">Belum diisi: faktur dibuat tanpa PPN sampai tarif ini diisi.</p>}
+          {taxPercent.trim() === "" && <p className="text-xs text-warning">Belum diisi: faktur dibuat tanpa PPN sampai tarif ini diisi.</p>}
         </div>
         <div className="space-y-1">
           <Label htmlFor="r-pay">Petunjuk transfer bank (tampil di faktur)</Label>
           <Textarea id="r-pay" rows={3} value={instructions} onChange={(e) => setInstructions(e.target.value)} />
-          {instructions.trim() === "" && <p className="text-xs text-amber-600">Belum diisi: pendaftar berbayar belum tahu ke mana harus membayar.</p>}
+          {instructions.trim() === "" && <p className="text-xs text-warning">Belum diisi: pendaftar berbayar belum tahu ke mana harus membayar.</p>}
         </div>
         <p className="text-xs text-muted-foreground">
           Format nomor faktur {initial.invoiceNumberFormat} dan penyedia pembayaran "{initial.paymentProvider}" belum bisa diubah di sini.

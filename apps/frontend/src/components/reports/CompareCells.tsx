@@ -33,7 +33,7 @@ export function CompareCells({
 }) {
   const { amount, pct } = rowDelta(current, previous);
   const tone =
-    higherIsBetter === undefined || amount === 0 ? "" : (amount > 0) === higherIsBetter ? "text-green-700" : "text-orange-700";
+    higherIsBetter === undefined || amount === 0 ? "" : (amount > 0) === higherIsBetter ? "text-success" : "text-warning";
   return (
     <>
       <TableCell className={cn("text-right tabular-nums text-muted-foreground", className)}>{formatRupiahOrDash(previous)}</TableCell>

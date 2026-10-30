@@ -17,7 +17,7 @@ export function useOnboardingMetadata(pathname: string) {
     const restore = Object.entries({
       description:
         "Satu ruang untuk anggota, simpanan, dan masa depan koperasi Anda. Pilih paket SISKOP dan mulai kelola koperasi Anda.",
-      "theme-color": "#071b16",
+      "theme-color": "#0d0f15",
       referrer: "strict-origin-when-cross-origin"
     }).map(([name, content]) => {
       const existing = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);

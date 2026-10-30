@@ -30,7 +30,7 @@ export function PlatformPricingPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Harga & Paket"
+        title="Harga dan paket"
         description="Atur paket, matriks fitur, add-on, dan aturan harga. Perubahan masuk draf dulu, baru berlaku setelah dipublikasikan."
         actions={
           data && (

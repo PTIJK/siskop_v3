@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { FileText } from "lucide-react";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { useAccessibleUnits } from "@/hooks/useAccessibleUnits";
 import { ALL_UNITS } from "@/lib/unit";
 
@@ -32,20 +33,13 @@ export function ReportResultCard({ reportName, title, subtitle, actions, isLoadi
 
   if (!hasRun) {
     return (
-      <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-        <FileText className="h-10 w-10" />
-        <p className="text-sm">Pilih periode dan klik &quot;Tampilkan&quot;</p>
-      </div>
+      <EmptyState icon={FileText} title="Pilih periode lalu klik Tampilkan" description="Laporan dihitung dari transaksi pada periode yang Anda pilih." />
     );
   }
 
   if (!hasData) {
     return (
-      <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-        <FileText className="h-10 w-10" />
-        <p className="text-sm font-semibold">Tidak Ada Data {reportName}</p>
-        {subtitle && <p className="text-xs">{subtitle}</p>}
-      </div>
+      <EmptyState icon={FileText} title={`Tidak ada data ${reportName}`} description={subtitle ? `${subtitle}. Coba ubah periode atau unit usaha.` : "Coba ubah periode atau unit usaha."} />
     );
   }
 

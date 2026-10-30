@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { applyBrandColor, brandCheckMessage, checkBrandColor } from "@/lib/brand";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 
 const DOMAIN_STATUS_LABEL: Record<WhitelabelConfig["domainStatus"], string> = {
   PENDING: "Menunggu verifikasi",
@@ -46,9 +48,22 @@ export function WhitelabelConfigTab() {
     setEmailSenderAddress(data.emailSenderAddress ?? "");
   }, [data]);
 
+  // Brand colour: measured against white text; a failing colour cannot be saved (design.md §2.5).
+  const colorCheck = primaryColor.trim() === "" ? null : checkBrandColor(primaryColor);
+
+  useEffect(() => {
+    // Live preview while typing; the saved colour comes back via BrandStyle when this tab unmounts.
+    if (colorCheck?.ok) applyBrandColor(colorCheck.hex);
+    else if (primaryColor.trim() === "") applyBrandColor(null);
+  }, [primaryColor]);
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setApiError("");
+    if (colorCheck && !colorCheck.ok) {
+      setApiError(brandCheckMessage(colorCheck));
+      return;
+    }
     setIsSaving(true);
     try {
       await apiPut("/config/whitelabel", {
@@ -71,7 +86,7 @@ export function WhitelabelConfigTab() {
   return (
     <Card className="max-w-xl">
       <CardHeader>
-        <CardTitle className="text-base">Whitelabel</CardTitle>
+        <CardTitle>Whitelabel</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -90,21 +105,33 @@ export function WhitelabelConfigTab() {
               onChange={(e) => setCustomDomain(e.target.value)}
             />
             {data?.customDomain && (
-              <Badge variant={data.domainStatus === "VERIFIED" ? "default" : "secondary"}>
+              <Badge variant={data.domainStatus === "VERIFIED" ? "ok" : data.domainStatus === "FAILED" ? "bad" : "warn"}>
                 {DOMAIN_STATUS_LABEL[data.domainStatus]}
               </Badge>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label>Warna Utama</Label>
-            <Input
-              type="text"
-              placeholder="#1D4ED8"
-              disabled={!canEdit}
-              value={primaryColor}
-              onChange={(e) => setPrimaryColor(e.target.value)}
-            />
+            <Label htmlFor="wl-color">Warna merek</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="wl-color"
+                type="text"
+                placeholder="#1D4ED8"
+                disabled={!canEdit}
+                value={primaryColor}
+                aria-invalid={colorCheck && !colorCheck.ok ? true : undefined}
+                aria-describedby="wl-color-msg"
+                onChange={(e) => setPrimaryColor(e.target.value)}
+              />
+              {colorCheck?.ok && (
+                <span aria-hidden="true" className="h-[42px] w-[42px] shrink-0 rounded-md border" style={{ backgroundColor: colorCheck.hex }} />
+              )}
+            </div>
+            <p id="wl-color-msg" className={colorCheck && !colorCheck.ok ? "flex items-start gap-1.5 text-[12.5px] font-semibold text-destructive" : "flex items-start gap-1.5 text-[12.5px] text-muted-foreground"}>
+              {colorCheck ? (colorCheck.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />) : null}
+              {colorCheck ? brandCheckMessage(colorCheck) : "Satu warna menggantikan warna aksen (tombol aksi, fokus, logo). Warna terlalu terang akan ditolak agar teks tetap terbaca."}
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -143,8 +170,8 @@ export function WhitelabelConfigTab() {
 
           {canEdit && (
             <div className="flex justify-end pt-2">
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? "Menyimpan..." : "Simpan"}
+              <Button type="submit" loading={isSaving}>
+                {isSaving ? "Menyimpan…" : "Simpan"}
               </Button>
             </div>
           )}

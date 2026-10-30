@@ -1,67 +1,99 @@
+@import "@fontsource/manrope/latin-400.css";
+@import "@fontsource/manrope/latin-500.css";
+@import "@fontsource/manrope/latin-600.css";
+@import "@fontsource/manrope/latin-700.css";
+@import "@fontsource/manrope/latin-800.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  /* UI v3 tokens: docs/ui-v3/design.md §2. HSL channels only; use as hsl(var(--x)). */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 220 20% 98%;
+    --foreground: 224 30% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 224 30% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --popover-foreground: 224 30% 11%;
+    --primary: 224 30% 12%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 16% 95%;
+    --secondary-foreground: 224 30% 12%;
+    --muted: 220 16% 95%;
+    --muted-foreground: 220 10% 38%;
+    --accent: 233 80% 96%;
+    --accent-foreground: 233 55% 32%;
+    --brand: 233 62% 50%;
+    --brand-foreground: 0 0% 100%;
+    --destructive: 4 66% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 150 62% 26%;
+    --warning: 34 92% 30%;
+    --info: 212 62% 36%;
+    --border: 220 14% 90%;
+    /* design.md says 78%; that is only 1.7:1 on a card, below WCAG 1.4.11 (3:1) for a field boundary. 56% gives 3.4:1. */
+    --input: 220 10% 56%;
+    --ring: 233 62% 50%;
+    --radius: 14px;
+
+    --hero: 0 0% 100%;
+    --hero-foreground: 224 30% 11%;
+    --hero-muted: 220 10% 40%;
+    --hero-line: 220 14% 91%;
+
+    --sidebar: 0 0% 100%;
+    --sidebar-foreground: 224 30% 14%;
+    --sidebar-active: 220 20% 96%;
+
+    --chart-1: 224 30% 12%;
+    --chart-2: 30 85% 38%;
+    --chart-3: 233 62% 50%;
+    --chart-4: 150 62% 26%;
+    --chart-5: 4 66% 42%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --background: 224 22% 7%;
+    --foreground: 220 20% 94%;
+    --card: 224 20% 10%;
+    --card-foreground: 220 20% 94%;
+    --popover: 224 20% 10%;
+    --popover-foreground: 220 20% 94%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 224 30% 10%;
+    --secondary: 224 16% 15%;
+    --secondary-foreground: 220 20% 94%;
+    --muted: 224 16% 15%;
+    --muted-foreground: 220 12% 68%;
+    --accent: 233 40% 20%;
+    --accent-foreground: 233 85% 88%;
+    --brand: 233 85% 74%;
+    --brand-foreground: 224 30% 10%;
+    --destructive: 4 80% 68%;
+    --destructive-foreground: 224 30% 10%;
+    --success: 150 55% 60%;
+    --warning: 38 90% 62%;
+    --info: 208 80% 72%;
+    --border: 224 14% 19%;
+    --input: 224 12% 46%;
+    --ring: 233 85% 74%;
+
+    --hero: 224 20% 10%;
+    --hero-foreground: 220 20% 94%;
+    --hero-muted: 220 12% 68%;
+    --hero-line: 224 14% 19%;
+
+    --sidebar: 224 22% 8%;
+    --sidebar-foreground: 220 18% 90%;
+    --sidebar-active: 224 18% 14%;
+
+    --chart-1: 233 85% 78%;
+    --chart-2: 36 90% 62%;
+    --chart-3: 233 85% 74%;
+    --chart-4: 150 55% 60%;
+    --chart-5: 4 80% 68%;
   }
 }
 
@@ -69,7 +101,48 @@
   * {
     @apply border-border;
   }
+  html {
+    font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
   body {
     @apply bg-background text-foreground;
+    line-height: 1.45;
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+  .money {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+/* design.md §5: no motion when the user asks for none. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* design.md §9.2: only the receipt prints. */
+@media print {
+  body:has(.print-area) * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
   }
 }

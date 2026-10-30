@@ -241,7 +241,7 @@ export function AccountsTab() {
       <ConfirmDialog
         open={generateOpen}
         onOpenChange={setGenerateOpen}
-        title="Buat COA Standar"
+        title="Buat COA standar"
         description="Menambahkan akun standar koperasi yang belum ada (± 25 akun) dan memetakan akun default untuk konfigurasi simpanan/pinjaman yang sudah ada. Jika koperasi memiliki unit Toko, akun dan pemetaan penjualan toko ikut ditambahkan. Akun dan pemetaan yang sudah ada tidak akan diubah — aman dijalankan lebih dari sekali."
         confirmLabel="Buat COA Standar"
         onConfirm={generateStandardCoa}

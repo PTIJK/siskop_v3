@@ -49,7 +49,7 @@ export function PiutangAnggotaPage() {
     { header: "Limit Kredit", cell: ({ row }) => formatRupiah(row.original.creditLimit) },
     {
       header: "Terpakai",
-      cell: ({ row }) => <span className="font-semibold text-orange-600">{formatRupiah(row.original.outstandingBalance)}</span>
+      cell: ({ row }) => <span className="font-semibold text-warning">{formatRupiah(row.original.outstandingBalance)}</span>
     },
     { header: "Sisa Limit", cell: ({ row }) => formatRupiah(row.original.availableCredit) },
     {
@@ -69,11 +69,11 @@ export function PiutangAnggotaPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Piutang Anggota" description="Piutang kredit anggota di Toko (Kredit Anggota) yang belum lunas" />
+      <PageHeader title="Piutang anggota" description="Piutang kredit anggota di Toko (Kredit Anggota) yang belum lunas" />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <StatCard title="Total Piutang Anggota" value={formatRupiah(totalOutstanding)} icon={Receipt} isLoading={isPending} />
-        <StatCard title="Jumlah Anggota Menunggak" value={String(memberCount)} icon={Users} isLoading={isPending} />
+        <StatCard title="Total piutang anggota" value={formatRupiah(totalOutstanding)} icon={Receipt} isLoading={isPending} />
+        <StatCard title="Jumlah anggota menunggak" value={String(memberCount)} icon={Users} isLoading={isPending} />
       </div>
 
       <DataTable

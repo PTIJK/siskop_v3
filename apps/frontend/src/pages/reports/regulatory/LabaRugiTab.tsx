@@ -3,7 +3,7 @@ import type { LabaRugiSection, LaporanHasilUsaha } from "@siskop/types";
 import { formatPeriode, formatRupiah } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
 import { CompareCells, CompareHeads } from "@/components/reports/CompareCells";
 import { CompareSelect } from "@/components/reports/CompareSelect";
@@ -16,6 +16,7 @@ import { useReport } from "@/components/reports/useReport";
 import { useReportFilter } from "@/components/reports/useReportFilter";
 import { bukuBesarHref } from "../accounting/drilldown";
 import { defaultPeriodFrom, defaultPeriodTo } from "./period";
+import { currentUnitScope } from "@/stores/unit-scope";
 
 function SectionTable({
   title,
@@ -81,7 +82,7 @@ function SectionTable({
 }
 
 export function LabaRugiTab() {
-  const filter = useReportFilter("laba-rugi", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS, compare: COMPARE_NONE }));
+  const filter = useReportFilter("laba-rugi", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: currentUnitScope(), compare: COMPARE_NONE }));
   const { value: f } = filter;
   const report = useReport<LaporanHasilUsaha>("Gagal memuat laporan hasil usaha");
   const unitLabel = useUnitLabel(f.unitId);
@@ -114,7 +115,7 @@ export function LabaRugiTab() {
 
       <ReportResultCard
         reportName="Laporan Hasil Usaha"
-        title="Laporan Hasil Usaha"
+        title="Laporan hasil usaha"
         subtitle={
           data
             ? [

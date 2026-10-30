@@ -4,6 +4,7 @@ import { apiFetch } from "@/api/client";
 import { formatRupiah, formatTanggalPendek } from "@/lib/format";
 import { Badge } from "@/components/shared/Badge";
 import { KOLBadge } from "@/components/shared/KOLBadge";
+import { LoanStatusBadge } from "@/components/shared/LoanStatusBadge";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 
 interface LoanDetail {
@@ -55,14 +56,14 @@ export function LoanDetailPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold">{loan.member.fullName}</h1>
-        <p className="font-mono text-xs text-muted-foreground">{loan.member.memberId}</p>
+        <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.02em]">{loan.member.fullName}</h1>
+        <p className="money text-xs text-muted-foreground">{loan.member.memberId}</p>
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
+      <div className="rounded-[16px] border bg-card p-4">
         <div className="flex flex-wrap gap-1.5">
           <Badge>{loan.loanConfig.name}</Badge>
-          <Badge variant="outline">{loan.status}</Badge>
+          <LoanStatusBadge status={loan.status} />
           <KOLBadge category={loan.kolCategory} />
         </div>
         {loan.disbursedAt && (
@@ -77,7 +78,7 @@ export function LoanDetailPage() {
           ].map((item) => (
             <div key={item.label} className="flex items-center justify-between text-sm">
               <dt className="text-muted-foreground">{item.label}</dt>
-              <dd className="font-semibold">{item.value}</dd>
+              <dd className="font-bold">{item.value}</dd>
             </div>
           ))}
         </dl>
@@ -85,7 +86,7 @@ export function LoanDetailPage() {
         <div className="mt-3 border-t pt-3">
           <div className="mb-1 flex justify-between text-xs">
             <span>Dibayar: {formatRupiah(paid)}</span>
-            <span className="text-orange-600">Sisa: {formatRupiah(remaining)}</span>
+            <span className="text-warning">Sisa: {formatRupiah(remaining)}</span>
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
             <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
@@ -95,25 +96,25 @@ export function LoanDetailPage() {
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold">Riwayat Pembayaran</h2>
+        <h2 className="mb-2 text-sm font-bold">Riwayat Pembayaran</h2>
         {loan.payments.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-lg border py-8 text-center text-muted-foreground">
+          <div className="flex flex-col items-center gap-2 rounded-[16px] border py-8 text-center text-muted-foreground">
             <p className="text-sm">Belum ada riwayat pembayaran</p>
           </div>
         ) : (
           <div className="space-y-2">
             {loan.payments.map((p) => (
-              <div key={p.id} className="rounded-lg border bg-card p-3">
+              <div key={p.id} className="rounded-[16px] border bg-card p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium">{formatTanggalPendek(p.paidAt)}</p>
+                    <p className="text-xs font-semibold">{formatTanggalPendek(p.paidAt)}</p>
                     {p.note && <p className="mt-0.5 truncate text-xs text-muted-foreground">{p.note}</p>}
                     <p className="mt-0.5 text-xs text-muted-foreground">{p.createdByUser?.name ?? "-"}</p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold text-green-700">{formatRupiah(p.amount)}</p>
+                    <p className="text-sm font-bold text-success">{formatRupiah(p.amount)}</p>
                     {parseFloat(p.penalty) > 0 && (
-                      <p className="text-xs text-red-600">Denda {formatRupiah(p.penalty)}</p>
+                      <p className="text-xs text-destructive">Denda {formatRupiah(p.penalty)}</p>
                     )}
                   </div>
                 </div>

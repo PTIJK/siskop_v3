@@ -34,15 +34,35 @@ export default {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))"
         },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))"
+        },
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))"
+        },
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          foreground: "hsl(var(--brand-foreground))"
+        },
+        success: "hsl(var(--success))",
+        warning: "hsl(var(--warning))",
+        info: "hsl(var(--info))",
+        hero: {
+          DEFAULT: "hsl(var(--hero))",
+          foreground: "hsl(var(--hero-foreground))",
+          muted: "hsl(var(--hero-muted))",
+          line: "hsl(var(--hero-line))"
         }
+      },
+      fontFamily: {
+        sans: ["Manrope", "system-ui", "-apple-system", "Segoe UI", "sans-serif"]
       },
       borderRadius: {
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)"
+        md: "calc(var(--radius) - 4px)",
+        sm: "calc(var(--radius) - 6px)"
       }
     }
   },

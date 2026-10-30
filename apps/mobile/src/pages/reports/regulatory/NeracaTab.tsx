@@ -9,8 +9,8 @@ import { FileText } from "lucide-react";
 
 function SectionCard({ title, section }: { title: string; section: NeracaSection }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+    <div className="rounded-[16px] border bg-card p-4">
+      <h3 className="mb-2 text-sm font-bold">{title}</h3>
       {section.items.map((item, i) => (
         <div key={item.accountId ?? i} className="flex items-center justify-between gap-3 border-b py-2 text-sm last:border-b-0">
           <div className="min-w-0">
@@ -22,12 +22,12 @@ function SectionCard({ title, section }: { title: string; section: NeracaSection
                 </Badge>
               )}
             </p>
-            {item.code && <p className="font-mono text-xs text-muted-foreground">{item.code}</p>}
+            {item.code && <p className="money text-xs text-muted-foreground">{item.code}</p>}
           </div>
-          <span className="shrink-0 font-medium">{formatRupiahSingkat(item.balance)}</span>
+          <span className="shrink-0 font-semibold">{formatRupiahSingkat(item.balance)}</span>
         </div>
       ))}
-      <div className="mt-1 flex items-center justify-between border-t pt-2 text-sm font-semibold">
+      <div className="mt-1 flex items-center justify-between border-t pt-2 text-sm font-bold">
         <span>Total {title}</span>
         <span>{formatRupiahSingkat(section.total)}</span>
       </div>
@@ -67,8 +67,8 @@ export function NeracaTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border bg-card p-4">
-        <p className="mb-2 text-xs font-medium text-muted-foreground">Per Tanggal</p>
+      <div className="rounded-[16px] border bg-card p-4">
+        <p className="mb-2 text-xs font-semibold text-muted-foreground">Per Tanggal</p>
         <div className="flex gap-2">
           <input
             type="date"
@@ -79,7 +79,7 @@ export function NeracaTab() {
           <button
             onClick={fetchReport}
             disabled={isLoading}
-            className="flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-60"
+            className="flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
           >
             <FileText className="h-4 w-4" /> {isLoading ? "Memuat..." : "Tampilkan"}
           </button>
@@ -98,12 +98,12 @@ export function NeracaTab() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">Neraca per {data.asOfDate}</p>
-            <Badge variant={data.balanced ? "default" : "destructive"}>{data.balanced ? "Seimbang" : "Tidak Seimbang"}</Badge>
+            <Badge variant={data.balanced ? "ok" : "bad"}>{data.balanced ? "Seimbang" : "Tidak Seimbang"}</Badge>
           </div>
           <SectionCard title="Aset" section={data.aset} />
           <SectionCard title="Kewajiban" section={data.kewajiban} />
           <SectionCard title="Ekuitas" section={data.ekuitas} />
-          <div className="flex items-center justify-between rounded-lg border bg-card p-4 text-sm font-semibold">
+          <div className="flex items-center justify-between rounded-[16px] border bg-card p-4 text-sm font-bold">
             <span>Total Kewajiban dan Ekuitas</span>
             <span>{formatRupiahSingkat(data.totalKewajibanDanEkuitas)}</span>
           </div>

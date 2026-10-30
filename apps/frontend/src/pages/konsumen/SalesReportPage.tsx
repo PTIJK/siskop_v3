@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { SERIES } from "@/pages/dashboard/chartColors";
 import { Package, Receipt, ShoppingCart, TrendingUp } from "lucide-react";
 import { ApiRequestError } from "@/api/client";
 import { getTokoSalesReport } from "@/api/konsumen";
@@ -85,7 +86,7 @@ export function SalesReportPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Laporan Toko" description="Penjualan, laba kotor, produk terlaris, dan stok unit ini" />
+      <PageHeader title="Laporan toko" description="Penjualan, laba kotor, produk terlaris, dan stok unit ini" />
 
       <Card>
         <CardContent className="pt-5">
@@ -112,13 +113,13 @@ export function SalesReportPage() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard title="Omzet" value={formatRupiah(data.ringkasan.omzet)} icon={ShoppingCart} />
-            <StatCard title="Harga Pokok (HPP)" value={formatRupiah(data.ringkasan.hpp)} icon={Package} />
+            <StatCard title="Harga pokok (HPP)" value={formatRupiah(data.ringkasan.hpp)} icon={Package} />
             <StatCard
-              title="Laba Kotor"
+              title="Laba kotor"
               value={formatRupiah(data.ringkasan.labaKotor)}
               subtitle={`Margin ${data.ringkasan.marginPercent.toLocaleString("id-ID")}%`}
               icon={TrendingUp}
-              iconColor="text-green-600"
+              iconColor="text-success"
             />
             <StatCard
               title="Transaksi"
@@ -147,8 +148,9 @@ export function SalesReportPage() {
                       <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                       <YAxis tickFormatter={(v) => formatRupiahSingkat(v)} tick={{ fontSize: 11 }} width={70} />
                       <Tooltip content={<TrendTooltip />} />
-                      <Bar dataKey="Omzet" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Laba kotor" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                      <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="Omzet" fill={SERIES.primary} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Laba kotor" fill={SERIES.secondary} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>

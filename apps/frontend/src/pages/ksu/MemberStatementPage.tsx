@@ -35,7 +35,7 @@ export function MemberStatementPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Laporan SHU Anggota" description="Rincian Sisa Hasil Usaha (SHU) anggota per unit usaha" />
+      <PageHeader title="Laporan SHU anggota" description="Rincian Sisa Hasil Usaha (SHU) anggota per unit usaha" />
 
       {!memberId ? (
         <Card>

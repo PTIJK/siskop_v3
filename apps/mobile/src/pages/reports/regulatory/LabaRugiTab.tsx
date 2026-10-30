@@ -10,18 +10,18 @@ import { FileText } from "lucide-react";
 
 function SectionCard({ title, section }: { title: string; section: LabaRugiSection }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+    <div className="rounded-[16px] border bg-card p-4">
+      <h3 className="mb-2 text-sm font-bold">{title}</h3>
       {section.items.map((item) => (
         <div key={item.accountId} className="flex items-center justify-between gap-3 border-b py-2 text-sm last:border-b-0">
           <div className="min-w-0">
             <p className="truncate">{item.name}</p>
-            <p className="font-mono text-xs text-muted-foreground">{item.code}</p>
+            <p className="money text-xs text-muted-foreground">{item.code}</p>
           </div>
-          <span className="shrink-0 font-medium">{formatRupiahSingkat(item.total)}</span>
+          <span className="shrink-0 font-semibold">{formatRupiahSingkat(item.total)}</span>
         </div>
       ))}
-      <div className="mt-1 flex items-center justify-between border-t pt-2 text-sm font-semibold">
+      <div className="mt-1 flex items-center justify-between border-t pt-2 text-sm font-bold">
         <span>Total {title}</span>
         <span>{formatRupiahSingkat(section.total)}</span>
       </div>
@@ -79,7 +79,7 @@ export function LabaRugiTab() {
           </p>
           <SectionCard title="Pendapatan" section={data.pendapatan} />
           <SectionCard title="Beban" section={data.beban} />
-          <div className="flex items-center justify-between rounded-lg border bg-card p-4 text-sm font-semibold">
+          <div className="flex items-center justify-between rounded-[16px] border bg-card p-4 text-sm font-bold">
             <span>SHU Berjalan (Pendapatan − Beban)</span>
             <span>{formatRupiahSingkat(data.shuBerjalan)}</span>
           </div>

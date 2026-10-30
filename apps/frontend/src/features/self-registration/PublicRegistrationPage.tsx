@@ -60,14 +60,14 @@ export function PublicRegistrationPage() {
   // shrinking below its content's intrinsic width, which pushed the card
   // past the viewport on narrow screens despite max-w-md.
   return (
-    <div className="min-h-screen bg-muted/30 px-4 py-10">
+    <main className="min-h-screen bg-muted/30 px-4 py-10">
       <Card className="mx-auto w-full max-w-md">
         {isPending && (
-          <CardContent className="py-16 text-center text-sm text-muted-foreground">Memuat…</CardContent>
+          <CardContent role="status" className="py-16 text-center text-sm text-muted-foreground">Memuat…</CardContent>
         )}
 
         {!isPending && isError && (
-          <CardContent className="py-16 text-center text-sm text-muted-foreground">
+          <CardContent role="alert" className="py-16 text-center text-sm text-muted-foreground">
             Tautan pendaftaran tidak ditemukan. Periksa kembali tautan atau kode QR yang Anda gunakan.
           </CardContent>
         )}
@@ -86,11 +86,11 @@ export function PublicRegistrationPage() {
 
         {!isPending && !isError && data && data.selfRegistrationEnabled && result && (
           <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <CheckCircle2 className="h-10 w-10 text-primary" />
+            <CheckCircle2 className="h-10 w-10 text-success" aria-hidden="true" />
             <p className="text-sm font-medium">{result.message}</p>
             <p className="text-xs text-muted-foreground">NIK: {result.nikMasked}</p>
             {result.nikWarning && (
-              <p className="text-xs text-amber-600">
+              <p className="text-xs text-warning">
                 NIK ini sudah tercatat sebelumnya di koperasi ini — petugas akan memeriksa datanya saat peninjauan.
               </p>
             )}
@@ -102,76 +102,76 @@ export function PublicRegistrationPage() {
             <CardHeader className="items-center text-center">
               {data.tenantLogoUrl && <img src={data.tenantLogoUrl} alt={data.tenantName} className="mb-2 h-12" />}
               <CardTitle className="text-lg">{data.tenantName}</CardTitle>
-              <p className="text-sm text-muted-foreground">Formulir Pendaftaran Anggota Mandiri</p>
+              <h1 className="text-[17px] font-extrabold">Formulir pendaftaran anggota</h1>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 {apiError && <FormError error={apiError} />}
 
                 <div className="space-y-1.5">
-                  <Label>Nama Lengkap *</Label>
-                  <Input placeholder="Budi Santoso" {...register("fullName")} />
-                  {errors.fullName && <p className="text-xs text-destructive">{errors.fullName.message}</p>}
+                  <Label htmlFor="reg-fullName">Nama Lengkap *</Label>
+                  <Input id="reg-fullName" aria-invalid={errors.fullName ? true : undefined} placeholder="Budi Santoso" {...register("fullName")} />
+                  {errors.fullName && <p role="alert" className="text-[12.5px] font-semibold text-destructive">{errors.fullName.message}</p>}
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>NIK (16 digit) *</Label>
-                  <Input placeholder="3201234567890123" maxLength={16} inputMode="numeric" {...register("nik")} />
-                  {errors.nik && <p className="text-xs text-destructive">{errors.nik.message}</p>}
+                  <Label htmlFor="reg-nik">NIK (16 digit) *</Label>
+                  <Input id="reg-nik" aria-invalid={errors.nik ? true : undefined} placeholder="3201234567890123" maxLength={16} inputMode="numeric" {...register("nik")} />
+                  {errors.nik && <p role="alert" className="text-[12.5px] font-semibold text-destructive">{errors.nik.message}</p>}
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Tempat Lahir *</Label>
-                  <Input placeholder="Jakarta" {...register("birthPlace")} />
-                  {errors.birthPlace && <p className="text-xs text-destructive">{errors.birthPlace.message}</p>}
+                  <Label htmlFor="reg-birthPlace">Tempat Lahir *</Label>
+                  <Input id="reg-birthPlace" aria-invalid={errors.birthPlace ? true : undefined} placeholder="Jakarta" {...register("birthPlace")} />
+                  {errors.birthPlace && <p role="alert" className="text-[12.5px] font-semibold text-destructive">{errors.birthPlace.message}</p>}
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Tanggal Lahir *</Label>
-                  <Input type="date" {...register("birthDate")} />
-                  {errors.birthDate && <p className="text-xs text-destructive">{errors.birthDate.message}</p>}
+                  <Label htmlFor="reg-birthDate">Tanggal Lahir *</Label>
+                  <Input id="reg-birthDate" aria-invalid={errors.birthDate ? true : undefined} type="date" {...register("birthDate")} />
+                  {errors.birthDate && <p role="alert" className="text-[12.5px] font-semibold text-destructive">{errors.birthDate.message}</p>}
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Pekerjaan *</Label>
-                  <Input placeholder="Pedagang" {...register("occupation")} />
-                  {errors.occupation && <p className="text-xs text-destructive">{errors.occupation.message}</p>}
+                  <Label htmlFor="reg-occupation">Pekerjaan *</Label>
+                  <Input id="reg-occupation" aria-invalid={errors.occupation ? true : undefined} placeholder="Pedagang" {...register("occupation")} />
+                  {errors.occupation && <p role="alert" className="text-[12.5px] font-semibold text-destructive">{errors.occupation.message}</p>}
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Nomor Telepon (opsional)</Label>
-                  <Input placeholder="08123456789" inputMode="tel" {...register("phone")} />
-                  {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
+                  <Label htmlFor="reg-phone">Nomor Telepon (opsional)</Label>
+                  <Input id="reg-phone" aria-invalid={errors.phone ? true : undefined} placeholder="08123456789" inputMode="tel" {...register("phone")} />
+                  {errors.phone && <p role="alert" className="text-[12.5px] font-semibold text-destructive">{errors.phone.message}</p>}
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Alamat *</Label>
-                  <Textarea placeholder="Jl. Merdeka No. 1, RT 01/RW 02, Jakarta" rows={3} {...register("address")} />
-                  {errors.address && <p className="text-xs text-destructive">{errors.address.message}</p>}
+                  <Label htmlFor="reg-address">Alamat *</Label>
+                  <Textarea id="reg-address" aria-invalid={errors.address ? true : undefined} placeholder="Jl. Merdeka No. 1, RT 01/RW 02, Jakarta" rows={3} {...register("address")} />
+                  {errors.address && <p role="alert" className="text-[12.5px] font-semibold text-destructive">{errors.address.message}</p>}
                 </div>
 
                 <div className="space-y-1.5">
                   <Label>Foto KTP (opsional)</Label>
-                  <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground hover:border-primary hover:text-primary">
-                    <Upload className="h-4 w-4" />
+                  <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground hover:border-primary hover:text-primary focus-within:ring-2 focus-within:ring-ring">
+                    <Upload className="h-4 w-4" aria-hidden="true" />
                     {ktpFile ? ktpFile.name : "Pilih file (JPG, PNG, PDF — maks 2MB)"}
                     <input
                       type="file"
                       accept="image/jpeg,image/png,application/pdf"
-                      className="hidden"
+                      className="sr-only"
                       onChange={(e) => setKtpFile(e.target.files?.[0] ?? null)}
                     />
                   </label>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? "Mengirim..." : "Daftar"}
+                <Button type="submit" size="lg" className="w-full" loading={isSubmitting}>
+                  {isSubmitting ? "Mengirim…" : "Daftar"}
                 </Button>
               </form>
             </CardContent>
           </>
         )}
       </Card>
-    </div>
+    </main>
   );
 }

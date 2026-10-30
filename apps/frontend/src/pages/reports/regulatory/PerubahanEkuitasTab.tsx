@@ -2,7 +2,7 @@ import type { PerubahanEkuitas } from "@siskop/types";
 import { formatPeriode, formatRupiah, formatRupiahOrDash } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
 import { ExportMenu } from "@/components/reports/ExportMenu";
 import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
@@ -10,6 +10,7 @@ import { ReportResultCard, useUnitLabel } from "@/components/reports/ReportResul
 import { useReport } from "@/components/reports/useReport";
 import { useReportFilter } from "@/components/reports/useReportFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "./period";
+import { currentUnitScope } from "@/stores/unit-scope";
 
 /** Pengurangan arrives as a positive amount; shown negated so each column reads top to bottom. */
 function signed(rowKey: string, value: string): string {
@@ -17,7 +18,7 @@ function signed(rowKey: string, value: string): string {
 }
 
 export function PerubahanEkuitasTab() {
-  const filter = useReportFilter("perubahan-ekuitas", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS }));
+  const filter = useReportFilter("perubahan-ekuitas", () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: currentUnitScope() }));
   const { value: f } = filter;
   const report = useReport<PerubahanEkuitas>("Gagal memuat laporan perubahan ekuitas");
   const unitLabel = useUnitLabel(f.unitId);
@@ -43,7 +44,7 @@ export function PerubahanEkuitasTab() {
 
       <ReportResultCard
         reportName="Perubahan Ekuitas"
-        title="Laporan Perubahan Ekuitas"
+        title="Laporan perubahan ekuitas"
         subtitle={data ? [formatPeriode(data.periode.from, data.periode.to), unitLabel].filter(Boolean).join(" · ") : undefined}
         actions={data && <ExportMenu report="perubahan-ekuitas" query={query} stem={`perubahan-ekuitas-${data.periode.from}_${data.periode.to}`} pdfPath={`/reports/regulatory/perubahan-ekuitas/pdf?${query}`} />}
         isLoading={report.isLoading}

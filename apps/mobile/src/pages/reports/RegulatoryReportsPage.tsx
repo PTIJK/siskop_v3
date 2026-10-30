@@ -27,7 +27,7 @@ export function RegulatoryReportsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold">Laporan Regulasi</h1>
+        <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.02em]">Laporan Regulasi</h1>
         <p className="text-sm text-muted-foreground">Sesuai Permenkop UKM No. 2/2024</p>
       </div>
 
@@ -37,8 +37,8 @@ export function RegulatoryReportsPage() {
             key={t.value}
             onClick={() => setTab(t.value)}
             className={cn(
-              "shrink-0 rounded-sm px-3 py-1.5 text-xs font-medium",
-              tab === t.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+              "shrink-0 rounded-sm px-3 py-1.5 text-xs font-semibold",
+              tab === t.value ? "bg-background text-foreground " : "text-muted-foreground"
             )}
           >
             {t.label}

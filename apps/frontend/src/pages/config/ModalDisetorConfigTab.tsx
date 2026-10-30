@@ -83,7 +83,7 @@ export function ModalDisetorConfigTab() {
           {/* Status reflects the saved value, not the unsaved input. */}
           {data?.modalDisetor != null &&
             (data.auditRequired ? (
-              <p className="text-sm font-medium text-amber-600">
+              <p className="text-sm font-medium text-warning">
                 Modal disetor telah mencapai ambang batas wajib audit ({threshold}).
               </p>
             ) : (

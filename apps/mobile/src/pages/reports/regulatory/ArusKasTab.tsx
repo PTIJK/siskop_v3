@@ -11,8 +11,8 @@ import { FileText, Info } from "lucide-react";
 
 function ActivityCard({ title, section }: { title: string; section: ArusKasSection }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+    <div className="rounded-[16px] border bg-card p-4">
+      <h3 className="mb-2 text-sm font-bold">{title}</h3>
       {section.rincian.length === 0 ? (
         <p className="text-sm text-muted-foreground">Tidak ada transaksi pada periode ini.</p>
       ) : (
@@ -20,10 +20,10 @@ function ActivityCard({ title, section }: { title: string; section: ArusKasSecti
           {section.rincian.map((r, i) => (
             <div key={i} className="flex items-center justify-between gap-3 border-b py-2 text-sm last:border-b-0">
               <span className="min-w-0 truncate">{r.label}</span>
-              <span className="shrink-0 font-medium">{formatRupiahSingkat(r.amount)}</span>
+              <span className="shrink-0 font-semibold">{formatRupiahSingkat(r.amount)}</span>
             </div>
           ))}
-          <div className="mt-1 flex items-center justify-between border-t pt-2 text-sm font-semibold">
+          <div className="mt-1 flex items-center justify-between border-t pt-2 text-sm font-bold">
             <span>Total {title}</span>
             <span>{formatRupiahSingkat(section.total)}</span>
           </div>
@@ -75,7 +75,7 @@ export function ArusKasTab() {
           <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error.message}</p>
         )
       ) : data?.catatan ? (
-        <div className="flex items-start gap-2.5 rounded-lg border bg-card p-4 text-sm">
+        <div className="flex items-start gap-2.5 rounded-[16px] border bg-card p-4 text-sm">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-muted-foreground">{data.catatan}</p>
         </div>
@@ -85,10 +85,10 @@ export function ArusKasTab() {
             <p className="text-xs text-muted-foreground">
               Periode {data.periode.from} — {data.periode.to}
             </p>
-            <Badge variant={data.balanced ? "default" : "destructive"}>{data.balanced ? "Seimbang" : "Tidak Seimbang"}</Badge>
+            <Badge variant={data.balanced ? "ok" : "bad"}>{data.balanced ? "Seimbang" : "Tidak Seimbang"}</Badge>
           </div>
 
-          <div className="flex items-center justify-between rounded-lg border bg-card p-4 text-sm font-semibold">
+          <div className="flex items-center justify-between rounded-[16px] border bg-card p-4 text-sm font-bold">
             <span>Saldo Kas Awal</span>
             <span>{formatRupiahSingkat(data.saldoKasAwal)}</span>
           </div>
@@ -97,12 +97,12 @@ export function ArusKasTab() {
           <ActivityCard title="Aktivitas Investasi" section={data.aktivitasInvestasi} />
           <ActivityCard title="Aktivitas Pendanaan" section={data.aktivitasPendanaan} />
 
-          <div className="rounded-lg border bg-card p-4">
+          <div className="rounded-[16px] border bg-card p-4">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Kenaikan (Penurunan) Kas Bersih</span>
               <span>{formatRupiahSingkat(data.kenaikanPenurunanKasBersih)}</span>
             </div>
-            <div className="mt-1.5 flex items-center justify-between border-t pt-1.5 text-sm font-semibold">
+            <div className="mt-1.5 flex items-center justify-between border-t pt-1.5 text-sm font-bold">
               <span>Saldo Kas Akhir</span>
               <span>{formatRupiahSingkat(data.saldoKasAkhir)}</span>
             </div>

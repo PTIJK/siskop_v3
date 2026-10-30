@@ -11,7 +11,7 @@ export function RegulatoryReportsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Laporan Regulasi"
+        title="Laporan regulasi"
         description="Laporan keuangan sesuai Permenkop UKM No. 2/2024 — Neraca, Arus Kas, Laporan Hasil Usaha, Perubahan Ekuitas, Pembagian SHU, dan CALK"
       />
 

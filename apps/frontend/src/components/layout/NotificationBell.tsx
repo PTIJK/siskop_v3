@@ -51,31 +51,40 @@ export function NotificationBell() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-9 w-9">
-          <Bell className="h-4 w-4" />
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={unreadCount > 0 ? `Notifikasi, ${unreadCount} belum dibaca` : "Notifikasi"}
+          className="relative h-[38px] w-[38px] rounded-full border bg-card hover:bg-muted max-[900px]:h-11 max-[900px]:w-11"
+        >
+          <Bell aria-hidden="true" />
           {unreadCount > 0 && (
             <Badge
               variant="destructive"
-              className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px]"
+              aria-hidden="true"
+              className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background px-1 text-[10px]"
             >
               {unreadCount > 9 ? "9+" : unreadCount}
             </Badge>
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuLabel>Notifikasi</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-2rem))]">
+        <DropdownMenuLabel className="font-extrabold">Notifikasi</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {items.length === 0 ? (
-          <p className="px-2 py-4 text-center text-sm text-muted-foreground">Tidak ada notifikasi</p>
+          <p className="px-2 py-6 text-center text-sm text-muted-foreground">Belum ada notifikasi. Pendaftaran anggota baru dan tugas lain muncul di sini.</p>
         ) : (
           items.map((n) => (
             <DropdownMenuItem
               key={n.id}
-              className="flex flex-col items-start gap-0.5 whitespace-normal"
+              className="flex min-h-[44px] flex-col items-start gap-0.5 whitespace-normal"
               onClick={() => onSelect(n)}
             >
-              <span className={n.read ? "text-sm text-muted-foreground" : "text-sm font-medium"}>{n.message}</span>
+              <span className={n.read ? "text-sm text-muted-foreground" : "text-sm font-bold"}>
+                {!n.read && <span className="sr-only">Belum dibaca: </span>}
+                {n.message}
+              </span>
               <span className="text-xs text-muted-foreground">{formatTanggalIndonesia(new Date(n.createdAt))}</span>
             </DropdownMenuItem>
           ))

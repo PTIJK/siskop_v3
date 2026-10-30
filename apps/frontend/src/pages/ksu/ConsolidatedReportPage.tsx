@@ -24,7 +24,7 @@ export function ConsolidatedReportPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Laporan Konsolidasi" description="Total aset gabungan seluruh unit usaha koperasi" />
+      <PageHeader title="Laporan konsolidasi" description="Total aset gabungan seluruh unit usaha koperasi" />
 
       {isPending ? (
         <PageLoading />

@@ -233,7 +233,7 @@ export function CalkTab() {
                   <span>Modal Sendiri per {data.periode.to}</span>
                   <span className="tabular-nums">{formatRupiah(data.permodalan.modalSendiri)}</span>
                 </div>
-                <p className={data.permodalan.wajibAudit ? "text-amber-600" : "text-muted-foreground"}>
+                <p className={data.permodalan.wajibAudit ? "text-warning" : "text-muted-foreground"}>
                   {data.permodalan.wajibAudit
                     ? `Modal sendiri mencapai ambang ${formatRupiah(data.permodalan.ambangAudit)} — laporan keuangan tahunan wajib diaudit akuntan publik (Permenkop UKM No. 2/2024 Pasal 12).`
                     : `Di bawah ambang audit wajib ${formatRupiah(data.permodalan.ambangAudit)} (Permenkop UKM No. 2/2024 Pasal 12).`}

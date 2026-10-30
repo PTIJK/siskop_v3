@@ -5,7 +5,7 @@ import { formatPeriode, formatTanggalPendek } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ALL_UNITS, unitQueryParam } from "@/lib/unit";
+import { unitQueryParam } from "@/lib/unit";
 import { UnitFilter } from "@/components/shared/UnitFilter";
 import { BalanceChip } from "@/components/reports/BalanceChip";
 import { ExportMenu } from "@/components/reports/ExportMenu";
@@ -17,6 +17,7 @@ import { useReport } from "@/components/reports/useReport";
 import { useReportFilter } from "@/components/reports/useReportFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "../regulatory/period";
 import { sourceHref } from "./drilldown";
+import { currentUnitScope } from "@/stores/unit-scope";
 
 const LIMIT = 50;
 
@@ -24,7 +25,7 @@ const LIMIT = 50;
 export function JurnalTab({ kind }: { kind: "umum" | "penyesuaian" }) {
   const isAdj = kind === "penyesuaian";
   const name = isAdj ? "Jurnal Penyesuaian" : "Jurnal Umum";
-  const filter = useReportFilter(`jurnal-${kind}`, () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: ALL_UNITS }));
+  const filter = useReportFilter(`jurnal-${kind}`, () => ({ from: defaultPeriodFrom(), to: defaultPeriodTo(), unitId: currentUnitScope() }));
   const { value: f } = filter;
   const report = useReport<JurnalReport>(`Gagal memuat ${name.toLowerCase()}`);
   const unitLabel = useUnitLabel(f.unitId);

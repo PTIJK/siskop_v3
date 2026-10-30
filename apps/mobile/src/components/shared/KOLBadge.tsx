@@ -1,19 +1,22 @@
 import type { KOLCategory } from "@siskop/types";
-import { cn } from "@/lib/utils";
+import { Badge } from "./Badge";
 
-const KOL_CONFIG: Record<KOLCategory, { label: string; className: string }> = {
-  LANCAR: { label: "Lancar", className: "bg-green-100 text-green-800" },
-  DALAM_PERHATIAN: { label: "Dalam Perhatian", className: "bg-yellow-100 text-yellow-800" },
-  KURANG_LANCAR: { label: "Kurang Lancar", className: "bg-orange-100 text-orange-800" },
-  DIRAGUKAN: { label: "Diragukan", className: "bg-red-100 text-red-800" },
-  MACET: { label: "Macet", className: "bg-red-900 text-red-100" }
+// "KOL n Nama" with a shape marker (design.md §2.4): the number and the shape
+// carry the meaning, so colour is never the only signal.
+const KOL_CONFIG: Record<KOLCategory, { label: string; variant: "ok" | "warn" | "bad" }> = {
+  LANCAR: { label: "KOL 1 Lancar", variant: "ok" },
+  DALAM_PERHATIAN: { label: "KOL 2 Dalam Perhatian", variant: "warn" },
+  KURANG_LANCAR: { label: "KOL 3 Kurang Lancar", variant: "warn" },
+  DIRAGUKAN: { label: "KOL 4 Diragukan", variant: "bad" },
+  MACET: { label: "KOL 5 Macet", variant: "bad" }
 };
 
 export function KOLBadge({ category, className }: { category: KOLCategory | string; className?: string }) {
-  const config = KOL_CONFIG[category as KOLCategory] ?? { label: category, className: "bg-gray-100 text-gray-800" };
+  const config = KOL_CONFIG[category as KOLCategory];
+  if (!config) return <Badge variant="secondary" className={className}>{category}</Badge>;
   return (
-    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", config.className, className)}>
+    <Badge variant={config.variant} className={className}>
       {config.label}
-    </span>
+    </Badge>
   );
 }

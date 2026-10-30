@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { LogOut } from "lucide-react";
 import { useAuth } from "@/stores/auth";
 import { apiPost } from "@/api/client";
+import { BrandMark } from "./MemberAuthLayout";
 
 const ROUTE_LABELS: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -49,22 +50,31 @@ export function Topbar() {
 
   return (
     <header
-      className="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4"
+      className="flex h-[60px] shrink-0 items-center justify-between gap-3 border-b bg-card px-4"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
-      <h1 className="text-base font-semibold text-foreground">{pageTitle}</h1>
-      <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <BrandMark className="h-7 w-7 shrink-0" />
+        <h1 className="truncate text-[17px] font-extrabold tracking-tight text-foreground">{pageTitle}</h1>
+      </div>
+      <div className="flex items-center gap-1">
         {user && (
           <button
             onClick={() => navigate("/profile")}
             aria-label="Profil Saya"
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground"
+            className="flex h-11 w-11 items-center justify-center"
           >
-            {getInitials(user.name)}
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-extrabold text-accent-foreground">
+              {getInitials(user.name)}
+            </span>
           </button>
         )}
-        <button onClick={logout} className="rounded-md p-2 text-muted-foreground hover:bg-accent" aria-label="Keluar">
-          <LogOut className="h-4 w-4" />
+        <button
+          onClick={logout}
+          className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Keluar"
+        >
+          <LogOut className="h-[18px] w-[18px]" aria-hidden="true" />
         </button>
       </div>
     </header>

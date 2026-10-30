@@ -12,7 +12,9 @@ import { ProductSearchGrid } from "@/components/konsumen/ProductSearchGrid";
 import { POSCart, type CartLine } from "@/components/konsumen/POSCart";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2 } from "lucide-react";
+import { Drawer, DrawerBody, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { CheckCircle2, ShoppingCart } from "lucide-react";
 
 // ── Cart state — the one deliberate exception to "server state via TanStack
 // Query, no new store": the cart is ephemeral, doesn't exist until checkout,
@@ -95,6 +97,9 @@ export function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>("CASH");
   const [receipt, setReceipt] = useState<CreateSaleResponse | null>(null);
   const [creditMember, setCreditMember] = useState<{ id: string; fullName: string } | null>(null);
+  // Phone and tablet: the cart and payment live in a bottom sheet opened from a bar with the total.
+  const narrow = useMediaQuery("(max-width: 1180px)");
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   // Fetched here (not inside POSCart) because checkout also needs
   // availableCredit — the mutationFn below reads it via this same query's
@@ -138,6 +143,7 @@ export function POSPage() {
     },
     onSuccess: (sale) => {
       setReceipt(sale);
+      setSheetOpen(false);
       dispatch({ type: "CLEAR" });
       resetPaymentMethod("CASH");
       void qc.invalidateQueries({ queryKey: ["konsumen", "products", unitId] });
@@ -155,23 +161,49 @@ export function POSPage() {
   });
 
   const cartQuantity = (productId: string) => cart.lines.find((l) => l.productId === productId)?.quantity ?? 0;
+  const itemCount = cart.lines.reduce((sum, l) => sum + l.quantity, 0);
+  const cartTotal = cart.lines.reduce((sum, l) => sum + parseFloat(l.unitPrice) * l.quantity, 0);
+
+  const cartPanel = (
+    <POSCart
+      lines={cart.lines}
+      paymentMethod={paymentMethod}
+      onPaymentMethodChange={resetPaymentMethod}
+      creditMemberId={creditMember?.id ?? null}
+      creditMemberName={creditMember?.fullName ?? null}
+      onCreditMemberChange={setCreditMember}
+      creditStatus={creditStatus}
+      creditStatusPending={creditStatusPending}
+      onIncrement={(productId) => {
+        const line = cart.lines.find((l) => l.productId === productId);
+        if (line) dispatch({ type: "SET_QUANTITY", productId, quantity: line.quantity + 1 });
+      }}
+      onDecrement={(productId) => {
+        const line = cart.lines.find((l) => l.productId === productId);
+        if (line) dispatch({ type: "SET_QUANTITY", productId, quantity: line.quantity - 1 });
+      }}
+      onRemove={(productId) => dispatch({ type: "REMOVE_ITEM", productId })}
+      onCheckout={() => checkout.mutate()}
+      isCheckingOut={checkout.isPending}
+    />
+  );
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Kasir (POS)" description="Catat transaksi penjualan langsung" />
+    <div className={narrow ? "space-y-5 pb-24" : "space-y-5"}>
+      <PageHeader title="Kasir" description="Ketuk produk untuk menambahkannya ke keranjang, lalu bayar." />
 
       {receipt && (
-        <Card className="border-green-600/30 bg-green-50 dark:bg-green-950/20">
+        <Card role="status" className="border-success/40 bg-success/10">
           <CardContent className="flex items-center justify-between gap-4 py-4">
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-6 w-6 text-green-600" />
+              <CheckCircle2 className="h-6 w-6 text-success" aria-hidden="true" />
               <div>
-                <p className="text-sm font-medium text-foreground">Transaksi #{receipt.id} berhasil</p>
-                <p className="text-sm text-muted-foreground">Total dibayar: {formatRupiah(receipt.totalAmount)}</p>
+                <p className="text-sm font-extrabold text-foreground">Transaksi #{receipt.id} berhasil</p>
+                <p className="text-sm tabular-nums text-muted-foreground">Total dibayar: {formatRupiah(receipt.totalAmount)}</p>
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setReceipt(null)}>
-              Tutup
+            <Button variant="outline" size="sm" onClick={() => setReceipt(null)}>
+              Transaksi baru
             </Button>
           </CardContent>
         </Card>
@@ -181,43 +213,46 @@ export function POSPage() {
         <PageLoading />
       ) : isError ? (
         <Card>
-          <CardContent className="py-6 text-sm text-destructive">
-            {error instanceof ApiRequestError ? error.message : "Gagal memuat produk"}
+          <CardContent role="alert" className="py-6 text-sm font-semibold text-destructive">
+            {error instanceof ApiRequestError ? error.message : "Produk belum bisa dimuat. Periksa koneksi, lalu muat ulang halaman."}
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <ProductSearchGrid
-              products={products}
-              cartQuantity={cartQuantity}
-              onAdd={(product) => dispatch({ type: "ADD_ITEM", product })}
-            />
+        <>
+          <div className="grid grid-cols-1 gap-5 min-[1181px]:grid-cols-3">
+            <div className="min-[1181px]:col-span-2">
+              <ProductSearchGrid
+                products={products}
+                cartQuantity={cartQuantity}
+                onAdd={(product) => dispatch({ type: "ADD_ITEM", product })}
+              />
+            </div>
+            {!narrow && <div className="min-[1181px]:sticky min-[1181px]:top-[84px] min-[1181px]:self-start">{cartPanel}</div>}
           </div>
-          <div>
-            <POSCart
-              lines={cart.lines}
-              paymentMethod={paymentMethod}
-              onPaymentMethodChange={resetPaymentMethod}
-              creditMemberId={creditMember?.id ?? null}
-              creditMemberName={creditMember?.fullName ?? null}
-              onCreditMemberChange={setCreditMember}
-              creditStatus={creditStatus}
-              creditStatusPending={creditStatusPending}
-              onIncrement={(productId) => {
-                const line = cart.lines.find((l) => l.productId === productId);
-                if (line) dispatch({ type: "SET_QUANTITY", productId, quantity: line.quantity + 1 });
-              }}
-              onDecrement={(productId) => {
-                const line = cart.lines.find((l) => l.productId === productId);
-                if (line) dispatch({ type: "SET_QUANTITY", productId, quantity: line.quantity - 1 });
-              }}
-              onRemove={(productId) => dispatch({ type: "REMOVE_ITEM", productId })}
-              onCheckout={() => checkout.mutate()}
-              isCheckingOut={checkout.isPending}
-            />
-          </div>
-        </div>
+
+          {narrow && (
+            <>
+              <div className="fixed inset-x-0 bottom-0 z-topbar flex items-center gap-3 border-t bg-card p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-muted-foreground">{itemCount} barang</p>
+                  <p className="truncate text-lg font-extrabold tabular-nums">{formatRupiah(cartTotal)}</p>
+                </div>
+                <Button size="lg" className="h-14 min-w-[140px] text-base" disabled={itemCount === 0} onClick={() => setSheetOpen(true)}>
+                  <ShoppingCart aria-hidden="true" /> Bayar
+                </Button>
+              </div>
+              <Drawer open={sheetOpen} onOpenChange={setSheetOpen}>
+                <DrawerContent side="bottom" aria-describedby="pos-sheet-desc">
+                  <DrawerHeader>
+                    <DrawerTitle>Keranjang dan pembayaran</DrawerTitle>
+                    <DrawerDescription id="pos-sheet-desc">Periksa barang, pilih metode pembayaran, lalu bayar.</DrawerDescription>
+                  </DrawerHeader>
+                  <DrawerBody className="p-3">{cartPanel}</DrawerBody>
+                </DrawerContent>
+              </Drawer>
+            </>
+          )}
+        </>
       )}
     </div>
   );
