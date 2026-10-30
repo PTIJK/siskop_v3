@@ -43,7 +43,7 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
         {landing ? (
           <>
             <nav className='desktop-nav' aria-label='Navigasi utama'>
-              <a href='#platform'>Platform</a>
+              <a href='#fitur'>Fitur</a>
               <a href='#paket'>Paket</a>
               <a href='#cara-bergabung'>Cara bergabung</a>
             </nav>
@@ -73,7 +73,7 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
                 aria-label='Navigasi seluler'
                 onClick={() => setMenu(false)}
               >
-                <a href='#platform'>Platform</a>
+                <a href='#fitur'>Fitur</a>
                 <a href='#paket'>Paket</a>
                 <a href='#cara-bergabung'>Cara bergabung</a>
                 <Link to='/login'>Masuk</Link>

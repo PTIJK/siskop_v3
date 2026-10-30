@@ -1,0 +1,38 @@
+/* Sign-in: one centred card on a white page. Same light tokens as the landing page. */
+.marketing.login-page {
+  --forest: #f6f7fb;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: radial-gradient(60% 50% at 50% 0%, #4f5fd91a, transparent 70%), var(--forest);
+}
+.marketing.login-page .login-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 40px;
+  border: 1px solid var(--rule);
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px -24px #4f5fd933;
+  outline: none;
+}
+@media (max-width: 520px) {
+  .marketing.login-page .login-card {
+    padding: 28px 20px;
+    border-radius: 18px;
+  }
+}
+.marketing.login-page .login-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: -8px 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-mint);
+  text-decoration: none;
+}
+.marketing.login-page .login-back:hover {
+  color: var(--lime);
+}

@@ -2,18 +2,24 @@ import { TenantPickerDialog } from "../../tenant-access/TenantPickerDialog";
 import { accessApi, useTenantAccessConfig } from "../../tenant-access/api";
 import { enterTenant } from "../../tenant-access/enterTenant";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUpRight, AlertCircle } from "lucide-react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { AlertCircle, ArrowLeft, ArrowUpRight } from "lucide-react";
 import type { OnboardingSignInResponse, StaffLoginResult, StaffTenantRedirect, TenantMembershipPage } from "@siskop/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/stores/auth";
-import { AuthLayout } from "@/components/layout/AuthLayout";
 import { identityToken, clearFirebaseIdentity, firebaseError, resetPassword, type AuthMethod } from "../firebase";
 import { workspaceSlug } from "../workspace";
 import { useWorkspace } from "../../workspace-domain/WorkspaceBoundary";
 import { errorMessage, onboardingApi } from "../api";
+import { useOnboardingMetadata } from "../metadata";
+import "@fontsource/manrope/latin-400.css";
+import "@fontsource/manrope/latin-500.css";
+import "@fontsource/manrope/latin-600.css";
+import "@fontsource/manrope/latin-700.css";
+import "../styles.css";
+import "../login.css";
 
 export default function AuthPage({ resume = false }: { resume?: boolean }) {
   const workspace = useWorkspace();
@@ -27,6 +33,8 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
   const [email, setEmail] = useState("");
   const busy = useRef(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  useOnboardingMetadata(location.pathname);
   const [search] = useSearchParams();
   useEffect(() => {
     if (resume || workspace || search.get("select") !== "1" || !accessConfig.data?.enabled) return;
@@ -91,7 +99,11 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
   const central = import.meta.env.VITE_PUBLIC_APP_URL ?? "https://siskop-d0f8c.web.app";
   const methods = [["password", "Email dan kata sandi"], ["google", "Google"]] as const;
   return (
-    <AuthLayout>
+    <div className="marketing login-page">
+      <main id="konten" className="login-card">
+        {workspace
+          ? <a className="login-back" href={central}><ArrowLeft size={16} aria-hidden="true" /> Kembali ke beranda</a>
+          : <Link className="login-back" to="/"><ArrowLeft size={16} aria-hidden="true" /> Kembali ke beranda</Link>}
       {picker ? <TenantPickerDialog onCancel={() => void cancelSelection()} /> : null}
       <h1 className="text-[26px] font-extrabold leading-[1.15] tracking-[-0.02em]">{resume ? "Lanjutkan pendaftaran" : "Selamat datang kembali"}</h1>
       {workspace ? <p className="mt-1 text-sm font-semibold">Masuk ke {workspace.name}</p> : null}
@@ -101,7 +113,7 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
       </p>
 
       {!resume && (
-        <div role="tablist" aria-label="Jenis akun" className="mt-6 inline-flex rounded-[11px] bg-muted p-[3px]">
+        <div role="tablist" aria-label="Jenis akun" className="mt-6 flex rounded-[11px] bg-muted p-[3px]">
           {([["staf", "Pengurus dan staf"], ["anggota", "Anggota"]] as const).map(([value, label]) => (
             <button
               key={value}
@@ -111,7 +123,7 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
               aria-selected={who === value}
               aria-controls="who-panel"
               onClick={() => setWho(value)}
-              className="min-h-[38px] rounded-[8px] px-4 text-[13.5px] font-bold text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-selected:bg-card aria-selected:text-foreground aria-selected:shadow-sm max-[900px]:min-h-11"
+              className="min-h-[38px] flex-1 rounded-[8px] px-4 text-[13.5px] font-bold text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-selected:bg-card aria-selected:text-foreground aria-selected:shadow-sm max-[900px]:min-h-11"
             >
               {label}
             </button>
@@ -207,6 +219,7 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
         </p>
         {workspaceSlug() !== null || import.meta.env.VITE_ONBOARDING_STAGING !== "true" ? <p><Link className="font-bold underline underline-offset-2" to="/login/legacy">Masuk dengan akun workspace lama</Link></p> : null}
       </div>
-    </AuthLayout>
+      </main>
+    </div>
   );
 }
