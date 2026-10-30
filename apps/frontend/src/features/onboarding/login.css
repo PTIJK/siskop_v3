@@ -1,23 +1,6 @@
 /* Sign-in: one centred card on a white page. Same light tokens as the landing page. */
 .marketing.login-page {
-  --background: 0 0% 100%;
-  --foreground: 228 30% 10%;
-  --primary: 233 70% 52%;
-  --primary-foreground: 0 0% 100%;
-  --muted: 228 25% 96%;
-  --muted-foreground: 228 12% 38%;
-  --border: 228 20% 89%;
-  --input: 228 20% 80%;
-  --ring: 233 70% 52%;
-  --card: 0 0% 100%;
-  --card-foreground: 228 30% 10%;
-  --accent: 228 25% 95%;
-  --accent-foreground: 228 30% 10%;
   --forest: #f6f7fb;
-  --mint: #0f1220;
-  --lime: #4f5fd9;
-  --muted-mint: #4b5266;
-  --rule: #e4e7ef;
   display: grid;
   place-items: center;
   padding: 24px 16px;

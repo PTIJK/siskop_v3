@@ -708,27 +708,7 @@
   }
 }
 
-/* Light theme: the landing page is white; register and checkout keep the dark marketing tokens. */
-.marketing:has(.landing) {
-  --background: 0 0% 100%;
-  --foreground: 228 30% 10%;
-  --primary: 233 70% 52%;
-  --primary-foreground: 0 0% 100%;
-  --muted: 228 25% 96%;
-  --muted-foreground: 228 12% 38%;
-  --border: 228 20% 89%;
-  --input: 228 20% 80%;
-  --ring: 233 70% 52%;
-  --card: 0 0% 100%;
-  --card-foreground: 228 30% 10%;
-  --accent: 228 25% 95%;
-  --accent-foreground: 228 30% 10%;
-  --forest: #ffffff;
-  --mint: #0f1220;
-  --lime: #4f5fd9;
-  --muted-mint: #4b5266;
-  --rule: #e4e7ef;
-}
+/* Theme tokens are shared in styles.css; only landing-specific tweaks follow. */
 .marketing:has(.landing) .mobile-nav {
   background: #ffffff;
   box-shadow: 0 20px 40px #0f122014;
