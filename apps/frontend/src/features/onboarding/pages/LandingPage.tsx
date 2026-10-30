@@ -1,15 +1,102 @@
 import { PackageFeatures } from "../components/PackageFeatures";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowUpRight, RefreshCw } from "lucide-react";
+import {
+  ArrowUpRight,
+  BookOpenCheck,
+  Check,
+  FileBarChart2,
+  HandCoins,
+  Landmark,
+  PiggyBank,
+  RefreshCw,
+  ShieldCheck,
+  Store,
+  Users
+} from "lucide-react";
 import type { BillingCycle } from "@siskop/types";
 import { MarketingShell } from "../components/MarketingShell";
-import { HeroScene } from "../components/HeroScene";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CycleToggle } from "../components/PackagePicker";
 import { errorMessage, rupiah, unitNames, usePublicPricing } from "../api";
 import { formatTaxRate, priceOf, yearlySaving } from "../registration";
+import "../landing.css";
+
+const featureChips = ["Anggota", "Simpanan", "Pinjaman", "Akuntansi", "Laporan", "Unit usaha", "Whitelabel"];
+
+const replaces = [
+  ["Hemat biaya.", "Anggota, simpanan, pinjaman, dan pembukuan dalam satu langganan."],
+  ["Hemat waktu.", "Setiap transaksi langsung tercatat di jurnal. Tanpa input ganda."],
+  ["Laporan siap pakai.", "Neraca, laba rugi, arus kas, dan laporan regulasi dari data yang sama."]
+];
+
+const bento = [
+  { icon: Users, title: "Anggota terhubung", text: "Data anggota, dokumen, dan riwayat transaksi dalam satu profil.", wide: true },
+  { icon: PiggyBank, title: "Simpanan tertata", text: "Pokok, wajib, dan sukarela dengan rekening koran otomatis." },
+  { icon: HandCoins, title: "Pinjaman terkendali", text: "Jadwal angsuran, kolektibilitas, dan tunggakan terpantau." },
+  { icon: BookOpenCheck, title: "Pembukuan otomatis", text: "Jurnal tercipta dari setiap transaksi, siap ditutup buku.", wide: true },
+  { icon: Store, title: "Unit usaha", text: "Toko, kasir, dan unit lain dalam satu laporan konsolidasi." },
+  { icon: FileBarChart2, title: "Laporan regulasi", text: "Format laporan yang dibutuhkan pengurus dan pengawas.", wide: true }
+];
+
+const mockRows = [
+  ["Budi Santoso", "Setoran simpanan wajib", "Rp 250.000"],
+  ["Siti Rahayu", "Angsuran pinjaman", "Rp 1.150.000"],
+  ["Agus Wibowo", "Setoran simpanan sukarela", "Rp 500.000"]
+];
+
+function ProductPreview() {
+  return (
+    <div className='product-preview' aria-hidden='true'>
+      <div className='preview-bar'>
+        <i />
+        <i />
+        <i />
+        <span>Koperasi Barokah · Dashboard</span>
+      </div>
+      <div className='preview-body'>
+        <aside>
+          {["Dashboard", "Anggota", "Simpanan", "Pinjaman", "Laporan"].map((item, index) => (
+            <span key={item} data-active={index === 0}>
+              {item}
+            </span>
+          ))}
+        </aside>
+        <div className='preview-main'>
+          <div className='preview-stats'>
+            {[
+              ["Kas & Bank", "Rp 148.200.000"],
+              ["Simpanan", "Rp 96.750.000"],
+              ["Pinjaman beredar", "Rp 71.400.000"]
+            ].map(([label, value]) => (
+              <div key={label}>
+                <small>{label}</small>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+          <div className='preview-chart'>
+            {[38, 52, 44, 63, 58, 74, 69, 88].map((height, index) => (
+              <i key={index} style={{ height: `${height}%` }} />
+            ))}
+          </div>
+          <ul className='preview-rows'>
+            {mockRows.map(([name, note, amount]) => (
+              <li key={name}>
+                <span>
+                  <b>{name}</b>
+                  <small>{note}</small>
+                </span>
+                <em>{amount}</em>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function LandingPage() {
   const container = useRef<HTMLElement>(null);
@@ -31,50 +118,85 @@ export default function LandingPage() {
   }, []);
   return (
     <MarketingShell landing>
-      <main id='main-content' ref={container}>
-        <section className='hero content-width' aria-labelledby='hero-title'>
-          <div className='hero-copy'>
-            <h1 id='hero-title'>
-              Koperasi maju.
-              <br />
-              <span>Tumbuh bersama.</span>
-            </h1>
-            <p>Satu ruang untuk anggota, simpanan, dan masa depan koperasi Anda.</p>
-            <div className='hero-actions'>
-              <Button asChild size='lg'>
-                <a href='#paket'>
-                  Temukan paket Anda <ArrowUpRight />
-                </a>
-              </Button>
-              <a className='text-action' href='#platform'>
-                Kenali SISKOP <ArrowDown size={18} />
+      <main id='main-content' ref={container} className='landing'>
+        <section className='lp-hero content-width' aria-labelledby='hero-title'>
+          <p className='lp-eyebrow'>
+            <span>Baru</span> Pembukuan, simpanan, dan pinjaman dalam satu ruang
+          </p>
+          <h1 id='hero-title'>
+            Satu ruang kerja untuk <span>koperasi yang tumbuh bersama.</span>
+          </h1>
+          <p className='lp-sub'>
+            SISKOP menghubungkan anggota, simpanan, pinjaman, dan laporan keuangan koperasi Anda, supaya pengurus fokus melayani anggota.
+          </p>
+          <div className='lp-actions'>
+            <Button asChild size='lg'>
+              <a href='#paket'>
+                Mulai sekarang <ArrowUpRight />
               </a>
-            </div>
-          </div>
-          <HeroScene />
-          <div className='hero-principles'>
-            <span>Anggota terhubung</span>
-            <span>Operasional tertata</span>
-            <span>Keuangan transparan</span>
-            <a href='#platform' aria-label='Lihat platform'>
-              <ArrowDown size={19} />
+            </Button>
+            <a className='lp-ghost' href='#fitur'>
+              Lihat fitur
             </a>
           </div>
+          <p className='lp-micro'>Tersedia paket gratis. Tanpa kartu kredit.</p>
+          <div className='lp-preview-wrap'>
+            <ProductPreview />
+          </div>
+          <ul className='lp-chips' aria-label='Modul SISKOP'>
+            {featureChips.map((chip) => (
+              <li key={chip}>{chip}</li>
+            ))}
+          </ul>
         </section>
-        <section id='platform' className='platform-section'>
-          <div className='content-width reveal'>
-            <h2>
-              Ruang untuk <span>setiap</span> koperasi.
-            </h2>
-            <div className='cooperative-types'>
-              {Object.entries(unitNames).map(([type, name]) => (
-                <a key={type} href='#paket'>
-                  {name}
-                </a>
-              ))}
-            </div>
+
+        <section id='platform' className='lp-replace content-width reveal'>
+          <h2>
+            Satu platform untuk <span>semua pekerjaan koperasi.</span>
+          </h2>
+          <ul>
+            {replaces.map(([title, text]) => (
+              <li key={title}>
+                <Check aria-hidden='true' />
+                <p>
+                  <strong>{title}</strong> {text}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section id='fitur' className='lp-bento content-width' aria-labelledby='fitur-title'>
+          <div className='lp-heading reveal'>
+            <h2 id='fitur-title'>Semua yang koperasi butuhkan, tertata rapi.</h2>
+            <p>Dari pencatatan harian sampai laporan akhir tahun.</p>
+          </div>
+          <div className='bento-grid'>
+            {bento.map(({ icon: Icon, title, text, wide }) => (
+              <article key={title} className={wide ? "bento-card bento-wide reveal" : "bento-card reveal"}>
+                <span className='bento-icon'>
+                  <Icon aria-hidden='true' />
+                </span>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </article>
+            ))}
           </div>
         </section>
+
+        <section className='lp-types content-width reveal' aria-label='Jenis koperasi'>
+          <p>
+            <Landmark aria-hidden='true' /> Dibuat untuk berbagai jenis koperasi
+          </p>
+          <div className='cooperative-types'>
+            {Object.entries(unitNames).map(([type, name]) => (
+              <a key={type} href='#paket'>
+                {name}
+              </a>
+            ))}
+          </div>
+        </section>
+
         <section id='paket' className='catalog-section content-width'>
           <div className='section-heading reveal'>
             <h2>Pilih ruang tumbuh Anda.</h2>
@@ -139,6 +261,7 @@ export default function LandingPage() {
             </>
           )}
         </section>
+
         <section id='cara-bergabung' className='how-section content-width reveal'>
           <h2>Dari rencana, jadi langkah nyata.</h2>
           <ol>
@@ -157,6 +280,17 @@ export default function LandingPage() {
               </li>
             ))}
           </ol>
+        </section>
+
+        <section className='lp-cta content-width reveal' aria-labelledby='cta-title'>
+          <ShieldCheck aria-hidden='true' />
+          <h2 id='cta-title'>Siap membawa koperasi Anda naik kelas?</h2>
+          <p>Mulai dari paket gratis, tingkatkan kapan pun koperasi Anda siap.</p>
+          <Button asChild size='lg'>
+            <a href='#paket'>
+              Temukan paket Anda <ArrowUpRight />
+            </a>
+          </Button>
         </section>
       </main>
     </MarketingShell>
