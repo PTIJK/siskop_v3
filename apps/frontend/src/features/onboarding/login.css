@@ -39,3 +39,17 @@
     border-radius: 18px;
   }
 }
+.marketing.login-page .login-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: -8px 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-mint);
+  text-decoration: none;
+}
+.marketing.login-page .login-back:hover {
+  color: var(--lime);
+}

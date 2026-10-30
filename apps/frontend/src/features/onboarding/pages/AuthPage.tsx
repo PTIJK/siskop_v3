@@ -3,7 +3,7 @@ import { accessApi, useTenantAccessConfig } from "../../tenant-access/api";
 import { enterTenant } from "../../tenant-access/enterTenant";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUpRight, AlertCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowUpRight } from "lucide-react";
 import type { OnboardingSignInResponse, StaffLoginResult, StaffTenantRedirect, TenantMembershipPage } from "@siskop/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,6 +101,9 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
   return (
     <div className="marketing login-page">
       <main id="konten" className="login-card">
+        {workspace
+          ? <a className="login-back" href={central}><ArrowLeft size={16} aria-hidden="true" /> Kembali ke beranda</a>
+          : <Link className="login-back" to="/"><ArrowLeft size={16} aria-hidden="true" /> Kembali ke beranda</Link>}
       {picker ? <TenantPickerDialog onCancel={() => void cancelSelection()} /> : null}
       <h1 className="text-[26px] font-extrabold leading-[1.15] tracking-[-0.02em]">{resume ? "Lanjutkan pendaftaran" : "Selamat datang kembali"}</h1>
       {workspace ? <p className="mt-1 text-sm font-semibold">Masuk ke {workspace.name}</p> : null}
