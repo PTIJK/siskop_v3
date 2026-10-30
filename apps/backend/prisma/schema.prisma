@@ -1175,7 +1175,9 @@ model Loan {
   rate                 Decimal?             @db.Decimal(8, 4)
   // Required when `rate` was overridden away from the product's rate.
   rateNote             String?
-  maturityDate         DateTime?            @db.Date
+  // General remarks (e.g. migration provenance); never a rate-override reason.
+  notes                String?
+  maturityDate        DateTime?            @db.Date
 
   payments     LoanPayment[]
   installments LoanInstallment[]
