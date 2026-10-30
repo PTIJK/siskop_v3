@@ -40,11 +40,34 @@ const bento = [
   { icon: FileBarChart2, title: "Laporan regulasi", text: "Format laporan yang dibutuhkan pengurus dan pengawas.", wide: true }
 ];
 
-const mockRows = [
-  ["Budi Santoso", "Setoran simpanan wajib", "Rp 250.000"],
-  ["Siti Rahayu", "Angsuran pinjaman", "Rp 1.150.000"],
-  ["Agus Wibowo", "Setoran simpanan sukarela", "Rp 500.000"]
-];
+// Mirrors the real "Beranda" screen: grouped sidebar, "Perlu perhatian hari ini", stat cards, trend, KOL health.
+const previewNav = [
+  ["Harian", ["Beranda", "Setor dan tarik", "Kasir toko"]],
+  ["Anggota", ["Daftar anggota", "Simpanan", "Pinjaman"]],
+  ["Keuangan", ["Beban umum", "Jurnal manual"]],
+  ["Laporan", ["Laporan keuangan", "Kualitas portofolio"]]
+] as const;
+
+const previewTasks = [
+  { count: 3, tone: "bad", word: "Mendesak", title: "Pinjaman macet", action: "Lihat anggota menunggak" },
+  { count: 5, tone: "warn", word: "Perlu ditinjau", title: "Pinjaman mulai terlambat", action: "Lihat kualitas portofolio" },
+  { count: 2, tone: "info", word: "Info", title: "Pendaftaran anggota menunggu", action: "Tinjau pendaftaran" }
+] as const;
+
+const previewStats = [
+  ["Total simpanan", "Rp 96,8 jt", "Modal Rp 41,2 jt · dapat ditarik Rp 55,6 jt"],
+  ["Pinjaman aktif", "Rp 71,4 jt", ""],
+  ["Jumlah anggota", "248", "+6 dari bulan lalu"],
+  ["Angsuran bulan ini", "Rp 8,9 jt", "Bulan lalu Rp 8,2 jt"]
+] as const;
+
+const previewKol = [
+  ["1", 62, "Lancar"],
+  ["2", 18, "Dalam perhatian"],
+  ["3", 8, "Kurang lancar"],
+  ["4", 6, "Diragukan"],
+  ["5", 6, "Macet"]
+] as const;
 
 function ProductPreview() {
   return (
@@ -53,45 +76,73 @@ function ProductPreview() {
         <i />
         <i />
         <i />
-        <span>Koperasi Barokah · Dashboard</span>
+        <span>Koperasi Barokah · Beranda</span>
       </div>
       <div className='preview-body'>
         <aside>
-          {["Dashboard", "Anggota", "Simpanan", "Pinjaman", "Laporan"].map((item, index) => (
-            <span key={item} data-active={index === 0}>
-              {item}
-            </span>
+          {previewNav.map(([group, items]) => (
+            <div key={group}>
+              <small>{group}</small>
+              {items.map((item) => (
+                <span key={item} data-active={item === "Beranda"}>
+                  {item}
+                </span>
+              ))}
+            </div>
           ))}
         </aside>
         <div className='preview-main'>
-          <div className='preview-stats'>
-            {[
-              ["Kas & Bank", "Rp 148.200.000"],
-              ["Simpanan", "Rp 96.750.000"],
-              ["Pinjaman beredar", "Rp 71.400.000"]
-            ].map(([label, value]) => (
-              <div key={label}>
-                <small>{label}</small>
-                <strong>{value}</strong>
+          <div className='preview-head'>
+            <strong>Beranda</strong>
+            <small>Yang perlu diputuskan hari ini, lalu ringkasan keadaan koperasi.</small>
+          </div>
+          <div className='preview-split'>
+            <section className='preview-attention'>
+              <h4>Perlu perhatian hari ini</h4>
+              <small>Diurutkan dari yang paling berisiko.</small>
+              <ul>
+                {previewTasks.map((task) => (
+                  <li key={task.title}>
+                    <b data-tone={task.tone}>{task.count}</b>
+                    <span>
+                      <strong>
+                        {task.title} <em data-tone={task.tone}>{task.word}</em>
+                      </strong>
+                      <i>{task.action} →</i>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <div className='preview-right'>
+              <div className='preview-stats'>
+                {previewStats.map(([label, value, note]) => (
+                  <div key={label}>
+                    <small>{label}</small>
+                    <strong>{value}</strong>
+                    {note ? <em>{note}</em> : null}
+                  </div>
+                ))}
               </div>
-            ))}
+              <div className='preview-trend'>
+                <small>Pencairan dan angsuran · 12 bulan terakhir</small>
+                <svg viewBox='0 0 240 64' preserveAspectRatio='none' role='presentation'>
+                  <polyline className='line-a' points='0,48 22,40 44,44 66,30 88,34 110,22 132,28 154,16 176,24 198,12 220,18 240,8' />
+                  <polyline className='line-b' points='0,56 22,52 44,54 66,46 88,48 110,40 132,44 154,36 176,40 198,32 220,36 240,28' />
+                </svg>
+              </div>
+            </div>
           </div>
-          <div className='preview-chart'>
-            {[38, 52, 44, 63, 58, 74, 69, 88].map((height, index) => (
-              <i key={index} style={{ height: `${height}%` }} />
-            ))}
-          </div>
-          <ul className='preview-rows'>
-            {mockRows.map(([name, note, amount]) => (
-              <li key={name}>
-                <span>
-                  <b>{name}</b>
-                  <small>{note}</small>
+          <div className='preview-kol'>
+            <small>Kesehatan pinjaman menurut KOL</small>
+            <div>
+              {previewKol.map(([level, count, label]) => (
+                <span key={level} data-kol={level} style={{ flexGrow: count }} title={label}>
+                  {level}
                 </span>
-                <em>{amount}</em>
-              </li>
-            ))}
-          </ul>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
