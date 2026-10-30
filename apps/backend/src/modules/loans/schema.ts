@@ -26,6 +26,8 @@ export const createLoanSchema = z.object({
   // Employee override of the product's rate (D3) — requires rateNote, capped at 24%/year.
   rate: z.coerce.number().min(0).max(100).optional(),
   rateNote: z.string().min(1).optional(),
+  // General remarks about the loan; unrelated to any rate override.
+  notes: z.string().min(1).optional(),
   force: z.boolean().default(false),
   acknowledgeBmpp: z.boolean().default(false),
   disbursedAt: z

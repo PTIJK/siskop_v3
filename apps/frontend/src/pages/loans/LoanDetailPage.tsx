@@ -32,6 +32,7 @@ interface LoanDetail {
   installmentFrequency: "DAILY" | "WEEKLY" | "MONTHLY";
   rate?: string | null;
   rateNote?: string | null;
+  notes?: string | null;
   status: string;
   kolCategory: string;
   daysOverdue: number;
@@ -159,11 +160,12 @@ export function LoanDetailPage() {
                 <KOLBadge category={loan.kolCategory} />
               </div>
               {loan.disbursedAt && <p className="mt-2 text-xs text-muted-foreground">Cair: {formatTanggalPendek(loan.disbursedAt)}</p>}
-              {loan.rateNote && (
+              {loan.rateNote && loan.rate != null && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Rate diubah menjadi {loan.rate}%: {loan.rateNote}
                 </p>
               )}
+              {loan.notes && <p className="mt-1 text-xs text-muted-foreground">Catatan: {loan.notes}</p>}
             </div>
             <div className="space-y-3">
               <dl className="grid grid-cols-3 gap-2 text-sm">

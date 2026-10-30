@@ -58,6 +58,8 @@ export interface Loan {
   rate: string | null;
   /** Required when `rate` was overridden away from the product's rate. */
   rateNote: string | null;
+  /** General remarks about the loan (e.g. migration provenance); unrelated to rate overrides. */
+  notes: string | null;
   maturityDate?: string | null;
   installments?: LoanInstallment[];
   createdAt: string;
@@ -88,6 +90,7 @@ export interface CreateLoanRequest {
   /** Employee override of the product's rate — requires `rateNote` (D3), capped at 24%/year. */
   rate?: number;
   rateNote?: string;
+  notes?: string;
   /** Resubmit with `force: true` to create a second loan after seeing `hasExistingLoan`. */
   force?: boolean;
   /** Resubmit with `acknowledgeBmpp: true` to proceed after seeing `bmppExceeded`. */

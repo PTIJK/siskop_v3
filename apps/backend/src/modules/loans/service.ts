@@ -426,6 +426,7 @@ export async function createLoan(tenantId: string, data: CreateLoanInput, _creat
         installmentAmount: firstInstallment.principalDue.plus(firstInstallment.interestDue),
         rate: effectiveRate,
         rateNote: data.rateNote ?? null,
+        notes: data.notes ?? null,
         maturityDate: lastInstallment.dueDate
       },
       include: {

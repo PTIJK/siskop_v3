@@ -194,6 +194,29 @@ describe("POST /api/loans — rate override (D3)", () => {
   });
 });
 
+describe("POST /api/loans — free-text notes", () => {
+  it("stores notes separately from rateNote, without needing a rate override", async () => {
+    const admin = await setupTenant();
+    const member = await createMemberWithPokokSaving(admin.accessToken);
+    const config = await createLoanConfigAs(admin.accessToken);
+
+    const res = await request(app())
+      .post("/api/loans")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({
+        memberId: member.id,
+        loanConfigId: config.id,
+        principalAmount: 1_000_000,
+        installmentCount: 30,
+        notes: "Migrasi saldo RAT 2025"
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.notes).toBe("Migrasi saldo RAT 2025");
+    expect(res.body.data.rateNote).toBeNull();
+  });
+});
+
 describe("POST /api/loans/:id/pay — installment allocation", () => {
   async function createDailyLoan(accessToken: string, memberId: string, configId: string) {
     const res = await request(app())
