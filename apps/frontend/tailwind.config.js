@@ -87,6 +87,8 @@ export default {
         scrim: "50",
         drawer: "51",
         modal: "52",
+        // Select/dropdown content portals to <body>, so it must outrank the dialog that opened it.
+        floating: "60",
         toast: "70"
       },
       keyframes: {
