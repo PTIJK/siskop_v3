@@ -13,6 +13,7 @@ const i = (severity: "error" | "warning", sheet: string, row: number | null, mes
 
 const preview = (issues: MigrationIssue[]): MigrationPreview => ({
   mode: "SISTEM",
+  target: null,
   fileHash: "a".repeat(64),
   tenantName: "Koperasi Uji",
   slug: "koperasi-uji",

@@ -42,7 +42,9 @@ export function PreviewStep({ file, preview, onBack, onDone }: Props) {
       const form = new FormData();
       form.append("file", file);
       form.append("fileHash", preview.fileHash);
-      form.append("adminPassword", password);
+      // An existing koperasi keeps its admin; only a new one needs the first admin's password.
+      if (preview.target) form.append("tenantId", preview.target.tenantId);
+      else form.append("adminPassword", password);
       onDone(await apiUpload<MigrationResult>("/platform/migration/execute", form));
     } catch (e) {
       setError(e instanceof ApiRequestError ? e.message : "Eksekusi gagal");
@@ -82,6 +84,9 @@ export function PreviewStep({ file, preview, onBack, onDone }: Props) {
         <p className="text-lg font-bold">{preview.tenantName ?? "(nama koperasi belum terbaca)"}</p>
         <p className="text-sm">
           Subdomain: {preview.slug ?? "-"} · Cut-off: {preview.cutoffDate ?? "-"}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {preview.target ? "Tujuan: koperasi yang sudah terdaftar (data koperasi dan admin tidak diubah)" : "Tujuan: koperasi baru dari sheet 1_Koperasi"}
         </p>
         <div className="mt-2 flex gap-2">
           <Badge variant={errors ? "bad" : "ok"}>{errors} kesalahan</Badge>
@@ -157,20 +162,24 @@ export function PreviewStep({ file, preview, onBack, onDone }: Props) {
       )}
 
       <div className="space-y-3 rounded-lg border bg-card p-5">
-        <Label htmlFor="adminPassword">Kata sandi admin koperasi (min. 8 karakter, serahkan ke admin lewat jalur aman)</Label>
-        <Input
-          id="adminPassword"
-          type="password"
-          autoComplete="new-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        {!preview.target && (
+          <>
+            <Label htmlFor="adminPassword">Kata sandi admin koperasi (min. 8 karakter, serahkan ke admin lewat jalur aman)</Label>
+            <Input
+              id="adminPassword"
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </>
+        )}
         <FormError error={error} />
         <div className="flex gap-2">
           <Button variant="outline" onClick={onBack} disabled={busy}>
             Unggah ulang
           </Button>
-          <Button onClick={() => void execute()} disabled={!preview.canExecute || password.length < 8 || busy}>
+          <Button onClick={() => void execute()} disabled={!preview.canExecute || (!preview.target && password.length < 8) || busy}>
             {busy ? "Memigrasi..." : "Eksekusi migrasi"}
           </Button>
         </div>

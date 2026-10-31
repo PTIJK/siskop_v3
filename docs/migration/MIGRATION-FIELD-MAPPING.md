@@ -329,6 +329,22 @@ Validasi khusus: jumlah debit hasil konversi = jumlah kredit. Dengan Neraca yang
 
 Batasan: Neraca tidak memuat pendapatan dan beban rinci. Cut-off di akhir tahun buku yang sudah ditutup membuat saldo laba rugi nol (laba sudah menjadi SHU di ekuitas). Cut-off tengah tahun hanya membawa satu angka SHU Tahun Berjalan (`3-3000`), sehingga Laba Rugi dan Arus Kas tahun berjalan baru benar sejak cut-off.
 
+### 3.12 Koperasi tujuan yang sudah terdaftar
+
+Selain membuat koperasi baru dari sheet 1, platform admin dapat memilih koperasi yang sudah terdaftar lewat dropdown pencarian (nama, subdomain, atau no. badan hukum). Dikirim sebagai field `tenantId` pada `POST /api/platform/migration/preview` dan `/execute`.
+
+| Aspek | Koperasi baru | Koperasi yang sudah terdaftar |
+|---|---|---|
+| `Tenant`, `Role` x6, COA standar, `User` admin | dibuat (3.1) | **tidak dibuat**; dipakai yang sudah ada |
+| Sheet 1 | seluruh kolom dipakai | hanya `cutoffDate` dan `modalDisetor` (bila diisi) yang dipakai; `slug` harus sama dengan tujuan; `name` berbeda = peringatan; data admin diabaikan (peringatan) |
+| Kata sandi admin | wajib (min. 8) | tidak diminta |
+| `CooperativeUnit` (sheet 2) | dibuat; unit pertama = default | unit dengan tipe dan nama sama dipakai ulang; yang belum ada ditambahkan; urutan unit tujuan tidak diubah |
+| `createdBy` baris simpanan dan jurnal | admin baru | Super Admin aktif tertua milik koperasi tujuan |
+| Akun tambahan (sheet 10) | dibuat | kode yang sudah ada di tujuan = kesalahan |
+| Audit `tenant.migrate` | tenant baru | koperasi tujuan |
+
+Syarat koperasi tujuan (kesalahan bila tidak terpenuhi): ada; punya Super Admin aktif; **tidak punya anggota, rekening simpanan, pinjaman, atau jurnal**; `slug` di file sama. Bila sudah punya produk simpanan/pinjaman, itu peringatan dan produk dari file ditambahkan. Koperasi yang sudah berisi data tidak didukung (butir terbuka B12).
+
 ---
 
 ## 4. Alur akun (ke mana uang pergi)
@@ -429,6 +445,7 @@ Ringkasan yang ditampilkan: jumlah baris per sheet, Σ simpanan per tipe, Σ sis
 | B9 | Template Laporan tetap mewajibkan identitas anggota lengkap (NIK 16 digit, alamat, tempat/tanggal lahir, pekerjaan) karena `Member` mewajibkannya dan NIK dipakai login portal. Tidak ada placeholder. Alternatif bila koperasi benar-benar tidak punya: ubah schema agar identitas boleh kosong dengan penanda "belum lengkap". **Belum diputuskan; saat ini roster lengkap adalah syarat mutlak.** | Koperasi tanpa buku anggota tidak bisa migrasi |
 | B10 | Nilai pengganti pinjaman template Laporan (3.11.1): `disbursedAt` = cut-off dan tenor perkiraan admin. Apakah perlu bendera di `Loan` (mis. `isEstimated`) agar laporan dan daftar bisa menyaring pinjaman estimasi? Saat ini hanya ditandai di `notes`. | Pinjaman estimasi tidak bisa difilter |
 | B11 | Template Laporan: apakah sheet 9 boleh menerima laba rugi tahun berjalan terpisah untuk cut-off tengah tahun? Saat ini hanya angka SHU Tahun Berjalan. | Laporan tahun berjalan |
+| B12 | Migrasi ke koperasi yang sudah berisi data (menambah anggota dan saldo) belum didukung: perlu aturan bentrok NIK, kode produk, dan jurnal saldo awal ganda. | Hanya koperasi kosong yang bisa menjadi tujuan |
 
 ## 8. Pengujian yang disarankan (TDD, aturan 4)
 

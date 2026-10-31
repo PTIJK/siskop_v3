@@ -16,10 +16,10 @@ Acuan kolom dan tabel tujuan: `MIGRATION-FIELD-MAPPING.md`.
 
 1. Buka **Migrasi koperasi**, unduh template yang sesuai, kirim ke admin koperasi.
 2. Admin mengisi sheet dari 1 sampai 10 sesuai sheet PETUNJUK dan mengembalikan file lewat jalur aman (file memuat data pribadi).
-3. Unggah file, klik **Pratinjau**. Tidak ada yang tersimpan.
+3. Pilih tujuan: **Koperasi baru** (dibuat dari sheet 1) atau **Koperasi yang sudah terdaftar** (cari nama, subdomain, atau no. badan hukum di dropdown). Koperasi terdaftar harus masih kosong dan subdomain di file harus sama. Lalu unggah file dan klik **Pratinjau**. Tidak ada yang tersimpan.
 4. Bila ada kesalahan: klik **Unduh laporan untuk koperasi (CSV)** atau **Salin ringkasan**, kirim ke admin. Nomor baris di laporan sama dengan nomor baris di file Excel mereka. Ulangi dari langkah 3 dengan file perbaikan.
 5. Bila pratinjau bersih: periksa kartu total dan tabel jurnal "Saldo Awal Migrasi" bersama admin. Peringatan "Rekonsiliasi" berarti total simpanan atau pinjaman di sheet 5/7 berbeda dari akun di neraca (sheet 9); minta admin menjelaskannya sebelum lanjut.
-6. Isi kata sandi admin (min. 8 karakter), klik **Eksekusi migrasi**. Seluruh data masuk dalam satu transaksi: berhasil semua atau tidak sama sekali.
+6. Untuk koperasi baru, isi kata sandi admin (min. 8 karakter); untuk koperasi terdaftar tidak ada kata sandi (admin yang ada dipakai). Klik **Eksekusi migrasi**. Seluruh data masuk dalam satu transaksi: berhasil semua atau tidak sama sekali.
 7. Serahkan kata sandi admin lewat jalur aman; kata sandi tidak disimpan di file maupun log.
 8. Atur paket langganan di halaman **Koperasi** (migrasi tidak mengimpor paket).
 9. Minta admin login di subdomain koperasi dan mencocokkan: jumlah anggota, total simpanan per tipe, total sisa pinjaman, dan Neraca per tanggal cut-off dengan sistem lama atau Neraca RAT.
@@ -33,7 +33,10 @@ Acuan kolom dan tabel tujuan: `MIGRATION-FIELD-MAPPING.md`.
 | NIK X tidak ada di 3_Anggota | Sheet 5 atau 7 merujuk NIK yang belum didaftar | Tambahkan anggota atau perbaiki NIK |
 | Anggota belum punya simpanan pokok | Pinjaman diminta untuk anggota tanpa simpanan Pokok | Tambah baris Pokok di sheet 5 |
 | Neraca saldo tidak seimbang | Total debit tidak sama dengan kredit | Periksa baris sheet 9; di template Laporan, pengurang ditulis sesuai aturan tanda |
-| Subdomain X sudah dipakai | Slug sudah ada | Ganti `slug` di sheet 1 |
+| Subdomain X sudah dipakai | Slug sudah ada (mode koperasi baru) | Ganti `slug` di sheet 1, atau pilih tujuan Koperasi yang sudah terdaftar |
+| Koperasi tujuan sudah berisi data | Tujuan punya anggota/simpanan/pinjaman/jurnal | Pilih koperasi kosong; yang sudah berisi tidak didukung |
+| Subdomain di file berbeda dari koperasi tujuan | File untuk koperasi lain | Pilih koperasi yang benar atau perbaiki `slug` di sheet 1 |
+| Koperasi tujuan belum punya admin aktif | Tidak ada user Super Admin aktif | Buat admin lewat halaman Koperasi, lalu ulangi |
 | File berbeda dari yang dipratinjau | File berubah setelah pratinjau | Unggah dan pratinjau ulang |
 
 ## Batas dan performa
