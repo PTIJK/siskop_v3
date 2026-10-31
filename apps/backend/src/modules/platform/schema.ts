@@ -1,12 +1,19 @@
 import { z } from "zod";
-import { CooperativeType } from "@siskop/types";
+import { CooperativeType, PROVINCES } from "@siskop/types";
 import { slugSchema } from "../tenants/provision.js";
+
+const provinceCodeSchema = z
+  .string()
+  .refine((code) => PROVINCES.some((p) => p.code === code), "Kode provinsi tidak dikenal");
+const citySchema = z.string().trim().min(1).max(100);
 
 export const createTenantSchema = z.object({
   tenantName: z.string().min(1),
   slug: slugSchema,
   registrationNo: z.string().min(1),
   address: z.string().min(1),
+  province: provinceCodeSchema.optional(),
+  city: citySchema.optional(),
   type: z.enum(["SYARIAH", "KONVENSIONAL"]),
   cooperativeType: z.string().min(1).default("KSP"),
   adminName: z.string().min(1),
@@ -20,7 +27,9 @@ export type CreateTenantInput = z.input<typeof createTenantSchema>;
 export const updateTenantStatusSchema = z.object({
   isActive: z.boolean().optional(),
   packageId: z.string().cuid().nullable().optional(),
-  nextBillingDate: z.coerce.date().nullable().optional()
+  nextBillingDate: z.coerce.date().nullable().optional(),
+  province: provinceCodeSchema.nullable().optional(),
+  city: citySchema.nullable().optional()
 });
 export type UpdateTenantStatusInput = z.infer<typeof updateTenantStatusSchema>;
 

@@ -277,3 +277,46 @@ describe("GET/POST/PUT/DELETE /api/platform/admins", () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe("tenant region", () => {
+  it("stores province and city when provisioning a koperasi", async () => {
+    const platformAdmin = await createPlatformAdminSession();
+    const res = await request(app())
+      .post("/api/platform/tenants")
+      .set("Authorization", `Bearer ${platformAdmin.accessToken}`)
+      .send({ ...NEW_TENANT, province: "35", city: "Surabaya" });
+    expect(res.status).toBe(201);
+
+    const list = await request(app()).get("/api/platform/tenants").set("Authorization", `Bearer ${platformAdmin.accessToken}`);
+    const baru = list.body.data.find((t: { slug: string }) => t.slug === "baru");
+    expect(baru).toMatchObject({ province: "35", city: "Surabaya" });
+  });
+
+  it("rejects an unknown province code", async () => {
+    const platformAdmin = await createPlatformAdminSession();
+    const res = await request(app())
+      .post("/api/platform/tenants")
+      .set("Authorization", `Bearer ${platformAdmin.accessToken}`)
+      .send({ ...NEW_TENANT, province: "00" });
+    expect(res.status).toBe(422);
+  });
+
+  it("lets a platform admin set and clear a region on an existing tenant", async () => {
+    const platformAdmin = await createPlatformAdminSession();
+    const tenantId = platformAdmin.user.tenantId;
+
+    const set = await request(app())
+      .put(`/api/platform/tenants/${tenantId}`)
+      .set("Authorization", `Bearer ${platformAdmin.accessToken}`)
+      .send({ province: "32", city: "Bandung" });
+    expect(set.status).toBe(200);
+    expect((await db.tenant.findUniqueOrThrow({ where: { id: tenantId } })).province).toBe("32");
+
+    const cleared = await request(app())
+      .put(`/api/platform/tenants/${tenantId}`)
+      .set("Authorization", `Bearer ${platformAdmin.accessToken}`)
+      .send({ province: null, city: null });
+    expect(cleared.status).toBe(200);
+    expect((await db.tenant.findUniqueOrThrow({ where: { id: tenantId } })).province).toBeNull();
+  });
+});
