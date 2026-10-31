@@ -37,21 +37,23 @@ export async function getAttention(now: Date): Promise<AttentionItem[]> {
   const idleSince = new Date(now.getTime() - 30 * DAY_MS);
   const soon = new Date(now.getTime() + 7 * DAY_MS);
 
-  const [overdue, pastDue, dueSoon, idle, noRegion, metrics] = await Promise.all([
+  const overdueWhere = { status: "OPEN" as const, dueDate: { lt: now } };
+  const [overdue, overdueTotal, pastDue, dueSoon, idle, noRegion, metrics] = await Promise.all([
     withoutTenantScope(async () =>
       db.invoice.findMany({
-        where: { status: "OPEN", dueDate: { lt: now } },
+        where: overdueWhere,
         include: { tenant: { select: { name: true } } },
         orderBy: { dueDate: "asc" },
         take: MAX_OVERDUE_LISTED
       })
     ),
+    withoutTenantScope(async () => db.invoice.count({ where: overdueWhere })),
     withoutTenantScope(async () => db.tenantSubscription.count({ where: { status: "PAST_DUE" } })),
     withoutTenantScope(async () =>
       db.tenantSubscription.count({ where: { status: "ACTIVE", nextBillingDate: { gte: now, lte: soon } } })
     ),
-    db.$queryRaw<{ name: string }[]>(Prisma.sql`
-      SELECT t.name FROM "Tenant" t
+    db.$queryRaw<{ name: string; total: bigint }[]>(Prisma.sql`
+      SELECT t.name, COUNT(*) OVER () AS total FROM "Tenant" t
       WHERE t."isActive" = true AND t."createdAt" < ${utcParam(idleSince)}
         AND NOT EXISTS (
           SELECT 1 FROM "User" u
@@ -76,6 +78,16 @@ export async function getAttention(now: Date): Promise<AttentionItem[]> {
       href: "/platform/invoices"
     });
   }
+  if (overdueTotal > overdue.length) {
+    // Critical like the listed invoices, so the stable sort keeps it right after them.
+    items.push({
+      id: "invoices-overdue-more",
+      severity: "critical",
+      kind: "INVOICE_OVERDUE",
+      message: `dan ${overdueTotal - overdue.length} faktur lainnya yang lewat jatuh tempo`,
+      href: "/platform/invoices"
+    });
+  }
 
   if (pastDue > 0) {
     items.push({
@@ -96,13 +108,14 @@ export async function getAttention(now: Date): Promise<AttentionItem[]> {
     });
   }
   if (idle.length > 0) {
+    const idleTotal = Number(idle[0]!.total);
     const names = idle.slice(0, 3).map((t) => t.name).join(", ");
-    const more = idle.length > 3 ? `, dan ${idle.length - 3} lainnya` : "";
+    const more = idleTotal > 3 ? `, dan ${idleTotal - 3} lainnya` : "";
     items.push({
       id: "tenants-inactive",
       severity: "warning",
       kind: "TENANT_INACTIVE",
-      message: `${idle.length} koperasi aktif tanpa login 30 hari terakhir: ${names}${more}`,
+      message: `${idleTotal} koperasi aktif tanpa login 30 hari terakhir: ${names}${more}`,
       href: "/platform/tenants"
     });
   }
