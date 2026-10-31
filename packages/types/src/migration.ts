@@ -28,8 +28,17 @@ export interface MigrationTotals {
   trialCredit: string;
 }
 
+/** An existing, empty koperasi chosen as the migration target (no new tenant is created). */
+export interface MigrationTarget {
+  tenantId: string;
+  name: string;
+  slug: string;
+}
+
 export interface MigrationPreview {
   mode: MigrationMode | null;
+  /** Null when the migration creates a new koperasi from sheet 1. */
+  target: MigrationTarget | null;
   fileHash: string;
   tenantName: string | null;
   slug: string | null;

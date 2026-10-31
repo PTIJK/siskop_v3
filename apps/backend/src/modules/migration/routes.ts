@@ -9,7 +9,12 @@ import { buildTemplate } from "./template.js";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_BYTES, files: 1 } }).single("file");
-const executeBody = z.object({ fileHash: z.string().regex(/^[0-9a-f]{64}$/), adminPassword: z.string().min(8) });
+// Multipart text fields arrive as strings; an empty tenantId means "create a new koperasi".
+const tenantIdField = z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).max(64).optional());
+const previewBody = z.object({ tenantId: tenantIdField });
+const executeBody = z
+  .object({ fileHash: z.string().regex(/^[0-9a-f]{64}$/), tenantId: tenantIdField, adminPassword: z.string().optional() })
+  .refine((b) => b.tenantId || (b.adminPassword ?? "").length >= 8, { message: "Kata sandi admin minimal 8 karakter", path: ["adminPassword"] });
 const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 function handle(fn: (req: Request, res: Response) => Promise<void>) {
@@ -54,7 +59,8 @@ export function migrationRoutes(): Router {
     "/preview",
     withFile,
     handle(async (req, res) => {
-      const data = await previewMigration(fileOf(req));
+      const { tenantId } = previewBody.parse(req.body);
+      const data = await previewMigration(fileOf(req), { tenantId });
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );
@@ -66,6 +72,7 @@ export function migrationRoutes(): Router {
       const body = executeBody.parse(req.body);
       const data = await executeMigration(fileOf(req), {
         fileHash: body.fileHash,
+        tenantId: body.tenantId,
         adminPassword: body.adminPassword,
         actor: {
           userId: authClaims(req).userId,

@@ -13,8 +13,10 @@ import type { ParsedData } from "./rows.js";
 import { accountIndex, targetNet } from "./validate.js";
 
 export interface MigrationContext {
-  /** User fields for the first admin (id, email, passwordHash, ...). Preview passes a local stub. */
-  identity: { id: string; email: string; passwordHash: string | null; firebaseUid: string | null; authProvider: string | null };
+  /** New tenant: user fields for the first admin (id, email, passwordHash, ...). Preview passes a local stub. Omit when `target` is set. */
+  identity?: { id: string; email: string; passwordHash: string | null; firebaseUid: string | null; authProvider: string | null };
+  /** Existing, empty tenant to load into: no tenant, admin or COA is created. `adminUserId` is one of its own users (rows need a createdBy). */
+  target?: { tenantId: string; adminUserId: string };
   requestId: string;
   /** The platform admin running the migration; recorded on the audit row. */
   actorUserId: string | null;
@@ -41,38 +43,57 @@ function groupBy<T>(xs: T[], key: (x: T) => string): Map<string, T[]> {
 export async function runMigration(tx: TxClient, data: ParsedData, ctx: MigrationContext): Promise<ImportOutcome> {
   const k = data.koperasi;
   const cutoff = parseDateKey(k.cutoffDate);
-  const slugUpper = k.slug.toUpperCase();
 
-  // 1. Tenant, units, roles, standard COA.
-  const { tenant, roles } = await provisionTenantInTx(tx, {
-    name: k.name,
-    slug: k.slug,
-    registrationNo: k.registrationNo,
-    address: k.address,
-    type: k.type,
-    cooperativeType: k.cooperativeType,
-    firstUnit: { type: data.units[0]!.type, name: data.units[0]!.name },
-    additionalUnits: data.units.slice(1).map((u) => ({ type: u.type, name: u.name }))
-  });
-  const tenantId = tenant.id;
-  if (k.modalDisetor) await tx.tenant.update({ where: { id: tenantId }, data: { modalDisetor: k.modalDisetor } });
-
-  // createMany stamps every unit with the same now(); getDefaultUnitId orders by createdAt, so stagger them
-  // in sheet order to make the first sheet-2 unit the default.
-  const unitRows = await tx.cooperativeUnit.findMany({ where: { tenantId } });
+  // 1-2. Tenant, units, first admin: created fresh, or taken from the existing empty target tenant.
+  let tenantId: string;
+  let slug: string;
+  let adminId: string;
   const unitIds = new Map<string, string>();
-  const base = Date.now();
-  for (const [i, u] of data.units.entries()) {
-    const row = unitRows.find((r) => r.name === u.name && r.type === u.type)!;
-    await tx.cooperativeUnit.update({ where: { id: row.id, tenantId }, data: { createdAt: new Date(base + i) } });
-    unitIds.set(u.unitCode, row.id);
+  if (ctx.target) {
+    const existing = await tx.tenant.findUniqueOrThrow({ where: { id: ctx.target.tenantId } });
+    tenantId = existing.id;
+    slug = existing.slug;
+    adminId = ctx.target.adminUserId;
+    if (k.modalDisetor) await tx.tenant.update({ where: { id: tenantId }, data: { modalDisetor: k.modalDisetor } });
+    // Reuse a unit with the same type and name; add the ones the target lacks. Existing units keep their order.
+    const have = await tx.cooperativeUnit.findMany({ where: { tenantId } });
+    for (const u of data.units) {
+      const found = have.find((r) => r.name === u.name && r.type === u.type);
+      const id = found?.id ?? (await tx.cooperativeUnit.create({ data: { tenantId, type: u.type, name: u.name } })).id;
+      unitIds.set(u.unitCode, id);
+    }
+  } else {
+    if (!ctx.identity) throw new Error("runMigration: identity is required when no target tenant is given");
+    const { tenant, roles } = await provisionTenantInTx(tx, {
+      name: k.name,
+      slug: k.slug,
+      registrationNo: k.registrationNo,
+      address: k.address,
+      type: k.type,
+      cooperativeType: k.cooperativeType,
+      firstUnit: { type: data.units[0]!.type, name: data.units[0]!.name },
+      additionalUnits: data.units.slice(1).map((u) => ({ type: u.type, name: u.name }))
+    });
+    tenantId = tenant.id;
+    slug = tenant.slug;
+    if (k.modalDisetor) await tx.tenant.update({ where: { id: tenantId }, data: { modalDisetor: k.modalDisetor } });
+
+    // createMany stamps every unit with the same now(); getDefaultUnitId orders by createdAt, so stagger them
+    // in sheet order to make the first sheet-2 unit the default.
+    const unitRows = await tx.cooperativeUnit.findMany({ where: { tenantId } });
+    const base = Date.now();
+    for (const [i, u] of data.units.entries()) {
+      const row = unitRows.find((r) => r.name === u.name && r.type === u.type)!;
+      await tx.cooperativeUnit.update({ where: { id: row.id, tenantId }, data: { createdAt: new Date(base + i) } });
+      unitIds.set(u.unitCode, row.id);
+    }
+
+    const superAdmin = roles.find((r) => r.name === "Super Admin")!;
+    adminId = (await tx.user.create({ data: { tenantId, roleId: superAdmin.id, name: k.adminName, ...ctx.identity } })).id;
   }
+  const slugUpper = slug.toUpperCase();
   const defaultUnitId = unitIds.get(data.units[0]!.unitCode)!;
   const unitOf = (code?: string) => (code ? unitIds.get(code)! : defaultUnitId);
-
-  // 2. First admin.
-  const superAdmin = roles.find((r) => r.name === "Super Admin")!;
-  const admin = await tx.user.create({ data: { tenantId, roleId: superAdmin.id, name: k.adminName, ...ctx.identity } });
 
   // 3. Extra accounts, then products, then mappings (mappings need both).
   const byCode = new Map((await tx.account.findMany({ where: { tenantId } })).map((a) => [a.code, a.id]));
@@ -153,7 +174,7 @@ export async function runMigration(tx: TxClient, data: ParsedData, ctx: Migratio
     });
     if (s.balance.gt(0)) {
       const txn = await tx.savingTransaction.create({
-        data: { savingId: saving.id, tenantId, type: "DEPOSIT", amount: s.balance, note: "Saldo awal migrasi", createdBy: admin.id, createdAt: cutoff }
+        data: { savingId: saving.id, tenantId, type: "DEPOSIT", amount: s.balance, note: "Saldo awal migrasi", createdBy: adminId, createdAt: cutoff }
       });
       await postSavingTransaction(tx, {
         tenantId,
@@ -274,7 +295,7 @@ export async function runMigration(tx: TxClient, data: ParsedData, ctx: Migratio
       sourceType: "MANUAL",
       sourceId: null,
       description: "Saldo Awal Migrasi",
-      createdById: admin.id,
+      createdById: adminId,
       lines: lines.map((l) => ({ accountId: l.key, debit: l.debit, credit: l.credit }))
     });
     openingEntryNo = entry.entryNo;
@@ -303,7 +324,7 @@ export async function runMigration(tx: TxClient, data: ParsedData, ctx: Migratio
   const names = new Map(accounts.map((a) => [a.id, a.name]));
   return {
     tenantId,
-    slug: tenant.slug,
+    slug,
     counts: [
       { sheet: "Anggota", rows: data.members.length },
       { sheet: "Rekening simpanan", rows: data.savings.length },
