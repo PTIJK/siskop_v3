@@ -33,7 +33,7 @@ import type {
  * spec only covers FLAT/HARIAN there). HARIAN and FLAT margin (SYARIAH or
  * MARGIN rateType) are real-day based and work at any frequency.
  */
-function assertFrequencyMethodCompatible(input: {
+export function assertFrequencyMethodCompatible(input: {
   type: LoanType;
   rateType: RateType;
   installmentFrequency: InstallmentFrequency;
