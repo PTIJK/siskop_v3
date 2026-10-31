@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/shared/FormError";
+import { HelpHint } from "@/components/shared/HelpHint";
 import { TenantPicker } from "./TenantPicker";
 
 type TemplateMode = "sistem" | "laporan";
@@ -67,10 +68,12 @@ export function UploadStep({ onPreview }: { onPreview: (file: File, preview: Mig
   return (
     <div className="space-y-6 rounded-lg border bg-card p-5">
       <div className="space-y-2">
-        <p className="text-sm font-semibold">1. Unduh template yang sesuai</p>
-        <p className="text-sm text-muted-foreground">
-          Pakai template Sistem bila koperasi punya data rinci dari sistem lama. Pakai template Laporan bila hanya ada Neraca dan lampiran RAT.
-        </p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-semibold">1. Unduh template yang sesuai</p>
+          <HelpHint label="Bantuan: pilih template">
+            Pakai template Sistem bila koperasi punya data rinci dari sistem lama. Pakai template Laporan bila hanya ada Neraca dan lampiran RAT.
+          </HelpHint>
+        </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => void download("sistem")}>
             <Download className="mr-2 h-4 w-4" />
@@ -88,18 +91,18 @@ export function UploadStep({ onPreview }: { onPreview: (file: File, preview: Mig
         <div className="space-y-2">
           <label className="flex cursor-pointer items-start gap-2 text-sm">
             <input type="radio" name="destination" className="mt-1" checked={destination === "baru"} onChange={() => setDestination("baru")} />
-            <span>
+            <span className="flex items-center gap-1.5">
               <span className="font-medium">Koperasi baru</span>
-              <span className="block text-muted-foreground">Dibuat dari sheet 1_Koperasi, termasuk akun admin pertamanya.</span>
+              <HelpHint label="Bantuan: koperasi baru">Dibuat dari sheet 1_Koperasi, termasuk akun admin pertamanya.</HelpHint>
             </span>
           </label>
           <label className="flex cursor-pointer items-start gap-2 text-sm">
             <input type="radio" name="destination" className="mt-1" checked={destination === "ada"} onChange={() => setDestination("ada")} />
-            <span>
+            <span className="flex items-center gap-1.5">
               <span className="font-medium">Koperasi yang sudah terdaftar</span>
-              <span className="block text-muted-foreground">
+              <HelpHint label="Bantuan: koperasi yang sudah terdaftar">
                 Data dimuat ke koperasi yang masih kosong (belum ada anggota, simpanan, pinjaman, atau jurnal). Subdomain di file harus sama.
-              </span>
+              </HelpHint>
             </span>
           </label>
         </div>

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/shared/FormError";
+import { HelpHint } from "@/components/shared/HelpHint";
 import { groupIssues, issueCounts } from "./issues";
 import { buildIssueReportCsv, buildIssueSummaryText } from "./report";
 
@@ -107,9 +108,12 @@ export function PreviewStep({ file, preview, onBack, onDone }: Props) {
 
       {preview.openingEntry.length > 0 && (
         <div className="rounded-lg border bg-card p-5">
-          <p className="mb-2 text-sm font-semibold">
-            Jurnal "Saldo Awal Migrasi" yang akan dibuat (hanya selisih terhadap jurnal otomatis simpanan dan pinjaman)
-          </p>
+          <div className="mb-2 flex items-center gap-1.5">
+            <p className="text-sm font-semibold">Jurnal "Saldo Awal Migrasi" yang akan dibuat</p>
+            <HelpHint label="Bantuan: jurnal saldo awal">
+              Hanya selisih antara neraca saldo di file dan jurnal otomatis simpanan dan pinjaman, supaya saldo tidak tercatat dua kali.
+            </HelpHint>
+          </div>
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-muted-foreground">
@@ -164,7 +168,10 @@ export function PreviewStep({ file, preview, onBack, onDone }: Props) {
       <div className="space-y-3 rounded-lg border bg-card p-5">
         {!preview.target && (
           <>
-            <Label htmlFor="adminPassword">Kata sandi admin koperasi (min. 8 karakter, serahkan ke admin lewat jalur aman)</Label>
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="adminPassword">Kata sandi admin koperasi</Label>
+              <HelpHint label="Bantuan: kata sandi admin">Minimal 8 karakter. Serahkan ke admin koperasi lewat jalur aman; kata sandi tidak disimpan di file maupun log.</HelpHint>
+            </div>
             <Input
               id="adminPassword"
               type="password"

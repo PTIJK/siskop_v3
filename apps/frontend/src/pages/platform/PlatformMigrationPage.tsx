@@ -27,7 +27,7 @@ export function PlatformMigrationPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Migrasi Koperasi" description="Pindahkan data koperasi dari template standar. Pratinjau tidak menyimpan apa pun." />
+      <PageHeader title="Migrasi Koperasi" help="Pindahkan data koperasi dari template standar. Pratinjau tidak menyimpan apa pun." />
       <Stepper steps={STEPS} current={step} />
       {!preview && !result && (
         <UploadStep
