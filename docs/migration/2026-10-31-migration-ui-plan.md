@@ -2157,6 +2157,20 @@ git commit -m "docs(migration): runbook and benchmark notes"
 
 ---
 
+## Task 11b: Laporan pratinjau untuk koperasi (ditambahkan setelah mockup disetujui)
+
+`apps/frontend/src/pages/platform/migration/report.ts`: `buildIssueReportCsv(preview, fileName, now)` (CSV UTF-8 BOM, CRLF, kolom Tingkat/Sheet/Baris/Kolom/Masalah/Perbaikan/Status; nomor baris = baris Excel file koperasi; kesalahan sebelum peringatan) dan `buildIssueSummaryText(preview, fileName)` (ringkasan WhatsApp/email, maksimal 5 contoh). Tombol "Unduh laporan untuk koperasi (CSV)" dan "Salin ringkasan" di `PreviewStep.tsx`. Pesan galat tidak mengulang NIK lengkap (`maskNik` di `validate.ts`, empat digit terakhir). Dites di `issues.test.ts`. **Terimplementasi.**
+
+## Catatan pelaksanaan (2026-10-31)
+
+Perbedaan antara rencana ini dan kode yang dibangun:
+
+- Sheet `7_Pinjaman` dijadikan **opsional** di kedua template (koperasi tanpa pinjaman sah).
+- `withManagedIdentity` mendapat parameter opsional `options` (timeout transaksi) karena bawaan Prisma 5 detik.
+- `apiDownload` ditambahkan di `apps/frontend/src/api/client.ts` untuk mengunduh template dengan penyegaran token.
+- Migrasi `20261030120000_loan_notes` harus diterapkan ke `siskop_test` (`prisma migrate deploy` dengan `DATABASE_URL` dari `.env.test`) sebelum test importer dapat berjalan.
+- **Benchmark (Task 12 step 1):** 5.000 anggota + 5.000 rekening simpanan + 1.500 pinjaman = 166 detik pratinjau, 154 detik eksekusi. Melewati ambang 60 detik pada D2. Tindak lanjut yang disarankan: jurnal massal (lihat B8 di MIGRATION-FIELD-MAPPING.md) sebelum dipakai untuk koperasi di atas sekitar 1.000 rekening.
+
 ## Self-review
 
 **Cakupan terhadap permintaan:** UI khusus migrasi untuk platform owner (Task 11), memakai format standar (dua template, Task 2-3), tanpa AI (seluruh alur deterministik), pratinjau sebelum commit (Task 9), dua jalur Sistem/Laporan (Task 4, 7, 8), pemetaan dokumen tetap sumber kebenaran (Task 2 step 5, 12).
