@@ -110,7 +110,7 @@ export function provinceName(code: string | null | undefined): string {
   return PROVINCES.find((p) => p.code === code)?.name ?? code;
 }
 
-export interface GrowthPoint {
+export interface PlatformGrowthPoint {
   /** `YYYY-MM-DD` for 30d/90d, `YYYY-MM` for 12m. */
   bucket: string;
   tenants: number;
@@ -193,7 +193,7 @@ export interface PlatformDashboard {
     activity: ActivityPoint[];
     technical: TechnicalPoint[];
   };
-  growth: GrowthPoint[];
+  growth: PlatformGrowthPoint[];
   members: { series: MemberPoint[]; total: number };
   regions: RegionRow[];
   attention: AttentionItem[];
@@ -593,7 +593,7 @@ export async function countPerBucket(
 
 ```ts
 import { Prisma } from "@prisma/client";
-import type { DashboardRange, GrowthPoint, MemberPoint } from "@siskop/types";
+import type { DashboardRange, PlatformGrowthPoint, MemberPoint } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import { buildBuckets, fill, granularityOf } from "./buckets.js";
@@ -602,7 +602,7 @@ import { countPerBucket } from "./counts.js";
 const STAFF_ONLY = Prisma.sql`AND "isPlatformAdmin" = false`;
 
 /** New tenants and new staff users (platform admins excluded) per bucket. */
-export async function getGrowth(range: DashboardRange, now: Date): Promise<GrowthPoint[]> {
+export async function getGrowth(range: DashboardRange, now: Date): Promise<PlatformGrowthPoint[]> {
   const buckets = buildBuckets(range, now);
   const g = granularityOf(range);
   const since = buckets[0]!.start;
