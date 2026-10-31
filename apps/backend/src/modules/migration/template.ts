@@ -152,8 +152,8 @@ const SHEETS: SheetDef[] = [
   {
     name: "7_Pinjaman",
     title: "Pinjaman Berjalan",
-    purpose: "Satu baris per pinjaman yang masih punya sisa kewajiban (atau perlu dicatat riwayatnya). Nilai diambil APA ADANYA dari sistem lama, tidak dihitung ulang.",
-    required: true,
+    purpose: "Satu baris per pinjaman yang masih punya sisa kewajiban (atau perlu dicatat riwayatnya). Nilai diambil APA ADANYA dari sistem lama, tidak dihitung ulang. Kosongkan sheet ini bila koperasi belum punya pinjaman.",
+    required: false,
     cols: [
       { key: "loanRef", label: "Kode Pinjaman", required: true, width: 16, hint: "Kode buatan Anda, unik, dirujuk sheet 8", example: "L-001", fmt: "@" },
       { key: "nik", label: "NIK Anggota", required: true, width: 20, hint: "Harus ada di sheet 3_Anggota", example: "3578012345670001", fmt: "@" },
@@ -230,8 +230,8 @@ const LAPORAN_SHEETS: Record<string, SheetDef | null> = {
   "7_Pinjaman": {
     name: "7_Pinjaman",
     title: "Pinjaman (ringkas)",
-    purpose: "Sisa pembiayaan per anggota dari lampiran RAT. Laporan tidak memuat plafon, tenor, atau tanggal cair, jadi sistem membuat nilai pengganti dan menandainya di Catatan. KOL dan jatuh tempo TIDAK akurat sampai kontrak asli dimasukkan.",
-    required: true,
+    purpose: "Sisa pembiayaan per anggota dari lampiran RAT. Laporan tidak memuat plafon, tenor, atau tanggal cair, jadi sistem membuat nilai pengganti dan menandainya di Catatan. KOL dan jatuh tempo TIDAK akurat sampai kontrak asli dimasukkan. Kosongkan sheet ini bila koperasi belum punya pinjaman.",
+    required: false,
     cols: [
       { key: "loanRef", label: "Kode Pinjaman", required: true, width: 16, hint: "Kode buatan Anda, unik", example: "L-001", fmt: "@" },
       { key: "nik", label: "NIK Anggota", required: true, width: 20, hint: "Harus ada di sheet 3_Anggota", example: "3578012345670001", fmt: "@" },

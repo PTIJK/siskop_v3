@@ -7,6 +7,8 @@ import { firebaseAuth } from "../onboarding/firebase.js";
 type AccountInput = { email: string; name: string; password: string };
 type IdentityFields = { id: string; email: string; passwordHash: string | null; firebaseUid: string | null; authProvider: string | null };
 type PersistIdentity<T> = (fields: IdentityFields, tx: TxClient) => Promise<T>;
+/** Interactive-transaction limits for `persist`; Prisma's 5s default is too short for bulk work such as a koperasi migration. */
+type TxOptions = { timeout?: number; maxWait?: number };
 export interface IdentityProvider {
   create(input: AccountInput & { uid: string }): Promise<void>;
   remove(uid: string): Promise<void>;
@@ -24,7 +26,7 @@ const firebaseProvider: IdentityProvider = {
  * remove only abandoned UIDs created by this service; passwords are never stored. */
 export class IdentityProvisioner {
   constructor(private readonly provider: IdentityProvider) {}
-  async create<T>(input: AccountInput, persist: PersistIdentity<T>): Promise<T> {
+  async create<T>(input: AccountInput, persist: PersistIdentity<T>, options?: TxOptions): Promise<T> {
     const id = randomUUID();
     const uid = `siskop-${id}`;
     const email = input.email.trim().toLowerCase();
@@ -38,7 +40,7 @@ export class IdentityProvisioner {
         const result = await persist({ id, email, firebaseUid: uid, authProvider: "password", passwordHash: null }, tx);
         await tx.identityProvisioning.update({ where: { uid }, data: { status: "LINKED" } });
         return result;
-      });
+      }, options);
     } catch (error) {
       await db.identityProvisioning.updateMany({ where: { uid, status: { not: "LINKED" } }, data: { status: "CLEANUP_REQUIRED" } }).catch(() => {});
       if ((error as { code?: string }).code === "auth/email-already-exists" || (error as { code?: string }).code === "auth/email-already-in-use") {
@@ -82,8 +84,8 @@ export class IdentityProvisioner {
   }
 }
 export const identityProvisioner = new IdentityProvisioner(firebaseProvider);
-export async function withManagedIdentity<T>(input: AccountInput, persist: PersistIdentity<T>): Promise<T> {
-  if (process.env.FIREBASE_ACCOUNT_PROVISIONING_ENABLED === "true") return identityProvisioner.create(input, persist);
+export async function withManagedIdentity<T>(input: AccountInput, persist: PersistIdentity<T>, options?: TxOptions): Promise<T> {
+  if (process.env.FIREBASE_ACCOUNT_PROVISIONING_ENABLED === "true") return identityProvisioner.create(input, persist, options);
   const passwordHash = await bcrypt.hash(input.password, 10);
-  return db.$transaction(tx => persist({ id: randomUUID(), email: input.email.trim().toLowerCase(), passwordHash, firebaseUid: null, authProvider: null }, tx));
+  return db.$transaction(tx => persist({ id: randomUUID(), email: input.email.trim().toLowerCase(), passwordHash, firebaseUid: null, authProvider: null }, tx), options);
 }
