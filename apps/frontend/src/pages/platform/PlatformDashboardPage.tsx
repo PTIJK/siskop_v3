@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { DASHBOARD_RANGES, type DashboardRange, type PlatformDashboard } from "@siskop/types";
 import { apiFetch } from "@/api/client";
 import { useAuth } from "@/stores/auth";
@@ -13,7 +13,7 @@ import { KpiCards } from "./dashboard/KpiCards";
 import { LinePanel } from "./dashboard/LinePanel";
 import { RegionPanel } from "./dashboard/RegionPanel";
 import { RevenuePanel } from "./dashboard/RevenuePanel";
-import { bucketLabel, hasTechnicalData, RANGE_LABEL } from "./dashboard/dashboardView";
+import { bucketLabel, hasTechnicalData, RANGE_LABEL, totalRequests } from "./dashboard/dashboardView";
 
 const C = (n: number) => `hsl(var(--chart-${n}))`;
 
@@ -21,9 +21,11 @@ export function PlatformDashboardPage() {
   const role = useAuth((s) => s.user?.role);
   const [range, setRange] = useState<DashboardRange>("30d");
 
-  const { data, isPending, isError, error, refetch } = useQuery({
+  const { data, isPending, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["platform", "dashboard", range],
-    queryFn: () => apiFetch<PlatformDashboard>(`/platform/dashboard?range=${range}`)
+    queryFn: () => apiFetch<PlatformDashboard>(`/platform/dashboard?range=${range}`),
+    placeholderData: keepPreviousData,
+    enabled: role === "super_admin"
   });
 
   if (role !== "super_admin") return <Navigate to="/dashboard" replace />;
@@ -33,12 +35,15 @@ export function PlatformDashboardPage() {
       title="Dashboard platform"
       description="Kondisi SISKOP secara keseluruhan: performa, pertumbuhan, wilayah, dan revenue"
       actions={
-        <div className="flex gap-1" role="group" aria-label="Rentang waktu">
-          {DASHBOARD_RANGES.map((r) => (
-            <Button key={r} size="sm" variant={range === r ? "default" : "outline"} aria-pressed={range === r} onClick={() => setRange(r)}>
-              {RANGE_LABEL[r]}
-            </Button>
-          ))}
+        <div className="flex items-center gap-2">
+          <span aria-live="polite" className="text-xs text-muted-foreground">{isFetching && !isPending ? "Memperbarui…" : ""}</span>
+          <div className="flex gap-1" role="group" aria-label="Rentang waktu">
+            {DASHBOARD_RANGES.map((r) => (
+              <Button key={r} size="sm" variant={range === r ? "default" : "outline"} aria-pressed={range === r} onClick={() => setRange(r)}>
+                {RANGE_LABEL[r]}
+              </Button>
+            ))}
+          </div>
         </div>
       }
     />
@@ -96,6 +101,14 @@ export function PlatformDashboardPage() {
           ]}
           empty={hasTechnicalData(data.performance.technical) ? undefined : "Telemetri baru mulai terkumpul sejak fitur ini dirilis."}
           formatValue={(n) => `${n} ms`}
+        />
+        <LinePanel
+          title="Performa: error dan trafik"
+          description={`Persentase respons 5xx. Total request pada rentang ini: ${totalRequests(data.performance.technical).toLocaleString("id-ID")}`}
+          data={technical}
+          series={[{ key: "errorPct", name: "Error 5xx", color: C(5), dashed: true }]}
+          empty={hasTechnicalData(data.performance.technical) ? undefined : "Telemetri baru mulai terkumpul sejak fitur ini dirilis."}
+          formatValue={(n) => `${n}%`}
         />
         <LinePanel
           title="Pertumbuhan koperasi dan pengguna"

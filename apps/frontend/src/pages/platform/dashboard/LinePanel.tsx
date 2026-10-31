@@ -1,5 +1,6 @@
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { describeValue } from "./dashboardView";
 
 export interface LineSeries {
   key: string;
@@ -24,7 +25,7 @@ function summarize(data: LinePanelProps["data"], series: LineSeries[]): string {
   const first = rows[0];
   const last = rows[rows.length - 1];
   if (!first || !last) return "Belum ada data.";
-  return series.map((s) => `${s.name}: dari ${first[s.key] ?? 0} pada ${first.label} menjadi ${last[s.key] ?? 0} pada ${last.label}`).join(". ");
+  return series.map((s) => `${s.name}: dari ${describeValue(first[s.key])} pada ${first.label} menjadi ${describeValue(last[s.key])} pada ${last.label}`).join(". ");
 }
 
 export function LinePanel({ title, description, data, series, empty, formatValue = (n) => n.toLocaleString("id-ID") }: LinePanelProps) {

@@ -27,3 +27,8 @@ export function topRegions(rows: RegionRow[], limit = 10): RegionRow[] {
   const unset = rows.find((r) => r.code === null);
   return unset ? [...named, unset] : named;
 }
+
+export const totalRequests = (points: TechnicalPoint[]): number => points.reduce((sum, p) => sum + p.requests, 0);
+
+/** Screen-reader text for a chart value; a missing value is not zero. */
+export const describeValue = (v: string | number | null | undefined): string => (v === null || v === undefined ? "tidak ada data" : String(v));

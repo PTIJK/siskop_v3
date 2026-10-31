@@ -257,23 +257,23 @@ export function PlatformTenantsPage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 sm:col-span-2">
-              <div className="space-y-1.5">
-                <Label>Provinsi</Label>
-                <Select value={values.province || "none"} onValueChange={(v) => setValue("province", v === "none" ? "" : v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Belum diisi</SelectItem>
-                    {PROVINCES.map((p) => (
-                      <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
                 <div className="space-y-1.5">
-                  <Label>Kota/Kabupaten</Label>
-                  <Input placeholder="Surabaya" {...register("city")} />
+                  <Label htmlFor="createProvince">Provinsi</Label>
+                  <Select value={values.province || "none"} onValueChange={(v) => setValue("province", v === "none" ? "" : v)}>
+                    <SelectTrigger id="createProvince">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Belum diisi</SelectItem>
+                      {PROVINCES.map((p) => (
+                        <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="createCity">Kota/Kabupaten</Label>
+                  <Input id="createCity" placeholder="Surabaya" {...register("city")} />
                 </div>
               </div>
 
@@ -388,9 +388,9 @@ export function PlatformTenantsPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Provinsi</Label>
+                <Label htmlFor="manageProvince">Provinsi</Label>
                 <Select value={manageProvince || "none"} onValueChange={(v) => setManageProvince(v === "none" ? "" : v)}>
-                  <SelectTrigger>
+                  <SelectTrigger id="manageProvince">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -402,8 +402,8 @@ export function PlatformTenantsPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Kota/Kabupaten</Label>
-                <Input value={manageCity} onChange={(e) => setManageCity(e.target.value)} placeholder="Surabaya" />
+                <Label htmlFor="manageCity">Kota/Kabupaten</Label>
+                <Input id="manageCity" value={manageCity} onChange={(e) => setManageCity(e.target.value)} placeholder="Surabaya" />
               </div>
             </div>
 

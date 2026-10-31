@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RegionRow, TechnicalPoint } from "@siskop/types";
-import { bucketLabel, deltaLabel, hasTechnicalData, topRegions } from "./dashboardView";
+import { bucketLabel, deltaLabel, describeValue, hasTechnicalData, topRegions, totalRequests } from "./dashboardView";
 
 describe("bucketLabel", () => {
   it("formats a day as 'D Mon' and a month as 'Mon YYYY' in Indonesian", () => {
@@ -37,5 +37,22 @@ describe("topRegions", () => {
   });
   it("omits the unset row when there is none", () => {
     expect(topRegions([row("35", "Jawa Timur")], 5)).toHaveLength(1);
+  });
+});
+
+describe("totalRequests", () => {
+  const point = (requests: number): TechnicalPoint => ({ bucket: "2026-10-01", requests, errorRate: 0, p50Ms: null, p95Ms: null });
+  it("sums requests across buckets", () => {
+    expect(totalRequests([point(2), point(3), point(0)])).toBe(5);
+    expect(totalRequests([])).toBe(0);
+  });
+});
+
+describe("describeValue", () => {
+  it("says there is no data for null instead of 0", () => {
+    expect(describeValue(null)).toBe("tidak ada data");
+    expect(describeValue(undefined)).toBe("tidak ada data");
+    expect(describeValue(0)).toBe("0");
+    expect(describeValue(12)).toBe("12");
   });
 });

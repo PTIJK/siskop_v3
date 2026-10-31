@@ -1,5 +1,5 @@
 import type { PlatformDashboard } from "@siskop/types";
-import { formatAngkaRingkas, formatRupiah } from "@/lib/format";
+import { formatRupiah } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 
 export function KpiCards({ kpis }: { kpis: PlatformDashboard["kpis"] }) {
@@ -7,7 +7,7 @@ export function KpiCards({ kpis }: { kpis: PlatformDashboard["kpis"] }) {
     { label: "Koperasi", value: kpis.tenants.toLocaleString("id-ID") },
     { label: "Pengguna staf", value: kpis.users.toLocaleString("id-ID") },
     { label: "Anggota", value: kpis.members.toLocaleString("id-ID") },
-    { label: "MRR", value: formatRupiah(Number(kpis.mrr)), hint: formatAngkaRingkas(Number(kpis.mrr)) }
+    { label: "MRR", value: formatRupiah(Number(kpis.mrr)) }
   ];
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
