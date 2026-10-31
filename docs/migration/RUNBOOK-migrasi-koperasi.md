@@ -16,8 +16,9 @@ Acuan kolom dan tabel tujuan: `MIGRATION-FIELD-MAPPING.md`.
 
 1. Buka **Migrasi koperasi**, unduh template yang sesuai, kirim ke admin koperasi.
 2. Admin mengisi sheet dari 1 sampai 10 sesuai sheet PETUNJUK dan mengembalikan file lewat jalur aman (file memuat data pribadi).
-3. Pilih tujuan: **Koperasi baru** (dibuat dari sheet 1) atau **Koperasi yang sudah terdaftar** (cari nama, subdomain, atau no. badan hukum di dropdown). Koperasi terdaftar harus masih kosong dan subdomain di file harus sama. Lalu unggah file dan klik **Pratinjau**. Tidak ada yang tersimpan.
+3. Unggah file dan klik **Pratinjau** (langkah 1 hanya butuh file). Tidak ada yang tersimpan.
 4. Bila ada kesalahan: klik **Unduh laporan untuk koperasi (CSV)** atau **Salin ringkasan**, kirim ke admin. Nomor baris di laporan sama dengan nomor baris di file Excel mereka. Ulangi dari langkah 3 dengan file perbaikan.
+   Koperasi tujuan dipilih di langkah **Pratinjau**, bukan saat mengunggah: **Koperasi baru** (default, dibuat dari sheet 1) atau **Koperasi yang sudah terdaftar** (cari nama, subdomain, atau no. badan hukum). Mengganti tujuan menjalankan pemeriksaan ulang otomatis; hasil lama diredupkan dan Eksekusi nonaktif sampai pemeriksaan selesai. Koperasi terdaftar harus masih kosong dan subdomain di file harus sama. Bila pratinjau melaporkan "Subdomain sudah dipakai", koperasi itu mungkin sudah terdaftar: pilih sebagai tujuan.
 5. Bila pratinjau bersih: periksa kartu total dan tabel jurnal "Saldo Awal Migrasi" bersama admin. Peringatan "Rekonsiliasi" berarti total simpanan atau pinjaman di sheet 5/7 berbeda dari akun di neraca (sheet 9); minta admin menjelaskannya sebelum lanjut.
 6. Untuk koperasi baru, isi kata sandi admin (min. 8 karakter); untuk koperasi terdaftar tidak ada kata sandi (admin yang ada dipakai). Klik **Eksekusi migrasi**. Seluruh data masuk dalam satu transaksi: berhasil semua atau tidak sama sekali.
 7. Serahkan kata sandi admin lewat jalur aman; kata sandi tidak disimpan di file maupun log.

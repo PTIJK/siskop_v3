@@ -331,7 +331,7 @@ Batasan: Neraca tidak memuat pendapatan dan beban rinci. Cut-off di akhir tahun 
 
 ### 3.12 Koperasi tujuan yang sudah terdaftar
 
-Selain membuat koperasi baru dari sheet 1, platform admin dapat memilih koperasi yang sudah terdaftar lewat dropdown pencarian (nama, subdomain, atau no. badan hukum). Dikirim sebagai field `tenantId` pada `POST /api/platform/migration/preview` dan `/execute`.
+Selain membuat koperasi baru dari sheet 1, platform admin dapat memilih koperasi yang sudah terdaftar lewat dropdown pencarian (nama, subdomain, atau no. badan hukum). Pilihan ini ada di langkah **Pratinjau**, bukan di langkah unggah: pratinjau pertama selalu untuk koperasi baru, dan mengganti tujuan menjalankan pratinjau ulang dengan `tenantId`. Dikirim sebagai field `tenantId` pada `POST /api/platform/migration/preview` dan `/execute`.
 
 | Aspek | Koperasi baru | Koperasi yang sudah terdaftar |
 |---|---|---|

@@ -37,7 +37,9 @@ export function PlatformMigrationPage() {
           }}
         />
       )}
-      {preview && file && !result && <PreviewStep file={file} preview={preview} onBack={reset} onDone={setResult} />}
+      {preview && file && !result && (
+        <PreviewStep file={file} preview={preview} onBack={reset} onPreviewChange={setPreview} onDone={setResult} />
+      )}
       {result && <ResultStep result={result} onAnother={reset} />}
     </div>
   );
