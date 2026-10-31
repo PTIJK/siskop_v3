@@ -1,6 +1,7 @@
 import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import dns from 'node:dns';
 import { createHmac } from 'node:crypto';
 import { createCentralGateway } from './server.mjs';
 
@@ -61,4 +62,42 @@ test('does not retry a failed mutation', async () => {
   const origin = await listen(createCentralGateway({ apiOrigin: target, secret, development: true }));
   assert.equal((await fetch(origin + '/api/loans', { method: 'POST', body: '{}' })).status, 502);
   assert.equal(calls, 1);
+});
+
+test('reaches the IPv4 ingress when a dual-stack DNS lookup times out', async t => {
+  let connections = 0;
+  const target = http.createServer();
+  target.on('connection', () => connections++);
+  target.on('clientError', (_error, socket) => socket.destroy());
+  await listen(target);
+  const origin = await listen(createCentralGateway({ apiOrigin: `https://ingress.invalid:${target.address().port}`, secret }));
+  t.mock.method(dns, 'lookup', (_hostname, options, callback) => {
+    if (options.family !== 4) {
+      process.nextTick(callback, Object.assign(new Error('AAAA response lost'), { code: 'EAI_AGAIN' }));
+    } else {
+      process.nextTick(callback, null, '127.0.0.1', 4);
+    }
+  });
+  // The plaintext fixture rejects TLS after accepting the TCP connection.
+  assert.equal((await fetch(origin + '/api/public/pricing')).status, 502);
+  assert.equal(connections, 1);
+});
+
+test('records slow upstream stages without logging request or response data', async t => {
+  const messages = [];
+  t.mock.method(console, 'warn', message => messages.push(JSON.parse(message)));
+  const target = await listen(http.createServer((_req, res) => {
+    setTimeout(() => res.end('private-response'), 1050);
+  }));
+  const origin = await listen(createCentralGateway({ apiOrigin: target, secret, development: true }));
+  const response = await fetch(origin + '/api/auth/login?token=private-query', {
+    method: 'POST', body: 'private-body', headers: { authorization: 'Bearer private-token' }
+  });
+  assert.equal(await response.text(), 'private-response');
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].event, 'gateway_slow_request');
+  assert.equal(messages[0].status, 200);
+  assert.ok(messages[0].headersMs >= 1000);
+  assert.ok(messages[0].totalMs >= messages[0].headersMs);
+  assert.doesNotMatch(JSON.stringify(messages), /private-|login|Bearer|central-gateway-test-key/);
 });

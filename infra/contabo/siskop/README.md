@@ -115,6 +115,13 @@ The public maintenance gate was opened only after the successful coordinated rel
 
 ## API handoff during releases
 
+The central gateway resolves the fixed Contabo ingress using IPv4, matching its
+published A record. Requests taking at least one second emit `gateway_slow_request`
+with cumulative milliseconds from request handling to socket assignment, DNS,
+TCP, TLS, upstream headers and response completion. Reused sockets omit connection
+stages. These logs contain no URLs, headers, cookies, bodies or signing secrets.
+The external uptime check's timeout and alert threshold are independent and unchanged.
+
 The deployer starts `siskop-api-candidate` on loopback port 18082 with the same
 resource limits and credentials as the regular API. It checks the published
 catalog and exact release ID before switching the SISKOP proxy to its private
