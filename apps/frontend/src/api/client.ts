@@ -158,3 +158,14 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
 
   return body.data;
 }
+
+/** Binary download (e.g. an .xlsx template) with the same bearer-token refresh as the JSON helpers. */
+export async function apiDownload(path: string): Promise<Blob> {
+  const res = await withAuthRetry(path, (token) => fetch(`/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} }));
+  if (!res.ok) {
+    if (res.status === 401) useAuth.getState().clear();
+    const body = (await res.json().catch(() => null)) as ApiResponse<unknown> | null;
+    throw new ApiRequestError(body?.error?.message ?? "Unduhan gagal", body?.error?.code ?? "INTERNAL_ERROR", res.status);
+  }
+  return res.blob();
+}
