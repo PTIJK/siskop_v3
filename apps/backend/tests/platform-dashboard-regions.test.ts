@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "../src/lib/db.js";
 import { getRegions } from "../src/modules/platform-dashboard/regions.js";
-import { createMemberAs, setupTenant } from "./helpers.js";
+import { createMemberAs, createPlatformAdminSession, setupTenant } from "./helpers.js";
 
 beforeEach(async () => {
   await db.tenant.deleteMany({});
@@ -20,6 +20,15 @@ describe("getRegions", () => {
       { code: "35", name: "Jawa Timur", tenants: 1, users: 1, members: 1 },
       { code: null, name: "Belum diisi", tenants: 1, users: 1, members: 0 }
     ]);
+  });
+
+  it("does not count platform admins as users", async () => {
+    // One staff admin plus one platform admin in the same tenant.
+    await createPlatformAdminSession();
+
+    const rows = await getRegions();
+
+    expect(rows).toEqual([{ code: null, name: "Belum diisi", tenants: 1, users: 1, members: 0 }]);
   });
 
   it("falls back to the raw code for a province not in the list", async () => {

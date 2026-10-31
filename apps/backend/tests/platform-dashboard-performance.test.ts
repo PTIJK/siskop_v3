@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "../src/lib/db.js";
 import { buildBuckets } from "../src/modules/platform-dashboard/buckets.js";
 import { aggregateTechnical, getPerformance } from "../src/modules/platform-dashboard/performance.js";
-import { setupTenant } from "./helpers.js";
+import { createPlatformAdminSession, setupTenant } from "./helpers.js";
 
 const NOW = new Date("2026-10-31T12:00:00Z");
 
@@ -62,6 +62,18 @@ describe("getPerformance", () => {
 
     expect(p.activeTenants7d).toBe(1);
     expect(p.activeTenants30d).toBe(2);
+  });
+
+  it("does not count a platform-admin-only login as tenant activity", async () => {
+    const session = await createPlatformAdminSession();
+    const tenantId = session.user.tenantId;
+    await db.$executeRawUnsafe(`UPDATE "User" SET "lastLoginAt" = NULL WHERE "tenantId" = $1 AND "isPlatformAdmin" = false`, tenantId);
+    await db.$executeRawUnsafe(`UPDATE "User" SET "lastLoginAt" = $1 WHERE "tenantId" = $2 AND "isPlatformAdmin" = true`, new Date("2026-10-30T00:00:00Z"), tenantId);
+
+    const p = await getPerformance("30d", NOW);
+
+    expect(p.activeTenants7d).toBe(0);
+    expect(p.activeTenants30d).toBe(0);
   });
 
   it("buckets audit-log actions per day and reads stored request metrics", async () => {
