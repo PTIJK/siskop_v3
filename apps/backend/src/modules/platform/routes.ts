@@ -3,6 +3,7 @@ import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePlatformAdmin } from "../../middleware/rbac.js";
 import { requireParam } from "../../lib/http.js";
 import { invoiceAdminRoutes } from "../billing/admin-routes.js";
+import { migrationRoutes } from "../migration/routes.js";
 import { pricingAdminRoutes } from "../pricing-admin/routes.js";
 import { tenantSubscriptionSchema } from "../pricing-admin/schema.js";
 import { getTenantSubscription, setTenantSubscription } from "../pricing-admin/service.js";
@@ -43,6 +44,9 @@ export function platformRoutes(): Router {
 
   // Subscription invoices: list, mark paid, void, reissue.
   router.use("/invoices", invoiceAdminRoutes());
+
+  // Koperasi migration from the standard workbook templates (preview = dry run, execute = commit).
+  router.use("/migration", migrationRoutes());
 
   router.get(
     "/tenants/:id/subscription",
