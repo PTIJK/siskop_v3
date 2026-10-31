@@ -18,7 +18,7 @@ One page at `/platform/dashboard` giving the SISKOP owner a view of how the SaaS
 - **Approach C (hybrid).** Growth, revenue, region and activity are computed live from `createdAt` / `Invoice` / `User.lastLoginAt`, so history exists on day one. Only latency and error rate use a new aggregate table, because no such data exists today.
 - **Region** comes from new nullable `Tenant.province` / `Tenant.city` columns. Tenants without a value fall in a "Belum diisi" bucket. No map in v1 (bar chart per province).
 - **Performance** = both activity metrics and technical metrics (p50/p95 latency, 5xx rate). Technical series start empty and fill from deploy.
-- **Revenue** = `Invoice` with status `PAID` (cash basis), grouped by paid month; MRR from active subscriptions.
+- **Revenue** = `Invoice` with status `PAID` (cash basis), grouped by paid month; MRR from active subscriptions (YEARLY ÷ 12). The revenue series is always the last 12 months, whatever the range filter.
 - **User** = staff `User` rows; **anggota** = `Member` rows. Shown separately.
 
 ## Backend — `apps/backend/src/modules/platform-dashboard/`
@@ -32,7 +32,7 @@ Response sections:
 
 | Key | Content |
 |-----|---------|
-| `performance.activity` | active tenants 7d/30d (distinct tenants with a `User.lastLoginAt` in window), transactions per day |
+| `performance.activity` | active tenants 7d/30d (distinct tenants with a `User.lastLoginAt` in window), recorded actions per day (`AuditLog` rows) |
 | `performance.technical` | per day: p50, p95, request count, 5xx rate |
 | `growth` | new tenants and new users per bucket (day for 30d/90d, month for 12m) |
 | `members` | cumulative `Member` count per bucket + total |
@@ -40,7 +40,7 @@ Response sections:
 | `attention[]` | `{ severity, kind, message, tenantId?, href? }` |
 | `revenue` | paid total per month, MRR, delta vs previous period |
 
-Attention rules: OVERDUE invoices; subscriptions with `nextBillingDate` ≤ 7d; tenants with no login ≥ 30d; 5xx rate spike vs trailing average; tenants near a volume quota; tenants with no region.
+Attention rules: overdue invoices (`status = OPEN` and `dueDate` in the past; the enum has no OVERDUE); subscriptions `PAST_DUE`; subscriptions with `nextBillingDate` ≤ 7d; tenants with no login ≥ 30d; 5xx rate ≥ 5% over the last 24h (min 20 requests); tenants with no region. Quota-proximity alerts are deferred (see out of scope).
 
 ### Tenant isolation
 
@@ -48,7 +48,7 @@ These queries are intentionally cross-tenant. They run inside `withoutTenantScop
 
 ## Schema (one migration)
 
-- `Tenant.province String?`, `Tenant.city String?` (code + name stored; static list of 38 provinces in `@siskop/types`).
+- `Tenant.province String?` (Kemendagri 2-digit code), `Tenant.city String?` (free-text name). The static list of 38 provinces lives in `@siskop/types`.
 - `RequestMetricHourly`: `hour DateTime`, `routeGroup String`, `count Int`, `errors5xx Int`, `p50Ms Int`, `p95Ms Int`; unique on `(hour, routeGroup)`. Platform-level, no `tenantId`.
 
 ## Request metrics
@@ -72,7 +72,7 @@ Middleware records duration + status per request into an in-memory buffer keyed 
 
 ## Out of scope (v1)
 
-GeoJSON map, email/push alerts, per-member region, report export.
+GeoJSON map, email/push alerts, per-member region, report export, quota-proximity alerts.
 
 ## Risks
 
