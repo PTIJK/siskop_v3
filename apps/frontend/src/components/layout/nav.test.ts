@@ -71,6 +71,7 @@ describe("buildNav", () => {
     expect(sections[0]?.label).toBe("Platform Admin");
     expect(sections[0]?.items.map((i) => i.href)).toEqual([
       "/platform/tenants",
+      "/platform/migration",
       "/platform/packages",
       "/platform/pricing",
       "/platform/invoices",

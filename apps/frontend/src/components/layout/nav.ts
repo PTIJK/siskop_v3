@@ -4,6 +4,7 @@ import {
   BookOpenCheck,
   CreditCard,
   FileText,
+  FileUp,
   Landmark,
   LayoutDashboard,
   Package as PackageIcon,
@@ -101,6 +102,7 @@ export const TENANT_NAV: readonly NavEntry[] = [
 
 export const PLATFORM_NAV: readonly NavEntry[] = [
   { id: "p-tenants", label: "Koperasi", href: "/platform/tenants", icon: Landmark, group: "platform" },
+  { id: "p-migration", label: "Migrasi koperasi", href: "/platform/migration", icon: FileUp, group: "platform" },
   { id: "p-packages", label: "Paket langganan", href: "/platform/packages", icon: PackageIcon, group: "platform" },
   { id: "p-pricing", label: "Harga dan paket", href: "/platform/pricing", icon: Tags, group: "platform" },
   { id: "p-invoices", label: "Faktur", href: "/platform/invoices", icon: Receipt, group: "platform" },
