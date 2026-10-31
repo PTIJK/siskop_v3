@@ -88,6 +88,9 @@ const AccountingBooksPage = lazy(() =>
 const LaporanPasarPage = lazy(() =>
   import("@/pages/reports/LaporanPasarPage").then((module) => ({ default: module.LaporanPasarPage }))
 );
+const PlatformDashboardPage = lazy(() =>
+  import("@/pages/platform/PlatformDashboardPage").then((module) => ({ default: module.PlatformDashboardPage }))
+);
 const PlatformTenantsPage = lazy(() =>
   import("@/pages/platform/PlatformTenantsPage").then((module) => ({ default: module.PlatformTenantsPage }))
 );
@@ -251,6 +254,7 @@ export default function App() {
                 <Route path='report' element={<SalesReportPage />} />
               </Route>
 
+              <Route path='/platform/dashboard' element={<PlatformDashboardPage />} />
               <Route path='/platform/tenants' element={<PlatformTenantsPage />} />
               <Route path='/platform/packages' element={<PlatformPackagesPage />} />
               <Route path='/platform/pricing' element={<PlatformPricingPage />} />
