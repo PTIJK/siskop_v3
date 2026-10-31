@@ -548,6 +548,10 @@ model Tenant {
   registrationNo             String               @unique
   type                       TenantType
   cooperativeType            String               @default("KSP")
+  // Kemendagri 2-digit province code (see PROVINCES in @siskop/types) and a free-text city.
+  // Null until a platform admin fills them in; the platform dashboard buckets those as "Belum diisi".
+  province                   String?
+  city                       String?
   logoUrl                    String?
   packageId                  String?
   package                    SubscriptionPackage? @relation(fields: [packageId], references: [id])
@@ -1839,4 +1843,19 @@ model IdempotencyKey {
 
   @@unique([tenantId, userId, key])
   @@index([tenantId, createdAt])
+}
+
+// Platform-level request telemetry (no tenantId): one row per (hour, route pattern).
+// p50/p95 are merged across flushes as count-weighted averages, so they are approximate.
+model RequestMetricHourly {
+  id         String   @id @default(cuid())
+  hour       DateTime
+  routeGroup String
+  count      Int
+  errors5xx  Int
+  p50Ms      Int
+  p95Ms      Int
+
+  @@unique([hour, routeGroup])
+  @@index([hour])
 }

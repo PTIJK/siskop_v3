@@ -9,6 +9,8 @@ export interface PlatformTenantSummary extends Tenant {
   packageId: string | null;
   packageName: string | null;
   nextBillingDate: string | null;
+  province: string | null;
+  city: string | null;
 }
 
 /**
@@ -27,6 +29,8 @@ export interface CreateTenantRequest {
   adminEmail: string;
   adminPassword: string;
   firstUnit: { type: CooperativeType; name: string };
+  province?: string;
+  city?: string;
 }
 
 /** Platform admin toggling a tenant's active status and/or subscription package. */
@@ -34,6 +38,8 @@ export interface UpdateTenantStatusRequest {
   isActive?: boolean;
   packageId?: string | null;
   nextBillingDate?: string | null;
+  province?: string | null;
+  city?: string | null;
 }
 
 /** Names the modules a SubscriptionPackage additionally entitles a tenant to. Base modules

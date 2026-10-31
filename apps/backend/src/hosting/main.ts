@@ -3,6 +3,7 @@ import express from "express";
 import { createApp } from "../app.js";
 import { db } from "../lib/db.js";
 import { firebaseHosting } from "./firebase.js";
+import { flushMetrics } from "../modules/platform-dashboard/request-metrics.js";
 
 const app = express();
 const api = createApp();
@@ -20,6 +21,7 @@ const server = app.listen(Number(process.env.PORT ?? 8080), "0.0.0.0", () => {
 
 process.on("SIGTERM", () => {
   server.close(() => {
-    void db.$disconnect().finally(() => process.exit(0));
+    // No flush timer on Cloud Run; persist what this instance buffered before it goes away.
+    void flushMetrics().finally(() => db.$disconnect()).finally(() => process.exit(0));
   });
 });

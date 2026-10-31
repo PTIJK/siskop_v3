@@ -4,6 +4,7 @@ import { createApp } from "../app.js";
 import { db } from "../lib/db.js";
 import { firebaseHosting } from "./firebase.js";
 import { contaboIngress } from "./contabo-ingress.js";
+import { flushMetrics, startMetricsFlush } from "../modules/platform-dashboard/request-metrics.js";
 
 if (process.env.SISKOP_HOSTING !== "contabo" || process.env.STORAGE_DRIVER !== "gcs" ||
     !process.env.SCHEDULER_OIDC_AUDIENCE || !process.env.CENTRAL_GATEWAY_SECRET || !process.env.SISKOP_RELEASE_ID) {
@@ -25,4 +26,6 @@ server.use((_error: unknown, _req: express.Request, res: express.Response, _next
   res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "SISKOP gateway required" } });
 });
 const listener = server.listen(Number(process.env.PORT ?? 8080), "0.0.0.0");
-process.on("SIGTERM", () => listener.close(() => { void db.$disconnect().finally(() => process.exit(0)); }));
+// The Contabo container is always on, so a buffered-metrics flush timer is safe here (unlike Cloud Run).
+startMetricsFlush();
+process.on("SIGTERM", () => listener.close(() => { void flushMetrics().finally(() => db.$disconnect()).finally(() => process.exit(0)); }));

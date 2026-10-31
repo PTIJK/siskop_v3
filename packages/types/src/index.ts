@@ -25,4 +25,5 @@ export * from "./collections.js";
 export * from "./charges.js";
 export * from "./pricing.js";
 export * from "./billing.js";
+export * from "./platform-dashboard.js";
 export * from "./migration.js";

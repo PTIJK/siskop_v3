@@ -81,7 +81,7 @@ export function AppLayout() {
   // real permissions for it. Confine them to /platform/* (+ their own /profile).
   const allowedForPlatformAdmin = location.pathname.startsWith("/platform") || location.pathname === "/profile";
   if (isPlatformAdmin && !allowedForPlatformAdmin) {
-    return <Navigate to="/platform/tenants" replace />;
+    return <Navigate to="/platform/dashboard" replace />;
   }
 
   return (

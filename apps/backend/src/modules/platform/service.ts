@@ -49,7 +49,9 @@ export async function listTenants(): Promise<PlatformTenantSummary[]> {
     userCount: t._count.users,
     packageId: t.packageId,
     packageName: t.package?.name ?? null,
-    nextBillingDate: t.nextBillingDate?.toISOString() ?? null
+    nextBillingDate: t.nextBillingDate?.toISOString() ?? null,
+    province: t.province,
+    city: t.city
   }));
 }
 
@@ -77,6 +79,10 @@ export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
 
       const superAdminRole = roles.find((r) => r.name === "Super Admin");
       if (!superAdminRole) throw new Error("Super Admin role was not seeded");
+
+      if (data.province || data.city) {
+        await tx.tenant.update({ where: { id: tenant.id }, data: { province: data.province ?? null, city: data.city ?? null } });
+      }
 
       await tx.user.create({
         data: {
@@ -113,7 +119,9 @@ export async function updateTenantStatus(tenantId: string, data: UpdateTenantSta
     data: {
       ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       ...(data.packageId !== undefined ? { packageId: data.packageId } : {}),
-      ...(data.nextBillingDate !== undefined ? { nextBillingDate: data.nextBillingDate } : {})
+      ...(data.nextBillingDate !== undefined ? { nextBillingDate: data.nextBillingDate } : {}),
+      ...(data.province !== undefined ? { province: data.province } : {}),
+      ...(data.city !== undefined ? { city: data.city } : {})
     }
   });
   return toPublicTenant(updated);

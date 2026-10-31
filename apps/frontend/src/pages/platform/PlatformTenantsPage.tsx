@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { PROVINCES } from "@siskop/types";
 import type { CooperativeType, PlatformTenantSummary, SubscriptionPackage } from "@siskop/types";
 import { apiFetch, apiPost, apiPut, ApiRequestError } from "@/api/client";
 import { useAuth } from "@/stores/auth";
@@ -32,6 +33,8 @@ const schema = z.object({
     .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, "Hanya huruf kecil, angka, dan tanda hubung"),
   registrationNo: z.string().min(1, "Nomor badan hukum wajib diisi"),
   address: z.string().min(1, "Alamat wajib diisi"),
+  province: z.string().optional(),
+  city: z.string().optional(),
   type: z.enum(["KONVENSIONAL", "SYARIAH"]),
   cooperativeType: z.string().min(1, "Jenis usaha wajib diisi"),
   firstUnitType: z.enum(UNIT_TYPES),
@@ -47,6 +50,8 @@ const DEFAULTS: FormValues = {
   slug: "",
   registrationNo: "",
   address: "",
+  province: "",
+  city: "",
   type: "KONVENSIONAL",
   cooperativeType: "KSP",
   firstUnitType: "KSP",
@@ -65,6 +70,8 @@ export function PlatformTenantsPage() {
   const [subscribing, setSubscribing] = useState<PlatformTenantSummary | null>(null);
   const [managePackageId, setManagePackageId] = useState("");
   const [manageIsActive, setManageIsActive] = useState(true);
+  const [manageProvince, setManageProvince] = useState("");
+  const [manageCity, setManageCity] = useState("");
   const [manageNextBillingDate, setManageNextBillingDate] = useState("");
   const [manageError, setManageError] = useState("");
   const [manageSaving, setManageSaving] = useState(false);
@@ -107,6 +114,8 @@ export function PlatformTenantsPage() {
     setManagePackageId(tenant.packageId ?? "");
     setManageIsActive(tenant.isActive);
     setManageNextBillingDate(tenant.nextBillingDate ? tenant.nextBillingDate.slice(0, 10) : "");
+    setManageProvince(tenant.province ?? "");
+    setManageCity(tenant.city ?? "");
   };
 
   const onManageSubmit = async (e: React.FormEvent) => {
@@ -118,7 +127,9 @@ export function PlatformTenantsPage() {
       await apiPut(`/platform/tenants/${managing.id}`, {
         packageId: managePackageId || null,
         isActive: manageIsActive,
-        nextBillingDate: manageNextBillingDate || null
+        nextBillingDate: manageNextBillingDate || null,
+        province: manageProvince || null,
+        city: manageCity.trim() || null
       });
       toast({ title: "Koperasi diperbarui" });
       setManaging(null);
@@ -138,6 +149,8 @@ export function PlatformTenantsPage() {
         slug: v.slug,
         registrationNo: v.registrationNo,
         address: v.address,
+        ...(v.province ? { province: v.province } : {}),
+        ...(v.city?.trim() ? { city: v.city.trim() } : {}),
         type: v.type,
         cooperativeType: v.cooperativeType,
         adminName: v.adminName,
@@ -241,6 +254,27 @@ export function PlatformTenantsPage() {
                 <Label>Alamat *</Label>
                 <Textarea rows={2} placeholder="Jl. Merdeka No. 1, Jakarta" {...register("address")} />
                 {errors.address && <p className="text-xs text-destructive">{errors.address.message}</p>}
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 sm:col-span-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="createProvince">Provinsi</Label>
+                  <Select value={values.province || "none"} onValueChange={(v) => setValue("province", v === "none" ? "" : v)}>
+                    <SelectTrigger id="createProvince">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Belum diisi</SelectItem>
+                      {PROVINCES.map((p) => (
+                        <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="createCity">Kota/Kabupaten</Label>
+                  <Input id="createCity" placeholder="Surabaya" {...register("city")} />
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -350,6 +384,27 @@ export function PlatformTenantsPage() {
                     ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="manageProvince">Provinsi</Label>
+                <Select value={manageProvince || "none"} onValueChange={(v) => setManageProvince(v === "none" ? "" : v)}>
+                  <SelectTrigger id="manageProvince">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Belum diisi</SelectItem>
+                    {PROVINCES.map((p) => (
+                      <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="manageCity">Kota/Kabupaten</Label>
+                <Input id="manageCity" value={manageCity} onChange={(e) => setManageCity(e.target.value)} placeholder="Surabaya" />
+              </div>
             </div>
 
             <div className="space-y-1.5">

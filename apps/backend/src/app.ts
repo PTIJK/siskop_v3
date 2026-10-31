@@ -1,3 +1,4 @@
+import { requestMetrics } from "./modules/platform-dashboard/request-metrics.js";
 import { tenantAccessRoutes } from "./modules/tenant-access/routes.js";
 import { onboardingRoutes } from "./modules/onboarding/routes.js";
 import { tenantEnforcement } from "./middleware/enforcement.js";
@@ -73,6 +74,9 @@ export function createApp(): Express {
     res.locals.meta = meta();
     next();
   });
+
+  // Latency and 5xx telemetry for the platform dashboard; buffered in memory, flushed by main.ts.
+  app.use(requestMetrics());
 
   // Served on both paths deliberately: "/health" is the root-level liveness
   // probe (docker/compose healthchecks), while "/api/health" is what the
