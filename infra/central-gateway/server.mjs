@@ -3,6 +3,7 @@ import https from 'node:https';
 import { createHmac } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 
 const excluded = new Set(['host', 'connection', 'keep-alive', 'proxy-authorization', 'proxy-authenticate', 'transfer-encoding', 'trailer', 'upgrade', 'te', 'forwarded']);
 
@@ -21,6 +22,15 @@ export function createCentralGateway({ apiOrigin, secret, development = false })
     if ((!url.startsWith('/api/') && !url.startsWith('/uploads/')) || url.includes('\\') || /[\r\n]/.test(url)) {
       res.writeHead(404); res.end(); return;
     }
+    const started = performance.now();
+    const elapsed = () => Math.round(performance.now() - started);
+    const timing = {};
+    res.once('finish', () => {
+      const totalMs = elapsed();
+      if (totalMs >= 1000) console.warn(JSON.stringify({
+        severity: 'WARNING', event: 'gateway_slow_request', status: res.statusCode, ...timing, totalMs
+      }));
+    });
     const headers = {};
     const hopHeaders = new Set(String(req.headers.connection ?? '').toLowerCase().split(',').map(x => x.trim()));
     for (const [name, value] of Object.entries(req.headers)) {
@@ -32,8 +42,11 @@ export function createCentralGateway({ apiOrigin, secret, development = false })
     headers['x-siskop-central-signature'] = createHmac('sha256', secret).update(['central', time, req.method, url].join('\n')).digest('base64url');
     const upstream = (origin.protocol === 'https:' ? https : http).request({
       protocol: origin.protocol, hostname: origin.hostname, port: origin.port,
+      // The fixed Contabo ingress publishes IPv4 only; avoid waiting on unused AAAA lookups.
+      family: 4,
       method: req.method, path: url, headers, timeout: 60_000
     }, response => {
+      timing.headersMs = elapsed();
       const output = { ...response.headers, 'cache-control': 'private, no-store' };
       const responseHopHeaders = new Set(String(response.headers.connection ?? '').toLowerCase().split(',').map(x => x.trim()));
       for (const name of Object.keys(output)) if (excluded.has(name) || responseHopHeaders.has(name)) delete output[name];
@@ -41,6 +54,15 @@ export function createCentralGateway({ apiOrigin, secret, development = false })
       res.writeHead(response.statusCode ?? 502, output);
       response.on('error', () => res.destroy());
       response.pipe(res);
+    });
+    upstream.once('socket', socket => {
+      timing.socketMs = elapsed();
+      timing.reusedSocket = upstream.reusedSocket;
+      if (!upstream.reusedSocket) {
+        socket.once('lookup', () => { timing.dnsMs = elapsed(); });
+        socket.once('connect', () => { timing.tcpMs = elapsed(); });
+        socket.once('secureConnect', () => { timing.tlsMs = elapsed(); });
+      }
     });
     let bytes = 0;
     req.on('data', chunk => {
