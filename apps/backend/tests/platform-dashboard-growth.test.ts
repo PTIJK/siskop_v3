@@ -28,6 +28,17 @@ describe("getGrowth", () => {
     expect(series.find((p) => p.bucket === "2026-10-31")).toMatchObject({ tenants: 0, users: 0 });
   });
 
+  it("buckets by Jakarta calendar day", async () => {
+    const s = await setupTenant();
+    // 2026-10-31 01:00 WIB
+    await backdate("Tenant", s.user.tenantId, "2026-10-30T18:00:00Z");
+
+    const series = await getGrowth("30d", NOW);
+
+    expect(series.find((p) => p.bucket === "2026-10-31")?.tenants).toBe(1);
+    expect(series.find((p) => p.bucket === "2026-10-30")?.tenants).toBe(0);
+  });
+
   it("does not count platform admins as users", async () => {
     const session = await createPlatformAdminSession();
     await backdate("User", session.user.tenantId, "2026-10-30T08:00:00Z");

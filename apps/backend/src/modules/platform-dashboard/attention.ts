@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { AttentionItem, AttentionSeverity } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { withoutTenantScope } from "../../lib/tenant-scope.js";
+import { utcParam } from "./counts.js";
 
 const DAY_MS = 86_400_000;
 const MAX_OVERDUE_LISTED = 10;
@@ -51,10 +52,10 @@ export async function getAttention(now: Date): Promise<AttentionItem[]> {
     ),
     db.$queryRaw<{ name: string }[]>(Prisma.sql`
       SELECT t.name FROM "Tenant" t
-      WHERE t."isActive" = true AND t."createdAt" < ${idleSince}
+      WHERE t."isActive" = true AND t."createdAt" < ${utcParam(idleSince)}
         AND NOT EXISTS (
           SELECT 1 FROM "User" u
-          WHERE u."tenantId" = t.id AND u."isPlatformAdmin" = false AND u."lastLoginAt" >= ${idleSince}
+          WHERE u."tenantId" = t.id AND u."isPlatformAdmin" = false AND u."lastLoginAt" >= ${utcParam(idleSince)}
         )
       ORDER BY t.name LIMIT 50
     `),

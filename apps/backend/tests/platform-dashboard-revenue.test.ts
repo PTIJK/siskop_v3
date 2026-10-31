@@ -56,6 +56,19 @@ describe("getRevenue", () => {
     expect(r.deltaPct).toBe(100);
   });
 
+  it("buckets payments by Jakarta calendar month", async () => {
+    const paid = await makeSubscribedTenant({ tag: "REVJ", status: "ACTIVE", invoice: { status: "PAID" } });
+    // 2026-11-01 03:00 WIB
+    await db.payment.create({
+      data: { tenantId: paid.tenant.id, invoiceId: paid.invoice!.id, method: "VA", amount: "100000", paidAt: new Date("2026-10-31T20:00:00Z") }
+    });
+
+    const r = await getRevenue(new Date("2026-11-01T01:00:00Z"));
+
+    expect(r.series.at(-1)).toEqual({ month: "2026-11", amount: "100000.00" });
+    expect(r.series.at(-2)).toEqual({ month: "2026-10", amount: "0.00" });
+  });
+
   it("reports MRR from ACTIVE subscriptions only", async () => {
     const active = await makeSubscribedTenant({ tag: "MRRA", status: "ACTIVE", invoice: null });
     await makeSubscribedTenant({ tag: "MRRB", status: "PENDING_PAYMENT", invoice: null });

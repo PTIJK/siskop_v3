@@ -1,8 +1,8 @@
 import { Prisma } from "@prisma/client";
 import type { ActivityPoint, DashboardRange, TechnicalPoint } from "@siskop/types";
 import { db } from "../../lib/db.js";
-import { buildBuckets, granularityOf, type Bucket, type Granularity } from "./buckets.js";
-import { countPerBucket } from "./counts.js";
+import { buildBuckets, granularityOf, jakartaWallClock, type Bucket, type Granularity } from "./buckets.js";
+import { countPerBucket, utcParam } from "./counts.js";
 
 const DAY_MS = 86_400_000;
 
@@ -14,12 +14,12 @@ interface MetricRow {
   p95Ms: number;
 }
 
-/** Folds hourly rows into the range's buckets. Percentiles are count-weighted averages, so approximate. */
+/** Folds hourly rows into the range's Asia/Jakarta buckets. Percentiles are count-weighted averages, so approximate. */
 export function aggregateTechnical(rows: MetricRow[], buckets: Bucket[], granularity: Granularity): TechnicalPoint[] {
   const sliceLength = granularity === "day" ? 10 : 7;
   const acc = new Map<string, { requests: number; errors: number; p50: number; p95: number }>();
   for (const r of rows) {
-    const key = r.hour.toISOString().slice(0, sliceLength);
+    const key = jakartaWallClock(r.hour).toISOString().slice(0, sliceLength);
     const a = acc.get(key) ?? { requests: 0, errors: 0, p50: 0, p95: 0 };
     a.requests += r.count;
     a.errors += r.errors5xx;
@@ -43,7 +43,7 @@ export function aggregateTechnical(rows: MetricRow[], buckets: Bucket[], granula
 async function activeTenantsSince(since: Date): Promise<number> {
   const [row] = await db.$queryRaw<{ n: bigint }[]>(Prisma.sql`
     SELECT COUNT(DISTINCT "tenantId") AS n FROM "User"
-    WHERE "isPlatformAdmin" = false AND "lastLoginAt" >= ${since}
+    WHERE "isPlatformAdmin" = false AND "lastLoginAt" >= ${utcParam(since)}
   `);
   return Number(row?.n ?? 0);
 }

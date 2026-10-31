@@ -3,6 +3,7 @@ import type { RevenueSummary } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import { monthBuckets } from "./buckets.js";
+import { jakartaColumn, utcParam } from "./counts.js";
 
 const ZERO = new Prisma.Decimal(0);
 const money = (d: Prisma.Decimal) => d.toFixed(2);
@@ -18,17 +19,17 @@ export function mrrOf(subs: { billingCycle: "MONTHLY" | "YEARLY"; amountPerCycle
   return subs.reduce((sum, s) => sum.plus(s.billingCycle === "YEARLY" ? s.amountPerCycle.div(12) : s.amountPerCycle), ZERO);
 }
 
-/** Cash-basis revenue: payments recorded against PAID subscription invoices, per month, last 12 months. */
+/** Cash-basis revenue: payments recorded against PAID subscription invoices, per Asia/Jakarta month, last 12 months. */
 export async function getRevenue(now: Date): Promise<RevenueSummary> {
   const months = monthBuckets(now, 12);
   const since = months[0]!.start;
 
   const [rows, subs] = await Promise.all([
     db.$queryRaw<{ bucket: string; total: string }[]>(Prisma.sql`
-      SELECT to_char(date_trunc('month', p."paidAt"), 'YYYY-MM') AS bucket, SUM(p.amount)::text AS total
+      SELECT to_char(date_trunc('month', ${jakartaColumn(Prisma.sql`p."paidAt"`)}), 'YYYY-MM') AS bucket, SUM(p.amount)::text AS total
       FROM "Payment" p
       JOIN "Invoice" i ON i.id = p."invoiceId"
-      WHERE i.status = 'PAID' AND p."paidAt" >= ${since}
+      WHERE i.status = 'PAID' AND p."paidAt" >= ${utcParam(since)}
       GROUP BY 1
     `),
     withoutTenantScope(async () =>

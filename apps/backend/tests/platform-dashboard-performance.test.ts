@@ -27,6 +27,16 @@ describe("aggregateTechnical", () => {
     });
   });
 
+  it("buckets an hour by its Jakarta calendar day", () => {
+    const points = aggregateTechnical(
+      [{ hour: new Date("2026-10-30T18:00:00Z"), count: 5, errors5xx: 0, p50Ms: 10, p95Ms: 20 }],
+      buckets,
+      "day"
+    );
+    expect(points.find((p) => p.bucket === "2026-10-31")?.requests).toBe(5);
+    expect(points.find((p) => p.bucket === "2026-10-30")?.requests).toBe(0);
+  });
+
   it("leaves latency null where there were no requests", () => {
     const points = aggregateTechnical([], buckets, "day");
     expect(points).toHaveLength(30);

@@ -20,6 +20,7 @@ One page at `/platform/dashboard` giving the SISKOP owner a view of how the SaaS
 - **Performance** = both activity metrics and technical metrics (p50/p95 latency, 5xx rate). Technical series start empty and fill from deploy.
 - **Revenue** = `Invoice` with status `PAID` (cash basis), grouped by paid month; MRR from active subscriptions (YEARLY ÷ 12). The revenue series is always the last 12 months, whatever the range filter.
 - **User** = staff `User` rows; **anggota** = `Member` rows. Shown separately.
+- **Buckets** are Asia/Jakarta calendar days/months (UTC+7, no DST), like the rest of the app's reports. A bucket starts at Jakarta midnight; raw SQL shifts `timestamp` columns by `+ interval '7 hours'` before `date_trunc`.
 
 ## Backend — `apps/backend/src/modules/platform-dashboard/`
 
