@@ -72,6 +72,7 @@ describe("buildNav", () => {
     expect(sections[0]?.items.map((i) => i.href)).toEqual([
       "/platform/dashboard",
       "/platform/tenants",
+      "/platform/migration",
       "/platform/packages",
       "/platform/pricing",
       "/platform/invoices",
