@@ -281,6 +281,35 @@ enum InvoiceStatus {
   VOID
 }
 
+enum ReferralPartnerStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum ReferralPartnerSource {
+  APPLICATION
+  ADMIN
+}
+
+enum TenantReferralSource {
+  REGISTRATION
+  ADMIN
+}
+
+enum ReferralCommissionStatus {
+  ACCRUED
+  PAID
+  VOID
+}
+
+enum ReferralPayoutStatus {
+  DRAFT
+  PAID
+  CANCELLED
+}
+
 // ── PRICING V2 catalog (platform-level: no tenantId, read-only to tenants) ────
 // These live tables are the owner's working draft. Publishing writes an
 // immutable PricingVersion snapshot; the engine reads only that snapshot.
@@ -353,6 +382,9 @@ model PricingSetting {
   // Owner input: bank transfer text shown on invoices.
   paymentInstructions            String?
   oneFreeTenantPerRegistrationNo Boolean        @default(false)
+  // Prefilled on a new referral partner; existing partners and referrals keep their own.
+  referralDefaultRate            Decimal        @default(0.2) @db.Decimal(5, 4)
+  referralDefaultMonths          Int            @default(12)
   updatedAt                      DateTime       @updatedAt
 }
 
@@ -437,7 +469,8 @@ model Invoice {
   noticeStage    Int                @default(0)
   createdAt      DateTime           @default(now())
 
-  payments Payment[]
+  payments           Payment[]
+  referralCommission ReferralCommission?
 
   @@index([tenantId])
   @@index([status, dueDate])
@@ -454,6 +487,8 @@ model Payment {
   amount       Decimal  @db.Decimal(15, 2)
   paidAt       DateTime
 
+  referralCommission ReferralCommission?
+
   @@index([tenantId])
   @@index([invoiceId])
 }
@@ -467,6 +502,127 @@ model WebhookEvent {
   createdAt   DateTime  @default(now())
 
   @@unique([provider, eventId])
+}
+
+// ── REFERRAL PROGRAM (platform-level: never exposed through tenant APIs) ─────
+// A partner sells SISKOP and earns a % of what each referred koperasi pays
+// during its commission window. See docs/referral-program.md.
+
+model ReferralPartner {
+  id               String                @id @default(cuid())
+  // Null until approved; never reused, even after suspension.
+  code             String?               @unique
+  name             String
+  email            String
+  phone            String
+  city             String?
+  province         String?
+  ktpNo            String
+  npwp             String?
+  bankName         String
+  bankAccountNo    String
+  bankAccountName  String
+  salesPlan        String?
+  termsVersion     String?
+  termsAcceptedAt  DateTime?
+  // Fraction (0.2000 = 20%). Applies to koperasi referred from now on.
+  commissionRate   Decimal               @db.Decimal(5, 4)
+  commissionMonths Int
+  status           ReferralPartnerStatus
+  source           ReferralPartnerSource
+  rejectReason     String?
+  reviewedById     String?
+  reviewedAt       DateTime?
+  notes            String?
+  createdById      String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  referrals   TenantReferral[]
+  commissions ReferralCommission[]
+  payouts     ReferralPayout[]
+
+  @@index([status])
+  @@index([email])
+  @@index([phone])
+}
+
+// One partner per tenant. Rate and months are snapshotted here so a later
+// change to the partner's rate never rewrites a deal already signed.
+model TenantReferral {
+  id                  String               @id @default(cuid())
+  tenantId            String               @unique
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  partnerId           String
+  partner             ReferralPartner      @relation(fields: [partnerId], references: [id])
+  codeUsed            String
+  rate                Decimal              @db.Decimal(5, 4)
+  months              Int
+  attributedAt        DateTime
+  // Invoices paid before this instant earn commission.
+  windowEndsAt        DateTime
+  source              TenantReferralSource
+  flaggedSelfReferral Boolean              @default(false)
+  createdById         String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  commissions ReferralCommission[]
+
+  @@index([partnerId])
+}
+
+// At most one commission per invoice. Restrict deletes: a tenant whose
+// payments earned commission keeps that financial history.
+model ReferralCommission {
+  id         String                   @id @default(cuid())
+  partnerId  String
+  partner    ReferralPartner          @relation(fields: [partnerId], references: [id])
+  tenantId   String
+  tenant     Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  referralId String
+  referral   TenantReferral           @relation(fields: [referralId], references: [id], onDelete: Restrict)
+  invoiceId  String                   @unique
+  invoice    Invoice                  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  paymentId  String                   @unique
+  payment    Payment                  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  // Invoice subtotal, before VAT.
+  baseAmount Decimal                  @db.Decimal(15, 2)
+  rate       Decimal                  @db.Decimal(5, 4)
+  amount     Decimal                  @db.Decimal(15, 2)
+  status     ReferralCommissionStatus @default(ACCRUED)
+  voidReason String?
+  payoutId   String?
+  payout     ReferralPayout?          @relation(fields: [payoutId], references: [id])
+  accruedAt  DateTime
+
+  @@index([partnerId, status])
+  @@index([tenantId])
+  @@index([payoutId])
+}
+
+model ReferralPayout {
+  id          String               @id @default(cuid())
+  // PO-YYYYMM-NNNN
+  number      String               @unique
+  partnerId   String
+  partner     ReferralPartner      @relation(fields: [partnerId], references: [id])
+  // Covers ACCRUED commissions accrued on or before this instant.
+  periodEnd   DateTime
+  grossAmount Decimal              @db.Decimal(15, 2)
+  taxWithheld Decimal              @default(0) @db.Decimal(15, 2)
+  netAmount   Decimal              @db.Decimal(15, 2)
+  status      ReferralPayoutStatus @default(DRAFT)
+  transferRef String?
+  paidAt      DateTime?
+  paidById    String?
+  createdById String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  commissions ReferralCommission[]
+
+  @@index([partnerId, status])
 }
 
 // Platform recovery ledger for Firebase creates; contains no passwords or tokens.
@@ -558,6 +714,8 @@ model Tenant {
   subscription               TenantSubscription?
   invoices                   Invoice[]
   payments                   Payment[]
+  referral                   TenantReferral?
+  referralCommissions        ReferralCommission[]
   isActive                   Boolean              @default(true)
   nextBillingDate            DateTime?
   billingReminder30SentAt    DateTime?
@@ -1181,7 +1339,7 @@ model Loan {
   rateNote             String?
   // General remarks (e.g. migration provenance); never a rate-override reason.
   notes                String?
-  maturityDate        DateTime?            @db.Date
+  maturityDate         DateTime?            @db.Date
 
   payments     LoanPayment[]
   installments LoanInstallment[]

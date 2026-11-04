@@ -12,6 +12,8 @@ import { seedJson } from "./pricing-fixture.js";
 export const BILLING_PREFIX = "BILL-TEST";
 
 export async function resetCatalog() {
+  // Commissions hold Restrict FKs to invoices and tenants.
+  await withoutTenantScope(async () => db.referralCommission.deleteMany({}));
   await withoutTenantScope(async () => db.invoice.deleteMany({}));
   await withoutTenantScope(async () => db.tenantSubscription.deleteMany({}));
   await db.packageFeature.deleteMany({});
@@ -32,6 +34,9 @@ export async function seedCatalog({ withVat = false }: { withVat?: boolean } = {
 }
 
 export async function cleanBilling() {
+  await withoutTenantScope(async () =>
+    db.referralCommission.deleteMany({ where: { tenant: { registrationNo: { startsWith: BILLING_PREFIX } } } })
+  );
   await db.notification.deleteMany({ where: { relatedTenant: { registrationNo: { startsWith: BILLING_PREFIX } } } });
   await db.tenant.deleteMany({ where: { registrationNo: { startsWith: BILLING_PREFIX } } });
 }
