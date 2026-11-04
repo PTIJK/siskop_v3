@@ -1,34 +1,10 @@
-import { Router, type Request, type Response, type NextFunction } from "express";
-import { rateLimit } from "express-rate-limit";
-import { ErrorCode } from "@siskop/types";
+import { Router } from "express";
 import { forbidden } from "../../lib/errors.js";
+import { handle, limiter, publicJsonGuard } from "../../lib/public-guards.js";
 import { clearRefreshCookie, setRefreshCookie } from "../auth/refresh-cookie.js";
 import { selectionEnabled } from "../tenant-access/config.js";
-import { trustedRequestOrigin } from "../tenant-domains/middleware.js";
 import { clearRegistrationCookie, setRegistrationCookie, tenantFromRegistrationCookie } from "./cookie.js";
 import { checkReferralCode, firebaseSignIn, register, status } from "./service.js";
-
-function handle(fn: (req: Request, res: Response) => Promise<void>) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    void fn(req, res).catch(next);
-  };
-}
-
-function limiter(limit: number, windowMs = 60_000) {
-  return rateLimit({
-    windowMs,
-    limit,
-    standardHeaders: "draft-7",
-    legacyHeaders: false,
-    handler: (_req, res) => {
-      res.status(429).json({
-        success: false,
-        error: { code: ErrorCode.RATE_LIMIT, message: "Terlalu banyak percobaan. Coba lagi sebentar." },
-        meta: res.locals.meta
-      });
-    }
-  });
-}
 
 /**
  * Public registration and the pre-activation status page. Prices come from
@@ -37,33 +13,7 @@ function limiter(limit: number, windowMs = 60_000) {
  */
 export function onboardingRoutes(): Router {
   const router = Router();
-  router.use((_req, res, next) => {
-    res.set("Cache-Control", "no-store");
-    next();
-  });
-  router.use((req, _res, next) => {
-    if (req.method !== "GET") {
-      if (!req.is("application/json")) {
-        next(forbidden("JSON required"));
-        return;
-      }
-      const origin = req.get("origin");
-      const allowed = [trustedRequestOrigin(req), process.env.PUBLIC_APP_URL, ...(process.env.CORS_ORIGIN ?? "").split(",")]
-        .filter(Boolean)
-        .map((url) => {
-          try {
-            return new URL(url!).origin;
-          } catch {
-            return "";
-          }
-        });
-      if (origin && !allowed.includes(origin)) {
-        next(forbidden("Origin not allowed"));
-        return;
-      }
-    }
-    next();
-  });
+  router.use(...publicJsonGuard());
 
   router.post(
     "/register",

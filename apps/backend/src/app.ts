@@ -26,6 +26,7 @@ import { publicPricingRoutes } from "./modules/pricing/routes.js";
 import { usersRoutes } from "./modules/users/routes.js";
 import { reportsRoutes } from "./modules/reports/routes.js";
 import { platformRoutes } from "./modules/platform/routes.js";
+import { partnerPublicRoutes } from "./modules/referrals/routes.js";
 import { ksuRoutes } from "./modules/ksu/routes.js";
 import { konsumenRoutes } from "./modules/konsumen/product.routes.js";
 import { schedulerRoutes } from "./modules/scheduler/routes.js";
@@ -91,6 +92,7 @@ export function createApp(): Express {
   });
 
   app.use("/api/onboarding", onboardingRoutes());
+  app.use("/api/partners", partnerPublicRoutes());
   app.use("/api/webhooks/payments", paymentWebhookRoutes());
   app.get("/api/workspace", (req, res) => {
     res.set("Cache-Control", "private, no-store");
