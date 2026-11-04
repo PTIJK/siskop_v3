@@ -2,6 +2,8 @@ import { useEffect } from "react";
 
 const titles: Record<string, string> = {
   "/": "SISKOP — Koperasi maju. Tumbuh bersama.",
+  "/mitra": "Program mitra — SISKOP",
+  "/mitra/daftar": "Daftar jadi mitra — SISKOP",
   "/register": "Daftarkan koperasi — SISKOP",
   "/checkout": "Pembayaran koperasi — SISKOP",
   "/checkout/resume": "Lanjutkan pendaftaran — SISKOP",

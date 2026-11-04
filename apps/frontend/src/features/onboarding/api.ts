@@ -28,6 +28,7 @@ async function publicCall<T>(url: string, body?: unknown): Promise<T> {
 }
 
 export const onboardingApi = <T>(path: string, body?: unknown) => publicCall<T>(`/api/onboarding${path}`, body);
+export const partnersApi = <T>(path: string, body?: unknown) => publicCall<T>(`/api/partners${path}`, body);
 export const pricingApi = <T>(path: string, body?: unknown) => publicCall<T>(`/api/public/pricing${path}`, body);
 
 /** The published catalog: public packages, features, add-ons, support plans, VAT rate. Prices exclude VAT. */

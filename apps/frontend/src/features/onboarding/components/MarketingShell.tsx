@@ -90,6 +90,7 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
       <footer className='marketing-footer content-width'>
         <Brand />
         <p>Tumbuh bersama, dikelola lebih baik.</p>
+        {workspace ? <a href={`${central}/mitra`}>Jadi mitra</a> : <Link to='/mitra'>Jadi mitra</Link>}
         {workspace ? <a href={`${central}/checkout/resume`}>Lanjutkan pendaftaran</a> : <Link to='/checkout/resume'>Lanjutkan pendaftaran</Link>}
       </footer>
     </div>

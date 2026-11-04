@@ -8,6 +8,8 @@ const StatusPage = lazy(() => import("./pages/StatusPage"));
 const WorkspaceEntry = lazy(() =>
   import("./components/WorkspaceEntry").then((module) => ({ default: module.WorkspaceEntry }))
 );
+const PartnerProgramPage = lazy(() => import("./pages/PartnerPages").then((module) => ({ default: module.PartnerProgramPage })));
+const PartnerApplyPage = lazy(() => import("./pages/PartnerPages"));
 const AuthPage = lazy(() => import("./pages/AuthPage"));
 
 /** The single router integration point. Pass the existing tenant login unchanged. */
@@ -16,6 +18,8 @@ export function onboardingRoutes(tenantLogin: ReactNode) {
   return (
     <>
       <Route path='/' element={tenantHost ? <Navigate to='/dashboard' replace /> : <LandingPage />} />
+      <Route path='/mitra' element={<PartnerProgramPage />} />
+      <Route path='/mitra/daftar' element={<PartnerApplyPage />} />
       <Route path='/register' element={<RegisterPage />} />
       {/* Registration status: the invoice to pay, or "active" for a free koperasi. */}
       <Route path='/checkout' element={<StatusPage />} />

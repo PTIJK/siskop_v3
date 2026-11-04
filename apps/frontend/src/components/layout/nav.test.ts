@@ -76,6 +76,7 @@ describe("buildNav", () => {
       "/platform/packages",
       "/platform/pricing",
       "/platform/invoices",
+      "/platform/partners",
       "/platform/admins"
     ]);
   });
