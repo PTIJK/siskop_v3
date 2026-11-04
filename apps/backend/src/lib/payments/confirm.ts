@@ -4,6 +4,7 @@ import { db } from "../db.js";
 import { writePricingAudit } from "../pricing/audit.js";
 import { addCycle, billingPeriod } from "../pricing/billing-dates.js";
 import { clearEntitlementCache } from "../pricing/entitlements.js";
+import { accrueCommission } from "../referrals/accrue.js";
 import { withoutTenantScope } from "../tenant-scope.js";
 import { findBillingContact, sendReceiptEmail } from "./emails.js";
 
@@ -63,6 +64,7 @@ export async function confirmPayment(invoiceId: string, options: ConfirmPaymentO
         }
       });
       const paid = await tx.invoice.update({ where: { id: invoiceId }, data: { status: "PAID" } });
+      await accrueCommission(tx, { invoice: paid, payment, actorId: options.confirmedBy });
 
       let startsAt = sub.startsAt;
       let nextBillingDate = sub.nextBillingDate;

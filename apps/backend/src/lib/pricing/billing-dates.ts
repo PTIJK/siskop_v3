@@ -7,7 +7,11 @@ import type { BillingCycle } from "@siskop/types";
  * to Mar 28 for good.
  */
 export function addCycle(from: Date, cycle: BillingCycle, anchorDay: number = from.getUTCDate()): Date {
-  const months = cycle === "YEARLY" ? 12 : 1;
+  return addMonths(from, cycle === "YEARLY" ? 12 : 1, anchorDay);
+}
+
+/** `addCycle` for any number of months, with the same short-month clamping. */
+export function addMonths(from: Date, months: number, anchorDay: number = from.getUTCDate()): Date {
   const target = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + months, 1));
   const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
   target.setUTCDate(Math.min(anchorDay, lastDay));
