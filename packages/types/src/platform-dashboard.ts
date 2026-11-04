@@ -99,7 +99,8 @@ export interface AttentionItem {
     | "BILLING_DUE_SOON"
     | "TENANT_INACTIVE"
     | "ERROR_RATE"
-    | "TENANT_NO_REGION";
+    | "TENANT_NO_REGION"
+    | "PARTNER_APPLICATIONS";
   message: string;
   /** In-app route to act on it. */
   href?: string;
@@ -123,6 +124,19 @@ export interface RevenueSummary {
   mrr: string;
 }
 
+/** Referral program totals. Money is a decimal string, 2 places; "this month" is the Asia/Jakarta calendar month. */
+export interface ReferralSummary {
+  activePartners: number;
+  pendingApplications: number;
+  referredTenants: number;
+  /** Commissionable base (invoice subtotal before VAT) of commissions not voided. */
+  referredRevenueThisMonth: string;
+  referredRevenueTotal: string;
+  commissionThisMonth: string;
+  /** Accrued and not yet paid out, drafts included. */
+  commissionOutstanding: string;
+}
+
 export interface PlatformDashboard {
   range: DashboardRange;
   generatedAt: string;
@@ -138,4 +152,5 @@ export interface PlatformDashboard {
   regions: RegionRow[];
   attention: AttentionItem[];
   revenue: RevenueSummary;
+  referrals: ReferralSummary;
 }

@@ -38,7 +38,7 @@ export async function getAttention(now: Date): Promise<AttentionItem[]> {
   const soon = new Date(now.getTime() + 7 * DAY_MS);
 
   const overdueWhere = { status: "OPEN" as const, dueDate: { lt: now } };
-  const [overdue, overdueTotal, pastDue, dueSoon, idle, noRegion, metrics] = await Promise.all([
+  const [overdue, overdueTotal, pastDue, dueSoon, idle, noRegion, metrics, pendingPartners] = await Promise.all([
     withoutTenantScope(async () =>
       db.invoice.findMany({
         where: overdueWhere,
@@ -62,7 +62,8 @@ export async function getAttention(now: Date): Promise<AttentionItem[]> {
       ORDER BY t.name LIMIT 50
     `),
     db.tenant.count({ where: { province: null } }),
-    db.requestMetricHourly.aggregate({ where: { hour: { gte: day } }, _sum: { count: true, errors5xx: true } })
+    db.requestMetricHourly.aggregate({ where: { hour: { gte: day } }, _sum: { count: true, errors5xx: true } }),
+    withoutTenantScope(async () => db.referralPartner.count({ where: { status: "PENDING" } }))
   ]);
 
   const rateAlert = errorRateAlert(metrics._sum.count ?? 0, metrics._sum.errors5xx ?? 0);
@@ -117,6 +118,15 @@ export async function getAttention(now: Date): Promise<AttentionItem[]> {
       kind: "TENANT_INACTIVE",
       message: `${idleTotal} koperasi aktif tanpa login 30 hari terakhir: ${names}${more}`,
       href: "/platform/tenants"
+    });
+  }
+  if (pendingPartners > 0) {
+    items.push({
+      id: "partner-applications",
+      severity: "warning",
+      kind: "PARTNER_APPLICATIONS",
+      message: `${plural(pendingPartners, "pendaftaran mitra")} menunggu ditinjau`,
+      href: "/platform/partners"
     });
   }
   if (noRegion > 0) {
