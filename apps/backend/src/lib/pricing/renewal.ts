@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { BillingCycle, PricingQuote } from "@siskop/types";
 import { billingPeriod } from "./billing-dates.js";
 
-type Amounts = Pick<PricingQuote, "subtotal" | "taxRate" | "taxAmount" | "total">;
+type Amounts = Pick<PricingQuote, "subtotal" | "taxRate" | "taxAmount" | "total" | "supportYearly">;
 
 const round2 = (d: Prisma.Decimal) => d.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 
@@ -37,5 +37,5 @@ export function renewalAmounts(
   const support = supportDue ? new Prisma.Decimal(supportYearlyCost ?? 0) : new Prisma.Decimal(0);
   const subtotal = round2(sub.amountPerCycle.plus(support));
   const tax = taxRate === null ? new Prisma.Decimal(0) : round2(subtotal.times(new Prisma.Decimal(taxRate)));
-  return { subtotal: subtotal.toFixed(2), taxRate, taxAmount: tax.toFixed(2), total: subtotal.plus(tax).toFixed(2) };
+  return { subtotal: subtotal.toFixed(2), supportYearly: support.toFixed(2), taxRate, taxAmount: tax.toFixed(2), total: subtotal.plus(tax).toFixed(2) };
 }

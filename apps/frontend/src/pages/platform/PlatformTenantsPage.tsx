@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus } from "lucide-react";
 import { TenantSubscriptionDialog } from "./pricing/TenantSubscriptionDialog";
+import { AssignPartnerDialog } from "./partners/PartnerDialogs";
 
 const UNIT_TYPES = ["KSP", "KONSUMEN", "PRODUSEN", "JASA", "PEMASARAN"] as const satisfies readonly CooperativeType[];
 
@@ -68,6 +69,7 @@ export function PlatformTenantsPage() {
   const [apiError, setApiError] = useState("");
   const [managing, setManaging] = useState<PlatformTenantSummary | null>(null);
   const [subscribing, setSubscribing] = useState<PlatformTenantSummary | null>(null);
+  const [assigning, setAssigning] = useState<PlatformTenantSummary | null>(null);
   const [managePackageId, setManagePackageId] = useState("");
   const [manageIsActive, setManageIsActive] = useState(true);
   const [manageProvince, setManageProvince] = useState("");
@@ -190,6 +192,9 @@ export function PlatformTenantsPage() {
         <div className="flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={() => setSubscribing(row.original)}>
             Langganan
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setAssigning(row.original)}>
+            Mitra
           </Button>
           <Button variant="outline" size="sm" onClick={() => openManage(row.original)}>
             Kelola
@@ -357,6 +362,7 @@ export function PlatformTenantsPage() {
         </DialogContent>
       </Dialog>
 
+      {assigning && <AssignPartnerDialog tenantId={assigning.id} tenantName={assigning.name} onClose={() => setAssigning(null)} />}
       {subscribing && <TenantSubscriptionDialog tenantId={subscribing.id} tenantName={subscribing.name} onClose={() => setSubscribing(null)} />}
 
       <Dialog open={managing !== null} onOpenChange={(open) => !open && setManaging(null)}>

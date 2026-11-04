@@ -4,6 +4,7 @@ import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import { getAttention } from "./attention.js";
 import { getGrowth, getMembers } from "./growth.js";
 import { getPerformance } from "./performance.js";
+import { getReferralSummary } from "./referrals.js";
 import { getRegions } from "./regions.js";
 import { getRevenue } from "./revenue.js";
 
@@ -12,12 +13,13 @@ import { getRevenue } from "./revenue.js";
  * requirePlatformAdmin). Nothing here accepts a tenantId.
  */
 export async function getPlatformDashboard(range: DashboardRange, now: Date = new Date()): Promise<PlatformDashboard> {
-  const [growth, members, regions, attention, revenue, performance, tenants, users] = await Promise.all([
+  const [growth, members, regions, attention, revenue, referrals, performance, tenants, users] = await Promise.all([
     getGrowth(range, now),
     getMembers(range, now),
     getRegions(),
     getAttention(now),
     getRevenue(now),
+    getReferralSummary(now),
     getPerformance(range, now),
     db.tenant.count(),
     withoutTenantScope(async () => db.user.count({ where: { isPlatformAdmin: false } }))
@@ -32,6 +34,7 @@ export async function getPlatformDashboard(range: DashboardRange, now: Date = ne
     members,
     regions,
     attention,
-    revenue
+    revenue,
+    referrals
   };
 }

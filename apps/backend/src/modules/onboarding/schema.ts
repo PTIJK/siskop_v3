@@ -21,7 +21,9 @@ export const registrationSchema = z
     type: z.enum(["SYARIAH", "KONVENSIONAL"]),
     adminName: z.string().trim().min(2).max(100),
     idToken: z.string().min(1).max(10000),
-    firstUnit: z.object({ type: z.nativeEnum(CooperativeType), name: z.string().trim().min(1).max(100) }).optional()
+    firstUnit: z.object({ type: z.nativeEnum(CooperativeType), name: z.string().trim().min(1).max(100) }).optional(),
+    // Blank means "no code"; a code that does not resolve is rejected in the service.
+    referralCode: z.string().trim().max(30).optional()
   })
   .strict();
 

@@ -140,3 +140,49 @@ describe("confirmPayment accrues referral commission", () => {
     expect(await commissionsOf(tenant.id)).toHaveLength(1);
   });
 });
+
+describe("the support fee is not commissionable", () => {
+  it("earns commission on the subtotal minus the yearly support fee", async () => {
+    const { tenant, invoice } = await makeSubscribedTenant({ tag: "S1", cycle: "YEARLY", supportPlanCode: "SP1" });
+    await makeReferral(tenant.id, { rate: "0.2" });
+
+    await confirmPayment(invoice!.id, { now: NOW });
+
+    expect(invoice!.supportAmount.toFixed(2)).toBe("5000000.00");
+    const [row] = await commissionsOf(tenant.id);
+    const base = invoice!.subtotal.minus(5_000_000);
+    expect(base.gt(0)).toBe(true);
+    expect(row!.baseAmount.toFixed(2)).toBe(base.toFixed(2));
+    expect(row!.amount.toFixed(2)).toBe(base.mul("0.2").toFixed(2));
+  });
+
+  it("earns nothing on an invoice that is only the support fee", async () => {
+    const { tenant, invoice } = await makeSubscribedTenant({ tag: "S2", packageCode: "free", cycle: "YEARLY", supportPlanCode: "SP1" });
+    await makeReferral(tenant.id);
+
+    await confirmPayment(invoice!.id, { now: NOW });
+
+    expect(invoice!.subtotal.toFixed(2)).toBe(invoice!.supportAmount.toFixed(2));
+    expect(await commissionsOf(tenant.id)).toHaveLength(0);
+  });
+
+  it("earns nothing on an invoice of type SUPPORT", async () => {
+    const { tenant, invoice } = await makeSubscribedTenant({ tag: "S3", invoice: { type: "SUPPORT" } });
+    await makeReferral(tenant.id);
+
+    await confirmPayment(invoice!.id, { now: NOW });
+
+    expect(await commissionsOf(tenant.id)).toHaveLength(0);
+  });
+
+  it("is unchanged for an invoice with no support fee", async () => {
+    const { tenant, invoice } = await makeSubscribedTenant({ tag: "S4" });
+    await makeReferral(tenant.id, { rate: "0.2" });
+
+    await confirmPayment(invoice!.id, { now: NOW });
+
+    expect(invoice!.supportAmount.toFixed(2)).toBe("0.00");
+    const [row] = await commissionsOf(tenant.id);
+    expect(row!.baseAmount.toFixed(2)).toBe(invoice!.subtotal.toFixed(2));
+  });
+});

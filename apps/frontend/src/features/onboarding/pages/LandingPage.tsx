@@ -1,6 +1,6 @@
 import { PackageFeatures } from "../components/PackageFeatures";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowUpRight,
   BookOpenCheck,
@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CycleToggle } from "../components/PackagePicker";
 import { errorMessage, rupiah, unitNames, usePublicPricing } from "../api";
-import { formatTaxRate, priceOf, yearlySaving } from "../registration";
+import { formatTaxRate, priceOf, recalledReferral, referralLink, rememberReferral, yearlySaving } from "../registration";
 import "../landing.css";
 
 const featureChips = ["Anggota", "Simpanan", "Pinjaman", "Akuntansi", "Laporan", "Unit usaha", "Whitelabel"];
@@ -153,6 +153,12 @@ export default function LandingPage() {
   const container = useRef<HTMLElement>(null);
   const catalog = usePublicPricing();
   const [cycle, setCycle] = useState<BillingCycle>("MONTHLY");
+  const [search] = useSearchParams();
+  const linkedRef = search.get("ref")?.trim() || null;
+  useEffect(() => {
+    if (linkedRef && linkedRef.length <= 30) rememberReferral(linkedRef);
+  }, [linkedRef]);
+  const referralCode = linkedRef && linkedRef.length <= 30 ? linkedRef : recalledReferral();
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -299,7 +305,7 @@ export default function LandingPage() {
                       <PackageFeatures pkg={pkg} catalog={catalog.data} />
                       <div className='package-action'>
                         <Button asChild size='lg'>
-                          <Link to={`/register?package=${encodeURIComponent(pkg.code)}&cycle=${shown.toLowerCase()}`}>
+                          <Link to={referralLink(`/register?package=${encodeURIComponent(pkg.code)}&cycle=${shown.toLowerCase()}`, referralCode)}>
                             Pilih paket <ArrowUpRight />
                           </Link>
                         </Button>

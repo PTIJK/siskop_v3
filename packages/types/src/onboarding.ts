@@ -9,6 +9,8 @@ export type OnboardingRegistration = Omit<RegisterTenantRequest, "adminEmail" | 
   subscription: PricingSelection;
   firstUnit?: RegisterTenantRequest["firstUnit"];
   idToken: string;
+  /** Optional partner code; the server rejects one that is unknown or inactive. */
+  referralCode?: string;
 };
 
 export interface FirebaseSignInRequest {

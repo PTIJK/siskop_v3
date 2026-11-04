@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import request from "supertest";
 import { endOfMonth, format, startOfMonth } from "date-fns";
 import { db } from "../src/lib/db.js";
+import { businessDate, dateKey } from "../src/lib/operating-calendar.js";
 import { app, createMemberWithPokokSaving, createStaffSession, setupTenant } from "./helpers.js";
 import { createProduct, recordStockMovement } from "../src/modules/konsumen/product.service.js";
 import { createSale } from "../src/modules/konsumen/sale.service.js";
@@ -26,6 +27,9 @@ type Session = Awaited<ReturnType<typeof setupTenant>>;
 
 const bearer = (accessToken: string) => ({ Authorization: `Bearer ${accessToken}` });
 const today = () => format(new Date(), "yyyy-MM-dd");
+// The report filters by Jakarta calendar day, so a query for "today" must name the Jakarta day.
+// The runner clock is UTC on CI, where this differs from today() for 7 hours every day.
+const jakartaToday = () => dateKey(businessDate());
 
 async function createUnit(accessToken: string, type: string, name: string) {
   const res = await request(app()).post("/api/config/units").set(bearer(accessToken)).send({ type, name });
@@ -157,7 +161,7 @@ describe("GET /api/konsumen/reports/sales", () => {
     const beras = await addProduct(admin, unit.id, BERAS);
     await sell(admin, unit.id, [{ productId: beras.id, quantity: 3 }]);
 
-    const res = await salesReport(admin.accessToken, `?unitId=${unit.id}&from=${today()}&to=${today()}`);
+    const res = await salesReport(admin.accessToken, `?unitId=${unit.id}&from=${jakartaToday()}&to=${jakartaToday()}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.ringkasan.omzet).toBe("45000");

@@ -458,6 +458,8 @@ model Invoice {
   number         String             @unique
   type           InvoiceType
   subtotal       Decimal            @db.Decimal(15, 2)
+  // Part of subtotal that is the yearly support fee; not commissionable.
+  supportAmount  Decimal            @default(0) @db.Decimal(15, 2)
   taxRate        Decimal?           @db.Decimal(6, 4)
   taxAmount      Decimal            @default(0) @db.Decimal(15, 2)
   total          Decimal            @db.Decimal(15, 2)

@@ -12,6 +12,7 @@ import { AttentionPanel } from "./dashboard/AttentionPanel";
 import { KpiCards } from "./dashboard/KpiCards";
 import { LinePanel } from "./dashboard/LinePanel";
 import { RegionPanel } from "./dashboard/RegionPanel";
+import { ReferralPanel } from "./dashboard/ReferralPanel";
 import { RevenuePanel } from "./dashboard/RevenuePanel";
 import { bucketLabel, hasTechnicalData, RANGE_LABEL, totalRequests } from "./dashboard/dashboardView";
 
@@ -127,6 +128,7 @@ export function PlatformDashboardPage() {
         />
         <RegionPanel regions={data.regions} />
         <RevenuePanel revenue={data.revenue} />
+        <ReferralPanel referrals={data.referrals} />
       </div>
 
       <AttentionPanel items={data.attention} />

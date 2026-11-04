@@ -1,9 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { addDays } from "date-fns";
 import { Prisma } from "@prisma/client";
-import type { RegistrationStatus } from "@siskop/types";
+import type { ReferralCodeCheck, RegistrationStatus } from "@siskop/types";
 import { db } from "../../lib/db.js";
-import { conflict, notFound, unauthorized } from "../../lib/errors.js";
+import { conflict, notFound, unauthorized, validationError } from "../../lib/errors.js";
+import { attributeRegistration, findActivePartnerByCode } from "../../lib/referrals/attribute.js";
 import { getPublishedCatalog } from "../../lib/pricing/catalog.js";
 import { buildSubscriptionSnapshot, quote } from "../../lib/pricing/engine.js";
 import { createInvoice } from "../../lib/pricing/invoice.js";
@@ -76,6 +77,11 @@ async function createRegistration(input: unknown): Promise<{ tenantId: string; i
 
       const role = roles.find((r) => r.name === "Super Admin");
       if (!role) throw new Error("Missing provisioned admin role");
+      const referralPartner = data.referralCode ? await findActivePartnerByCode(tx, data.referralCode) : null;
+      if (data.referralCode && !referralPartner) {
+        throw validationError("Kode referral tidak valid atau tidak aktif. Periksa kembali atau kosongkan kolom ini.", { field: "referralCode" });
+      }
+      if (referralPartner) await attributeRegistration(tx, { tenantId: tenant.id, partner: referralPartner, adminEmail: identity.email });
       await tx.user.create({
         data: {
           tenantId: tenant.id,
@@ -148,6 +154,12 @@ export async function register(input: unknown): Promise<string> {
     await Promise.race([sendInvoiceEmail(invoiceEmail), new Promise<void>((resolve) => setTimeout(resolve, EMAIL_WAIT_MS))]);
   }
   return tenantId;
+}
+
+/** Public check behind the register form's "Kode Referral" field. Reveals only the display name. */
+export async function checkReferralCode(code: string): Promise<ReferralCodeCheck> {
+  const partner = await findActivePartnerByCode(db, code);
+  return partner ? { valid: true, partnerName: partner.name } : { valid: false, partnerName: null };
 }
 
 /** Where a registration stands: the plan, the invoice awaiting payment and how to pay it. */

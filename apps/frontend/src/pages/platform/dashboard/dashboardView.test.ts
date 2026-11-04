@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { RegionRow, TechnicalPoint } from "@siskop/types";
-import { bucketLabel, deltaLabel, describeValue, hasTechnicalData, topRegions, totalRequests } from "./dashboardView";
+import type { ReferralSummary, RegionRow, TechnicalPoint } from "@siskop/types";
+import { bucketLabel, deltaLabel, describeValue, hasReferralActivity, hasTechnicalData, topRegions, totalRequests } from "./dashboardView";
 
 describe("bucketLabel", () => {
   it("formats a day as 'D Mon' and a month as 'Mon YYYY' in Indonesian", () => {
@@ -54,5 +54,28 @@ describe("describeValue", () => {
     expect(describeValue(undefined)).toBe("tidak ada data");
     expect(describeValue(0)).toBe("0");
     expect(describeValue(12)).toBe("12");
+  });
+});
+
+describe("hasReferralActivity", () => {
+  const empty: ReferralSummary = {
+    activePartners: 0,
+    pendingApplications: 0,
+    referredTenants: 0,
+    referredRevenueThisMonth: "0.00",
+    referredRevenueTotal: "0.00",
+    commissionThisMonth: "0.00",
+    commissionOutstanding: "0.00"
+  };
+
+  it("is false for a program nobody has joined", () => {
+    expect(hasReferralActivity(empty)).toBe(false);
+  });
+
+  it("is true once there is a partner, an application, a referred koperasi or any money", () => {
+    expect(hasReferralActivity({ ...empty, activePartners: 1 })).toBe(true);
+    expect(hasReferralActivity({ ...empty, pendingApplications: 1 })).toBe(true);
+    expect(hasReferralActivity({ ...empty, referredTenants: 1 })).toBe(true);
+    expect(hasReferralActivity({ ...empty, commissionOutstanding: "100.00" })).toBe(true);
   });
 });

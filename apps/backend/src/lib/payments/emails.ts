@@ -13,7 +13,7 @@ interface Layout {
   note?: { title: string; body: string };
 }
 
-function render({ heading, greeting, paragraphs, rows, note }: Layout) {
+export function render({ heading, greeting, paragraphs, rows, note }: Layout) {
   const text = [
     greeting,
     "",
@@ -124,7 +124,7 @@ export function buildRenewalEmail(data: RenewalEmailData, from: string): EmailPa
 }
 
 /** Never throws: a billing step must not fail because email does. */
-async function sendSafely(build: (from: string) => EmailPayload, key: string, label: string): Promise<boolean> {
+export async function sendSafely(build: (from: string) => EmailPayload, key: string, label: string): Promise<boolean> {
   try {
     const config = resendConfiguration();
     if (!config) {

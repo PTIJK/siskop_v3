@@ -109,6 +109,7 @@ describe("renewal invoicing", () => {
     await runBillingJobs(NOW);
     const [invoice] = await renewals(tenant.id);
     expect(invoice?.subtotal.toString()).toBe("10000000"); // 5.000.000 package + 5.000.000 support
+    expect(invoice?.supportAmount.toString()).toBe("5000000"); // kept apart so referral commission can leave it out
   });
 
   it("a monthly subscription pays support only on the anniversary month", async () => {
@@ -117,7 +118,9 @@ describe("renewal invoicing", () => {
     const anniversary = await active("R7B", 20, { supportPlanCode: "SP1", startsAt: new Date("2025-03-30T00:00:00.000Z") });
     await runBillingJobs(NOW);
     expect((await renewals(mid.tenant.id))[0]?.subtotal.toString()).toBe("500000");
+    expect((await renewals(mid.tenant.id))[0]?.supportAmount.toString()).toBe("0");
     expect((await renewals(anniversary.tenant.id))[0]?.subtotal.toString()).toBe("5500000");
+    expect((await renewals(anniversary.tenant.id))[0]?.supportAmount.toString()).toBe("5000000");
   });
 
   it("a free package with paid support is billed the support fee alone", async () => {

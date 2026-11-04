@@ -4,6 +4,7 @@ import { requirePlatformAdmin } from "../../middleware/rbac.js";
 import { requireParam } from "../../lib/http.js";
 import { platformDashboardRoutes } from "../platform-dashboard/routes.js";
 import { invoiceAdminRoutes } from "../billing/admin-routes.js";
+import { partnerAdminRoutes, referralAdminRoutes } from "../referrals/routes.js";
 import { migrationRoutes } from "../migration/routes.js";
 import { pricingAdminRoutes } from "../pricing-admin/routes.js";
 import { tenantSubscriptionSchema } from "../pricing-admin/schema.js";
@@ -51,6 +52,10 @@ export function platformRoutes(): Router {
 
   // Koperasi migration from the standard workbook templates (preview = dry run, execute = commit).
   router.use("/migration", migrationRoutes());
+
+  // Referral partners: application review (approve / reject) and, later, payouts.
+  router.use("/partners", partnerAdminRoutes());
+  router.use(referralAdminRoutes());
 
   router.get(
     "/tenants/:id/subscription",
