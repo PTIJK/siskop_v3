@@ -27,7 +27,7 @@ export interface CreateInvoiceInput {
   subscriptionId: string;
   type: InvoiceType;
   /** The engine's quote for what is being billed. The invoice copies its amounts. */
-  quote: Pick<PricingQuote, "subtotal" | "taxRate" | "taxAmount" | "total">;
+  quote: Pick<PricingQuote, "subtotal" | "taxRate" | "taxAmount" | "total"> & { supportYearly?: string };
   dueDate: Date;
   now?: Date;
 }
@@ -42,6 +42,7 @@ export async function createInvoice(tx: TxClient, input: CreateInvoiceInput) {
       number,
       type: input.type,
       subtotal: new Prisma.Decimal(input.quote.subtotal),
+      supportAmount: new Prisma.Decimal(input.quote.supportYearly ?? 0),
       taxRate: input.quote.taxRate === null ? null : new Prisma.Decimal(input.quote.taxRate),
       taxAmount: new Prisma.Decimal(input.quote.taxAmount),
       total: new Prisma.Decimal(input.quote.total),

@@ -15,8 +15,9 @@ export function referralWindowEnd(attributedAt: Date, months: number): Date {
 
 /**
  * Runs inside confirmPayment's transaction so a payment and its commission
- * commit together. Earns `subtotal × rate` (VAT is not the partner's) when the
- * tenant has a referral and the payment falls in [attributedAt, windowEndsAt).
+ * commit together. Earns `(subtotal - support fee) × rate` when the tenant has a
+ * referral and the payment falls in [attributedAt, windowEndsAt). Neither VAT nor
+ * the support fee is the partner's, so an invoice that is only support earns nothing.
  * The unique invoiceId keeps it to one commission per invoice.
  */
 export async function accrueCommission(
@@ -27,7 +28,11 @@ export async function accrueCommission(
   if (!referral) return null;
   if (payment.paidAt < referral.attributedAt || payment.paidAt >= referral.windowEndsAt) return null;
 
-  const amount = commissionAmount(invoice.subtotal, referral.rate);
+  if (invoice.type === "SUPPORT") return null;
+  const base = invoice.subtotal.minus(invoice.supportAmount);
+  if (base.lte(0)) return null;
+
+  const amount = commissionAmount(base, referral.rate);
   if (amount.lte(0)) return null;
 
   const commission = await tx.referralCommission.create({
@@ -37,7 +42,7 @@ export async function accrueCommission(
       referralId: referral.id,
       invoiceId: invoice.id,
       paymentId: payment.id,
-      baseAmount: invoice.subtotal,
+      baseAmount: base,
       rate: referral.rate,
       amount,
       accruedAt: payment.paidAt
@@ -52,7 +57,7 @@ export async function accrueCommission(
       partnerId: referral.partnerId,
       tenantId: invoice.tenantId,
       invoiceId: invoice.id,
-      baseAmount: invoice.subtotal.toFixed(2),
+      baseAmount: base.toFixed(2),
       rate: referral.rate.toFixed(4),
       amount: amount.toFixed(2)
     }

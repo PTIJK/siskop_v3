@@ -7,7 +7,7 @@ Operations runbook for the referral (mitra) program: what the rules are, how to 
 External partners (agents, consultants, ex-Dinas Koperasi staff) recommend SISKOP. Each approved partner gets one code, `NEX-XXXXXX`. A koperasi that registers with the code is attributed to the partner for good, and the partner earns a percentage of what that koperasi pays for a fixed number of months.
 
 - Default: **20% for 12 months**. Both numbers can be changed per partner and per referred koperasi.
-- The commission base is the invoice **subtotal, before PPN**, of every **paid** invoice (registration, renewal, add-on, support).
+- The commission base is the invoice **subtotal, before PPN and without the support fee**, of every **paid** invoice (registration, renewal, add-on). **The support fee never earns commission** (decided 2026-11-05).
 - Partners have no login. They are records only, and everything is visible to platform admins only. Nothing about partners is exposed through tenant screens or tenant APIs.
 - Commission is paid by manual bank transfer, tracked as a payout batch.
 
@@ -18,6 +18,7 @@ External partners (agents, consultants, ex-Dinas Koperasi staff) recommend SISKO
 | First code wins | Attribution is locked at registration. One partner per koperasi. |
 | Terms are snapshotted | A koperasi keeps the rate and months it was signed at. Changing a partner's rate later affects only koperasi referred afterwards. |
 | Commission window | A payment earns commission only if it is paid on or after attribution and before `attributedAt + months`. |
+| Support fee is excluded | The yearly support fee is billed inside the registration and renewal invoices, so the system records it separately on each invoice (`supportAmount`) and pays commission on subtotal minus that amount. An invoice that is only the support fee earns nothing, and neither does an invoice of type SUPPORT. |
 | Accrual is automatic | It happens in the same transaction that marks an invoice paid. Nothing to run by hand. |
 | Never edit an amount | A wrong commission is fixed by **voiding** it with a reason. |
 | Suspended partner | The code stops accepting new sign-ups. Commission on koperasi already referred keeps accruing unless you void it. |
@@ -100,9 +101,12 @@ The system stores the withheld amount per payout and does not calculate it. Whet
 These are product decisions, not code. The defaults in force are noted.
 
 - **PPh treatment** (21 vs 23, rate). Currently manual.
-- **SUPPORT invoices earn commission.** Default yes. To exclude them, engineering changes the type filter in `accrueCommission`.
 - **Partner terms text.** The wording on `/mitra` and the version stamp `PARTNER_TERMS_VERSION` in `apps/frontend/src/features/onboarding/partner.ts` need legal sign-off. Bump the version whenever the terms change.
 - **Retention of personal data.** The form collects KTP and bank details. A retention period for rejected applications (proposed 12 months) is not yet enforced by any job.
+
+## Support fee and invoices that already exist
+
+Invoices created before 2026-11-05 have no support amount recorded (it defaults to 0). That does not matter for the launch, because nobody has been referred yet. It does matter in one case: if you attach a partner to an **existing** koperasi that already has an **open** invoice with a support fee inside it, that invoice will pay commission on the support part too. Before attaching a partner to such a koperasi, either void and reissue the open invoice or void the commission it earns.
 
 ## Engineering notes
 
