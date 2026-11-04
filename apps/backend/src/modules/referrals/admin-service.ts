@@ -261,10 +261,11 @@ export async function voidCommission(actorId: string, id: string, input: unknown
   const { reason } = voidCommissionSchema.parse(input);
   const row = await withoutTenantScope(async () =>
     db.$transaction(async (tx) => {
-      const claimed = await tx.referralCommission.updateMany({ where: { id, status: "ACCRUED" }, data: { status: "VOID", voidReason: reason } });
+      const claimed = await tx.referralCommission.updateMany({ where: { id, status: "ACCRUED", payoutId: null }, data: { status: "VOID", voidReason: reason } });
       if (claimed.count === 0) {
-        const exists = await tx.referralCommission.findUnique({ where: { id }, select: { status: true } });
+        const exists = await tx.referralCommission.findUnique({ where: { id }, select: { status: true, payoutId: true } });
         if (!exists) throw notFound("Komisi tidak ditemukan");
+        if (exists.status === "ACCRUED" && exists.payoutId) throw conflict("Komisi ini ada di draf pembayaran. Batalkan draf pembayaran terlebih dahulu.");
         throw conflict("Hanya komisi berstatus terhutang yang dapat dibatalkan");
       }
       await writePricingAudit(tx, { actorId, entity: "referral_commission", entityId: id, action: "VOIDED", before: { status: "ACCRUED" }, after: { status: "VOID", reason } });

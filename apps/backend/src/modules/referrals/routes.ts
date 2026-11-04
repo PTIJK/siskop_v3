@@ -11,6 +11,7 @@ import {
   updateTenantReferral,
   voidCommission
 } from "./admin-service.js";
+import { cancelPayout, createPayout, listPayouts, markPayoutPaid, partnerStatementCsv } from "./payout-service.js";
 import { applyAsPartner, approvePartner, getPartner, listPartners, rejectPartner } from "./service.js";
 
 /** Public partner application, mounted at /api/partners. Same guards as onboarding register. */
@@ -46,6 +47,15 @@ export function partnerAdminRoutes(): Router {
     "/:id",
     handle(async (req, res) => {
       res.json({ success: true, data: await updatePartner(authClaims(req).userId, requireParam(req, "id"), req.body), meta: res.locals.meta });
+    })
+  );
+  router.get(
+    "/:id/statement.csv",
+    handle(async (req, res) => {
+      const { filename, csv } = await partnerStatementCsv(requireParam(req, "id"), req.query);
+      res.set({ "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${filename}"` });
+      // BOM so Excel opens the UTF-8 file with the right encoding.
+      res.send(`\uFEFF${csv}`);
     })
   );
   router.get(
@@ -94,6 +104,30 @@ export function referralAdminRoutes(): Router {
     "/referral-settings",
     handle(async (req, res) => {
       res.json({ success: true, data: await updateReferralSettings(authClaims(req).userId, req.body), meta: res.locals.meta });
+    })
+  );
+  router.get(
+    "/payouts",
+    handle(async (req, res) => {
+      res.json({ success: true, data: await listPayouts(req.query), meta: res.locals.meta });
+    })
+  );
+  router.post(
+    "/payouts",
+    handle(async (req, res) => {
+      res.status(201).json({ success: true, data: await createPayout(authClaims(req).userId, req.body), meta: res.locals.meta });
+    })
+  );
+  router.post(
+    "/payouts/:id/mark-paid",
+    handle(async (req, res) => {
+      res.json({ success: true, data: await markPayoutPaid(authClaims(req).userId, requireParam(req, "id"), req.body), meta: res.locals.meta });
+    })
+  );
+  router.post(
+    "/payouts/:id/cancel",
+    handle(async (req, res) => {
+      res.json({ success: true, data: await cancelPayout(authClaims(req).userId, requireParam(req, "id"), req.body), meta: res.locals.meta });
     })
   );
   router.post(

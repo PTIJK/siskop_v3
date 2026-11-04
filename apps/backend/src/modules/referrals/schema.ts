@@ -106,3 +106,32 @@ export const updateReferralSchema = z.object({ rate: rate.optional(), months: mo
 export const referralSettingsSchema = z.object({ defaultRate: rate, defaultMonths: months, reason }).strict();
 
 export const voidCommissionSchema = z.object({ reason }).strict();
+
+/** YYYY-MM-DD that is a real calendar date. */
+const calendarDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal harus berformat YYYY-MM-DD")
+  .refine((v) => {
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
+  }, "Tanggal tidak valid");
+const amount = z.string().regex(/^\d{1,13}(\.\d{1,2})?$/, "Jumlah tidak valid");
+
+export const createPayoutSchema = z.object({ partnerId: z.string().min(1).max(40), periodEnd: calendarDate }).strict();
+
+export const markPayoutPaidSchema = z
+  .object({
+    transferRef: z.string().trim().min(1, "Referensi transfer wajib diisi").max(100),
+    paidAt: z.string().datetime().optional(),
+    taxWithheld: amount.optional()
+  })
+  .strict();
+
+export const cancelPayoutSchema = z.object({ reason: z.string().trim().min(3).max(500).optional() }).strict();
+
+export const payoutListQuerySchema = z.object({
+  status: z.enum(["DRAFT", "PAID", "CANCELLED"]).optional(),
+  partnerId: z.string().min(1).max(40).optional()
+});
+
+export const statementQuerySchema = z.object({ from: calendarDate.optional(), to: calendarDate.optional() });
