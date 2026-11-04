@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Settings } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ReferralPartnerDetail, ReferralPartnerStatus, ReferralPartnerSummary } from "@siskop/types";
+import type { ReferralPartnerDetail, ReferralPartnerSummary } from "@siskop/types";
 import { apiFetch, apiPost, ApiRequestError } from "@/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -14,18 +16,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { approveBody, percent, rejectProblem } from "./partners/helpers";
-
-const STATUS_LABEL: Record<ReferralPartnerStatus, string> = { PENDING: "Menunggu", ACTIVE: "Aktif", SUSPENDED: "Ditangguhkan", REJECTED: "Ditolak" };
-const STATUS_VARIANT: Record<ReferralPartnerStatus, "default" | "secondary" | "outline" | "destructive"> = {
-  PENDING: "outline",
-  ACTIVE: "default",
-  SUSPENDED: "secondary",
-  REJECTED: "destructive"
-};
-const rupiah = (amount: string) =>
-  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(amount));
-const day = (iso: string | null) => (iso ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(new Date(iso)) : "—");
+import { approveBody, percent, rejectProblem, shareLink } from "./partners/helpers";
+import { PartnerFormDialog, ReferralSettingsDialog } from "./partners/PartnerDialogs";
+import { CopyButton, day, rupiah, STATUS_LABEL, STATUS_VARIANT } from "./partners/shared";
 
 function Field({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -159,7 +152,10 @@ function ReviewDialog({ id, onClose, onDone }: { id: string; onClose: () => void
 
 export function PlatformPartnersPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [settings, setSettings] = useState(false);
   const list = useQuery({ queryKey: ["platform", "partners"], queryFn: () => apiFetch<ReferralPartnerSummary[]>("/platform/partners") });
   const rows = list.data ?? [];
   const pending = rows.filter((r) => r.status === "PENDING");
@@ -185,7 +181,18 @@ export function PlatformPartnersPage() {
 
   const partnerColumns: ColumnDef<ReferralPartnerSummary>[] = [
     { header: "Nama", accessorKey: "name" },
-    { header: "Kode", cell: ({ row }) => row.original.code ?? "—" },
+    {
+      header: "Kode",
+      cell: ({ row }) =>
+        row.original.code ? (
+          <span className="flex items-center gap-2">
+            {row.original.code}
+            <CopyButton text={shareLink(window.location.origin, row.original.code)} label="Salin tautan" />
+          </span>
+        ) : (
+          "—"
+        )
+    },
     { header: "Status", cell: ({ row }) => <Badge variant={STATUS_VARIANT[row.original.status]}>{STATUS_LABEL[row.original.status]}</Badge> },
     { header: "Komisi", cell: ({ row }) => `${percent(row.original.commissionRate)} · ${row.original.commissionMonths} bln` },
     { header: "Koperasi", accessorKey: "referredTenants" },
@@ -195,7 +202,7 @@ export function PlatformPartnersPage() {
       header: "",
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => setReviewing(row.original.id)}>
+          <Button variant="outline" size="sm" onClick={() => (row.original.status === "REJECTED" ? setReviewing(row.original.id) : navigate(`/platform/partners/${row.original.id}`))}>
             Lihat
           </Button>
         </div>
@@ -213,6 +220,16 @@ export function PlatformPartnersPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Mitra referral" description="Tinjau pendaftaran mitra dan pantau komisi dari koperasi yang dirujuk" />
+      <div className="flex justify-end gap-3">
+        <Button variant="outline" onClick={() => setSettings(true)}>
+          <Settings className="mr-2 h-4 w-4" />
+          Pengaturan program
+        </Button>
+        <Button onClick={() => setCreating(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Tambah mitra
+        </Button>
+      </div>
       <Tabs defaultValue="applications">
         <TabsList>
           <TabsTrigger value="applications">Pendaftaran{pending.length > 0 ? ` (${pending.length})` : ""}</TabsTrigger>
@@ -225,6 +242,8 @@ export function PlatformPartnersPage() {
           <DataTable columns={partnerColumns} data={partners} emptyMessage="Belum ada mitra" {...common} />
         </TabsContent>
       </Tabs>
+      {creating && <PartnerFormDialog partner={null} onClose={() => setCreating(false)} onSaved={refresh} />}
+      {settings && <ReferralSettingsDialog onClose={() => setSettings(false)} />}
       {reviewing && <ReviewDialog key={reviewing} id={reviewing} onClose={() => setReviewing(null)} onDone={refresh} />}
     </div>
   );
