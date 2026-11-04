@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
@@ -11,11 +11,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuthMethodSwitch } from "../components/AuthMethodSwitch";
 import { PackagePicker, QuoteSummary } from "../components/PackagePicker";
-import { errorMessage, onboardingApi, pricingApi, usePublicPricing } from "../api";
+import { errorMessage, onboardingApi, pricingApi, usePublicPricing, useReferralCheck } from "../api";
 import { clearFirebaseIdentity, firebaseError, identityToken } from "../firebase";
 import {
   buildRegistration,
   parseDeepLink,
+  recalledReferral,
+  rememberReferral,
   requiredCustomFeatures,
   startingSelection,
   stepProblems,
@@ -37,7 +39,8 @@ const EMPTY: RegistrationForm = {
   method: "password",
   email: "",
   password: "",
-  confirmPassword: ""
+  confirmPassword: "",
+  referralCode: ""
 };
 
 function WizardSteps({ active }: { active: number }) {
@@ -56,7 +59,11 @@ function WizardSteps({ active }: { active: number }) {
 function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: ReturnType<typeof parseDeepLink> }) {
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-  const [form, setForm] = useState<RegistrationForm>(EMPTY);
+  const [form, setForm] = useState<RegistrationForm>(() => ({ ...EMPTY, referralCode: link.referralCode ?? recalledReferral() ?? "" }));
+  const referral = useReferralCheck(form.referralCode);
+  useEffect(() => {
+    if (link.referralCode) rememberReferral(link.referralCode);
+  }, [link.referralCode]);
   const [selection, setSelection] = useState<PricingSelection>(() => startingSelection(catalog, link));
   const [problems, setProblems] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
@@ -154,6 +161,21 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
                 <div className='field field-wide'>
                   <Label htmlFor='address'>Alamat koperasi</Label>
                   <Textarea id='address' rows={3} value={form.address} maxLength={500} placeholder='Tulis alamat lengkap koperasi' autoComplete='street-address' onChange={(e) => set("address", e.target.value)} />
+                </div>
+                <div className='field field-wide'>
+                  <Label htmlFor='referralCode'>Kode referral (opsional)</Label>
+                  <Input id='referralCode' value={form.referralCode} maxLength={30} placeholder='NEX-XXXXXX' autoComplete='off' onChange={(e) => set("referralCode", e.target.value)} />
+                  {form.referralCode.trim() === "" ? null : referral.checking ? (
+                    <p className='form-note'>Memeriksa kode…</p>
+                  ) : referral.current && referral.data?.valid ? (
+                    <p className='form-note' role='status'>
+                      Direferensikan oleh {referral.data.partnerName}
+                    </p>
+                  ) : referral.current && referral.data ? (
+                    <p className='form-error' role='alert'>
+                      Kode tidak ditemukan atau tidak aktif. Periksa kembali atau kosongkan kolom ini.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ) : null}

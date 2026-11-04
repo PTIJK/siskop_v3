@@ -5,6 +5,9 @@ import {
   formatTaxRate,
   parseDeepLink,
   priceOf,
+  recalledReferral,
+  referralLink,
+  rememberReferral,
   requiredCustomFeatures,
   startingSelection,
   stepProblems,
@@ -53,6 +56,7 @@ const form = (over: Partial<RegistrationForm> = {}): RegistrationForm => ({
   email: "budi@koperasi.id",
   password: "rahasia123",
   confirmPassword: "rahasia123",
+  referralCode: "",
   ...over
 });
 
@@ -95,18 +99,73 @@ describe("parseDeepLink", () => {
   const q = (s: string) => new URLSearchParams(s);
 
   it("reads a known package and cycle", () => {
-    expect(parseDeepLink(q("package=small&cycle=yearly"), catalog)).toEqual({ packageCode: "small", cycle: "YEARLY" });
+    expect(parseDeepLink(q("package=small&cycle=yearly"), catalog)).toEqual({ packageCode: "small", cycle: "YEARLY", referralCode: null });
   });
 
   it("ignores an unknown package or a cycle the owner has not enabled", () => {
-    expect(parseDeepLink(q("package=platinum&cycle=weekly"), catalog)).toEqual({ packageCode: null, cycle: null });
+    expect(parseDeepLink(q("package=platinum&cycle=weekly"), catalog)).toEqual({ packageCode: null, cycle: null, referralCode: null });
     const monthlyOnly = { ...catalog, settings: { ...catalog.settings, enabledCycles: ["MONTHLY"] } } as PublicPricingCatalog;
-    expect(parseDeepLink(q("package=small&cycle=yearly"), monthlyOnly)).toEqual({ packageCode: "small", cycle: null });
+    expect(parseDeepLink(q("package=small&cycle=yearly"), monthlyOnly)).toEqual({ packageCode: "small", cycle: null, referralCode: null });
   });
 
   it("ignores Custom when the owner has switched it off", () => {
     const off = { ...catalog, settings: { ...catalog.settings, customEnabled: false } } as PublicPricingCatalog;
     expect(parseDeepLink(q("package=custom"), off).packageCode).toBeNull();
+  });
+});
+
+describe("referral capture", () => {
+  const q = (s: string) => new URLSearchParams(s);
+  const memory = () => {
+    const data = new Map<string, string>();
+    return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
+  };
+  const day = 86_400_000;
+
+  it("reads ref from the link, trimmed, and treats blank as none", () => {
+    expect(parseDeepLink(q("ref=%20nex-abc123%20"), catalog).referralCode).toBe("nex-abc123");
+    expect(parseDeepLink(q("ref=%20"), catalog).referralCode).toBeNull();
+    expect(parseDeepLink(q("ref=" + "x".repeat(60)), catalog).referralCode).toBeNull();
+  });
+
+  it("remembers a code for 60 days, then forgets it", () => {
+    const store = memory();
+    rememberReferral("NEX-ABC123", store, 0);
+    expect(recalledReferral(store, 59 * day)).toBe("NEX-ABC123");
+    expect(recalledReferral(store, 61 * day)).toBeNull();
+  });
+
+  it("keeps the first code: a later ref does not overwrite a live one", () => {
+    const store = memory();
+    rememberReferral("NEX-FIRST1", store, 0);
+    rememberReferral("NEX-LATER2", store, day);
+    expect(recalledReferral(store, 2 * day)).toBe("NEX-FIRST1");
+  });
+
+  it("never throws when storage is blocked or holds junk", () => {
+    const blocked = {
+      getItem: () => {
+        throw new Error("denied");
+      },
+      setItem: () => {
+        throw new Error("denied");
+      }
+    };
+    expect(() => rememberReferral("NEX-ABC123", blocked, 0)).not.toThrow();
+    expect(recalledReferral(blocked, 0)).toBeNull();
+    expect(recalledReferral({ getItem: () => "{not json", setItem: () => undefined }, 0)).toBeNull();
+  });
+
+  it("adds ref to a register link only when there is a code", () => {
+    expect(referralLink("/register?package=small", "NEX-ABC123")).toBe("/register?package=small&ref=NEX-ABC123");
+    expect(referralLink("/register?package=small", null)).toBe("/register?package=small");
+    expect(referralLink("/register", "NEX-ABC123")).toBe("/register?ref=NEX-ABC123");
+  });
+
+  it("sends referralCode only when the form has one", () => {
+    const sel = { packageCode: "free", billingCycle: "MONTHLY" as const };
+    expect(buildRegistration(form({ referralCode: "  nex-abc123 " }), sel, "t").referralCode).toBe("nex-abc123");
+    expect("referralCode" in buildRegistration(form(), sel, "t")).toBe(false);
   });
 });
 

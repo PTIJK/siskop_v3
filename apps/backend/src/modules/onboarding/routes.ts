@@ -6,7 +6,7 @@ import { clearRefreshCookie, setRefreshCookie } from "../auth/refresh-cookie.js"
 import { selectionEnabled } from "../tenant-access/config.js";
 import { trustedRequestOrigin } from "../tenant-domains/middleware.js";
 import { clearRegistrationCookie, setRegistrationCookie, tenantFromRegistrationCookie } from "./cookie.js";
-import { firebaseSignIn, register, status } from "./service.js";
+import { checkReferralCode, firebaseSignIn, register, status } from "./service.js";
 
 function handle(fn: (req: Request, res: Response) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -72,6 +72,14 @@ export function onboardingRoutes(): Router {
       const tenantId = await register(req.body);
       setRegistrationCookie(res, tenantId);
       res.status(201).json({ success: true, data: await status(tenantId), meta: res.locals.meta });
+    })
+  );
+
+  router.get(
+    "/referral/:code",
+    limiter(10, 15 * 60_000),
+    handle(async (req, res) => {
+      res.json({ success: true, data: await checkReferralCode(String(req.params.code).slice(0, 40)), meta: res.locals.meta });
     })
   );
 

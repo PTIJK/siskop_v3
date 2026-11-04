@@ -44,13 +44,56 @@ export function yearlySaving(pkg: Package): number | null {
 export function parseDeepLink(
   params: URLSearchParams,
   catalog: PublicPricingCatalog
-): { packageCode: string | null; cycle: BillingCycle | null } {
+): { packageCode: string | null; cycle: BillingCycle | null; referralCode: string | null } {
   const code = params.get("package");
   const pkg = catalog.packages.find((p) => p.code === code);
   const packageCode = pkg && (!pkg.isCustom || catalog.settings.customEnabled) ? pkg.code : null;
   const cycle = params.get("cycle")?.toUpperCase();
   const enabled = catalog.settings.enabledCycles.find((c) => c === cycle) ?? null;
-  return { packageCode, cycle: enabled };
+  const ref = params.get("ref")?.trim() ?? "";
+  return { packageCode, cycle: enabled, referralCode: ref !== "" && ref.length <= 30 ? ref : null };
+}
+
+const REFERRAL_KEY = "siskop.referral";
+const REFERRAL_TTL_MS = 60 * 86_400_000;
+
+interface ReferralStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+function browserStorage(): ReferralStorage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** The code remembered from an earlier visit, or null once it is 60 days old, unreadable or missing. */
+export function recalledReferral(storage: ReferralStorage | null = browserStorage(), now = Date.now()): string | null {
+  try {
+    const saved = JSON.parse(storage?.getItem(REFERRAL_KEY) ?? "null") as { code?: unknown; at?: unknown } | null;
+    return saved && typeof saved.code === "string" && typeof saved.at === "number" && now - saved.at < REFERRAL_TTL_MS ? saved.code : null;
+  } catch {
+    return null;
+  }
+}
+
+/** First code wins: a live remembered code is not replaced by a later link. */
+export function rememberReferral(code: string, storage: ReferralStorage | null = browserStorage(), now = Date.now()): void {
+  try {
+    if (!storage || recalledReferral(storage, now) !== null) return;
+    storage.setItem(REFERRAL_KEY, JSON.stringify({ code, at: now }));
+  } catch {
+    // Storage may be blocked (private window); the code then only lives in the URL.
+  }
+}
+
+/** Keeps the partner's code on a register link. */
+export function referralLink(path: string, code: string | null): string {
+  if (!code) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}ref=${encodeURIComponent(code)}`;
 }
 
 export function startingSelection(
@@ -77,6 +120,8 @@ export interface RegistrationForm {
   email: string;
   password: string;
   confirmPassword: string;
+  /** Optional partner code; blank means none. */
+  referralCode: string;
 }
 
 /** What is wrong with a wizard step, in the user's words. Empty means the step may continue. */
@@ -111,7 +156,8 @@ export function buildRegistration(form: RegistrationForm, selection: PricingSele
     type: form.type,
     adminName: form.adminName.trim(),
     firstUnit: { type: form.unitType, name: choice(form.unitType).unitName },
-    idToken
+    idToken,
+    ...(form.referralCode.trim() !== "" ? { referralCode: form.referralCode.trim() } : {})
   };
 }
 
