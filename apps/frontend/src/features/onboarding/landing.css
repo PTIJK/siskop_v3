@@ -749,3 +749,43 @@
 .marketing:has(.landing) {
   padding-top: 12px;
 }
+
+/* Partner programme band */
+.lp-partner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding: 32px 36px;
+  border: 1px solid var(--rule);
+  border-radius: 24px;
+  background: #ffffff;
+}
+.lp-partner > svg {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  color: var(--lime);
+}
+.lp-partner > div {
+  flex: 1;
+}
+.lp-partner h2 {
+  margin: 0 0 6px;
+  font-size: 24px;
+}
+.lp-partner p {
+  margin: 0;
+  color: var(--muted-mint);
+}
+.lp-partner .button,
+.lp-partner a[class*="border"] {
+  flex: none;
+}
+@media (max-width: 760px) {
+  .lp-partner {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 24px 20px;
+  }
+}

@@ -6,6 +6,7 @@ import {
   BookOpenCheck,
   Check,
   FileBarChart2,
+  Handshake,
   HandCoins,
   Landmark,
   PiggyBank,
@@ -337,6 +338,22 @@ export default function LandingPage() {
               </li>
             ))}
           </ol>
+        </section>
+
+        <section id='mitra' className='lp-partner content-width reveal' aria-labelledby='partner-title'>
+          <Handshake aria-hidden='true' />
+          <div>
+            <h2 id='partner-title'>Kenal koperasi yang butuh sistem lebih baik?</h2>
+            <p>
+              Jadi mitra referral SISKOP. Ajak koperasi bergabung dengan kode Anda dan dapatkan komisi dari setiap
+              pembayaran mereka selama masa program.
+            </p>
+          </div>
+          <Button asChild size='lg' variant='outline'>
+            <Link to='/mitra'>
+              Daftar jadi mitra <ArrowUpRight />
+            </Link>
+          </Button>
         </section>
 
         <section className='lp-cta content-width reveal' aria-labelledby='cta-title'>
