@@ -1,4 +1,4 @@
-import type { AttentionSeverity, DashboardRange, RegionRow, TechnicalPoint } from "@siskop/types";
+import type { AttentionSeverity, DashboardRange, ReferralSummary, RegionRow, TechnicalPoint } from "@siskop/types";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
@@ -32,3 +32,10 @@ export const totalRequests = (points: TechnicalPoint[]): number => points.reduce
 
 /** Screen-reader text for a chart value; a missing value is not zero. */
 export const describeValue = (v: string | number | null | undefined): string => (v === null || v === undefined ? "tidak ada data" : String(v));
+
+/** Whether the referral card has anything to show; an unused program stays a quiet empty state. */
+export const hasReferralActivity = (r: ReferralSummary): boolean =>
+  r.activePartners > 0 ||
+  r.pendingApplications > 0 ||
+  r.referredTenants > 0 ||
+  [r.referredRevenueTotal, r.commissionThisMonth, r.commissionOutstanding].some((amount) => Number(amount) > 0);
