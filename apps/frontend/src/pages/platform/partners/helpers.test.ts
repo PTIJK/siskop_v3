@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approveBody, createPartnerBody, EMPTY_PARTNER_FORM, partnerEditBody, percent, rejectProblem, settingsBody, shareLink, termsChangeBody } from "./helpers";
+import { approveBody, createPartnerBody, createPayoutBody, markPaidBody, statementPath, EMPTY_PARTNER_FORM, partnerEditBody, percent, rejectProblem, settingsBody, shareLink, termsChangeBody } from "./helpers";
 
 describe("percent", () => {
   it("shows a stored fraction as a percentage", () => {
@@ -125,5 +125,42 @@ describe("partnerEditBody", () => {
   it("clears an emptied optional field with null", () => {
     const result = partnerEditBody({ ...form, city: "" }, original);
     expect(result).toMatchObject({ ok: true, body: { city: null } });
+  });
+});
+
+describe("createPayoutBody", () => {
+  it("needs a partner and a cutoff date", () => {
+    expect(createPayoutBody("", "2026-03-31").ok).toBe(false);
+    expect(createPayoutBody("p1", "").ok).toBe(false);
+    expect(createPayoutBody("p1", "2026-03-31")).toEqual({ ok: true, body: { partnerId: "p1", periodEnd: "2026-03-31" } });
+  });
+});
+
+describe("markPaidBody", () => {
+  it("requires a transfer reference", () => {
+    expect(markPaidBody({ transferRef: " ", paidOn: "", taxWithheld: "" }, "500000.00").ok).toBe(false);
+  });
+
+  it("sends only what was filled, with the paid date as a Jakarta noon instant", () => {
+    expect(markPaidBody({ transferRef: " TRF-1 ", paidOn: "", taxWithheld: "" }, "500000.00")).toEqual({ ok: true, body: { transferRef: "TRF-1" } });
+    expect(markPaidBody({ transferRef: "TRF-1", paidOn: "2026-04-05", taxWithheld: "25000" }, "500000.00")).toEqual({
+      ok: true,
+      body: { transferRef: "TRF-1", paidAt: "2026-04-05T05:00:00.000Z", taxWithheld: "25000" }
+    });
+  });
+
+  it("keeps tax a non-negative amount within the gross", () => {
+    expect(markPaidBody({ transferRef: "T", paidOn: "", taxWithheld: "-1" }, "500000.00").ok).toBe(false);
+    expect(markPaidBody({ transferRef: "T", paidOn: "", taxWithheld: "abc" }, "500000.00").ok).toBe(false);
+    expect(markPaidBody({ transferRef: "T", paidOn: "", taxWithheld: "500000.01" }, "500000.00").ok).toBe(false);
+    expect(markPaidBody({ transferRef: "T", paidOn: "", taxWithheld: "500000" }, "500000.00").ok).toBe(true);
+  });
+});
+
+describe("statementPath", () => {
+  it("adds only the dates given and refuses a reversed period", () => {
+    expect(statementPath("p1", "", "")).toEqual({ ok: true, body: "/platform/partners/p1/statement.csv" });
+    expect(statementPath("p1", "2026-03-01", "2026-03-31")).toEqual({ ok: true, body: "/platform/partners/p1/statement.csv?from=2026-03-01&to=2026-03-31" });
+    expect(statementPath("p1", "2026-04-01", "2026-03-31").ok).toBe(false);
   });
 });

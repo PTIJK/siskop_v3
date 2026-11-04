@@ -16,8 +16,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PartnerFormDialog, ReferralTermsDialog } from "./partners/PartnerDialogs";
-import { CopyButton, day, rupiah, STATUS_LABEL, STATUS_VARIANT } from "./partners/shared";
-import { percent, shareLink } from "./partners/helpers";
+import { CopyButton, day, downloadFile, rupiah, STATUS_LABEL, STATUS_VARIANT } from "./partners/shared";
+import { percent, shareLink, statementPath } from "./partners/helpers";
 
 const COMMISSION_VARIANT = { ACCRUED: "outline", PAID: "default", VOID: "secondary" } as const;
 const COMMISSION_LABEL = { ACCRUED: "Terhutang", PAID: "Dibayar", VOID: "Dibatalkan" } as const;
@@ -77,6 +77,42 @@ function VoidDialog({ commission, onClose, onDone }: { commission: ReferralCommi
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function StatementDownload({ partnerId, code }: { partnerId: string; code: string | null }) {
+  const { toast } = useToast();
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function download() {
+    const path = statementPath(partnerId, from, to);
+    if (!path.ok) return toast({ title: path.problem, variant: "destructive" });
+    setBusy(true);
+    try {
+      await downloadFile(path.body, `statement-${code ?? "mitra"}.csv`);
+    } catch (err) {
+      toast({ title: "Unduhan gagal", description: err instanceof ApiRequestError ? err.message : "Terjadi kesalahan", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <div className="space-y-1.5">
+        <Label htmlFor="st-from">Dari</Label>
+        <Input id="st-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="st-to">Sampai</Label>
+        <Input id="st-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+      </div>
+      <Button variant="outline" onClick={() => void download()} disabled={busy}>
+        {busy ? "Mengunduh..." : "Unduh statement CSV"}
+      </Button>
+    </div>
   );
 }
 
@@ -180,6 +216,8 @@ export function PlatformPartnerDetailPage() {
         <Kpi label="Komisi tercatat" value={rupiah(p.commissionAccrued)} />
         <Kpi label="Belum dibayar" value={rupiah(p.commissionOutstanding)} />
       </div>
+
+      <StatementDownload partnerId={p.id} code={p.code} />
 
       <Tabs defaultValue="referrals">
         <TabsList>

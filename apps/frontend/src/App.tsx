@@ -112,6 +112,9 @@ const PlatformPartnersPage = lazy(() =>
 const PlatformPartnerDetailPage = lazy(() =>
   import("@/pages/platform/PlatformPartnerDetailPage").then((module) => ({ default: module.PlatformPartnerDetailPage }))
 );
+const PlatformPayoutsPage = lazy(() =>
+  import("@/pages/platform/PlatformPayoutsPage").then((module) => ({ default: module.PlatformPayoutsPage }))
+);
 const PlatformAdminsPage = lazy(() =>
   import("@/pages/platform/PlatformAdminsPage").then((module) => ({ default: module.PlatformAdminsPage }))
 );
@@ -271,6 +274,7 @@ export default function App() {
               <Route path='/platform/invoices' element={<PlatformInvoicesPage />} />
               <Route path='/platform/partners' element={<PlatformPartnersPage />} />
               <Route path='/platform/partners/:id' element={<PlatformPartnerDetailPage />} />
+              <Route path='/platform/payouts' element={<PlatformPayoutsPage />} />
               <Route path='/platform/admins' element={<PlatformAdminsPage />} />
             </Route>
 

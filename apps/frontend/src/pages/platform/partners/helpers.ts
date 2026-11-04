@@ -1,6 +1,8 @@
 import type {
   ApproveReferralPartnerInput,
   CreateReferralPartnerInput,
+  CreateReferralPayoutInput,
+  MarkReferralPayoutPaidInput,
   UpdateReferralPartnerInput,
   UpdateReferralSettingsInput,
   UpdateTenantReferralInput
@@ -217,4 +219,39 @@ export function partnerEditBody(
     body.reason = form.reason.trim();
   }
   return { ok: true, body };
+}
+
+export function createPayoutBody(partnerId: string, periodEnd: string): Result<CreateReferralPayoutInput> {
+  if (partnerId === "") return { ok: false, problem: "Pilih mitra." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) return { ok: false, problem: "Pilih tanggal batas komisi." };
+  return { ok: true, body: { partnerId, periodEnd } };
+}
+
+export interface MarkPaidForm {
+  transferRef: string;
+  /** YYYY-MM-DD from a date input; blank means now. */
+  paidOn: string;
+  taxWithheld: string;
+}
+
+/** Transfer record for a payout. A chosen paid date is taken as noon in Jakarta, so it stays on that day in any timezone. */
+export function markPaidBody(form: MarkPaidForm, grossAmount: string): Result<MarkReferralPayoutPaidInput> {
+  const transferRef = form.transferRef.trim();
+  if (transferRef === "") return { ok: false, problem: "Referensi transfer wajib diisi." };
+  const body: MarkReferralPayoutPaidInput = { transferRef };
+  if (form.paidOn !== "") body.paidAt = new Date(`${form.paidOn}T12:00:00+07:00`).toISOString();
+  if (form.taxWithheld.trim() !== "") {
+    const tax = form.taxWithheld.trim();
+    if (!/^\d{1,13}(\.\d{1,2})?$/.test(tax)) return { ok: false, problem: "Pajak harus berupa angka tidak negatif." };
+    if (Number(tax) > Number(grossAmount)) return { ok: false, problem: "Pajak tidak boleh melebihi jumlah kotor." };
+    body.taxWithheld = tax;
+  }
+  return { ok: true, body };
+}
+
+/** API path for a partner's statement CSV, with an optional period. */
+export function statementPath(partnerId: string, from: string, to: string): Result<string> {
+  if (from !== "" && to !== "" && from > to) return { ok: false, problem: "Tanggal awal tidak boleh setelah tanggal akhir." };
+  const query = [from && `from=${from}`, to && `to=${to}`].filter(Boolean).join("&");
+  return { ok: true, body: `/platform/partners/${partnerId}/statement.csv${query ? `?${query}` : ""}` };
 }

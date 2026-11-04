@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import type { ReferralPartnerStatus } from "@siskop/types";
+import { apiDownload } from "@/api/client";
 import { Button } from "@/components/ui/button";
 
 export const STATUS_LABEL: Record<ReferralPartnerStatus, string> = { PENDING: "Menunggu", ACTIVE: "Aktif", SUSPENDED: "Ditangguhkan", REJECTED: "Ditolak" };
@@ -33,4 +34,13 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
       {copied ? "Tersalin" : label}
     </Button>
   );
+}
+
+/** Fetches an authenticated file and hands it to the browser as a download. */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const blob = await apiDownload(path);
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement("a"), { href: url, download: filename });
+  link.click();
+  URL.revokeObjectURL(url);
 }

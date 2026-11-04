@@ -24,7 +24,8 @@ import {
   FileSpreadsheet,
   ScrollText,
   ShoppingCart,
-  Handshake
+  Handshake,
+  Banknote
 } from "lucide-react";
 import type { PermissionAction, PermissionModule } from "@siskop/types";
 
@@ -109,6 +110,7 @@ export const PLATFORM_NAV: readonly NavEntry[] = [
   { id: "p-pricing", label: "Harga dan paket", href: "/platform/pricing", icon: Tags, group: "platform" },
   { id: "p-invoices", label: "Faktur", href: "/platform/invoices", icon: Receipt, group: "platform" },
   { id: "p-partners", label: "Mitra referral", href: "/platform/partners", icon: Handshake, group: "platform" },
+  { id: "p-payouts", label: "Pembayaran komisi", href: "/platform/payouts", icon: Banknote, group: "platform" },
   { id: "p-admins", label: "Admin platform", href: "/platform/admins", icon: ShieldCheck, group: "platform" }
 ];
 
