@@ -46,6 +46,7 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
               <a href='#fitur'>Fitur</a>
               <a href='#paket'>Paket</a>
               <a href='#cara-bergabung'>Cara bergabung</a>
+              <Link to='/mitra'>Jadi mitra</Link>
             </nav>
             <div className='header-actions'>
               <Link to='/login'>Masuk</Link>
@@ -76,6 +77,7 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
                 <a href='#fitur'>Fitur</a>
                 <a href='#paket'>Paket</a>
                 <a href='#cara-bergabung'>Cara bergabung</a>
+                <Link to='/mitra'>Jadi mitra</Link>
                 <Link to='/login'>Masuk</Link>
               </nav>
             ) : null}
