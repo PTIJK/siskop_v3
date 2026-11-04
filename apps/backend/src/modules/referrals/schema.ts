@@ -58,3 +58,51 @@ export const approvePartnerSchema = z
 export const rejectPartnerSchema = z.object({ reason: z.string().trim().min(3).max(500) }).strict();
 
 export const partnerListQuerySchema = z.object({ status: z.enum(["PENDING", "ACTIVE", "SUSPENDED", "REJECTED"]).optional() });
+
+const reason = z.string().trim().min(3, "Alasan wajib diisi (minimal 3 karakter)").max(500);
+const nullableText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((v) => (v === "" ? null : v));
+
+/** Admin-created partners skip the public form's terms and honeypot but share its field rules. */
+export const createPartnerSchema = partnerApplicationSchema
+  .omit({ termsVersion: true, acceptTerms: true, website: true })
+  .extend({
+    code: z.string().trim().max(20).optional(),
+    commissionRate: rate.optional(),
+    commissionMonths: months.optional(),
+    notes: optionalText(1000)
+  });
+
+/** Rate, months and status changes need a reason; the service enforces it only when one actually changes. */
+export const updatePartnerSchema = z
+  .object({
+    name: z.string().trim().min(2).max(100).optional(),
+    email: z.string().trim().toLowerCase().email().max(254).optional(),
+    phone: phoneSchema.optional(),
+    city: nullableText(100),
+    province: nullableText(100),
+    npwp: nullableText(25),
+    bankName: text(100).optional(),
+    bankAccountNo: z.string().trim().regex(/^\d{5,25}$/, "Nomor rekening tidak valid").optional(),
+    bankAccountName: text(100).optional(),
+    notes: nullableText(1000),
+    status: z.enum(["ACTIVE", "SUSPENDED"]).optional(),
+    commissionRate: rate.optional(),
+    commissionMonths: months.optional(),
+    reason: reason.optional()
+  })
+  .strict();
+
+export const assignReferralSchema = z.object({ partnerId: z.string().min(1).max(40), reason }).strict();
+
+export const updateReferralSchema = z.object({ rate: rate.optional(), months: months.optional(), reason }).strict();
+
+export const referralSettingsSchema = z.object({ defaultRate: rate, defaultMonths: months, reason }).strict();
+
+export const voidCommissionSchema = z.object({ reason }).strict();

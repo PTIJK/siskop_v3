@@ -4,7 +4,7 @@ import { requirePlatformAdmin } from "../../middleware/rbac.js";
 import { requireParam } from "../../lib/http.js";
 import { platformDashboardRoutes } from "../platform-dashboard/routes.js";
 import { invoiceAdminRoutes } from "../billing/admin-routes.js";
-import { partnerAdminRoutes } from "../referrals/routes.js";
+import { partnerAdminRoutes, referralAdminRoutes } from "../referrals/routes.js";
 import { migrationRoutes } from "../migration/routes.js";
 import { pricingAdminRoutes } from "../pricing-admin/routes.js";
 import { tenantSubscriptionSchema } from "../pricing-admin/schema.js";
@@ -55,6 +55,7 @@ export function platformRoutes(): Router {
 
   // Referral partners: application review (approve / reject) and, later, payouts.
   router.use("/partners", partnerAdminRoutes());
+  router.use(referralAdminRoutes());
 
   router.get(
     "/tenants/:id/subscription",

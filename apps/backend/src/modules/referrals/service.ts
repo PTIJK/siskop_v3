@@ -1,5 +1,5 @@
 import { Prisma, type ReferralPartner, type ReferralPartnerStatus } from "@prisma/client";
-import type { ReferralPartnerDetail, ReferralPartnerSummary } from "@siskop/types";
+import type { ReferralCommissionRow, ReferralPartnerDetail, ReferralPartnerSummary, TenantReferralRow } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { conflict, notFound, validationError } from "../../lib/errors.js";
 import { writePricingAudit } from "../../lib/pricing/audit.js";
@@ -9,8 +9,45 @@ import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import { approvePartnerSchema, partnerApplicationSchema, partnerListQuerySchema, rejectPartnerSchema } from "./schema.js";
 
 const REAPPLY_AFTER_MS = 30 * 86_400_000;
-const money = (d: Prisma.Decimal | null | undefined) => (d ?? new Prisma.Decimal(0)).toFixed(2);
+export const money = (d: Prisma.Decimal | null | undefined) => (d ?? new Prisma.Decimal(0)).toFixed(2);
 const iso = (d: Date | null) => d?.toISOString() ?? null;
+
+
+type ReferralWithTenant = Prisma.TenantReferralGetPayload<{ include: { tenant: { select: { id: true; name: true; slug: true; isActive: true } } } }>;
+type CommissionWithRefs = Prisma.ReferralCommissionGetPayload<{
+  include: { tenant: { select: { id: true; name: true } }; invoice: { select: { id: true; number: true; type: true } } };
+}>;
+
+export const REFERRAL_TENANT_SELECT = { id: true, name: true, slug: true, isActive: true } as const;
+
+export function toReferralRow(r: ReferralWithTenant): TenantReferralRow {
+  return {
+    id: r.id,
+    tenant: r.tenant,
+    codeUsed: r.codeUsed,
+    rate: r.rate.toFixed(4),
+    months: r.months,
+    attributedAt: r.attributedAt.toISOString(),
+    windowEndsAt: r.windowEndsAt.toISOString(),
+    source: r.source,
+    flaggedSelfReferral: r.flaggedSelfReferral
+  };
+}
+
+export function toCommissionRow(c: CommissionWithRefs): ReferralCommissionRow {
+  return {
+    id: c.id,
+    tenant: c.tenant,
+    invoice: c.invoice,
+    baseAmount: money(c.baseAmount),
+    rate: c.rate.toFixed(4),
+    amount: money(c.amount),
+    status: c.status,
+    voidReason: c.voidReason,
+    payoutId: c.payoutId,
+    accruedAt: c.accruedAt.toISOString()
+  };
+}
 
 /**
  * Public application. Always answers `received`: a duplicate of an open application
@@ -140,29 +177,8 @@ export async function getPartner(id: string): Promise<ReferralPartnerDetail> {
     rejectReason: p.rejectReason,
     reviewedAt: iso(p.reviewedAt),
     notes: p.notes,
-    referrals: p.referrals.map((r) => ({
-      id: r.id,
-      tenant: r.tenant,
-      codeUsed: r.codeUsed,
-      rate: r.rate.toFixed(4),
-      months: r.months,
-      attributedAt: r.attributedAt.toISOString(),
-      windowEndsAt: r.windowEndsAt.toISOString(),
-      source: r.source,
-      flaggedSelfReferral: r.flaggedSelfReferral
-    })),
-    commissions: p.commissions.map((c) => ({
-      id: c.id,
-      tenant: c.tenant,
-      invoice: c.invoice,
-      baseAmount: money(c.baseAmount),
-      rate: c.rate.toFixed(4),
-      amount: money(c.amount),
-      status: c.status,
-      voidReason: c.voidReason,
-      payoutId: c.payoutId,
-      accruedAt: c.accruedAt.toISOString()
-    })),
+    referrals: p.referrals.map(toReferralRow),
+    commissions: p.commissions.map(toCommissionRow),
     payouts: p.payouts.map((o) => ({
       id: o.id,
       number: o.number,
