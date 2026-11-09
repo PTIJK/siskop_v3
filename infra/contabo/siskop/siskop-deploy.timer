@@ -3,7 +3,7 @@ Description=Check the private SISKOP release mailbox
 
 [Timer]
 OnBootSec=60
-OnUnitInactiveSec=15
+OnUnitInactiveSec=120
 Unit=siskop-deploy.service
 
 [Install]

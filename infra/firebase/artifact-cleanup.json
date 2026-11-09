@@ -9,11 +9,11 @@
     }
   },
   {
-    "name": "keep-ten-newest-backend-versions",
+    "name": "keep-five-newest-backend-versions",
     "action": { "type": "Keep" },
     "mostRecentVersions": {
       "packageNamePrefixes": ["api"],
-      "keepCount": 10
+      "keepCount": 5
     }
   },
   {
