@@ -8,14 +8,14 @@ Cloud Run revisions/tags, Hosting versions, databases, or uploaded member docume
 ## Retention rules
 
 - Keep every image younger than seven days.
-- Keep at least the ten newest `api` package versions, regardless of age.
-  Dependency-cache images also count as versions; this is not ten successful releases.
+- Keep at least the five newest `api` package versions, regardless of age.
+  Dependency-cache images also count as versions; this is not five successful releases.
 - Always keep images carrying `cache-*` or `retain-*` tags.
 - Delete other `api*` package versions older than seven days. The repository currently
-  contains only `api`; review the prefix policy before adding other packages.
+  also contains `central-gateway`, which this policy leaves untouched.
 
 Keep rules take precedence over deletion. The seven-day grace period means this
-is not an immediate reduction to ten images. Shared layers also mean multiplying
+is not an immediate reduction to five images. Shared layers also mean multiplying
 image count by image size does not predict reclaimed storage accurately.
 
 ## Release protection
@@ -83,6 +83,20 @@ original repository policy configuration before replacing an existing policy.
 
 References: [cleanup policies](https://docs.cloud.google.com/artifact-registry/docs/repositories/cleanup-policy)
 and [Cloud Run image import](https://docs.cloud.google.com/run/docs/deploying).
+
+## Cost adjustment — 2026-11-09
+
+Reduced the newest-version floor from ten to five and applied the policy to
+`siskop-staging`. The seven-day grace period and all `retain-*` / `cache-*`
+protections remain. The inventory preview identified five eligible API versions;
+actual deletion and reclaimed bytes depend on Google's background cleanup.
+Gateway and Firebase-managed repositories remain unchanged.
+
+The backend Dockerfile copies dependency files before application output, directly
+from the dependency stage, so application changes do not invalidate that layer.
+Docker on Contabo already retains downloaded layers; do not prune its image cache
+to save registry storage, because that increases subsequent downloads. Monthly
+OS refreshes remain enabled, and new security/dependency layers still need transfer.
 
 ## Initial rollout — 2026-09-18
 

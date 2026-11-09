@@ -24,8 +24,8 @@ ARG OS_CACHE_EPOCH=manual
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates chromium fonts-liberation tini && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=dependencies /app/node_modules/ node_modules/
+COPY --from=dependencies /app/apps/backend/node_modules/ apps/backend/node_modules/
 COPY --from=build /app/packages/types/ packages/types/
-COPY --from=build /app/apps/backend/node_modules/ apps/backend/node_modules/
 COPY --from=build /app/apps/backend/dist/ apps/backend/dist/
 COPY --from=build /app/apps/backend/package.json apps/backend/
 COPY --from=build /app/apps/backend/prisma/ apps/backend/prisma/
