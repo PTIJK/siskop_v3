@@ -16,7 +16,9 @@ import {
   Users
 } from "lucide-react";
 import type { BillingCycle } from "@siskop/types";
+import { track } from "@/lib/analytics";
 import { MarketingShell } from "../components/MarketingShell";
+import { Definition, Faq, LastUpdated, PricingTable } from "../components/LandingSeo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CycleToggle } from "../components/PackagePicker";
@@ -156,10 +158,12 @@ export default function LandingPage() {
   const [cycle, setCycle] = useState<BillingCycle>("MONTHLY");
   const [search] = useSearchParams();
   const linkedRef = search.get("ref")?.trim() || null;
+  // Read in an effect, not during render: the prerendered HTML has no URL or localStorage to read from.
+  const [referralCode, setReferralCode] = useState<string | null>(null);
   useEffect(() => {
     if (linkedRef && linkedRef.length <= 30) rememberReferral(linkedRef);
+    setReferralCode(linkedRef && linkedRef.length <= 30 ? linkedRef : recalledReferral());
   }, [linkedRef]);
-  const referralCode = linkedRef && linkedRef.length <= 30 ? linkedRef : recalledReferral();
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -182,14 +186,14 @@ export default function LandingPage() {
             <span>Baru</span> Pembukuan, simpanan, dan pinjaman dalam satu ruang
           </p>
           <h1 id='hero-title'>
-            Satu ruang kerja untuk <span>koperasi yang tumbuh bersama.</span>
+            SISKOP, aplikasi koperasi <span>untuk pengurus yang ingin bekerja lebih rapi.</span>
           </h1>
           <p className='lp-sub'>
             SISKOP menghubungkan anggota, simpanan, pinjaman, dan laporan keuangan koperasi Anda, supaya pengurus fokus melayani anggota.
           </p>
           <div className='lp-actions'>
             <Button asChild size='lg'>
-              <a href='#paket'>
+              <a href='#paket' onClick={() => track("cta_pricing_click", { location: "hero", label: "mulai_sekarang" })}>
                 Mulai sekarang <ArrowUpRight />
               </a>
             </Button>
@@ -207,6 +211,8 @@ export default function LandingPage() {
             ))}
           </ul>
         </section>
+
+        <Definition />
 
         <section id='platform' className='lp-replace content-width reveal'>
           <h2>
@@ -306,7 +312,10 @@ export default function LandingPage() {
                       <PackageFeatures pkg={pkg} catalog={catalog.data} />
                       <div className='package-action'>
                         <Button asChild size='lg'>
-                          <Link to={referralLink(`/register?package=${encodeURIComponent(pkg.code)}&cycle=${shown.toLowerCase()}`, referralCode)}>
+                          <Link
+                            to={referralLink(`/register?package=${encodeURIComponent(pkg.code)}&cycle=${shown.toLowerCase()}`, referralCode)}
+                            onClick={() => track("cta_signup_click", { location: "pricing", label: "pilih_paket", package: pkg.code, cycle: shown })}
+                          >
                             Pilih paket <ArrowUpRight />
                           </Link>
                         </Button>
@@ -316,6 +325,7 @@ export default function LandingPage() {
                   );
                 })}
               </div>
+              <PricingTable />
             </>
           )}
         </section>
@@ -350,22 +360,25 @@ export default function LandingPage() {
             </p>
           </div>
           <Button asChild size='lg' variant='outline'>
-            <Link to='/mitra'>
+            <Link to='/mitra' onClick={() => track("cta_signup_click", { location: "partner", label: "daftar_jadi_mitra" })}>
               Daftar jadi mitra <ArrowUpRight />
             </Link>
           </Button>
         </section>
+
+        <Faq />
 
         <section className='lp-cta content-width reveal' aria-labelledby='cta-title'>
           <ShieldCheck aria-hidden='true' />
           <h2 id='cta-title'>Siap membawa koperasi Anda naik kelas?</h2>
           <p>Mulai dari paket gratis, tingkatkan kapan pun koperasi Anda siap.</p>
           <Button asChild size='lg'>
-            <a href='#paket'>
+            <a href='#paket' onClick={() => track("cta_pricing_click", { location: "cta", label: "temukan_paket" })}>
               Temukan paket Anda <ArrowUpRight />
             </a>
           </Button>
         </section>
+        <LastUpdated />
       </main>
     </MarketingShell>
   );
