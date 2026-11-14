@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { track } from "@/lib/analytics";
 import { errorMessage, partnersApi } from "../api";
 import { applicationProblems, buildApplication, EMPTY_APPLICATION, type PartnerApplicationForm } from "../partner";
 
@@ -87,6 +88,7 @@ export function PartnerApplyPage() {
     submitting.current = true;
     try {
       await partnersApi<{ received: true }>("/apply", buildApplication(form));
+      track("form_submit", { form: "partner_apply" });
       setDone(true);
     } catch (err) {
       setError(errorMessage(err));

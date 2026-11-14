@@ -1,7 +1,8 @@
 import { useEffect } from "react";
+import { PAGE_DESCRIPTION, PAGE_TITLE } from "@/seo/content";
 
 const titles: Record<string, string> = {
-  "/": "SISKOP — Koperasi maju. Tumbuh bersama.",
+  "/": PAGE_TITLE,
   "/mitra": "Program mitra — SISKOP",
   "/mitra/daftar": "Daftar jadi mitra — SISKOP",
   "/register": "Daftarkan koperasi — SISKOP",
@@ -17,8 +18,7 @@ export function useOnboardingMetadata(pathname: string) {
     const previousTitle = document.title;
     document.title = titles[pathname] ?? "SISKOP";
     const restore = Object.entries({
-      description:
-        "Satu ruang untuk anggota, simpanan, dan masa depan koperasi Anda. Pilih paket SISKOP dan mulai kelola koperasi Anda.",
+      description: PAGE_DESCRIPTION,
       "theme-color": "#0d0f15",
       referrer: "strict-origin-when-cross-origin"
     }).map(([name, content]) => {

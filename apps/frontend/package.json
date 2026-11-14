@@ -37,6 +37,7 @@
     "date-fns": "^4.4.0",
     "firebase": "^12.19.0",
     "lucide-react": "^0.378.0",
+    "posthog-js": "^1.447.15",
     "qrcode.react": "^3.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",

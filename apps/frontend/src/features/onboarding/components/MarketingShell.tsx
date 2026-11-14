@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { track } from "@/lib/analytics";
+import { PUBLISHER } from "@/seo/content";
 import { useOnboardingMetadata } from "../metadata";
 import { useWorkspace } from "../../workspace-domain/WorkspaceBoundary";
 import "@fontsource/manrope/latin-400.css";
@@ -44,14 +46,14 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
           <>
             <nav className='desktop-nav' aria-label='Navigasi utama'>
               <a href='#fitur'>Fitur</a>
-              <a href='#paket'>Paket</a>
+              <a href='#paket' onClick={() => track("cta_pricing_click", { location: "navbar", label: "paket" })}>Paket</a>
               <a href='#cara-bergabung'>Cara bergabung</a>
               <Link to='/mitra'>Jadi mitra</Link>
             </nav>
             <div className='header-actions'>
               <Link to='/login'>Masuk</Link>
               <Button asChild size='lg'>
-                <a href='#paket'>
+                <a href='#paket' onClick={() => track("cta_pricing_click", { location: "navbar", label: "mulai_sekarang" })}>
                   Mulai sekarang <ArrowUpRight />
                 </a>
               </Button>
@@ -75,7 +77,7 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
                 onClick={() => setMenu(false)}
               >
                 <a href='#fitur'>Fitur</a>
-                <a href='#paket'>Paket</a>
+                <a href='#paket' onClick={() => track("cta_pricing_click", { location: "navbar", label: "paket" })}>Paket</a>
                 <a href='#cara-bergabung'>Cara bergabung</a>
                 <Link to='/mitra'>Jadi mitra</Link>
                 <Link to='/login'>Masuk</Link>
@@ -92,8 +94,16 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
       <footer className='marketing-footer content-width'>
         <Brand />
         <p>Tumbuh bersama, dikelola lebih baik.</p>
+        {/* TODO(owner): publisher name and contact are empty in src/seo/content.ts; nothing renders until set. */}
+        {PUBLISHER.name || PUBLISHER.email || PUBLISHER.phone ? (
+          <address className='footer-contact'>
+            {PUBLISHER.name ? <span>{PUBLISHER.name}</span> : null}
+            {PUBLISHER.email ? <a href={`mailto:${PUBLISHER.email}`}>{PUBLISHER.email}</a> : null}
+            {PUBLISHER.phone ? <a href={`tel:${PUBLISHER.phone.replace(/[^\d+]/g, "")}`}>{PUBLISHER.phone}</a> : null}
+          </address>
+        ) : null}
         {workspace ? <a href={`${central}/mitra`}>Jadi mitra</a> : <Link to='/mitra'>Jadi mitra</Link>}
-        {workspace ? <a href={`${central}/checkout/resume`}>Lanjutkan pendaftaran</a> : <Link to='/checkout/resume'>Lanjutkan pendaftaran</Link>}
+        {workspace ? <a href={`${central}/checkout/resume`}>Lanjutkan pendaftaran</a> : <Link to='/checkout/resume' onClick={() => track("cta_signup_click", { location: "footer", label: "lanjutkan_pendaftaran" })}>Lanjutkan pendaftaran</Link>}
       </footer>
     </div>
   );

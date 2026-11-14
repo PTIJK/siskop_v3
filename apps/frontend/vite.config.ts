@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
+import { seoPlugin } from "./vite-plugins/seo";
 
 // Production hosting rewrites /anggota/** to the separate member app
 // (firebase.json). In dev that app runs on its own port (apps/mobile, 3002), so
@@ -21,7 +22,7 @@ const memberAppRedirect = {
 };
 
 export default defineConfig({
-  plugins: [react(), memberAppRedirect],
+  plugins: [react(), seoPlugin(), memberAppRedirect],
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   server: {
     port: 3000,

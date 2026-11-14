@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuthMethodSwitch } from "../components/AuthMethodSwitch";
 import { PackagePicker, QuoteSummary } from "../components/PackagePicker";
+import { track } from "@/lib/analytics";
 import { errorMessage, onboardingApi, pricingApi, usePublicPricing, useReferralCheck } from "../api";
 import { clearFirebaseIdentity, firebaseError, identityToken } from "../firebase";
 import {
@@ -114,6 +115,7 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
     try {
       const idToken = await identityToken(form.method, form.email.trim(), form.password, true);
       await onboardingApi<RegistrationStatus>("/register", buildRegistration(form, selection, idToken));
+      track("form_submit", { form: "register", package: selection.packageCode });
       navigate("/checkout", { replace: true });
     } catch (err) {
       setError(firebaseError(err) ?? errorMessage(err));
