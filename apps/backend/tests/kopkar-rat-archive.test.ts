@@ -4,8 +4,9 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { db } from "../src/lib/db.js";
 import { signAccessToken, verifyAccessToken } from "../src/middleware/auth.js";
+import { login } from "../src/modules/auth/service.js";
 import { testDatabaseUrl } from "./database-isolation.js";
-import { app, createPlatformAdminSession, setupTenant } from "./helpers.js";
+import { app, createPlatformAdminSession, createStaffSession, setupTenant } from "./helpers.js";
 
 const path = "/api/platform/migration/kopkar-rat";
 const savingsSheet = "5_Saldo_Simpanan";
@@ -53,6 +54,7 @@ async function installArchiveFixture() {
   for (const tenant of ["cmvpy390900018h9b1zq0c87x", "another-tenant"]) {
     await db.$executeRaw`INSERT INTO public."KopkarRatSourceArchive" VALUES (${tenant}, 'prepared_review', ${tenant === "another-tenant" ? "other.xlsx" : "review.xlsx"}, 2, ${bytes}, ${notes}::jsonb)`;
   }
+  return bytes;
 }
 
 it("shows archived XLSX rows and flags without accepting another tenant or posting records", async () => {
@@ -97,4 +99,43 @@ it("shows only provisional identity rows to Kopkar staff with members.read", asy
   const live = await request(app()).get("/api/members").set("Authorization", `Bearer ${token}`);
   expect(live.status).toBe(200);
   expect(live.body.data).toEqual([]);
+});
+
+it("lets only the active Kopkar Super Admin review and download the source archive", async () => {
+  const bytes = await installArchiveFixture();
+  const slug = "kopkar-rat-client-test";
+  const email = "kopkar-rat-client@test.example";
+  const tenant = await setupTenant({ slug, registrationNo: "kopkar-rat-client-test", adminEmail: email });
+  await db.tenant.update({ where: { id: tenant.user.tenantId }, data: { id: KOPKAR_RAT_TENANT_ID } });
+  const client = await login(slug, email, "rahasia123");
+  const manager = await createStaffSession(KOPKAR_RAT_TENANT_ID, slug, "Manager", "kopkar-manager@test.example");
+  const path = "/api/reports/arsip-rat";
+  const auth = (token: string) => "Bearer " + token;
+  const page = () => request(app()).get(path).set("Authorization", auth(client.accessToken));
+  const download = (token: string) => request(app()).get(path + "/file").set("Authorization", auth(token));
+
+  expect((await request(app()).get(path)).status).toBe(401);
+  for (const token of [staff, manager.accessToken]) {
+    expect((await request(app()).get(path).set("Authorization", auth(token))).status).toBe(403);
+    expect((await download(token)).status).toBe(403);
+  }
+  const response = await page().query({ sheet: savingsSheet });
+  expect(response.status).toBe(200);
+  expect(response.headers["cache-control"]).toContain("no-store");
+  expect(response.body.data.sheet.rows[1]).toMatchObject({
+    row: 4, cells: ["TMP-0001", "-13000000", "=B4*2 → -26000000"],
+    flags: ["unverified_balance"], notes: ["Periksa saldo negatif"]
+  });
+  expect((await page().query({ tenantId: "another-tenant" })).status).toBe(422);
+  const file = await download(client.accessToken).buffer(true).parse((res, cb) => {
+    const chunks: Buffer[] = [];
+    res.on("data", (chunk: Buffer) => chunks.push(chunk));
+    res.on("end", () => cb(null, Buffer.concat(chunks)));
+  });
+  expect(file.status).toBe(200);
+  expect(file.headers["content-disposition"]).toContain("attachment");
+  expect(file.headers["cache-control"]).toContain("no-store");
+  expect(file.body).toEqual(bytes);
+  await db.user.update({ where: { id: client.user.id, tenantId: KOPKAR_RAT_TENANT_ID }, data: { isActive: false } });
+  expect((await page()).status).toBe(403);
 });
