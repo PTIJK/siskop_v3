@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { KOPKAR_RAT_TENANT_ID, type Member } from "@siskop/types";
-import { apiFetchPage } from "@/api/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { KOPKAR_RAT_TENANT_ID, type Member, type ProvisionalMember } from "@siskop/types";
+import { apiFetch, apiFetchPage } from "@/api/client";
 import { formatTanggalPendek } from "@/lib/format";
 import { useAuth } from "@/stores/auth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -17,99 +17,105 @@ import { UserPlus } from "lucide-react";
 import { GenerateQrModal } from "./GenerateQrModal";
 import { MemberDrawer } from "./MemberDrawer";
 import { RegistrationRequestsTab } from "./RegistrationRequestsTab";
-import { ProvisionalMembersTab } from "./ProvisionalMembersTab";
+import { ProvisionalMemberDialog } from "./ProvisionalMemberDialog";
+import { provisionalPage } from "./member-directory";
 
 const LIMIT = 20;
 
-function MembersListTab() {
+type DirectoryRow = { live: Member; pending?: never } | { pending: ProvisionalMember; live?: never };
+
+function MembersListTab({ tenantId, provisionalOnly = false }: { tenantId?: string; provisionalOnly?: boolean }) {
   const navigate = useNavigate();
+  const client = useQueryClient();
   const { can } = usePermissions();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  // Row click opens the detail drawer; "Detail" still goes to the full page.
   const [openId, setOpenId] = useState<string | null>(null);
-
-  const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: ["members", { page, search }],
-    queryFn: () =>
-      apiFetchPage<Member[]>(
-        `/members?page=${page}&limit=${LIMIT}${search ? `&search=${encodeURIComponent(search)}` : ""}`
-      )
+  const [openDraft, setOpenDraft] = useState<ProvisionalMember | null>(null);
+  const [saved, setSaved] = useState(false);
+  const trimmed = search.trim();
+  const provisionalKey = ["members", tenantId, "provisional-rat"];
+  const registered = useQuery({
+    queryKey: ["members", tenantId, { page, search: trimmed }],
+    enabled: !provisionalOnly,
+    queryFn: () => apiFetchPage<Member[]>(`/members?${new URLSearchParams({ page: String(page), limit: String(LIMIT), ...(trimmed && { search: trimmed }) })}`)
+  });
+  const provisional = useQuery({
+    queryKey: provisionalKey,
+    enabled: Boolean(tenantId),
+    queryFn: () => apiFetch<ProvisionalMember[]>("/members/provisional-rat"),
+    gcTime: 0,
+    retry: false
   });
 
-  const columns: ColumnDef<Member>[] = [
-    { header: "ID Anggota", accessorKey: "memberId", className: "font-mono text-xs" },
-    { header: "Nama Lengkap", accessorKey: "fullName" },
-    { header: "NIK", accessorKey: "nik", className: "font-mono text-xs" },
-    { header: "No. Rekening", accessorKey: "accountNumber", className: "font-mono text-xs" },
-    { header: "Pekerjaan", accessorKey: "occupation" },
-    {
-      header: "Status",
-      cell: ({ row }) => (
-        <Badge variant={row.original.isActive ? "ok" : "info"}>
-          {row.original.isActive ? "Aktif" : "Nonaktif"}
-        </Badge>
-      )
-    },
-    { header: "Tgl. Daftar", cell: ({ row }) => formatTanggalPendek(row.original.createdAt) },
-    {
-      header: "Aksi",
-      cell: ({ row }) => (
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/members/${row.original.id}`);
-            }}
-          >
-            Detail
-          </Button>
-          {can("members", "update") && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/members/${row.original.id}/edit`);
-              }}
-            >
-              Edit
-            </Button>
-          )}
-        </div>
-      )
-    }
+  const term = trimmed.toLocaleLowerCase("id-ID");
+  const pending = (provisional.data ?? []).filter((row) =>
+    !term || [row.fullName, row.temporaryId, row.legacyNo, row.nik].some((text) => text?.toLocaleLowerCase("id-ID").includes(term)));
+  const live = provisionalOnly ? [] : (registered.data?.items ?? []);
+  const registeredTotal = provisionalOnly ? 0 : (registered.data?.meta.total ?? 0);
+  const total = registeredTotal + pending.length;
+  const loading = (!provisionalOnly && registered.isPending) || (!!tenantId && provisional.isPending);
+  const failed = (!provisionalOnly && registered.isError) || (!!tenantId && provisional.isError);
+  const error = registered.error ?? provisional.error;
+
+  useEffect(() => {
+    if (!loading && !failed && page > Math.max(1, Math.ceil(total / LIMIT))) setPage(Math.max(1, Math.ceil(total / LIMIT)));
+  }, [loading, failed, page, total]);
+
+  const data: DirectoryRow[] = loading || failed ? [] : [
+    ...live.map((member) => ({ live: member })),
+    ...provisionalPage(pending, registeredTotal, live.length, page, LIMIT).map((member) => ({ pending: member }))
+  ];
+  const canEdit = can("members", "update");
+  const columns: ColumnDef<DirectoryRow>[] = [
+    { header: "ID Anggota", className: "font-mono text-xs", cell: ({ row: { original } }) => original.live?.memberId ?? original.pending?.temporaryId },
+    { header: "Nama Lengkap", cell: ({ row: { original } }) => original.live?.fullName ?? original.pending?.fullName },
+    { header: "NIK", className: "font-mono text-xs", cell: ({ row: { original } }) =>
+      original.live?.nik ?? original.pending?.nik ?? <span className="sr-only">Belum tersedia</span> },
+    { header: "No. Rekening", className: "font-mono text-xs", cell: ({ row: { original } }) => original.live?.accountNumber },
+    { header: "Pekerjaan", cell: ({ row: { original } }) => original.live?.occupation ?? original.pending?.occupation },
+    { header: "Status", cell: ({ row: { original } }) => original.pending
+      ? <Badge variant="warn">Belum terverifikasi</Badge>
+      : <Badge variant={original.live.isActive ? "ok" : "info"}>{original.live.isActive ? "Aktif" : "Nonaktif"}</Badge> },
+    { header: "Tgl. Daftar", cell: ({ row: { original } }) => original.live ? formatTanggalPendek(original.live.createdAt) : null },
+    { header: "Aksi", cell: ({ row: { original } }) => original.pending ? (
+      <Button size="sm" variant="outline" aria-label={(canEdit ? "Edit " : "Detail ") + original.pending.temporaryId}
+        onClick={(e) => { e.stopPropagation(); setSaved(false); setOpenDraft(original.pending); }}>
+        {canEdit ? "Edit" : "Detail"}
+      </Button>
+    ) : (
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigate("/members/" + original.live.id); }}>Detail</Button>
+        {canEdit && <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigate("/members/" + original.live.id + "/edit"); }}>Edit</Button>}
+      </div>
+    ) }
   ];
 
-  return (
-    <>
-    <DataTable
-      label="Daftar anggota"
-      columns={columns}
-      data={data?.items ?? []}
-      isLoading={isPending}
-      isError={isError}
-      errorMessage={error instanceof Error ? error.message : undefined}
-      onRetry={refetch}
-      search={{
-        value: search,
-        onChange: (v) => {
-          setSearch(v);
-          setPage(1);
-        },
-        placeholder: "Cari nama, NIK, ID..."
-      }}
-      pagination={{ page, limit: LIMIT, total: data?.meta.total ?? 0, onPageChange: setPage }}
-      onRowClick={(row) => setOpenId(row.id)}
-      getRowKey={(row) => row.id}
-      emptyMessage="Belum ada anggota terdaftar"
-      emptyDescription="Tambah anggota pertama, atau bagikan QR pendaftaran agar calon anggota mendaftar sendiri."
+  return <>
+    {saved && <p role="status" className="pb-3 text-sm font-medium">Koreksi anggota tersimpan.</p>}
+    <DataTable<DirectoryRow>
+      label={provisionalOnly ? "Anggota belum terverifikasi" : "Daftar anggota"} columns={columns} data={data}
+      isLoading={loading} isError={failed} errorMessage={error instanceof Error ? error.message : undefined}
+      onRetry={() => { if (!provisionalOnly) void registered.refetch(); if (tenantId) void provisional.refetch(); }}
+      search={{ value: search, onChange: (value) => { setSearch(value); setPage(1); }, placeholder: "Cari nama, NIK, ID..." }}
+      pagination={{ page, limit: LIMIT, total, onPageChange: setPage }}
+      onRowClick={(row) => { if (row.pending) { setSaved(false); setOpenDraft(row.pending); } else setOpenId(row.live.id); }}
+      getRowKey={(row) => row.live ? row.live.id : row.pending.temporaryId}
+      emptyDescription={!trimmed && !provisionalOnly ? "Tambah anggota pertama, atau bagikan QR pendaftaran agar calon anggota mendaftar sendiri." : undefined}
+      emptyMessage={trimmed ? "Tidak ada anggota yang cocok" : provisionalOnly ? "Belum ada anggota untuk diperiksa" : "Belum ada anggota terdaftar"}
     />
     <MemberDrawer memberId={openId} onClose={() => setOpenId(null)} />
-    </>
-  );
+    {openDraft && <ProvisionalMemberDialog
+      member={openDraft} editable={canEdit} onClose={() => { setOpenDraft(null); void provisional.refetch(); }}
+      onSaved={(updated) => {
+        client.setQueryData<ProvisionalMember[]>(provisionalKey, (old) =>
+          old?.map((row) => row.sourceRow === updated.sourceRow ? updated : row));
+        setOpenDraft(null);
+        setSaved(true);
+        void client.invalidateQueries({ queryKey: provisionalKey });
+      }}
+    />}
+  </>;
 }
 
 export function MembersPage() {
@@ -125,7 +131,9 @@ export function MembersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Anggota"
-        description="Klik baris untuk melihat simpanan dan pinjaman anggota tanpa meninggalkan daftar."
+        description={canViewProvisional
+          ? "Buka baris untuk melihat detail. Anggota ber-ID TMP dapat dikoreksi sebelum diterbitkan."
+          : "Klik baris untuk melihat simpanan dan pinjaman anggota tanpa meninggalkan daftar."}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {canReviewRegistrations && <GenerateQrModal />}
@@ -148,11 +156,11 @@ export function MembersPage() {
             {canReviewRegistrations && <TabsTrigger value="registrations">Pendaftaran mandiri</TabsTrigger>}
           </TabsList>
           <TabsContent value="list">
-            <MembersListTab />
+            <MembersListTab tenantId={canViewProvisional ? tenantId : undefined} />
           </TabsContent>
           {canViewProvisional && (
             <TabsContent value="provisional">
-              <ProvisionalMembersTab tenantId={tenantId} />
+              <MembersListTab tenantId={tenantId} provisionalOnly />
             </TabsContent>
           )}
           {canReviewRegistrations && (

@@ -126,15 +126,19 @@ export interface PublicTenantBranding {
 
 export const KOPKAR_RAT_TENANT_ID = "cmvpy390900018h9b1zq0c87x";
 
-/** A source record for review in the member directory. */
-export interface ProvisionalMember {
-  temporaryId: string;
+export interface ProvisionalMemberIdentity {
   fullName: string;
-  legacyNo: string | null;
-  sourceRow: number;
-  nik: null;
+  nik: string | null;
   address: string | null;
   birthPlace: string | null;
   birthDate: string | null;
   occupation: string | null;
+}
+
+/** A source record and any saved review corrections in the member directory. */
+export interface ProvisionalMember extends ProvisionalMemberIdentity {
+  temporaryId: string;
+  legacyNo: string | null;
+  sourceRow: number;
+  revision: number;
 }

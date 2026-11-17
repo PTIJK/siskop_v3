@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { KOPKAR_RAT_TENANT_ID } from "@siskop/types";
+import { KOPKAR_RAT_TENANT_ID, type ProvisionalMemberIdentity } from "@siskop/types";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { db } from "../src/lib/db.js";
@@ -96,9 +96,9 @@ it("shows only provisional identity rows to Kopkar staff with members.read", asy
   expect(response.status).toBe(200);
   expect(response.headers["cache-control"]).toContain("no-store");
   expect(response.body.data).toEqual([
-    { temporaryId: "TMP-0001", fullName: "Sumber Uji", legacyNo: null, sourceRow: 4,
+    { temporaryId: "TMP-0001", fullName: "Sumber Uji", legacyNo: null, sourceRow: 4, revision: 0,
       nik: null, address: null, birthPlace: null, birthDate: null, occupation: null },
-    { temporaryId: "TMP-SRC-0001", fullName: "Sumber Kedua", legacyNo: "17", sourceRow: 5,
+    { temporaryId: "TMP-SRC-0001", fullName: "Sumber Kedua", legacyNo: "17", sourceRow: 5, revision: 0,
       nik: null, address: null, birthPlace: null, birthDate: null, occupation: null }
   ]);
   const live = await request(app()).get("/api/members").set("Authorization", `Bearer ${token}`);
@@ -167,6 +167,29 @@ it("publishes verified Kopkar batches atomically, with no cash movement or dupli
   expect((await post(member, true, staff)).status).toBe(403);
   const memberOptions = await request(app()).get(base).query({ kind: "member" }).set("Authorization", "Bearer " + session.accessToken);
   expect(memberOptions.body.data.rows).toEqual([expect.objectContaining({ sourceRow: 4, published: false }), expect.objectContaining({ sourceRow: 5, published: false })]);
+  const provisionalPath = "/api/members/provisional-rat";
+  const limited = verifyAccessToken(session.accessToken, "test-secret");
+  const reader = signAccessToken({ ...limited, permissions: { ...limited.permissions, members: { read: true } } }, "test-secret", "15m");
+  const correction: ProvisionalMemberIdentity & { revision: number } = { fullName: "Sumber Uji", nik: null, address: null, birthPlace: null, birthDate: null,
+    occupation: "Pegawai", revision: 0 };
+  const update = (body: typeof correction, accessToken = session.accessToken, row = 4) =>
+    request(app()).put(provisionalPath + "/" + row).set("Authorization", "Bearer " + accessToken).send(body);
+  expect((await update(correction, staff)).status).toBe(403);
+  expect((await update(correction, reader)).status).toBe(403);
+  expect((await update(correction, session.accessToken, 999)).status).toBe(404);
+  expect((await update({ ...correction, birthDate: "1990-02-30" })).status).toBe(422);
+  const beforeCorrection = await post(member, true);
+  expect(beforeCorrection.status).toBe(200);
+  const corrected = await update(correction);
+  expect(corrected.status).toBe(200);
+  expect(corrected.body.data).toMatchObject({ ...correction, temporaryId: "TMP-0001", revision: 1 });
+  expect((await update(correction)).status).toBe(409);
+  const directory = await request(app()).get(provisionalPath).set("Authorization", "Bearer " + session.accessToken);
+  expect(directory.body.data[0]).toEqual(corrected.body.data);
+  expect(await db.member.count({ where: { tenantId } })).toBe(0);
+  const correctedOptions = await request(app()).get(base).query({ kind: "member" }).set("Authorization", "Bearer " + session.accessToken);
+  expect(correctedOptions.body.data.rows[0].correction).toMatchObject({ nik: null, occupation: "Pegawai" });
+  expect((await post({ batch: member, token: beforeCorrection.body.data.token, confirmed: true })).status).toBe(409);
   const memberPreview = await post(member, true);
   expect(memberPreview.status).toBe(200);
   const token = memberPreview.body.data.token;
