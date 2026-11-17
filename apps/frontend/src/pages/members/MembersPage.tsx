@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import type { Member } from "@siskop/types";
+import { KOPKAR_RAT_TENANT_ID, type Member } from "@siskop/types";
 import { apiFetchPage } from "@/api/client";
 import { formatTanggalPendek } from "@/lib/format";
+import { useAuth } from "@/stores/auth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { QuotaBadge } from "@/components/shared/QuotaBadge";
@@ -16,6 +17,7 @@ import { UserPlus } from "lucide-react";
 import { GenerateQrModal } from "./GenerateQrModal";
 import { MemberDrawer } from "./MemberDrawer";
 import { RegistrationRequestsTab } from "./RegistrationRequestsTab";
+import { ProvisionalMembersTab } from "./ProvisionalMembersTab";
 
 const LIMIT = 20;
 
@@ -115,6 +117,9 @@ export function MembersPage() {
   const { can } = usePermissions();
   const { quota } = useEntitlements();
   const canReviewRegistrations = can("members", "create");
+  const tenantId = useAuth((state) => state.user?.tenantId);
+  const [params] = useSearchParams();
+  const canViewProvisional = tenantId === KOPKAR_RAT_TENANT_ID && can("members", "read");
 
   return (
     <div className="space-y-6">
@@ -135,18 +140,26 @@ export function MembersPage() {
         }
       />
 
-      {canReviewRegistrations ? (
-        <Tabs defaultValue="list">
-          <TabsList>
+      {canReviewRegistrations || canViewProvisional ? (
+        <Tabs defaultValue={canViewProvisional && params.get("tab") === "belum-terverifikasi" ? "provisional" : "list"}>
+          <TabsList aria-label="Daftar anggota">
             <TabsTrigger value="list">Daftar anggota</TabsTrigger>
-            <TabsTrigger value="registrations">Pendaftaran mandiri</TabsTrigger>
+            {canViewProvisional && <TabsTrigger value="provisional">Belum terverifikasi</TabsTrigger>}
+            {canReviewRegistrations && <TabsTrigger value="registrations">Pendaftaran mandiri</TabsTrigger>}
           </TabsList>
           <TabsContent value="list">
             <MembersListTab />
           </TabsContent>
-          <TabsContent value="registrations">
-            <RegistrationRequestsTab />
-          </TabsContent>
+          {canViewProvisional && (
+            <TabsContent value="provisional">
+              <ProvisionalMembersTab tenantId={tenantId} />
+            </TabsContent>
+          )}
+          {canReviewRegistrations && (
+            <TabsContent value="registrations">
+              <RegistrationRequestsTab />
+            </TabsContent>
+          )}
         </Tabs>
       ) : (
         <MembersListTab />

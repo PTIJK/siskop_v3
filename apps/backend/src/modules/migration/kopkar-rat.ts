@@ -1,8 +1,8 @@
 import ExcelJS from "exceljs";
 import { z } from "zod";
-import { ErrorCode, type KopkarRatArchive, type KopkarRatRow } from "@siskop/types";
+import { ErrorCode, KOPKAR_RAT_TENANT_ID, type KopkarRatArchive, type KopkarRatFileKind, type KopkarRatRow, type ProvisionalMember } from "@siskop/types";
 import { db } from "../../lib/db.js";
-import { AppError } from "../../lib/errors.js";
+import { AppError, forbidden } from "../../lib/errors.js";
 
 export const kopkarRatQuery = z.object({
   kind: z.enum(["prepared_review", "original_master", "original_template"]).default("prepared_review"),
@@ -31,22 +31,54 @@ const financeSheets = new Set(["5_Saldo_Simpanan", "7_Pinjaman", "8_Jadwal_Angsu
 const sourceFinanceSheets = new Set(["Simpanan Anggota", "Modal SR TQ", "Pembiayaan", "Neraca"]);
 const masterBalances = [7, 11, 12, 14, 17, 20, 24];
 
-export async function readKopkarRat({ kind, sheet: requested, page }: z.infer<typeof kopkarRatQuery>): Promise<KopkarRatArchive> {
+async function loadKopkarRat(kind: KopkarRatFileKind) {
   const archive = await db.$queryRaw<ArchiveFile[]>`SELECT * FROM public.read_kopkar_rat_archive(${kind}::text)`;
   const files = archive.map(({ kind, name, sheetCount }) => ({ kind, name, sheetCount }));
-  if (!archive.length) return { files, sheet: null };
+  if (!archive.length) return { files, wb: null, reviewNotes: [] };
   const file = archive.find((entry) => entry.kind === kind);
   if (!file?.workbook) throw new AppError(ErrorCode.NOT_FOUND, "File arsip tidak ditemukan");
 
-  // Only the fixed, administrator-loaded Kopkar archive is read by this endpoint.
+  // Only the fixed, administrator-loaded Kopkar archive is read by these views.
   if (file.workbook.byteLength > 1024 * 1024) throw new AppError(ErrorCode.MIGRATION_FILE_INVALID, "File arsip melebihi batas 1 MB");
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(Buffer.from(file.workbook) as unknown as ExcelJS.Buffer);
+  return { files, wb, reviewNotes: file.reviewNotes ?? [] };
+}
+
+export async function listProvisionalKopkarMembers(tenantId: string): Promise<ProvisionalMember[]> {
+  if (tenantId !== KOPKAR_RAT_TENANT_ID) throw forbidden("Arsip anggota ini hanya tersedia di Kopkar UM Surabaya.");
+  const { wb } = await loadKopkarRat("prepared_review");
+  if (!wb) return [];
+  const ws = wb.getWorksheet("3_Anggota");
+  if (!ws) throw new AppError(ErrorCode.NOT_FOUND, "Sheet anggota arsip tidak ditemukan");
+
+  const headers = ws.getRow(1).values as ExcelJS.CellValue[];
+  const memberName = headers.indexOf("fullName");
+  const reference = headers.indexOf("nik");
+  if (memberName < 1 || reference < 1) throw new AppError(ErrorCode.MIGRATION_FILE_INVALID, "Kolom sumber anggota tidak lengkap");
+  const columns = ["legacyNo", "address", "birthPlace", "birthDate", "occupation"].map((key) => headers.indexOf(key));
+  const members: ProvisionalMember[] = [];
+  ws.eachRow((row, sourceRow) => {
+    if (sourceRow < 4) return;
+    const fullName = cellText(row.getCell(memberName))?.trim();
+    if (!fullName) return;
+    const key = cellText(row.getCell(reference))?.trim() ?? "";
+    const temporaryId = /^TMP-\d+$/.test(key) ? key : /^SRC-\d+$/.test(key) ? `TMP-${key}` : `TMP-ROW-${sourceRow}`;
+    const [legacyNo = null, address = null, birthPlace = null, birthDate = null, occupation = null] = columns.map((index) =>
+      index > 0 ? cellText(row.getCell(index))?.trim() || null : null);
+    members.push({ temporaryId, sourceRow, fullName, legacyNo, nik: null, address, birthPlace, birthDate, occupation });
+  });
+  return members;
+}
+
+export async function readKopkarRat({ kind, sheet: requested, page }: z.infer<typeof kopkarRatQuery>): Promise<KopkarRatArchive> {
+  const { files, wb, reviewNotes } = await loadKopkarRat(kind);
+  if (!wb) return { files, sheet: null };
   const ws = requested ? wb.getWorksheet(requested) : wb.getWorksheet("3_Anggota") ?? wb.getWorksheet("master") ?? wb.worksheets[0];
   if (!ws) throw new AppError(ErrorCode.NOT_FOUND, "Sheet arsip tidak ditemukan");
 
   const notesByRow = new Map<number, string[]>();
-  for (const note of file.reviewNotes ?? []) {
+  for (const note of reviewNotes) {
     if (note.sheet !== ws.name) continue;
     const notes = notesByRow.get(note.row) ?? [];
     notes.push(note.note);
