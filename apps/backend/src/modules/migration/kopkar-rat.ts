@@ -56,8 +56,12 @@ async function loadKopkarRat(kind: KopkarRatFileKind) {
 
 export async function listProvisionalKopkarMembers(tenantId: string): Promise<ProvisionalMember[]> {
   if (tenantId !== KOPKAR_RAT_TENANT_ID) throw forbidden("Arsip anggota ini hanya tersedia di Kopkar UM Surabaya.");
-  const { wb } = await loadKopkarRat("prepared_review");
+  const [{ wb }, published] = await Promise.all([
+    loadKopkarRat("prepared_review"),
+    db.kopkarRatPublication.findMany({ where: { tenantId, kind: "member" }, select: { sourceRow: true } })
+  ]);
   if (!wb) return [];
+  const activeRows = new Set(published.map((row) => row.sourceRow));
   const ws = wb.getWorksheet("3_Anggota");
   if (!ws) throw new AppError(ErrorCode.NOT_FOUND, "Sheet anggota arsip tidak ditemukan");
 
@@ -68,7 +72,7 @@ export async function listProvisionalKopkarMembers(tenantId: string): Promise<Pr
   const columns = ["legacyNo", "address", "birthPlace", "birthDate", "occupation"].map((key) => headers.indexOf(key));
   const members: ProvisionalMember[] = [];
   ws.eachRow((row, sourceRow) => {
-    if (sourceRow < 4) return;
+    if (sourceRow < 4 || activeRows.has(sourceRow)) return;
     const fullName = cellText(row.getCell(memberName))?.trim();
     if (!fullName) return;
     const key = cellText(row.getCell(reference))?.trim() ?? "";
@@ -116,4 +120,43 @@ export async function readKopkarRat({ kind, sheet: requested, page }: z.infer<ty
     rows.push({ row: number, cells, flags, notes: notesByRow.get(number) ?? [] });
   });
   return { files, sheet: { kind, names: wb.worksheets.map((sheet) => sheet.name), name: ws.name, page, limit, total, rows } };
+}
+
+const publishSheets = { member: "3_Anggota", saving: "5_Saldo_Simpanan", loan: "7_Pinjaman" } as const;
+
+export async function loadRatPublishSource() {
+  const { wb, reviewNotes } = await loadKopkarRat("prepared_review");
+  if (!wb) throw new AppError(ErrorCode.NOT_FOUND, "Arsip RAT Kopkar tidak ditemukan");
+  function rows(kind: keyof typeof publishSheets) {
+    const name = publishSheets[kind];
+    const sheet = wb!.getWorksheet(name);
+    if (!sheet) return [];
+    const headers = sheet.getRow(1).values as ExcelJS.CellValue[];
+    const referenceColumn = headers.indexOf(kind === "loan" ? "loanRef" : "nik");
+    const ownerColumn = headers.indexOf("nik");
+    const nameColumn = headers.indexOf("fullName");
+    const amountColumn = headers.indexOf(kind === "loan" ? "remainingPrincipal" : "balance");
+    const notesByRow = new Map<number, string[]>();
+    for (const note of reviewNotes.filter((entry) => entry.sheet === name)) {
+      const list = notesByRow.get(note.row) ?? [];
+      list.push(note.note);
+      notesByRow.set(note.row, list);
+    }
+    const result: { sourceRow: number; reference: string; ownerRef: string; name: string; value: string | null; notes: string[] }[] = [];
+    if (referenceColumn < 1 || ownerColumn < 1) return result;
+    sheet.eachRow((row, sourceRow) => {
+      if (sourceRow < 4) return;
+      const reference = cellText(row.getCell(referenceColumn))?.trim();
+      const ownerRef = cellText(row.getCell(ownerColumn))?.trim();
+      if (!reference || !ownerRef || reference.startsWith("#")) return;
+      result.push({
+        sourceRow, reference, ownerRef,
+        name: nameColumn > 0 ? cellText(row.getCell(nameColumn)) ?? "" : "",
+        value: amountColumn > 0 ? cellText(row.getCell(amountColumn)) : null,
+        notes: notesByRow.get(sourceRow) ?? []
+      });
+    });
+    return result;
+  }
+  return { member: rows("member"), saving: rows("saving"), loan: rows("loan") };
 }

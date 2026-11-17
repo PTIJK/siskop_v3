@@ -1,6 +1,7 @@
-import { KOPKAR_RAT_TENANT_ID, type LaporanHasilUsaha, type Neraca } from "@siskop/types";
+import { KOPKAR_RAT_TENANT_ID, type LaporanHasilUsaha, type Neraca, type RatPublishKind } from "@siskop/types";
 import { forbidden, notFound, validationError } from "../../lib/errors.js";
 import { Router, type Request, type Response, type NextFunction } from "express";
+import { z } from "zod";
 import { db } from "../../lib/db.js";
 import { resolvePeriod } from "../../lib/period.js";
 import { resolveReadableUnitId } from "../../lib/unit-access.js";
@@ -8,6 +9,7 @@ import { businessDate, dateKey, endOfBusinessDay, parseDateKey } from "../../lib
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { getKopkarRatWorkbookFile, kopkarRatQuery, readKopkarRat } from "../migration/kopkar-rat.js";
+import { executeRatPublish, getRatPublishOptions, previewRatPublish, ratBatch, ratPublishKind } from "../migration/kopkar-publish.js";
 import { requireAccountingEntitlement, requirePasarEntitlement } from "../../middleware/entitlement.js";
 import {
   bukuBesarAccountParamsSchema,
@@ -106,6 +108,16 @@ async function assertKopkarRatReviewer(req: Request): Promise<void> {
   if (!reviewer) throw forbidden("Arsip RAT hanya dapat dibuka oleh Super Admin Kopkar.");
 }
 
+const ratResource = { member: "members", saving: "savings", loan: "loans" } as const;
+const publishRatBody = z.object({ batch: ratBatch, token: z.string().max(2000), confirmed: z.literal(true) }).strict();
+
+function assertRatPublishPermission(req: Request, kind: RatPublishKind): void {
+  const permissions = authClaims(req).permissions;
+  if (!permissions[ratResource[kind]].create || (kind !== "member" && (!permissions.accounting?.create || !permissions.reports.update))) {
+    throw forbidden("Izin penerbitan atau pembukuan belum tersedia.");
+  }
+}
+
 export function reportsRoutes(): Router {
   const router = Router();
   router.use(requireAuth);
@@ -127,6 +139,33 @@ export function reportsRoutes(): Router {
       "Content-Disposition": `attachment; filename="arsip-rat.xlsx"; filename*=UTF-8''${encodeURIComponent(file.name)}`
     });
     res.send(file.bytes);
+  }));
+
+  router.get("/arsip-rat/publish", requirePermission("reports", "read"), handle(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    await assertKopkarRatReviewer(req);
+    const { kind } = z.object({ kind: ratPublishKind }).strict().parse(req.query);
+    assertRatPublishPermission(req, kind);
+    const data = await getRatPublishOptions(authClaims(req), kind);
+    res.json({ success: true, data, meta: res.locals.meta });
+  }));
+
+  router.post("/arsip-rat/publish/preview", requirePermission("reports", "read"), handle(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    await assertKopkarRatReviewer(req);
+    const batch = ratBatch.parse(req.body);
+    assertRatPublishPermission(req, batch.kind);
+    const data = await previewRatPublish(authClaims(req), batch);
+    res.json({ success: true, data, meta: res.locals.meta });
+  }));
+
+  router.post("/arsip-rat/publish", requirePermission("reports", "read"), handle(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    await assertKopkarRatReviewer(req);
+    const { batch, token } = publishRatBody.parse(req.body);
+    assertRatPublishPermission(req, batch.kind);
+    const data = await executeRatPublish(authClaims(req), batch, token);
+    res.json({ success: true, data, meta: res.locals.meta });
   }));
 
   // ── RPT-01 / RPT-02 — aggregate savings/loan summary (pre-ledger) ───────────
