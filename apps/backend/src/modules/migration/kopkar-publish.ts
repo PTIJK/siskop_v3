@@ -13,6 +13,7 @@ import { assertQuota } from "../../lib/pricing/entitlements.js";
 import { validateRegulatoryRate } from "../../lib/regulatory-config.js";
 import { getEffectiveUnitIds } from "../../lib/unit-access.js";
 import { recordAudit } from "../audit-log/service.js";
+import { ratFinancialFields } from "./kopkar-financial-drafts.js";
 import { loadRatPublishSource } from "./kopkar-rat.js";
 import { checkVerifiedMemberBatch, MAX_RAT_BATCH_ROWS, verifiedRatMemberRow } from "./kopkar-verified-members.js";
 
@@ -57,7 +58,7 @@ function rowError(row: number, message: string): never {
 export async function getRatPublishOptions(actor: Actor, kind: RatPublishKind): Promise<RatPublishOptions> {
   assertScope(actor);
   const { tenantId, userId } = actor;
-  const [source, unitIds, publications, products, accounts, corrections] = await Promise.all([
+  const [source, unitIds, publications, products, accounts, corrections, financialCorrections] = await Promise.all([
     loadRatPublishSource(), getEffectiveUnitIds(userId, tenantId),
     db.kopkarRatPublication.findMany({ where: { tenantId, kind }, select: { sourceRow: true } }),
     kind === "saving" ? db.savingConfig.findMany({ where: { tenantId, isActive: true }, select: { id: true, name: true } })
@@ -65,15 +66,19 @@ export async function getRatPublishOptions(actor: Actor, kind: RatPublishKind): 
     kind === "member" ? [] : db.account.findMany({ where: { tenantId, ...offsets }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
     kind === "member" ? db.kopkarRatMemberCorrection.findMany({ where: { tenantId }, select: {
       sourceRow: true, fullName: true, nik: true, address: true, birthPlace: true, birthDate: true, occupation: true
-    } }) : []
+    } }) : [],
+    kind === "member" ? [] : db.kopkarRatFinancialCorrection.findMany({ where: { tenantId, kind }, select: { sourceRow: true, fields: true } })
   ]);
   const units = await db.cooperativeUnit.findMany({ where: { tenantId, id: { in: unitIds }, isActive: true, type: "KSP" }, select: { id: true, name: true } });
   const published = new Set(publications.map((r) => r.sourceRow));
   const names = new Map(source.member.map((row) => [row.ownerRef, row.name]));
   const byRow = new Map(corrections.map(({ sourceRow, ...identity }) => [sourceRow, identity]));
+  const financialByRow = new Map(kind === "member" ? [] :
+    financialCorrections.map(({ sourceRow, fields }) => [sourceRow, ratFinancialFields[kind].parse(fields)]));
   return { units, products, offsets: accounts.map((a) => ({ id: a.id, name: accountName(a) })),
     rows: source[kind].map((r) => ({ sourceRow: r.sourceRow, reference: r.reference, name: names.get(r.ownerRef) ?? r.reference,
-      value: r.value, notes: r.notes, published: published.has(r.sourceRow), correction: published.has(r.sourceRow) ? undefined : byRow.get(r.sourceRow) })) };
+      value: r.value, notes: r.notes, published: published.has(r.sourceRow), correction: published.has(r.sourceRow) ? undefined : byRow.get(r.sourceRow),
+      financialCorrection: published.has(r.sourceRow) ? undefined : financialByRow.get(r.sourceRow) })) };
 }
 
 type PlanRow = {
@@ -128,6 +133,9 @@ async function plan(tx: TxClient, actor: Actor, input: Batch, source: Source, al
   const offset = await tx.account.findFirst({ where: { tenantId, id: input.offsetAccountId, ...offsets }, select: { id: true, code: true, name: true } });
   if (!offset) throw validationError("Pilih akun penampung neraca aktif selain kas/bank.");
   const ownerByRef = new Map(source.member.map((r) => [r.ownerRef, r]));
+  const corrections = await tx.kopkarRatFinancialCorrection.findMany({ where: { tenantId, kind: input.kind, sourceRow: { in: keys } },
+    select: { sourceRow: true, revision: true } });
+  const revisions = new Map(corrections.map((row) => [row.sourceRow, row.revision]));
   const recordKeys = new Set<string>();
   const loanSignatures = new Set<string>();
 
@@ -197,7 +205,7 @@ async function plan(tx: TxClient, actor: Actor, input: Batch, source: Source, al
       where: { tenantId, kind: input.kind, recordKey }, select: { sourceRow: true }
     })) rowError(item.sourceRow, "Rekening atau nomor kontrak ini sudah dipilih atau diterbitkan.");
     recordKeys.add(recordKey);
-    rows.push({ sourceRow: item.sourceRow, name: member.fullName + " · " + member.memberId, memberId: member.id, recordKey, amount, action,
+    rows.push({ sourceRow: item.sourceRow, name: member.fullName + " · " + member.memberId, memberId: member.id, recordKey, amount, action, correctionRevision: revisions.get(item.sourceRow) ?? 0,
       debit: input.kind === "saving" ? offset : account, credit: input.kind === "saving" ? account : offset });
   }
   return { unit, rows };

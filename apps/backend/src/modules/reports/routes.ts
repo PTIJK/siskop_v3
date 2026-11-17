@@ -9,6 +9,7 @@ import { businessDate, dateKey, endOfBusinessDay, parseDateKey } from "../../lib
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { getKopkarRatWorkbookFile, kopkarRatQuery, readKopkarRat } from "../migration/kopkar-rat.js";
+import { listRatFinancialDrafts, ratFinancialFields, ratFinancialKind, saveRatFinancialDraft } from "../migration/kopkar-financial-drafts.js";
 import { executeRatPublish, getRatPublishOptions, previewRatPublish, ratBatch, ratPublishKind } from "../migration/kopkar-publish.js";
 import { requireAccountingEntitlement, requirePasarEntitlement } from "../../middleware/entitlement.js";
 import {
@@ -139,6 +140,30 @@ export function reportsRoutes(): Router {
       "Content-Disposition": `attachment; filename="arsip-rat.xlsx"; filename*=UTF-8''${encodeURIComponent(file.name)}`
     });
     res.send(file.bytes);
+  }));
+
+  router.get("/arsip-rat/financial-drafts/:kind", requirePermission("reports", "read"), handle(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    await assertKopkarRatReviewer(req);
+    z.strictObject({}).parse(req.query);
+    const kind = ratFinancialKind.parse(req.params.kind);
+    const { tenantId, permissions } = authClaims(req);
+    if (!permissions[ratResource[kind]].read) throw forbidden("Izin melihat data belum tersedia.");
+    const data = await listRatFinancialDrafts(tenantId, kind);
+    res.json({ success: true, data, meta: res.locals.meta });
+  }));
+
+  router.put("/arsip-rat/financial-drafts/:kind/:sourceRow", requirePermission("reports", "read"), handle(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    await assertKopkarRatReviewer(req);
+    const kind = ratFinancialKind.parse(req.params.kind);
+    const sourceRow = z.coerce.number().int().min(4).max(10000).parse(req.params.sourceRow);
+    const { tenantId, userId, permissions } = authClaims(req);
+    const permission = permissions[ratResource[kind]];
+    if (!permission.read || !permission.update) throw forbidden("Izin mengoreksi data belum tersedia.");
+    const { revision, fields } = z.object({ revision: z.number().int().min(0), fields: ratFinancialFields[kind] }).strict().parse(req.body);
+    const data = await saveRatFinancialDraft(tenantId, userId, kind, sourceRow, revision, fields);
+    res.json({ success: true, data, meta: res.locals.meta });
   }));
 
   router.get("/arsip-rat/publish", requirePermission("reports", "read"), handle(async (req, res) => {

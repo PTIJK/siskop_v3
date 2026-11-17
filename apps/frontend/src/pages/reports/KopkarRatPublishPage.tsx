@@ -13,6 +13,7 @@ import { FormError } from "@/components/shared/FormError";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { formatRupiahRinci } from "@/lib/format";
 import { useAuth } from "@/stores/auth";
+import { loanFields } from "@/pages/rat/FinancialDraftRows";
 import { canReviewKopkarRat } from "./KopkarRatArchivePage";
 
 const BASE = "/reports/arsip-rat/publish";
@@ -23,13 +24,6 @@ const memberFields = [
   ["fullName", "Nama sesuai identitas"], ["nik", "NIK terverifikasi"], ["address", "Alamat"],
   ["birthPlace", "Tempat lahir"], ["birthDate", "Tanggal lahir", "date"], ["occupation", "Pekerjaan"]
 ] as const;
-const loanFields = [
-  ["contractRef", "Nomor kontrak asli"], ["disbursedAt", "Tanggal cair asli", "date"],
-  ["principalAmount", "Pokok kontrak (Rp)"], ["totalAmount", "Total kontrak (Rp)"], ["remainingPrincipal", "Sisa pokok (Rp)"],
-  ["remainingAmount", "Sisa kewajiban (Rp)"], ["termMonths", "Tenor awal (bulan)"], ["rate", "Tarif kontrak (%)"],
-  ["installmentAmount", "Angsuran kontrak (Rp)"]
-] as const;
-
 type Fields = Record<string, string>;
 type Draft = { source: RatPublishSource; fields: Fields; selected: boolean };
 type Opening = { unitId: string; cutoffDate: string; offsetAccountId: string; verificationRef: string };
@@ -110,7 +104,8 @@ export function KopkarRatPublishPage() {
     clearPreview();
     setDrafts((old) => [...old, { source, selected: false, fields: {
       fullName: source.name, action: "create", balance: source.value ?? "", remainingPrincipal: source.value ?? "",
-      ...Object.fromEntries(Object.entries(source.correction ?? {}).map(([field, value]) => [field, value ?? ""]))
+      ...Object.fromEntries(Object.entries(source.correction ?? {}).map(([field, value]) => [field, value ?? ""])),
+      ...source.financialCorrection
     } }]);
   }
   async function check(event: FormEvent) {
@@ -191,6 +186,7 @@ export function KopkarRatPublishPage() {
                   <Button type="button" size="sm" variant="ghost" onClick={() => { clearPreview(); setDrafts((old) => old.filter((d) => d.source.sourceRow !== source.sourceRow)); }}>Keluarkan</Button>
                 </div>
                 {source.notes.map((note, i) => <p key={i} className="text-sm text-warning">{note}</p>)}
+                {fields.reviewNote && <p className="text-sm text-muted-foreground">{fields.reviewNote}</p>}
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {kind === "member" ? <>
                     <Choice label="Tindakan anggota" value={fields.action ?? "create"} onChange={(v) => update("action", v)}

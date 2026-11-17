@@ -86,6 +86,25 @@ export interface KopkarRatArchive {
 
 export type RatPublishKind = "member" | "saving" | "loan";
 
+export type RatFinancialKind = Exclude<RatPublishKind, "member">;
+
+export interface RatFinancialDraft {
+  sourceRow: number;
+  reference: string;
+  ownerRef: string;
+  name: string;
+  productRef: string;
+  sourceFields: Record<string, string>;
+  fields: Record<string, string>;
+  notes: string[];
+  revision: number;
+}
+
+export interface RatFinancialDirectory {
+  rows: RatFinancialDraft[];
+  products: { id: string; name: string; type: string }[];
+}
+
 export interface RatPublishSource {
   sourceRow: number;
   reference: string;
@@ -94,6 +113,7 @@ export interface RatPublishSource {
   notes: string[];
   published: boolean;
   correction?: ProvisionalMemberIdentity;
+  financialCorrection?: Record<string, string>;
 }
 
 export interface RatPublishOptions {

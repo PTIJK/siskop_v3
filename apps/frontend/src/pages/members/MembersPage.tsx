@@ -18,7 +18,7 @@ import { GenerateQrModal } from "./GenerateQrModal";
 import { MemberDrawer } from "./MemberDrawer";
 import { RegistrationRequestsTab } from "./RegistrationRequestsTab";
 import { ProvisionalMemberDialog } from "./ProvisionalMemberDialog";
-import { provisionalPage } from "./member-directory";
+import { appendPage } from "@/components/shared/directory-pagination";
 
 const LIMIT = 20;
 
@@ -64,7 +64,7 @@ function MembersListTab({ tenantId, provisionalOnly = false }: { tenantId?: stri
 
   const data: DirectoryRow[] = loading || failed ? [] : [
     ...live.map((member) => ({ live: member })),
-    ...provisionalPage(pending, registeredTotal, live.length, page, LIMIT).map((member) => ({ pending: member }))
+    ...appendPage(pending, registeredTotal, live.length, page, LIMIT).map((member) => ({ pending: member }))
   ];
   const canEdit = can("members", "update");
   const columns: ColumnDef<DirectoryRow>[] = [
