@@ -50,8 +50,8 @@ async function installArchiveFixture(includeLoans = false) {
   savings.getCell("C4").value = { formula: "B4*2", result: -26000000 };
   if (includeLoans) {
     const loans = wb.addWorksheet("7_Pinjaman");
-    loans.getRow(1).values = ["loanRef", "nik", "remainingPrincipal"];
-    loans.getRow(4).values = ["PB-UJI", "TMP-0001", 600000];
+    loans.getRow(1).values = ["loanRef", "nik", "remainingPrincipal", "remainingAmount", "termMonths"];
+    loans.getRow(4).values = ["PB-UJI", "TMP-0001", 600000, 630000, 3];
   }
   const notes = JSON.stringify([{ sheet: savingsSheet, row: 4, note: "Periksa saldo negatif" }]);
   const bytes = Buffer.from(await wb.xlsx.writeBuffer());
@@ -223,6 +223,30 @@ it("publishes verified Kopkar batches atomically, with no cash movement or dupli
     { tenantId, sourceType: "LOAN_CONFIG", sourceId: loanProduct.id, transactionKind: "PAYMENT_PRINCIPAL", debitAccountId: cash.id, creditAccountId: receivable.id },
     { tenantId, sourceType: "LOAN_CONFIG", sourceId: loanProduct.id, transactionKind: "PAYMENT_INTEREST", debitAccountId: cash.id, creditAccountId: offset.id }
   ] });
+  const financePath = "/api/reports/arsip-rat/financial-drafts/";
+  const readFinance = (kind: string, accessToken = session.accessToken) =>
+    request(app()).get(financePath + kind).set("Authorization", "Bearer " + accessToken);
+  const editFinance = (kind: string, revision: number, fields: Record<string, unknown>, accessToken = session.accessToken) =>
+    request(app()).put(financePath + kind + "/4").set("Authorization", "Bearer " + accessToken).send({ revision, fields });
+  expect((await readFinance("saving", staff)).status).toBe(403);
+  const readOnlyFinance = signAccessToken({ ...limited, permissions: { ...limited.permissions, savings: { read: true } } }, "test-secret", "15m");
+  const sourceSavings = await readFinance("saving", readOnlyFinance);
+  expect(sourceSavings.body.data.rows[0]).toMatchObject({ sourceRow: 4, ownerRef: "TMP-0001", sourceFields: { balance: "-13000000" }, fields: {}, revision: 0 });
+  expect(sourceSavings.headers["cache-control"]).toContain("no-store");
+  expect((await editFinance("saving", 0, { balance: "150000.25" }, readOnlyFinance)).status).toBe(403);
+  expect((await editFinance("saving", 0, { remainingPrincipal: "1" })).status).toBe(422);
+  expect((await editFinance("saving", 0, { productId: "unknown" })).status).toBe(422);
+  const financePreview = await post(saving, true);
+  expect(financePreview.status).toBe(200);
+  const correctionFields = { balance: "150000.25", productId: product.id, reviewNote: "Cocokkan buku anggota" };
+  expect((await editFinance("saving", 0, correctionFields)).body.data).toEqual({ fields: correctionFields, revision: 1 });
+  expect((await editFinance("saving", 0, { balance: "0" })).status).toBe(409);
+  expect((await readFinance("saving")).body.data.rows[0]).toMatchObject({
+    sourceFields: { balance: "-13000000" }, fields: correctionFields, revision: 1
+  });
+  const financeOptions = await request(app()).get(base).query({ kind: "saving" }).set("Authorization", "Bearer " + session.accessToken);
+  expect(financeOptions.body.data.rows[0]).toMatchObject({ value: "-13000000", financialCorrection: correctionFields });
+  expect((await post({ batch: saving, token: financePreview.body.data.token, confirmed: true })).status).toBe(409);
   const savingPreview = await post(saving, true);
   expect(savingPreview.status).toBe(200);
   expect(savingPreview.body.data.rows[0].journal).toMatchObject({ debit: "3-9800 · Penampung Uji", credit: "2-9800 · Simpanan Uji", amount: "150000.25" });
@@ -233,6 +257,8 @@ it("publishes verified Kopkar batches atomically, with no cash movement or dupli
   await db.account.update({ where: { tenantId, id: offset.id }, data: { name: "Penampung Uji" } });
   const postedSaving = await post({ batch: saving, token: savingPreview.body.data.token, confirmed: true });
   expect(postedSaving.status).toBe(200);
+  expect((await readFinance("saving")).body.data.rows).toEqual([]);
+  expect((await editFinance("saving", 1, { balance: "12" })).status).toBe(409);
 
   const item = { sourceRow: 4, productId: loanProduct.id, contractRef: "ASLI-01", disbursedAt: "2025-11-01",
     principalAmount: "1200000", totalAmount: "1260000", remainingPrincipal: "600000", remainingAmount: "630000",
@@ -240,6 +266,12 @@ it("publishes verified Kopkar batches atomically, with no cash movement or dupli
     schedule: [1, 2, 3].map((month) => ({ dueDate: "2026-0" + month + "-01", principal: "200000", margin: "10000" })) };
   const loan = { kind: "loan", ...opening, rows: [item] };
   expect((await post({ ...loan, rows: [{ ...item, schedule: item.schedule.slice(0, 1) }] }, true)).status).toBe(422);
+  expect((await readFinance("loan")).body.data.rows[0]).toMatchObject({
+    reference: "PB-UJI", ownerRef: "TMP-0001", sourceFields: { remainingPrincipal: "600000", remainingAmount: "630000", termMonths: "3" }
+  });
+  const storedLoan = { remainingAmount: "", reviewNote: "Konfirmasi margin" };
+  expect((await editFinance("loan", 0, storedLoan)).body.data).toEqual({ fields: storedLoan, revision: 1 });
+  expect(await db.loan.count({ where: { tenantId } })).toBe(0);
   const loanPreview = await post(loan, true);
   expect(loanPreview.status).toBe(200);
   expect(loanPreview.body.data.rows[0].journal).toMatchObject({ debit: "1-9800 · Piutang Uji", credit: "3-9800 · Penampung Uji", amount: "600000.00" });

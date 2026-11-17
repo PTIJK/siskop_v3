@@ -58,6 +58,7 @@ interface DataTableProps<T> {
   getRowKey?: (row: T) => string;
   /** When set, row click toggles a panel rendered below the row (instead of `onRowClick`). */
   renderExpanded?: (row: T) => React.ReactNode;
+  canExpandRow?: (row: T) => boolean;
   /** Filter chips above the table (single choice, e.g. Semua / Aktif / Nonaktif). */
   chips?: { options: FilterChip[]; value: string; onChange: (value: string) => void; label?: string };
   /** Export menu in the footer (PDF, CSV, ...). Each page supplies the real export. */
@@ -94,6 +95,7 @@ export function DataTable<T>({
   headerActions,
   getRowKey,
   renderExpanded,
+  canExpandRow,
   chips,
   exportOptions,
   label
@@ -145,12 +147,11 @@ export function DataTable<T>({
 
   const totalPages = pagination ? Math.ceil(pagination.total / pagination.limit) : 1;
   const compact = density === "compact";
-  const interactive = Boolean(renderExpanded || onRowClick);
   const cellPad = compact ? "px-3 py-2 text-[13px]" : "px-4 py-3.5";
   const shown = data.length;
 
-  const activateRow = (row: T, key: string) => {
-    if (renderExpanded) toggleExpanded(key);
+  const activateRow = (row: T, key: string, expandable: boolean) => {
+    if (expandable) toggleExpanded(key);
     else onRowClick?.(row);
   };
 
@@ -248,24 +249,26 @@ export function DataTable<T>({
             ) : (
               data.map((row, i) => {
                 const key = getRowKey?.(row) ?? String(i);
-                const isExpanded = expanded.has(key);
+                const expandable = Boolean(renderExpanded && (!canExpandRow || canExpandRow(row)));
+                const interactive = expandable || Boolean(onRowClick);
+                const isExpanded = expandable && expanded.has(key);
                 return (
                   <Fragment key={key}>
                     <TableRow
-                      onClick={() => activateRow(row, key)}
+                      onClick={() => activateRow(row, key, expandable)}
                       onKeyDown={
                         interactive
                           ? (event) => {
                               if (event.target !== event.currentTarget) return;
                               if (event.key === "Enter" || event.key === " ") {
                                 event.preventDefault();
-                                activateRow(row, key);
+                                activateRow(row, key, expandable);
                               }
                             }
                           : undefined
                       }
                       tabIndex={interactive ? 0 : undefined}
-                      aria-expanded={renderExpanded ? isExpanded : undefined}
+                      aria-expanded={expandable ? isExpanded : undefined}
                       className={cn(
                         interactive && "cursor-pointer hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         "max-[900px]:grid max-[900px]:grid-cols-2 max-[900px]:gap-x-3 max-[900px]:gap-y-2 max-[900px]:p-3",
@@ -285,7 +288,7 @@ export function DataTable<T>({
                             col.className
                           )}
                         >
-                          {renderExpanded && j === 0 ? (
+                          {expandable && j === 0 ? (
                             <div className="flex items-start gap-2">
                               {isExpanded ? (
                                 <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />

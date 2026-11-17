@@ -779,6 +779,7 @@ model Tenant {
   idempotencyKeys         IdempotencyKey[]
   kopkarRatPublications   KopkarRatPublication[]
   kopkarRatMemberCorrections KopkarRatMemberCorrection[]
+  kopkarRatFinancialCorrections KopkarRatFinancialCorrection[]
 }
 
 // A tenant's own non-collection day (public holiday, market closure). Loan
@@ -2055,4 +2056,17 @@ model KopkarRatMemberCorrection {
   updatedAt  DateTime @updatedAt
 
   @@id([tenantId, sourceRow])
+}
+
+model KopkarRatFinancialCorrection {
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind      String
+  sourceRow Int
+  fields    Json
+  revision  Int
+  updatedBy String
+  updatedAt DateTime @updatedAt
+
+  @@id([tenantId, kind, sourceRow])
 }

@@ -140,13 +140,17 @@ export async function loadRatPublishSource() {
     const ownerColumn = headers.indexOf("nik");
     const nameColumn = headers.indexOf("fullName");
     const amountColumn = headers.indexOf(kind === "loan" ? "remainingPrincipal" : "balance");
+    const fieldNames = kind === "saving" ? ["balance"] : kind === "loan"
+      ? ["remainingPrincipal", "remainingAmount", "termMonths", "installmentAmount", "kolCategory"] : [];
+    const fieldColumns = fieldNames.map((field) => [field, headers.indexOf(field)] as const);
+    const productColumn = headers.indexOf("productCode");
     const notesByRow = new Map<number, string[]>();
     for (const note of reviewNotes.filter((entry) => entry.sheet === name)) {
       const list = notesByRow.get(note.row) ?? [];
       list.push(note.note);
       notesByRow.set(note.row, list);
     }
-    const result: { sourceRow: number; reference: string; ownerRef: string; name: string; value: string | null; notes: string[] }[] = [];
+    const result: { sourceRow: number; reference: string; ownerRef: string; name: string; value: string | null; productRef: string; sourceFields: Record<string, string>; notes: string[] }[] = [];
     if (referenceColumn < 1 || ownerColumn < 1) return result;
     sheet.eachRow((row, sourceRow) => {
       if (sourceRow < 4) return;
@@ -157,6 +161,11 @@ export async function loadRatPublishSource() {
         sourceRow, reference, ownerRef,
         name: nameColumn > 0 ? cellText(row.getCell(nameColumn)) ?? "" : "",
         value: amountColumn > 0 ? cellText(row.getCell(amountColumn)) : null,
+        productRef: productColumn > 0 ? cellText(row.getCell(productColumn))?.trim() ?? "" : "",
+        sourceFields: Object.fromEntries(fieldColumns.flatMap(([field, column]) => {
+          const value = column > 0 ? cellText(row.getCell(column)) : null;
+          return value === null ? [] : [[field, value]];
+        })),
         notes: notesByRow.get(sourceRow) ?? []
       });
     });
