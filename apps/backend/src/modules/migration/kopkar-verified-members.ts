@@ -21,7 +21,7 @@ export const verifiedRatMemberRow = z.discriminatedUnion("action", [
 ]);
 
 type SourceMember = Pick<ProvisionalMember, "sourceRow" | "temporaryId" | "fullName">;
-type ExistingMember = { id: string; memberId: string; nik: string; fullName: string; isActive: boolean };
+type ExistingMember = { id: string; memberId: string; nik: string | null; fullName: string; isActive: boolean };
 type BatchIssue = { sourceRow: number | null; field: string; message: string };
 type PreviewRow = SourceMember & { action: "create" | "link"; linkedMemberNumber?: string };
 

@@ -1014,13 +1014,14 @@ model Member {
   memberId           String    @unique
   accountNumber      String    @unique
   fullName           String
-  nik                String
+  nik                String?
   address            String
   birthPlace         String
-  birthDate          DateTime
+  birthDate          DateTime?
   occupation         String
   ktpPhotoUrl        String?
   isActive           Boolean   @default(true)
+  identityUnverified Boolean   @default(false)
   // Related-party concentration limit (Permenkop UKM 8/2023) — a pengurus/
   // pengawas member's cumulative active-loan principal is capped at 10% of
   // the tenant's modalDisetor. See lib/regulatory-config.ts.

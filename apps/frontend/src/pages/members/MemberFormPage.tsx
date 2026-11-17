@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -26,12 +27,21 @@ const memberSchema = z.object({
   occupation: z.string().min(2, "Pekerjaan wajib diisi")
 });
 
+const unverifiedSchema = memberSchema.extend({
+  nik: memberSchema.shape.nik.or(z.literal("")),
+  address: memberSchema.shape.address.or(z.literal("")),
+  birthPlace: memberSchema.shape.birthPlace.or(z.literal("")),
+  birthDate: memberSchema.shape.birthDate.or(z.literal("")),
+  occupation: memberSchema.shape.occupation.or(z.literal(""))
+});
+
 type MemberForm = z.infer<typeof memberSchema>;
 
 export function MemberFormPage() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
   const navigate = useNavigate();
+  const client = useQueryClient();
   const { toast } = useToast();
   const [apiError, setApiError] = useState("");
   const [ktpFile, setKtpFile] = useState<File | null>(null);
@@ -39,13 +49,15 @@ export function MemberFormPage() {
   const [memberInfo, setMemberInfo] = useState<{ memberId: string; accountNumber: string } | null>(null);
   const [isPengurus, setIsPengurus] = useState(false);
   const [isPengawas, setIsPengawas] = useState(false);
+  const [identityUnverified, setIdentityUnverified] = useState(false);
+  const [verifyIdentity, setVerifyIdentity] = useState(false);
 
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors, isSubmitting }
-  } = useForm<MemberForm>({ resolver: zodResolver(memberSchema) });
+  } = useForm<MemberForm>({ resolver: zodResolver(identityUnverified && !verifyIdentity ? unverifiedSchema : memberSchema) });
 
   useEffect(() => {
     if (!isEdit) return;
@@ -53,12 +65,13 @@ export function MemberFormPage() {
       .then((m) => {
         reset({
           fullName: m.fullName,
-          nik: m.nik,
+          nik: m.nik ?? "",
           address: m.address,
           birthPlace: m.birthPlace,
           birthDate: m.birthDate ? m.birthDate.split("T")[0] : "",
           occupation: m.occupation
         });
+        setIdentityUnverified(Boolean(m.identityUnverified));
         setIsPengurus(m.isPengurus);
         setIsPengawas(m.isPengawas);
         setMemberInfo({ memberId: m.memberId, accountNumber: m.accountNumber });
@@ -82,7 +95,9 @@ export function MemberFormPage() {
     setApiError("");
     try {
       let memberId = id;
-      const payload = { ...data, isPengurus, isPengawas };
+      const fields = identityUnverified && !verifyIdentity
+        ? Object.fromEntries(Object.entries(data).filter(([, value]) => value.trim() !== "")) : data;
+      const payload = { ...fields, isPengurus, isPengawas, ...(verifyIdentity && { verifyIdentity: true }) };
       if (isEdit) {
         await apiPut(`/members/${id}`, payload);
         toast({ title: "Data anggota berhasil diperbarui" });
@@ -98,11 +113,14 @@ export function MemberFormPage() {
         await apiUpload(`/members/${memberId}/upload-ktp`, form);
       }
 
+      if (identityUnverified) await client.invalidateQueries({ queryKey: ["members"] });
       navigate(`/members/${memberId}`);
     } catch (err) {
       setApiError(err instanceof ApiRequestError ? err.message : "Terjadi kesalahan");
     }
   };
+
+  const requiredMark = !identityUnverified || verifyIdentity ? " *" : "";
 
   return (
     <div className="space-y-6">
@@ -115,9 +133,10 @@ export function MemberFormPage() {
         <CardHeader>
           <CardTitle className="text-base">Data Pribadi</CardTitle>
           {memberInfo && (
-            <div className="flex gap-3 pt-1">
+            <div className="flex flex-wrap gap-3 pt-1">
               <Badge variant="outline">ID: {memberInfo.memberId}</Badge>
               <Badge variant="outline">No. Rek: {memberInfo.accountNumber}</Badge>
+              {identityUnverified && <Badge variant="warn">Belum terverifikasi</Badge>}
             </div>
           )}
         </CardHeader>
@@ -127,38 +146,38 @@ export function MemberFormPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>Nama Lengkap *</Label>
-                <Input placeholder="Budi Santoso" {...register("fullName")} />
+                <Label htmlFor="fullName">Nama Lengkap *</Label>
+                <Input id="fullName" placeholder="Budi Santoso" {...register("fullName")} />
                 {errors.fullName && <p className="text-xs text-destructive">{errors.fullName.message}</p>}
               </div>
 
               <div className="space-y-1.5">
-                <Label>NIK (16 digit) *</Label>
-                <Input placeholder="3201234567890123" maxLength={16} {...register("nik")} />
+                <Label htmlFor="nik">NIK (16 digit){requiredMark}</Label>
+                <Input id="nik" placeholder="3201234567890123" maxLength={16} {...register("nik")} />
                 {errors.nik && <p className="text-xs text-destructive">{errors.nik.message}</p>}
               </div>
 
               <div className="space-y-1.5">
-                <Label>Pekerjaan *</Label>
-                <Input placeholder="Pedagang" {...register("occupation")} />
+                <Label htmlFor="occupation">Pekerjaan{requiredMark}</Label>
+                <Input id="occupation" placeholder="Pedagang" {...register("occupation")} />
                 {errors.occupation && <p className="text-xs text-destructive">{errors.occupation.message}</p>}
               </div>
 
               <div className="space-y-1.5">
-                <Label>Tempat Lahir *</Label>
-                <Input placeholder="Jakarta" {...register("birthPlace")} />
+                <Label htmlFor="birthPlace">Tempat Lahir{requiredMark}</Label>
+                <Input id="birthPlace" placeholder="Jakarta" {...register("birthPlace")} />
                 {errors.birthPlace && <p className="text-xs text-destructive">{errors.birthPlace.message}</p>}
               </div>
 
               <div className="space-y-1.5">
-                <Label>Tanggal Lahir *</Label>
-                <Input type="date" {...register("birthDate")} />
+                <Label htmlFor="birthDate">Tanggal Lahir{requiredMark}</Label>
+                <Input id="birthDate" type="date" {...register("birthDate")} />
                 {errors.birthDate && <p className="text-xs text-destructive">{errors.birthDate.message}</p>}
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>Alamat *</Label>
-                <Textarea placeholder="Jl. Merdeka No. 1, RT 01/RW 02, Jakarta" rows={3} {...register("address")} />
+                <Label htmlFor="address">Alamat{requiredMark}</Label>
+                <Textarea id="address" placeholder="Jl. Merdeka No. 1, RT 01/RW 02, Jakarta" rows={3} {...register("address")} />
                 {errors.address && <p className="text-xs text-destructive">{errors.address.message}</p>}
               </div>
 
@@ -222,6 +241,10 @@ export function MemberFormPage() {
               </div>
             </div>
 
+            {identityUnverified && <div className="flex items-center gap-2">
+              <Checkbox id="verifyIdentity" checked={verifyIdentity} onCheckedChange={(checked) => setVerifyIdentity(checked === true)} />
+              <Label htmlFor="verifyIdentity">Identitas telah diperiksa</Label>
+            </div>}
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => navigate(-1)}>
                 Batal

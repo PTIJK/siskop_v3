@@ -1,10 +1,10 @@
 import { Prisma } from "@prisma/client";
 import type { MigrationOpeningLine } from "@siskop/types";
 import type { TxClient } from "../../lib/db.js";
+import { generateAccountNumbers } from "../../lib/id-generator.js";
 import { buildSchedule } from "../../lib/installment-schedule.js";
 import { createJournalEntry, postLoanDisbursement, postSavingTransaction } from "../../lib/journal.js";
 import { loadOperatingCalendar, parseDateKey } from "../../lib/operating-calendar.js";
-import { withoutTenantScope } from "../../lib/tenant-scope.js";
 import { recordAudit } from "../audit-log/service.js";
 import { generateStandardCoaInTx } from "../config/service.js";
 import { provisionTenantInTx } from "../tenants/provision.js";
@@ -141,7 +141,7 @@ export async function runMigration(tx: TxClient, data: ParsedData, ctx: Migratio
 
   // 4. Members. memberId is numbered in memory: generateMemberId counts rows in the DB per call.
   const yyyymm = `${cutoff.getUTCFullYear()}${String(cutoff.getUTCMonth() + 1).padStart(2, "0")}`;
-  const accountNumbers = await uniqueAccountNumbers(tx, data.members.length);
+  const accountNumbers = await generateAccountNumbers(tx, data.members.length);
   const memberIds = new Map<string, string>();
   for (const [ci, chunk] of chunks(data.members).entries()) {
     const created = await tx.member.createManyAndReturn({
@@ -162,7 +162,7 @@ export async function runMigration(tx: TxClient, data: ParsedData, ctx: Migratio
       })),
       select: { id: true, nik: true }
     });
-    for (const c of created) memberIds.set(c.nik, c.id);
+    for (const c of created) if (c.nik) memberIds.set(c.nik, c.id);
     await tx.unitMembership.createMany({ data: chunk.map((m) => ({ memberId: memberIds.get(m.nik)!, unitId: unitOf(m.unitCode) })) });
   }
 
@@ -339,17 +339,4 @@ export async function runMigration(tx: TxClient, data: ParsedData, ctx: Migratio
       credit: l.credit.toString()
     }))
   };
-}
-
-/** ACC-{10 digits}, unique across all tenants; the check must see every tenant's members. */
-async function uniqueAccountNumbers(tx: TxClient, n: number): Promise<string[]> {
-  const out = new Set<string>();
-  while (out.size < n) {
-    const batch = new Set<string>();
-    while (out.size + batch.size < n) batch.add(`ACC-${Math.floor(Math.random() * 9_000_000_000) + 1_000_000_000}`);
-    const taken = await withoutTenantScope(() => tx.member.findMany({ where: { accountNumber: { in: [...batch] } }, select: { accountNumber: true } }));
-    const takenSet = new Set(taken.map((t) => t.accountNumber));
-    for (const a of batch) if (!takenSet.has(a) && !out.has(a)) out.add(a);
-  }
-  return [...out];
 }

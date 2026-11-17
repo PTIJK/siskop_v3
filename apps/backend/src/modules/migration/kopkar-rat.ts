@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { z } from "zod";
 import { ErrorCode, KOPKAR_RAT_TENANT_ID, type KopkarRatArchive, type KopkarRatFileKind, type KopkarRatRow, type ProvisionalMember } from "@siskop/types";
-import { db } from "../../lib/db.js";
+import { db, type TxClient } from "../../lib/db.js";
 import { AppError, forbidden } from "../../lib/errors.js";
 
 export const kopkarRatQuery = z.object({
@@ -31,8 +31,8 @@ const financeSheets = new Set(["5_Saldo_Simpanan", "7_Pinjaman", "8_Jadwal_Angsu
 const sourceFinanceSheets = new Set(["Simpanan Anggota", "Modal SR TQ", "Pembiayaan", "Neraca"]);
 const masterBalances = [7, 11, 12, 14, 17, 20, 24];
 
-const readArchive = (kind: KopkarRatFileKind) =>
-  db.$queryRaw<ArchiveFile[]>`SELECT * FROM public.read_kopkar_rat_archive(${kind}::text)`;
+const readArchive = (kind: KopkarRatFileKind, tx: TxClient = db) =>
+  tx.$queryRaw<ArchiveFile[]>`SELECT * FROM public.read_kopkar_rat_archive(${kind}::text)`;
 
 export async function getKopkarRatWorkbookFile(kind: KopkarRatFileKind) {
   const file = (await readArchive(kind)).find((entry) => entry.kind === kind);
@@ -40,8 +40,8 @@ export async function getKopkarRatWorkbookFile(kind: KopkarRatFileKind) {
   return { name: file.name, bytes: Buffer.from(file.workbook) };
 }
 
-async function loadKopkarRat(kind: KopkarRatFileKind) {
-  const archive = await readArchive(kind);
+async function loadKopkarRat(kind: KopkarRatFileKind, tx: TxClient = db) {
+  const archive = await readArchive(kind, tx);
   const files = archive.map(({ kind, name, sheetCount }) => ({ kind, name, sheetCount }));
   if (!archive.length) return { files, wb: null, reviewNotes: [] };
   const file = archive.find((entry) => entry.kind === kind);
@@ -54,12 +54,12 @@ async function loadKopkarRat(kind: KopkarRatFileKind) {
   return { files, wb, reviewNotes: file.reviewNotes ?? [] };
 }
 
-export async function listProvisionalKopkarMembers(tenantId: string): Promise<ProvisionalMember[]> {
+export async function listProvisionalKopkarMembers(tenantId: string, tx: TxClient = db): Promise<ProvisionalMember[]> {
   if (tenantId !== KOPKAR_RAT_TENANT_ID) throw forbidden("Arsip anggota ini hanya tersedia di Kopkar UM Surabaya.");
   const [{ wb }, published, corrections] = await Promise.all([
-    loadKopkarRat("prepared_review"),
-    db.kopkarRatPublication.findMany({ where: { tenantId, kind: "member" }, select: { sourceRow: true } }),
-    db.kopkarRatMemberCorrection.findMany({ where: { tenantId }, select: {
+    loadKopkarRat("prepared_review", tx),
+    tx.kopkarRatPublication.findMany({ where: { tenantId, kind: "member" }, select: { sourceRow: true } }),
+    tx.kopkarRatMemberCorrection.findMany({ where: { tenantId }, select: {
       sourceRow: true, fullName: true, nik: true, address: true, birthPlace: true, birthDate: true, occupation: true, revision: true
     } })
   ]);

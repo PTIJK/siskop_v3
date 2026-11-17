@@ -1,12 +1,13 @@
 import type { Prisma } from "@prisma/client";
 import { ErrorCode } from "@siskop/types";
 import { db } from "../../lib/db.js";
-import { AppError, notFound } from "../../lib/errors.js";
+import { AppError, notFound, validationError } from "../../lib/errors.js";
 import { generateAccountNumber, generateMemberId } from "../../lib/id-generator.js";
 import { recordAudit } from "../audit-log/service.js";
 import { getDefaultUnitId } from "../../lib/units.js";
 import { withQuota } from "../../lib/pricing/entitlements.js";
-import type { CreateMemberInput, ListMembersQueryInput, UpdateMemberInput } from "./schema.js";
+import { dateKey, parseDateKey, businessDate } from "../../lib/operating-calendar.js";
+import { memberFieldsSchema, type CreateMemberInput, type ListMembersQueryInput, type UpdateMemberInput } from "./schema.js";
 
 // `Prisma.$extends()`-wrapped clients (see lib/db.ts) don't carry the `omit`
 // query option through their generated types, so the passwordHash column
@@ -26,6 +27,7 @@ const memberSelect = {
   occupation: true,
   ktpPhotoUrl: true,
   isActive: true,
+  identityUnverified: true,
   isPengurus: true,
   isPengawas: true,
   commodity: true,
@@ -36,7 +38,7 @@ const memberSelect = {
 } satisfies Prisma.MemberSelect;
 
 export async function listMembers(tenantId: string, query: ListMembersQueryInput) {
-  const { page, limit, search, sortBy, sortOrder, isActive } = query;
+  const { page, limit, search, sortBy, sortOrder, isActive, identityUnverified } = query;
   const skip = (page - 1) * limit;
 
   const where: Prisma.MemberWhereInput = {
@@ -51,7 +53,8 @@ export async function listMembers(tenantId: string, query: ListMembersQueryInput
           ]
         }
       : {}),
-    ...(isActive !== undefined ? { isActive } : {})
+    ...(isActive !== undefined ? { isActive } : {}),
+    ...(identityUnverified && { identityUnverified: true })
   };
 
   const [items, total] = await Promise.all([
@@ -131,13 +134,14 @@ export async function createMember(tenantId: string, data: CreateMemberInput) {
 
 const memberEditableFields = (m: {
   fullName: string;
-  nik: string;
+  nik: string | null;
   address: string;
   birthPlace: string;
-  birthDate: Date;
+  birthDate: Date | null;
   occupation: string;
   isPengurus: boolean;
   isPengawas: boolean;
+  identityUnverified: boolean;
 }) => ({
   fullName: m.fullName,
   nik: m.nik,
@@ -146,7 +150,8 @@ const memberEditableFields = (m: {
   birthDate: m.birthDate,
   occupation: m.occupation,
   isPengurus: m.isPengurus,
-  isPengawas: m.isPengawas
+  isPengawas: m.isPengawas,
+  identityUnverified: m.identityUnverified
 });
 
 export async function updateMember(tenantId: string, id: string, data: UpdateMemberInput) {
@@ -159,6 +164,15 @@ export async function updateMember(tenantId: string, id: string, data: UpdateMem
       if (duplicateNik) throw new AppError(ErrorCode.NIK_EXISTS, "NIK sudah terdaftar di koperasi ini");
     }
 
+    if (data.verifyIdentity) {
+      if (!member.identityUnverified) throw validationError("Anggota ini tidak menunggu verifikasi identitas.");
+      const verified = memberFieldsSchema.parse({ ...memberEditableFields(member), birthDate: member.birthDate && dateKey(member.birthDate), ...data });
+      const dob = parseDateKey(verified.birthDate);
+      if (!Number.isFinite(dob.valueOf()) || dateKey(dob) !== verified.birthDate || dob > businessDate()) {
+        throw validationError("Tanggal lahir tidak valid.");
+      }
+    }
+
     const updated = await tx.member.update({
       where: { id, tenantId },
       data: {
@@ -167,6 +181,7 @@ export async function updateMember(tenantId: string, id: string, data: UpdateMem
         ...(data.address && { address: data.address }),
         ...(data.birthPlace && { birthPlace: data.birthPlace }),
         ...(data.birthDate && { birthDate: new Date(data.birthDate) }),
+        ...(data.verifyIdentity && { identityUnverified: false }),
         ...(data.occupation && { occupation: data.occupation }),
         ...(data.isPengurus !== undefined && { isPengurus: data.isPengurus }),
         ...(data.isPengawas !== undefined && { isPengawas: data.isPengawas }),

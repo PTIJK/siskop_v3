@@ -74,6 +74,7 @@ export interface ListSavingsQuery {
 
 /** One row of the Simpanan list grouped by member — `GET /api/savings/by-member`. */
 export interface MemberSavingsSummary {
+  identityUnverified?: boolean;
   /** Member.id (cuid). */
   memberId: string;
   /** Member.memberId — the human-readable member number. */

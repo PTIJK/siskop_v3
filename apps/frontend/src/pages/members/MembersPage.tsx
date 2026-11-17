@@ -18,6 +18,8 @@ import { GenerateQrModal } from "./GenerateQrModal";
 import { MemberDrawer } from "./MemberDrawer";
 import { RegistrationRequestsTab } from "./RegistrationRequestsTab";
 import { ProvisionalMemberDialog } from "./ProvisionalMemberDialog";
+import { canReviewKopkarRat } from "@/pages/reports/KopkarRatArchivePage";
+import { ActivateTmpMembers } from "./ActivateTmpMembers";
 import { appendPage } from "@/components/shared/directory-pagination";
 
 const LIMIT = 20;
@@ -28,6 +30,7 @@ function MembersListTab({ tenantId, provisionalOnly = false }: { tenantId?: stri
   const navigate = useNavigate();
   const client = useQueryClient();
   const { can } = usePermissions();
+  const user = useAuth((state) => state.user);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -36,9 +39,8 @@ function MembersListTab({ tenantId, provisionalOnly = false }: { tenantId?: stri
   const trimmed = search.trim();
   const provisionalKey = ["members", tenantId, "provisional-rat"];
   const registered = useQuery({
-    queryKey: ["members", tenantId, { page, search: trimmed }],
-    enabled: !provisionalOnly,
-    queryFn: () => apiFetchPage<Member[]>(`/members?${new URLSearchParams({ page: String(page), limit: String(LIMIT), ...(trimmed && { search: trimmed }) })}`)
+    queryKey: ["members", tenantId, { page, search: trimmed, provisionalOnly }],
+    queryFn: () => apiFetchPage<Member[]>(`/members?${new URLSearchParams({ page: String(page), limit: String(LIMIT), ...(trimmed && { search: trimmed }), ...(provisionalOnly && { identityUnverified: "true" }) })}`)
   });
   const provisional = useQuery({
     queryKey: provisionalKey,
@@ -51,11 +53,11 @@ function MembersListTab({ tenantId, provisionalOnly = false }: { tenantId?: stri
   const term = trimmed.toLocaleLowerCase("id-ID");
   const pending = (provisional.data ?? []).filter((row) =>
     !term || [row.fullName, row.temporaryId, row.legacyNo, row.nik].some((text) => text?.toLocaleLowerCase("id-ID").includes(term)));
-  const live = provisionalOnly ? [] : (registered.data?.items ?? []);
-  const registeredTotal = provisionalOnly ? 0 : (registered.data?.meta.total ?? 0);
+  const live = registered.data?.items ?? [];
+  const registeredTotal = registered.data?.meta.total ?? 0;
   const total = registeredTotal + pending.length;
-  const loading = (!provisionalOnly && registered.isPending) || (!!tenantId && provisional.isPending);
-  const failed = (!provisionalOnly && registered.isError) || (!!tenantId && provisional.isError);
+  const loading = registered.isPending || (!!tenantId && provisional.isPending);
+  const failed = registered.isError || (!!tenantId && provisional.isError);
   const error = registered.error ?? provisional.error;
 
   useEffect(() => {
@@ -76,7 +78,10 @@ function MembersListTab({ tenantId, provisionalOnly = false }: { tenantId?: stri
     { header: "Pekerjaan", cell: ({ row: { original } }) => original.live?.occupation ?? original.pending?.occupation },
     { header: "Status", cell: ({ row: { original } }) => original.pending
       ? <Badge variant="warn">Belum terverifikasi</Badge>
-      : <Badge variant={original.live.isActive ? "ok" : "info"}>{original.live.isActive ? "Aktif" : "Nonaktif"}</Badge> },
+      : <div className="flex flex-wrap gap-1">
+        <Badge variant={original.live.isActive ? "ok" : "info"}>{original.live.isActive ? "Aktif" : "Nonaktif"}</Badge>
+        {original.live.identityUnverified && <Badge variant="warn">Belum terverifikasi</Badge>}
+      </div> },
     { header: "Tgl. Daftar", cell: ({ row: { original } }) => original.live ? formatTanggalPendek(original.live.createdAt) : null },
     { header: "Aksi", cell: ({ row: { original } }) => original.pending ? (
       <Button size="sm" variant="outline" aria-label={(canEdit ? "Edit " : "Detail ") + original.pending.temporaryId}
@@ -96,8 +101,10 @@ function MembersListTab({ tenantId, provisionalOnly = false }: { tenantId?: stri
     <DataTable<DirectoryRow>
       label={provisionalOnly ? "Anggota belum terverifikasi" : "Daftar anggota"} columns={columns} data={data}
       isLoading={loading} isError={failed} errorMessage={error instanceof Error ? error.message : undefined}
-      onRetry={() => { if (!provisionalOnly) void registered.refetch(); if (tenantId) void provisional.refetch(); }}
+      onRetry={() => { void registered.refetch(); if (tenantId) void provisional.refetch(); }}
       search={{ value: search, onChange: (value) => { setSearch(value); setPage(1); }, placeholder: "Cari nama, NIK, ID..." }}
+      headerActions={!provisionalOnly && can("members", "create") && canReviewKopkarRat(user)
+        ? <ActivateTmpMembers count={provisional.data?.length ?? 0} /> : undefined}
       pagination={{ page, limit: LIMIT, total, onPageChange: setPage }}
       onRowClick={(row) => { if (row.pending) { setSaved(false); setOpenDraft(row.pending); } else setOpenId(row.live.id); }}
       getRowKey={(row) => row.live ? row.live.id : row.pending.temporaryId}

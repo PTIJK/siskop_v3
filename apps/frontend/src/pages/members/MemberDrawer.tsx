@@ -67,7 +67,7 @@ export function MemberDrawer({ memberId, onClose }: MemberDrawerProps) {
             <div className="min-w-0">
               <DrawerTitle className="truncate">{member?.fullName ?? "Memuat anggota"}</DrawerTitle>
               <DrawerDescription id="member-drawer-desc">
-                {member ? `${member.memberId} · NIK ${maskNik(member.nik)}` : "Rincian anggota dibuka di panel ini."}
+                {member ? `${member.memberId}${member.nik ? " · NIK " + maskNik(member.nik) : ""}` : "Rincian anggota dibuka di panel ini."}
               </DrawerDescription>
             </div>
           </div>
@@ -92,6 +92,7 @@ export function MemberDrawer({ memberId, onClose }: MemberDrawerProps) {
           ) : (
             <>
               <div className="flex flex-wrap gap-2">
+                {member.identityUnverified && <Badge variant="warn">Belum terverifikasi</Badge>}
                 <Badge variant={member.isActive ? "ok" : "info"}>{member.isActive ? "Aktif" : "Nonaktif"}</Badge>
                 <Badge variant="outline" className="font-mono">
                   Rek. {member.accountNumber}

@@ -52,6 +52,7 @@ export function MemberDetailPage() {
           <Badge variant="outline" className="money">
             {member.accountNumber}
           </Badge>
+          {member.identityUnverified && <Badge variant="secondary">Belum terverifikasi</Badge>}
           <Badge variant={member.isActive ? "ok" : "secondary"}>{member.isActive ? "Aktif" : "Nonaktif"}</Badge>
         </div>
       </div>

@@ -109,7 +109,7 @@ export async function listLoans(tenantId: string, query: ListLoansQueryInput) {
       skip,
       take: limit,
       include: {
-        member: { select: { memberId: true, fullName: true, accountNumber: true } },
+        member: { select: { memberId: true, fullName: true, accountNumber: true, identityUnverified: true } },
         loanConfig: { select: { name: true, type: true } }
       },
       orderBy: { createdAt: "desc" }

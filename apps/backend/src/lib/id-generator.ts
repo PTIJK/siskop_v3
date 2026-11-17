@@ -1,4 +1,5 @@
 import { db, type TxClient } from "./db.js";
+import { withoutTenantScope } from "./tenant-scope.js";
 
 /**
  * KOP-{TENANTSLUG}-{YYYYMM}-{4-digit sequence}, e.g. KOP-DEMO-202606-0001.
@@ -35,4 +36,17 @@ export async function generateAccountNumber(tx: TxClient | typeof db = db): Prom
   }
 
   return accountNumber;
+}
+
+/** Generate globally unique account numbers for a single bulk insert. */
+export async function generateAccountNumbers(tx: TxClient, n: number): Promise<string[]> {
+  const out = new Set<string>();
+  while (out.size < n) {
+    const batch = new Set<string>();
+    while (out.size + batch.size < n) batch.add(`ACC-${Math.floor(Math.random() * 9_000_000_000) + 1_000_000_000}`);
+    const taken = await withoutTenantScope(() => tx.member.findMany({ where: { accountNumber: { in: [...batch] } }, select: { accountNumber: true } }));
+    const takenSet = new Set(taken.map((t) => t.accountNumber));
+    for (const a of batch) if (!takenSet.has(a) && !out.has(a)) out.add(a);
+  }
+  return [...out];
 }

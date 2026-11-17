@@ -65,6 +65,7 @@ export async function activatePortalAccess(
   const member = await db.member.findFirst({ where: { id: memberId, tenantId } });
   if (!member) throw notFound("Anggota tidak ditemukan");
 
+  if (member.identityUnverified || !member.birthDate) throw validationError("Verifikasi identitas anggota sebelum mengaktifkan portal.");
   const defaultPassword = defaultPasswordFromBirthDate(member.birthDate);
   const passwordHash = await bcrypt.hash(defaultPassword, BCRYPT_ROUNDS);
 
