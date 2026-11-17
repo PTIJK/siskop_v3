@@ -52,6 +52,11 @@ async function installArchiveFixture(includeLoans = false) {
     const loans = wb.addWorksheet("7_Pinjaman");
     loans.getRow(1).values = ["loanRef", "nik", "remainingPrincipal", "remainingAmount", "termMonths"];
     loans.getRow(4).values = ["PB-UJI", "TMP-0001", 600000, 630000, 3];
+    const neraca = wb.addWorksheet("9_Neraca");
+    neraca.getRow(1).values = ["reportName", "accountCode", "amount"];
+    neraca.getRow(4).values = ["Piutang Uji", "1-1100", 500000];
+    neraca.getRow(5).values = ["Piutang Macet Uji", "1-1100", 50000];
+    neraca.getRow(6).values = ["Kas", "1-1000", 75000];
   }
   const notes = JSON.stringify([{ sheet: savingsSheet, row: 4, note: "Periksa saldo negatif" }]);
   const bytes = Buffer.from(await wb.xlsx.writeBuffer());
@@ -326,4 +331,67 @@ it("activates only unmatched Kopkar TMP members with blank identities and no fin
   expect(await db.saving.count({ where: { tenantId } })).toBe(0);
   expect(await db.loan.count({ where: { tenantId } })).toBe(0);
   expect(await db.journalLine.count({ where: { tenantId } })).toBe(0);
+});
+
+it("books a principal-only opening journal once, with editable review rows and no operational loans", async () => {
+  await installArchiveFixture(true);
+  const tenantId = KOPKAR_RAT_TENANT_ID;
+  await db.tenant.deleteMany({ where: { id: tenantId } });
+  const slug = "kopkar-loan-principal-test";
+  const email = "kopkar-loan-principal@test.example";
+  const original = await setupTenant({ slug, registrationNo: slug, adminEmail: email });
+  await db.tenant.update({ where: { id: original.user.tenantId }, data: { id: tenantId } });
+  const session = await login(slug, email, "rahasia123");
+  const auth = "Bearer " + session.accessToken;
+  const path = "/api/reports/arsip-rat/loan-principal-opening";
+  const book = (excelAmount: string) => request(app()).post(path).set("Authorization", auth)
+    .send({ excelAmount, neracaAmount: "550000.00", confirmed: true });
+  const summary = await request(app()).get(path).set("Authorization", auth);
+  expect(summary.body.data).toEqual({
+    cutoffDate: "2025-12-31", receivableCode: "1-1100", offsetCode: "3-9010", sourceRows: 1,
+    excelAmount: "600000.00", neracaAmount: "550000.00", difference: "50000.00", journal: null
+  });
+  expect((await request(app()).get(path).set("Authorization", "Bearer " + staff)).status).toBe(403);
+  expect((await book("550000.00")).status).toBe(409);
+  const ready = await request(app()).post("/api/reports/arsip-rat/activate-tmp-members").set("Authorization", auth)
+    .send({ count: 2, confirmed: true });
+  expect(ready.body.data).toEqual({ activated: 2, needsMatch: 0 });
+  const ensureAccount = (code: string, name: string, category: "ASET" | "EKUITAS", normalBalance: "DEBIT" | "KREDIT") =>
+    db.account.upsert({ where: { tenantId_code: { tenantId, code } }, update: {}, create: { tenantId, code, name, category, normalBalance } });
+  const [receivable, offset, unit] = await Promise.all([
+    ensureAccount("1-1100", "Piutang Pinjaman Anggota", "ASET", "DEBIT"),
+    ensureAccount("3-9010", "Penampung Saldo Awal RAT 2025", "EKUITAS", "KREDIT"),
+    db.cooperativeUnit.findFirstOrThrow({ where: { tenantId, type: "KSP" } })
+  ]);
+  const first = await book("600000.00");
+  expect(first.status).toBe(200);
+  expect(first.body.data.journal).toMatchObject({ entryNo: 1, reversedOn: null });
+  expect((await book("600000.00")).body.data).toEqual(first.body.data);
+  expect(await db.journalEntry.count({ where: { tenantId } })).toBe(1);
+  const journal = await db.journalEntry.findFirstOrThrow({
+    where: { tenantId }, select: { entryDate: true, unitId: true, description: true, lines: true }
+  });
+  expect(journal.entryDate.toISOString()).toBe("2025-12-31T00:00:00.000Z");
+  expect(journal.unitId).toBe(unit.id);
+  expect(journal.description).toContain("Belum terverifikasi");
+  expect(journal.lines.map((line) => [line.accountId, line.debit.toFixed(2), line.credit.toFixed(2)])).toEqual(expect.arrayContaining([
+    [receivable.id, "600000.00", "0.00"], [offset.id, "0.00", "600000.00"]
+  ]));
+  expect(journal.lines).toHaveLength(2);
+  expect(await db.loan.count({ where: { tenantId } })).toBe(0);
+  expect(await db.loanInstallment.count({ where: { tenantId } })).toBe(0);
+  expect(await db.loanConfig.count({ where: { tenantId } })).toBe(0);
+  const drafts = await request(app()).get("/api/reports/arsip-rat/financial-drafts/loan").set("Authorization", auth);
+  expect(drafts.body.data.rows).toHaveLength(1);
+  expect(drafts.body.data.rows[0]).toMatchObject({ sourceRow: 4, sourceFields: { remainingPrincipal: "600000" } });
+  const corrected = await request(app()).put("/api/reports/arsip-rat/financial-drafts/loan/4").set("Authorization", auth)
+    .send({ revision: 0, fields: { reviewNote: "Tinjau selisih", remainingPrincipal: "550000" } });
+  expect(corrected.status).toBe(200);
+  expect(await db.journalEntry.count({ where: { tenantId } })).toBe(1);
+  const again = await request(app()).post("/api/reports/arsip-rat/publish/preview").set("Authorization", auth)
+    .send({ kind: "loan", unitId: unit.id, cutoffDate: "2025-12-31", offsetAccountId: offset.id, verificationRef: "UJI SALDO POKOK",
+      rows: [{ sourceRow: 4, productId: "loan-test", contractRef: "PB-UJI", disbursedAt: "2025-01-01",
+        principalAmount: "600000", totalAmount: "630000", remainingPrincipal: "600000", remainingAmount: "630000", termMonths: 3,
+        rate: "0", installmentAmount: "210000", schedule: [{ dueDate: "2026-01-01", principal: "600000", margin: "30000" }] }] });
+  expect(again.status).toBe(409);
 });

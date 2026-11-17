@@ -14,6 +14,7 @@ import { validateRegulatoryRate } from "../../lib/regulatory-config.js";
 import { getEffectiveUnitIds } from "../../lib/unit-access.js";
 import { recordAudit } from "../audit-log/service.js";
 import { ratFinancialFields } from "./kopkar-financial-drafts.js";
+import { assertRatLoanPrincipalNotBooked } from "./kopkar-loan-principal.js";
 import { loadRatPublishSource } from "./kopkar-rat.js";
 import { checkVerifiedMemberBatch, MAX_RAT_BATCH_ROWS, verifiedRatMemberRow } from "./kopkar-verified-members.js";
 
@@ -126,6 +127,7 @@ async function plan(tx: TxClient, actor: Actor, input: Batch, source: Source, al
     return { unit, rows };
   }
 
+  if (input.kind === "loan") await assertRatLoanPrincipalNotBooked(tx, tenantId, input.cutoffDate);
   if (input.cutoffDate > dateKey(businessDate())) throw validationError("Tanggal saldo awal tidak boleh di masa depan.");
   if (await tx.fiscalYearClose.findFirst({ where: { tenantId, year: Number(input.cutoffDate.slice(0, 4)), reopenedAt: null }, select: { id: true } })) {
     throw conflict("Tahun buku pada tanggal saldo awal sudah ditutup.");

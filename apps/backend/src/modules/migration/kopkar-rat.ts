@@ -171,5 +171,15 @@ export async function loadRatPublishSource() {
     });
     return result;
   }
-  return { member: rows("member"), saving: rows("saving"), loan: rows("loan") };
+  const neraca = wb.getWorksheet("9_Neraca");
+  const headers = neraca?.getRow(1).values as ExcelJS.CellValue[] | undefined;
+  const accountCode = headers?.indexOf("accountCode") ?? -1;
+  const amount = headers?.indexOf("amount") ?? -1;
+  const loanNeraca: (string | null)[] = [];
+  if (accountCode > 0 && amount > 0) {
+    neraca?.eachRow((row, number) => {
+      if (number >= 4 && cellText(row.getCell(accountCode))?.trim() === "1-1100") loanNeraca.push(cellText(row.getCell(amount)));
+    });
+  }
+  return { member: rows("member"), saving: rows("saving"), loan: rows("loan"), loanNeraca };
 }
