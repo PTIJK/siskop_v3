@@ -109,7 +109,8 @@ export function KopkarRatPublishPage() {
     if (drafts.length >= (kind === "loan" ? 10 : 25)) { setError("Batch sudah penuh. Selesaikan atau keluarkan baris terlebih dahulu."); return; }
     clearPreview();
     setDrafts((old) => [...old, { source, selected: false, fields: {
-      fullName: source.name, action: "create", balance: source.value ?? "", remainingPrincipal: source.value ?? ""
+      fullName: source.name, action: "create", balance: source.value ?? "", remainingPrincipal: source.value ?? "",
+      ...Object.fromEntries(Object.entries(source.correction ?? {}).map(([field, value]) => [field, value ?? ""]))
     } }]);
   }
   async function check(event: FormEvent) {

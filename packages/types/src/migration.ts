@@ -1,3 +1,5 @@
+import type { ProvisionalMemberIdentity } from "./member.js";
+
 export type MigrationMode = "SISTEM" | "LAPORAN";
 
 export interface MigrationIssue {
@@ -91,6 +93,7 @@ export interface RatPublishSource {
   value: string | null;
   notes: string[];
   published: boolean;
+  correction?: ProvisionalMemberIdentity;
 }
 
 export interface RatPublishOptions {

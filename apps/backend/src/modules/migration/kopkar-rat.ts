@@ -56,12 +56,16 @@ async function loadKopkarRat(kind: KopkarRatFileKind) {
 
 export async function listProvisionalKopkarMembers(tenantId: string): Promise<ProvisionalMember[]> {
   if (tenantId !== KOPKAR_RAT_TENANT_ID) throw forbidden("Arsip anggota ini hanya tersedia di Kopkar UM Surabaya.");
-  const [{ wb }, published] = await Promise.all([
+  const [{ wb }, published, corrections] = await Promise.all([
     loadKopkarRat("prepared_review"),
-    db.kopkarRatPublication.findMany({ where: { tenantId, kind: "member" }, select: { sourceRow: true } })
+    db.kopkarRatPublication.findMany({ where: { tenantId, kind: "member" }, select: { sourceRow: true } }),
+    db.kopkarRatMemberCorrection.findMany({ where: { tenantId }, select: {
+      sourceRow: true, fullName: true, nik: true, address: true, birthPlace: true, birthDate: true, occupation: true, revision: true
+    } })
   ]);
   if (!wb) return [];
   const activeRows = new Set(published.map((row) => row.sourceRow));
+  const correctionsByRow = new Map(corrections.map(({ sourceRow, ...data }) => [sourceRow, data]));
   const ws = wb.getWorksheet("3_Anggota");
   if (!ws) throw new AppError(ErrorCode.NOT_FOUND, "Sheet anggota arsip tidak ditemukan");
 
@@ -79,7 +83,7 @@ export async function listProvisionalKopkarMembers(tenantId: string): Promise<Pr
     const temporaryId = /^TMP-\d+$/.test(key) ? key : /^SRC-\d+$/.test(key) ? `TMP-${key}` : `TMP-ROW-${sourceRow}`;
     const [legacyNo = null, address = null, birthPlace = null, birthDate = null, occupation = null] = columns.map((index) =>
       index > 0 ? cellText(row.getCell(index))?.trim() || null : null);
-    members.push({ temporaryId, sourceRow, fullName, legacyNo, nik: null, address, birthPlace, birthDate, occupation });
+    members.push({ temporaryId, sourceRow, fullName, legacyNo, nik: null, address, birthPlace, birthDate, occupation, revision: 0, ...correctionsByRow.get(sourceRow) });
   });
   return members;
 }

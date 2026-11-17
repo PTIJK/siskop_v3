@@ -9,6 +9,7 @@ import { requireParam } from "../../lib/http.js";
 import { activatePortalAccess } from "../member-auth/service.js";
 import { listProvisionalKopkarMembers } from "../migration/kopkar-rat.js";
 import { createMemberSchema, listMembersQuerySchema, updateMemberSchema } from "./schema.js";
+import { provisionalCorrectionSchema, saveProvisionalCorrection } from "./provisional-corrections.js";
 import { registrationRoutes } from "./registration.routes.js";
 import { saveKtp } from "../../lib/upload-storage.js";
 import {
@@ -79,6 +80,19 @@ export function membersRoutes(): Router {
       res.setHeader("Cache-Control", "private, no-store");
       z.strictObject({}).parse(req.query);
       const data = await listProvisionalKopkarMembers(authClaims(req).tenantId);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
+
+  router.put(
+    "/provisional-rat/:sourceRow",
+    requirePermission("members", "read"),
+    requirePermission("members", "update"),
+    handle(async (req, res) => {
+      res.setHeader("Cache-Control", "private, no-store");
+      const { tenantId, userId } = authClaims(req);
+      const sourceRow = z.coerce.number().int().min(4).max(10000).parse(requireParam(req, "sourceRow"));
+      const data = await saveProvisionalCorrection(tenantId, userId, sourceRow, provisionalCorrectionSchema.parse(req.body));
       res.json({ success: true, data, meta: res.locals.meta });
     })
   );

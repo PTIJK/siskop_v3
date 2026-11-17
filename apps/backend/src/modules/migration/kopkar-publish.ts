@@ -57,23 +57,27 @@ function rowError(row: number, message: string): never {
 export async function getRatPublishOptions(actor: Actor, kind: RatPublishKind): Promise<RatPublishOptions> {
   assertScope(actor);
   const { tenantId, userId } = actor;
-  const [source, unitIds, publications, products, accounts] = await Promise.all([
+  const [source, unitIds, publications, products, accounts, corrections] = await Promise.all([
     loadRatPublishSource(), getEffectiveUnitIds(userId, tenantId),
     db.kopkarRatPublication.findMany({ where: { tenantId, kind }, select: { sourceRow: true } }),
     kind === "saving" ? db.savingConfig.findMany({ where: { tenantId, isActive: true }, select: { id: true, name: true } })
       : kind === "loan" ? db.loanConfig.findMany({ where: { tenantId, isActive: true, installmentFrequency: "MONTHLY" }, select: { id: true, name: true } }) : [],
-    kind === "member" ? [] : db.account.findMany({ where: { tenantId, ...offsets }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } })
+    kind === "member" ? [] : db.account.findMany({ where: { tenantId, ...offsets }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
+    kind === "member" ? db.kopkarRatMemberCorrection.findMany({ where: { tenantId }, select: {
+      sourceRow: true, fullName: true, nik: true, address: true, birthPlace: true, birthDate: true, occupation: true
+    } }) : []
   ]);
   const units = await db.cooperativeUnit.findMany({ where: { tenantId, id: { in: unitIds }, isActive: true, type: "KSP" }, select: { id: true, name: true } });
   const published = new Set(publications.map((r) => r.sourceRow));
   const names = new Map(source.member.map((row) => [row.ownerRef, row.name]));
+  const byRow = new Map(corrections.map(({ sourceRow, ...identity }) => [sourceRow, identity]));
   return { units, products, offsets: accounts.map((a) => ({ id: a.id, name: accountName(a) })),
     rows: source[kind].map((r) => ({ sourceRow: r.sourceRow, reference: r.reference, name: names.get(r.ownerRef) ?? r.reference,
-      value: r.value, notes: r.notes, published: published.has(r.sourceRow) })) };
+      value: r.value, notes: r.notes, published: published.has(r.sourceRow), correction: published.has(r.sourceRow) ? undefined : byRow.get(r.sourceRow) })) };
 }
 
 type PlanRow = {
-  sourceRow: number; name: string; action: string; memberId?: string; recordKey?: string;
+  sourceRow: number; name: string; action: string; memberId?: string; recordKey?: string; correctionRevision?: number;
   debit?: { id: string; code: string; name: string }; credit?: { id: string; code: string; name: string }; amount?: string;
 };
 
@@ -97,6 +101,8 @@ async function plan(tx: TxClient, actor: Actor, input: Batch, source: Source, al
     });
     const checked = checkVerifiedMemberBatch(input.rows, source.member.map((r) => ({ ...r, temporaryId: r.reference, fullName: r.name })), existing);
     if (!checked.canPublish) throw validationError("Perbaiki data anggota sebelum menerbitkan.", { issues: checked.issues });
+    const corrections = await tx.kopkarRatMemberCorrection.findMany({ where: { tenantId, sourceRow: { in: keys } }, select: { sourceRow: true, revision: true } });
+    const revisions = new Map(corrections.map((row) => [row.sourceRow, row.revision]));
     for (const item of input.rows) {
       const row = checked.rows.find((r) => r.sourceRow === item.sourceRow)!;
       const match = item.action === "link" ? existing.find((member) => member.memberId === item.memberId) : undefined;
@@ -109,7 +115,8 @@ async function plan(tx: TxClient, actor: Actor, input: Batch, source: Source, al
       }) : null;
       if (prior) rowError(item.sourceRow, "Anggota ini sudah ditautkan dari baris arsip lain.");
       rows.push({ sourceRow: item.sourceRow, name: match?.fullName ?? row.fullName,
-        action: match ? "Tautkan " + match.memberId + " · sumber: " + row.fullName : "Buat anggota aktif", memberId: match?.id });
+        action: match ? "Tautkan " + match.memberId + " · sumber: " + row.fullName : "Buat anggota aktif", memberId: match?.id,
+        correctionRevision: revisions.get(item.sourceRow) ?? 0 });
     }
     return { unit, rows };
   }
