@@ -123,3 +123,18 @@ export interface PublicTenantBranding {
   tenantLogoUrl: string | null;
   selfRegistrationEnabled: boolean;
 }
+
+export const KOPKAR_RAT_TENANT_ID = "cmvpy390900018h9b1zq0c87x";
+
+/** A source record for review in the member directory. */
+export interface ProvisionalMember {
+  temporaryId: string;
+  fullName: string;
+  legacyNo: string | null;
+  sourceRow: number;
+  nik: null;
+  address: string | null;
+  birthPlace: string | null;
+  birthDate: string | null;
+  occupation: string | null;
+}

@@ -1,11 +1,13 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import multer from "multer";
+import { z } from "zod";
 import { ErrorCode } from "@siskop/types";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { AppError } from "../../lib/errors.js";
 import { requireParam } from "../../lib/http.js";
 import { activatePortalAccess } from "../member-auth/service.js";
+import { listProvisionalKopkarMembers } from "../migration/kopkar-rat.js";
 import { createMemberSchema, listMembersQuerySchema, updateMemberSchema } from "./schema.js";
 import { registrationRoutes } from "./registration.routes.js";
 import { saveKtp } from "../../lib/upload-storage.js";
@@ -69,6 +71,17 @@ export function membersRoutes(): Router {
   // "/registration-requests" aren't shadowed by the single-segment :id route
   // below — same ordering discipline loans.routes.ts uses for /overdue.
   router.use(registrationRoutes());
+
+  router.get(
+    "/provisional-rat",
+    requirePermission("members", "read"),
+    handle(async (req, res) => {
+      res.setHeader("Cache-Control", "private, no-store");
+      z.strictObject({}).parse(req.query);
+      const data = await listProvisionalKopkarMembers(authClaims(req).tenantId);
+      res.json({ success: true, data, meta: res.locals.meta });
+    })
+  );
 
   router.get(
     "/:id",
