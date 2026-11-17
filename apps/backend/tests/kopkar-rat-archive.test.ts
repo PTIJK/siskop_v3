@@ -287,3 +287,43 @@ it("publishes verified Kopkar batches atomically, with no cash movement or dupli
   expect(await db.kopkarRatPublication.count({ where: { tenantId } })).toBe(3);
   expect(await db.kopkarRatPublication.count({ where: { tenantId, verificationRef: opening.verificationRef } })).toBe(2);
 });
+
+it("activates only unmatched Kopkar TMP members with blank identities and no financial writes", async () => {
+  await installArchiveFixture();
+  const tenantId = KOPKAR_RAT_TENANT_ID;
+  await db.tenant.deleteMany({ where: { id: tenantId } });
+  const slug = "kopkar-tmp-activation-test";
+  const email = "kopkar-tmp-activation@test.example";
+  const original = await setupTenant({ slug, registrationNo: slug, adminEmail: email });
+  await db.tenant.update({ where: { id: original.user.tenantId }, data: { id: tenantId } });
+  const session = await login(slug, email, "rahasia123");
+  const existing = await db.member.create({ data: {
+    tenantId, memberId: "ANGGOTA-TMP-TEST", accountNumber: "ACCT-TMP-TEST", fullName: "Sumber Kedua", nik: "3578000000000002",
+    address: "Jalan Uji Kedua", birthPlace: "Surabaya", birthDate: new Date("1990-01-02"), occupation: "Pegawai"
+  } });
+  const activate = (count: number, token = session.accessToken) => request(app()).post("/api/reports/arsip-rat/activate-tmp-members")
+    .set("Authorization", "Bearer " + token).send({ count, confirmed: true });
+  expect((await activate(2, staff)).status).toBe(403);
+  expect((await activate(1)).status).toBe(409);
+  expect((await activate(2)).body.data).toEqual({ activated: 1, needsMatch: 1 });
+  const active = await db.member.findFirstOrThrow({ where: { tenantId, memberId: "TMP-0001" } });
+  expect(active).toMatchObject({ isActive: true, identityUnverified: true, nik: null, birthDate: null, address: "" });
+  expect(await db.member.count({ where: { tenantId } })).toBe(2);
+  expect(await db.unitMembership.count({ where: { memberId: active.id } })).toBe(1);
+  expect(await db.kopkarRatPublication.findFirst({ where: { tenantId, kind: "member", sourceRow: 4 } })).toMatchObject({ recordId: active.id });
+  expect(await db.kopkarRatPublication.count({ where: { tenantId, recordId: existing.id } })).toBe(0);
+  expect((await activate(1)).body.data).toEqual({ activated: 0, needsMatch: 1 });
+  const auth = "Bearer " + session.accessToken;
+  const provisional = await request(app()).get("/api/members/provisional-rat").set("Authorization", auth);
+  expect(provisional.body.data.map((row: { sourceRow: number }) => row.sourceRow)).toEqual([5]);
+  const portal = await request(app()).post("/api/members/" + active.id + "/portal-access").set("Authorization", auth);
+  expect(portal.status).toBe(422);
+  const edit = (body: Record<string, unknown>) => request(app()).put("/api/members/" + active.id).set("Authorization", auth).send(body);
+  expect((await edit({ occupation: "Pegawai" })).body.data).toMatchObject({ occupation: "Pegawai", identityUnverified: true, nik: null });
+  expect((await edit({ verifyIdentity: true })).status).toBe(422);
+  expect((await edit({ nik: "3578000000000001", address: "Jalan Uji Pertama", birthPlace: "Surabaya", birthDate: "1990-02-01",
+    verifyIdentity: true })).body.data).toMatchObject({ identityUnverified: false, isActive: true });
+  expect(await db.saving.count({ where: { tenantId } })).toBe(0);
+  expect(await db.loan.count({ where: { tenantId } })).toBe(0);
+  expect(await db.journalLine.count({ where: { tenantId } })).toBe(0);
+});

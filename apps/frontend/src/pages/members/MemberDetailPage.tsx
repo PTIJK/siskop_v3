@@ -112,7 +112,7 @@ export function MemberDetailPage() {
         actions={
           can("members", "update") && (
             <div className="flex gap-2">
-              <Button
+              {!member.identityUnverified && <Button
                 variant="outline"
                 onClick={() => {
                   setPortalResult(null);
@@ -120,7 +120,7 @@ export function MemberDetailPage() {
                 }}
               >
                 <Smartphone className="mr-2 h-4 w-4" /> Akses Mobile
-              </Button>
+              </Button>}
               <Button variant="outline" onClick={() => navigate(`/members/${id}/edit`)}>
                 <Edit className="mr-2 h-4 w-4" /> Edit
               </Button>
@@ -136,6 +136,7 @@ export function MemberDetailPage() {
         <Badge variant="outline" className="font-mono">
           Rek: {member.accountNumber}
         </Badge>
+        {member.identityUnverified && <Badge variant="warn">Belum terverifikasi</Badge>}
         <Badge variant={member.isActive ? "default" : "secondary"}>{member.isActive ? "Aktif" : "Nonaktif"}</Badge>
       </div>
 

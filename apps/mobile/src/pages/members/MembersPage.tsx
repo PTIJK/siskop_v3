@@ -49,6 +49,7 @@ export function MembersPage() {
               <p className="mt-1 truncate text-xs text-muted-foreground">{m.occupation}</p>
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1">
+              {m.identityUnverified && <Badge variant="secondary">Belum terverifikasi</Badge>}
               <Badge variant={m.isActive ? "ok" : "secondary"}>{m.isActive ? "Aktif" : "Nonaktif"}</Badge>
               <p className="money text-xs text-muted-foreground">{m.accountNumber}</p>
             </div>

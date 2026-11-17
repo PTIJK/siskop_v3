@@ -9,14 +9,15 @@ export interface Member {
   memberId: string;
   accountNumber: string;
   fullName: string;
-  nik: string;
+  nik: string | null;
   address: string;
   birthPlace: string;
   /** ISO date, e.g. `1985-03-15`. */
-  birthDate: string;
+  birthDate: string | null;
   occupation: string;
   ktpPhotoUrl?: string | null;
   isActive: boolean;
+  identityUnverified?: boolean;
   /**
    * Related-party concentration limit (Permenkop UKM 8/2023): a pengurus/
    * pengawas member's cumulative active-loan principal is capped at 10% of

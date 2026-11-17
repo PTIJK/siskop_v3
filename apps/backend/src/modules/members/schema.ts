@@ -23,7 +23,7 @@ export const createMemberSchema = memberFieldsSchema.extend({
   commodity: z.string().min(1).optional()
 });
 
-export const updateMemberSchema = createMemberSchema.partial();
+export const updateMemberSchema = createMemberSchema.partial().extend({ verifyIdentity: z.literal(true).optional() });
 
 export const listMembersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -31,7 +31,8 @@ export const listMembersQuerySchema = z.object({
   search: z.string().optional(),
   sortBy: z.enum(["fullName", "memberId", "createdAt"]).default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
-  isActive: z.coerce.boolean().optional()
+  isActive: z.coerce.boolean().optional(),
+  identityUnverified: z.literal("true").optional()
 });
 
 export type CreateMemberInput = z.infer<typeof createMemberSchema>;

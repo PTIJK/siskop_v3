@@ -132,6 +132,7 @@ export async function listSavingsByMember(
         memberId: true,
         fullName: true,
         accountNumber: true,
+        identityUnverified: true,
         savings: {
           where: savingWhere,
           select: { id: true, balance: true, savingConfig: { select: { name: true, type: true } } },
@@ -148,6 +149,7 @@ export async function listSavingsByMember(
     memberNumber: m.memberId,
     fullName: m.fullName,
     accountNumber: m.accountNumber,
+    ...(m.identityUnverified && { identityUnverified: true }),
     totalBalance: m.savings.reduce((sum, s) => sum.add(s.balance), new Prisma.Decimal(0)).toFixed(2),
     savings: m.savings.map((s) => ({
       id: s.id,

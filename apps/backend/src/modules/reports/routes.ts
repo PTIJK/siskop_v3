@@ -9,6 +9,7 @@ import { businessDate, dateKey, endOfBusinessDay, parseDateKey } from "../../lib
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { getKopkarRatWorkbookFile, kopkarRatQuery, readKopkarRat } from "../migration/kopkar-rat.js";
+import { activateKopkarTmpMembers } from "../migration/kopkar-activate-tmp.js";
 import { listRatFinancialDrafts, ratFinancialFields, ratFinancialKind, saveRatFinancialDraft } from "../migration/kopkar-financial-drafts.js";
 import { executeRatPublish, getRatPublishOptions, previewRatPublish, ratBatch, ratPublishKind } from "../migration/kopkar-publish.js";
 import { requireAccountingEntitlement, requirePasarEntitlement } from "../../middleware/entitlement.js";
@@ -140,6 +141,15 @@ export function reportsRoutes(): Router {
       "Content-Disposition": `attachment; filename="arsip-rat.xlsx"; filename*=UTF-8''${encodeURIComponent(file.name)}`
     });
     res.send(file.bytes);
+  }));
+
+  router.post("/arsip-rat/activate-tmp-members", requirePermission("reports", "read"), requirePermission("members", "create"), handle(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    await assertKopkarRatReviewer(req);
+    const { count } = z.object({ count: z.number().int().min(1).max(765), confirmed: z.literal(true) }).strict().parse(req.body);
+    const { tenantId, userId } = authClaims(req);
+    const data = await activateKopkarTmpMembers(tenantId, userId, count);
+    res.json({ success: true, data, meta: res.locals.meta });
   }));
 
   router.get("/arsip-rat/financial-drafts/:kind", requirePermission("reports", "read"), handle(async (req, res) => {

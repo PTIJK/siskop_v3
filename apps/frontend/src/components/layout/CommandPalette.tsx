@@ -85,7 +85,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             id: `member-${m.id}`,
             group: "Anggota",
             label: m.fullName,
-            hint: `${m.memberId} · NIK ${maskNik(m.nik)}`,
+            hint: m.nik ? `${m.memberId} · NIK ${maskNik(m.nik)}` : m.memberId,
             icon: User,
             to: `/members/${m.id}`
           }))

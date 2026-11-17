@@ -18,7 +18,7 @@ import { AlertTriangle, Plus } from "lucide-react";
 
 interface LoanRow {
   id: string;
-  member: { memberId: string; fullName: string };
+  member: { memberId: string; fullName: string; identityUnverified?: boolean };
   loanConfig: { name: string };
   principalAmount: string;
   totalAmount: string;
@@ -90,7 +90,10 @@ function LoansTable({
       ? original.draft.fields.termMonths ? original.draft.fields.termMonths + " bln" :
         original.draft.sourceFields.termMonths && "Sisa " + original.draft.sourceFields.termMonths + " bln"
       : original.live.termMonths + " bln" },
-    { header: "Status", cell: ({ row: { original } }) => original.draft ? draft.status : <Badge variant="outline">{original.live.status}</Badge> },
+    { header: "Status", cell: ({ row: { original } }) => original.draft ? draft.status : <div className="flex flex-wrap gap-1">
+      <Badge variant="outline">{original.live.status}</Badge>
+      {original.live.member.identityUnverified && draft.status}
+    </div> },
     { header: "KOL", cell: ({ row }) => row.original.live ? <KOLBadge category={row.original.live.kolCategory} /> : row.original.draft.sourceFields.kolCategory }
   ];
 

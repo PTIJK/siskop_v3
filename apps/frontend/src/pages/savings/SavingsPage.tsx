@@ -82,8 +82,8 @@ export function SavingsPage() {
     }
   ];
 
-  if (draft.enabled) {
-    columns.push({ header: "Status", cell: ({ row }) => row.original.draft ? draft.status : null },
+  if (draft.enabled || live.some((member) => member.identityUnverified)) {
+    columns.push({ header: "Status", cell: ({ row }) => (row.original.draft || row.original.live?.identityUnverified) ? draft.status : null },
       { header: "Aksi", cell: ({ row }) => row.original.draft ? draft.action(row.original.draft) : null });
   }
   const renderAccounts = (row: MemberSavingsSummary) => (
