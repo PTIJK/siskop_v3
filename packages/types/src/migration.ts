@@ -58,3 +58,26 @@ export interface MigrationResult {
   openingEntryNo: number | null;
   totals: MigrationTotals;
 }
+
+export type KopkarRatFileKind = "prepared_review" | "original_master" | "original_template";
+export type KopkarRatFlag = "missing_nik" | "unverified_balance";
+
+export interface KopkarRatRow {
+  row: number;
+  cells: (string | null)[];
+  flags: KopkarRatFlag[];
+  notes: string[];
+}
+
+export interface KopkarRatArchive {
+  files: { kind: KopkarRatFileKind; name: string; sheetCount: number }[];
+  sheet: {
+    kind: KopkarRatFileKind;
+    names: string[];
+    name: string;
+    page: number;
+    limit: number;
+    total: number;
+    rows: KopkarRatRow[];
+  } | null;
+}
