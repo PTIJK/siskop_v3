@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { KOPKAR_RAT_TENANT_ID, type KopkarRatArchive, type KopkarRatFileKind, type KopkarRatRow, type User } from "@siskop/types";
 import { apiDownload, apiFetch } from "@/api/client";
 import { useToast } from "@/hooks/use-toast";
@@ -69,13 +69,19 @@ export function KopkarRatArchivePage({ platform = false }: { platform?: boolean 
     <div className="min-w-0 space-y-5">
       <PageHeader
         title="Arsip RAT 2025 · Kopkar UM Surabaya"
-        description="Tinjau data dari Excel dan catatan pemeriksaan. Arsip ini hanya untuk dibaca dan belum masuk ke data aktif."
+        description="Tinjau data asli dari Excel dan catatan pemeriksaan. Nilai arsip tetap sama setelah penerbitan."
         breadcrumb={[platform ? { label: "Migrasi Koperasi", href: "/platform/migration" } : { label: "Laporan", href: "/reports" }, { label: "Arsip RAT 2025" }]}
-        actions={!platform && user?.permissions.reports.export && (
-          <Button variant="outline" className="min-h-11" disabled={!selectedFile || downloading} onClick={() => void download()}>
-            {downloading ? "Mengunduh…" : "Unduh file Excel"}
-          </Button>
-        )}
+        actions={!platform && <>
+          {user?.permissions.reports.export && (
+            <Button variant="outline" className="min-h-11" disabled={!selectedFile || downloading} onClick={() => void download()}>
+              {downloading ? "Mengunduh…" : "Unduh file Excel"}
+            </Button>
+          )}
+          {user && (user.permissions.members.create ||
+            (user.permissions.accounting?.create && user.permissions.reports.update && (user.permissions.savings.create || user.permissions.loans.create))) && (
+            <Button asChild className="min-h-11"><Link to="/reports/arsip-rat/terbitkan">Terbitkan data</Link></Button>
+          )}
+        </>}
       />
       {!!archive.data?.files.length && (
         <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">

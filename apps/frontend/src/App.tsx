@@ -97,6 +97,9 @@ const PlatformTenantsPage = lazy(() =>
 const PlatformMigrationPage = lazy(() =>
   import("@/pages/platform/PlatformMigrationPage").then((module) => ({ default: module.PlatformMigrationPage }))
 );
+const KopkarRatPublishPage = lazy(() =>
+  import("@/pages/reports/KopkarRatPublishPage").then((module) => ({ default: module.KopkarRatPublishPage }))
+);
 const KopkarRatArchivePage = lazy(() =>
   import("@/pages/reports/KopkarRatArchivePage").then((module) => ({ default: module.KopkarRatArchivePage }))
 );
@@ -207,6 +210,7 @@ export default function App() {
 
               <Route path='/reports' element={<ReportsPage />} />
               <Route path='/reports/arsip-rat' element={<KopkarRatArchivePage />} />
+              <Route path='/reports/arsip-rat/terbitkan' element={<KopkarRatPublishPage />} />
               <Route path='/reports/regulatory' element={<RegulatoryReportsPage />} />
               <Route path='/reports/pasar' element={<LaporanPasarPage />} />
               <Route path='/reports/accounting' element={<AccountingBooksPage />} />

@@ -777,6 +777,7 @@ model Tenant {
   charges                 Charge[]
   chargePayments          ChargePayment[]
   idempotencyKeys         IdempotencyKey[]
+  kopkarRatPublications   KopkarRatPublication[]
 }
 
 // A tenant's own non-collection day (public holiday, market closure). Loan
@@ -2018,4 +2019,22 @@ model RequestMetricHourly {
 
   @@unique([hour, routeGroup])
   @@index([hour])
+}
+
+model KopkarRatPublication {
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind           String
+  sourceRow      Int
+  recordKey      String
+  recordId       String
+  publishedBy    String
+  batchHash      String
+  journalEntryNo Int?
+  verificationRef String?
+  createdAt      DateTime @default(now())
+
+  @@id([tenantId, kind, sourceRow])
+  @@unique([tenantId, kind, recordKey])
+  @@index([tenantId, batchHash])
 }

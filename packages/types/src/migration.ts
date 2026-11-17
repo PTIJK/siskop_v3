@@ -81,3 +81,34 @@ export interface KopkarRatArchive {
     rows: KopkarRatRow[];
   } | null;
 }
+
+export type RatPublishKind = "member" | "saving" | "loan";
+
+export interface RatPublishSource {
+  sourceRow: number;
+  reference: string;
+  name: string;
+  value: string | null;
+  notes: string[];
+  published: boolean;
+}
+
+export interface RatPublishOptions {
+  rows: RatPublishSource[];
+  units: { id: string; name: string }[];
+  products: { id: string; name: string }[];
+  offsets: { id: string; name: string }[];
+}
+
+export interface RatPublishPreview {
+  token: string;
+  kind: RatPublishKind;
+  unit: string;
+  cutoffDate?: string;
+  rows: { sourceRow: number; name: string; action: string; journal?: { debit: string; credit: string; amount: string } }[];
+}
+
+export interface RatPublishReceipt {
+  rows: { sourceRow: number; journalEntryNo: number | null }[];
+  alreadyPublished: boolean;
+}
