@@ -6,6 +6,7 @@ import { AppError } from "../../lib/errors.js";
 import { authClaims } from "../../middleware/auth.js";
 import { executeMigration, previewMigration } from "./service.js";
 import { buildTemplate } from "./template.js";
+import { kopkarRatQuery, readKopkarRat } from "./kopkar-rat.js";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_BYTES, files: 1 } }).single("file");
@@ -43,6 +44,11 @@ function fileOf(req: Request): Buffer {
 /** Mounted under /api/platform, which already applies requireAuth + requirePlatformAdmin. */
 export function migrationRoutes(): Router {
   const router = Router();
+  router.get("/kopkar-rat", handle(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    const data = await readKopkarRat(kopkarRatQuery.parse(req.query));
+    res.json({ success: true, data, meta: res.locals.meta });
+  }));
 
   router.get(
     "/templates/:mode",

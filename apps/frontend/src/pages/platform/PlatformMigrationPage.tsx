@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import type { MigrationPreview, MigrationResult } from "@siskop/types";
 import { useAuth } from "@/stores/auth";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
 import { Stepper } from "@/components/shared/Stepper";
 import { UploadStep } from "./migration/UploadStep";
 import { PreviewStep } from "./migration/PreviewStep";
@@ -27,7 +28,11 @@ export function PlatformMigrationPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Migrasi Koperasi" help="Pindahkan data koperasi dari template standar. Pratinjau tidak menyimpan apa pun." />
+      <PageHeader
+        title="Migrasi Koperasi"
+        help="Pindahkan data koperasi dari template standar. Pratinjau tidak menyimpan apa pun."
+        actions={<Button asChild variant="outline"><Link to="/platform/migration/kopkar-rat">Arsip RAT Kopkar</Link></Button>}
+      />
       <Stepper steps={STEPS} current={step} />
       {!preview && !result && (
         <UploadStep
