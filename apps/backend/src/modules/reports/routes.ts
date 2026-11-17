@@ -1,5 +1,5 @@
-import type { LaporanHasilUsaha, Neraca } from "@siskop/types";
-import { notFound, validationError } from "../../lib/errors.js";
+import { KOPKAR_RAT_TENANT_ID, type LaporanHasilUsaha, type Neraca } from "@siskop/types";
+import { forbidden, notFound, validationError } from "../../lib/errors.js";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { db } from "../../lib/db.js";
 import { resolvePeriod } from "../../lib/period.js";
@@ -7,6 +7,7 @@ import { resolveReadableUnitId } from "../../lib/unit-access.js";
 import { businessDate, dateKey, endOfBusinessDay, parseDateKey } from "../../lib/operating-calendar.js";
 import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
+import { getKopkarRatWorkbookFile, kopkarRatQuery, readKopkarRat } from "../migration/kopkar-rat.js";
 import { requireAccountingEntitlement, requirePasarEntitlement } from "../../middleware/entitlement.js";
 import {
   bukuBesarAccountParamsSchema,
@@ -91,9 +92,42 @@ async function bookUnit(req: Request, unitId?: string): Promise<UnitScope> {
   return reportUnit(req, unitId);
 }
 
+/** The full workbook contains identifiable member and financial details. */
+async function assertKopkarRatReviewer(req: Request): Promise<void> {
+  const auth = authClaims(req);
+  if (auth.tenantId !== KOPKAR_RAT_TENANT_ID) throw forbidden("Arsip ini khusus Kopkar UM Surabaya.");
+  const reviewer = await db.user.findFirst({
+    where: {
+      id: auth.userId, tenantId: auth.tenantId, isActive: true, isPlatformAdmin: false,
+      role: { id: auth.roleId, tenantId: auth.tenantId, name: "Super Admin" }
+    },
+    select: { id: true }
+  });
+  if (!reviewer) throw forbidden("Arsip RAT hanya dapat dibuka oleh Super Admin Kopkar.");
+}
+
 export function reportsRoutes(): Router {
   const router = Router();
   router.use(requireAuth);
+
+  router.get("/arsip-rat", requirePermission("reports", "read"), handle(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    await assertKopkarRatReviewer(req);
+    const data = await readKopkarRat(kopkarRatQuery.parse(req.query));
+    res.json({ success: true, data, meta: res.locals.meta });
+  }));
+
+  router.get("/arsip-rat/file", requirePermission("reports", "export"), handle(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    await assertKopkarRatReviewer(req);
+    const { kind } = kopkarRatQuery.pick({ kind: true }).parse(req.query);
+    const file = await getKopkarRatWorkbookFile(kind);
+    res.set({
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="arsip-rat.xlsx"; filename*=UTF-8''${encodeURIComponent(file.name)}`
+    });
+    res.send(file.bytes);
+  }));
 
   // ── RPT-01 / RPT-02 — aggregate savings/loan summary (pre-ledger) ───────────
 

@@ -1,10 +1,13 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { FinancialReport, RATReport } from "@siskop/types";
 import { apiFetch, ApiRequestError } from "@/api/client";
 import { formatPeriode, formatRupiah, formatRupiahOrDash } from "@/lib/format";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { defaultPeriodFrom, defaultPeriodTo, todayLocal, validatePeriod } from "./regulatory/period";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/stores/auth";
+import { canReviewKopkarRat } from "./KopkarRatArchivePage";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +31,7 @@ const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
 export function ReportsPage() {
   const { toast } = useToast();
+  const canSeeArchive = useAuth((s) => canReviewKopkarRat(s.user));
   const [periodType, setPeriodType] = useState<PeriodType>("range");
   // Start from the current month like the other reports, so the form is valid (not in an error state) on arrival.
   const [startDate, setStartDate] = useState(defaultPeriodFrom);
@@ -91,7 +95,11 @@ export function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Laporan" description="Laporan keuangan dan RAT koperasi" />
+      <PageHeader
+        title="Laporan"
+        description="Laporan keuangan dan RAT koperasi"
+        actions={canSeeArchive && <Button asChild variant="outline"><Link to="/reports/arsip-rat">Arsip RAT 2025</Link></Button>}
+      />
 
       <Card>
         <CardContent className="pt-5">

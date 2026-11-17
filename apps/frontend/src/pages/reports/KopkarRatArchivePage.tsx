@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
-import type { KopkarRatArchive, KopkarRatFileKind, KopkarRatRow } from "@siskop/types";
-import { apiFetch } from "@/api/client";
+import { KOPKAR_RAT_TENANT_ID, type KopkarRatArchive, type KopkarRatFileKind, type KopkarRatRow, type User } from "@siskop/types";
+import { apiDownload, apiFetch } from "@/api/client";
+import { useToast } from "@/hooks/use-toast";
 import { DataTable } from "@/components/shared/DataTable";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/stores/auth";
@@ -21,20 +23,45 @@ function columnLabel(index: number): string {
   return label;
 }
 
-export function PlatformKopkarRatPage() {
-  const role = useAuth((s) => s.user?.role);
+export function canReviewKopkarRat(user: User | null): boolean {
+  return user?.tenantId === KOPKAR_RAT_TENANT_ID &&
+    user.roleName === "Super Admin" && !user.isPlatformAdmin && user.permissions.reports.read === true;
+}
+
+export function KopkarRatArchivePage({ platform = false }: { platform?: boolean }) {
+  const user = useAuth((s) => s.user);
+  const allowed = platform ? user?.role === "super_admin" : canReviewKopkarRat(user);
+  const endpoint = platform ? "/platform/migration/kopkar-rat" : "/reports/arsip-rat";
+  const { toast } = useToast();
+  const [downloading, setDownloading] = useState(false);
   const [kind, setKind] = useState<KopkarRatFileKind>("prepared_review");
   const [sheet, setSheet] = useState("");
   const [page, setPage] = useState(1);
   const archive = useQuery({
-    queryKey: ["platform", "kopkar-rat", kind, sheet, page],
-    queryFn: () => apiFetch<KopkarRatArchive>(`/platform/migration/kopkar-rat?${new URLSearchParams({ kind, page: String(page), ...(sheet && { sheet }) })}`),
-    enabled: role === "super_admin",
+    queryKey: [endpoint, user?.id, kind, sheet, page],
+    queryFn: () => apiFetch<KopkarRatArchive>(`${endpoint}?${new URLSearchParams({ kind, page: String(page), ...(sheet && { sheet }) })}`),
+    enabled: allowed,
     placeholderData: keepPreviousData,
     gcTime: 0,
     retry: false
   });
-  if (role !== "super_admin") return <Navigate to="/dashboard" replace />;
+  if (!allowed) return <Navigate to="/dashboard" replace />;
+
+  const selectedFile = archive.data?.files.find((file) => file.kind === kind);
+  async function download() {
+    if (!selectedFile || downloading) return;
+    setDownloading(true);
+    try {
+      const blob = await apiDownload(`${endpoint}/file?${new URLSearchParams({ kind })}`);
+      const url = URL.createObjectURL(blob);
+      Object.assign(document.createElement("a"), { href: url, download: selectedFile.name }).click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: "File Excel gagal diunduh", variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   const data = archive.data?.sheet;
   const settled = !!data && !archive.isPlaceholderData;
@@ -43,7 +70,12 @@ export function PlatformKopkarRatPage() {
       <PageHeader
         title="Arsip RAT 2025 · Kopkar UM Surabaya"
         description="Tinjau data dari Excel dan catatan pemeriksaan. Arsip ini hanya untuk dibaca dan belum masuk ke data aktif."
-        breadcrumb={[{ label: "Migrasi Koperasi", href: "/platform/migration" }, { label: "Arsip RAT 2025" }]}
+        breadcrumb={[platform ? { label: "Migrasi Koperasi", href: "/platform/migration" } : { label: "Laporan", href: "/reports" }, { label: "Arsip RAT 2025" }]}
+        actions={!platform && user?.permissions.reports.export && (
+          <Button variant="outline" className="min-h-11" disabled={!selectedFile || downloading} onClick={() => void download()}>
+            {downloading ? "Mengunduh…" : "Unduh file Excel"}
+          </Button>
+        )}
       />
       {!!archive.data?.files.length && (
         <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">

@@ -31,8 +31,17 @@ const financeSheets = new Set(["5_Saldo_Simpanan", "7_Pinjaman", "8_Jadwal_Angsu
 const sourceFinanceSheets = new Set(["Simpanan Anggota", "Modal SR TQ", "Pembiayaan", "Neraca"]);
 const masterBalances = [7, 11, 12, 14, 17, 20, 24];
 
+const readArchive = (kind: KopkarRatFileKind) =>
+  db.$queryRaw<ArchiveFile[]>`SELECT * FROM public.read_kopkar_rat_archive(${kind}::text)`;
+
+export async function getKopkarRatWorkbookFile(kind: KopkarRatFileKind) {
+  const file = (await readArchive(kind)).find((entry) => entry.kind === kind);
+  if (!file?.workbook) throw new AppError(ErrorCode.NOT_FOUND, "File arsip tidak ditemukan");
+  return { name: file.name, bytes: Buffer.from(file.workbook) };
+}
+
 async function loadKopkarRat(kind: KopkarRatFileKind) {
-  const archive = await db.$queryRaw<ArchiveFile[]>`SELECT * FROM public.read_kopkar_rat_archive(${kind}::text)`;
+  const archive = await readArchive(kind);
   const files = archive.map(({ kind, name, sheetCount }) => ({ kind, name, sheetCount }));
   if (!archive.length) return { files, wb: null, reviewNotes: [] };
   const file = archive.find((entry) => entry.kind === kind);

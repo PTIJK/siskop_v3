@@ -97,8 +97,8 @@ const PlatformTenantsPage = lazy(() =>
 const PlatformMigrationPage = lazy(() =>
   import("@/pages/platform/PlatformMigrationPage").then((module) => ({ default: module.PlatformMigrationPage }))
 );
-const PlatformKopkarRatPage = lazy(() =>
-  import("@/pages/platform/PlatformKopkarRatPage").then((module) => ({ default: module.PlatformKopkarRatPage }))
+const KopkarRatArchivePage = lazy(() =>
+  import("@/pages/reports/KopkarRatArchivePage").then((module) => ({ default: module.KopkarRatArchivePage }))
 );
 const PlatformPackagesPage = lazy(() =>
   import("@/pages/platform/PlatformPackagesPage").then((module) => ({ default: module.PlatformPackagesPage }))
@@ -206,6 +206,7 @@ export default function App() {
               <Route path='/market' element={<MarketPage />} />
 
               <Route path='/reports' element={<ReportsPage />} />
+              <Route path='/reports/arsip-rat' element={<KopkarRatArchivePage />} />
               <Route path='/reports/regulatory' element={<RegulatoryReportsPage />} />
               <Route path='/reports/pasar' element={<LaporanPasarPage />} />
               <Route path='/reports/accounting' element={<AccountingBooksPage />} />
@@ -272,7 +273,7 @@ export default function App() {
               <Route path='/platform/dashboard' element={<PlatformDashboardPage />} />
               <Route path='/platform/tenants' element={<PlatformTenantsPage />} />
               <Route path='/platform/migration' element={<PlatformMigrationPage />} />
-              <Route path='/platform/migration/kopkar-rat' element={<PlatformKopkarRatPage />} />
+              <Route path='/platform/migration/kopkar-rat' element={<KopkarRatArchivePage platform />} />
               <Route path='/platform/packages' element={<PlatformPackagesPage />} />
               <Route path='/platform/pricing' element={<PlatformPricingPage />} />
               <Route path='/platform/invoices' element={<PlatformInvoicesPage />} />
