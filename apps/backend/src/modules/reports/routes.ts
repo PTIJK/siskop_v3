@@ -10,6 +10,7 @@ import { authClaims, requireAuth } from "../../middleware/auth.js";
 import { requirePermission } from "../../middleware/rbac.js";
 import { getKopkarRatWorkbookFile, kopkarRatQuery, readKopkarRat } from "../migration/kopkar-rat.js";
 import { activateKopkarTmpMembers } from "../migration/kopkar-activate-tmp.js";
+import { postRatLoanPrincipalOpening, ratLoanPrincipalBody, readRatLoanPrincipalOpening } from "../migration/kopkar-loan-principal.js";
 import { listRatFinancialDrafts, ratFinancialFields, ratFinancialKind, saveRatFinancialDraft } from "../migration/kopkar-financial-drafts.js";
 import { executeRatPublish, getRatPublishOptions, previewRatPublish, ratBatch, ratPublishKind } from "../migration/kopkar-publish.js";
 import { requireAccountingEntitlement, requirePasarEntitlement } from "../../middleware/entitlement.js";
@@ -151,6 +152,21 @@ export function reportsRoutes(): Router {
     const data = await activateKopkarTmpMembers(tenantId, userId, count);
     res.json({ success: true, data, meta: res.locals.meta });
   }));
+
+  router.get("/arsip-rat/loan-principal-opening", requirePermission("reports", "read"), requirePermission("loans", "read"), handle(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    await assertKopkarRatReviewer(req);
+    res.json({ success: true, data: await readRatLoanPrincipalOpening(authClaims(req).tenantId), meta: res.locals.meta });
+  }));
+
+  router.post("/arsip-rat/loan-principal-opening", requirePermission("reports", "read"), requirePermission("reports", "update"),
+    requirePermission("accounting", "create"), requirePermission("loans", "read"), handle(async (req, res) => {
+      res.setHeader("Cache-Control", "private, no-store");
+      await assertKopkarRatReviewer(req);
+      const { tenantId, userId } = authClaims(req);
+      const data = await postRatLoanPrincipalOpening(tenantId, userId, ratLoanPrincipalBody.parse(req.body));
+      res.json({ success: true, data, meta: res.locals.meta });
+    }));
 
   router.get("/arsip-rat/financial-drafts/:kind", requirePermission("reports", "read"), handle(async (req, res) => {
     res.setHeader("Cache-Control", "private, no-store");

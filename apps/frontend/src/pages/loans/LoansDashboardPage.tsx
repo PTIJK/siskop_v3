@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { appendPage } from "@/components/shared/directory-pagination";
 import { draftAmount, useFinancialDraftRows, type FinancialListRow } from "@/pages/rat/FinancialDraftRows";
+import { LoanPrincipalOpening } from "@/pages/rat/LoanPrincipalOpening";
 import { AlertTriangle, Plus } from "lucide-react";
 
 interface LoanRow {
@@ -99,6 +100,7 @@ function LoansTable({
 
   if (draft.enabled) columns.push({ header: "Aksi", cell: ({ row }) => row.original.draft ? draft.action(row.original.draft) : null });
   return <>
+    {draft.enabled && <LoanPrincipalOpening />}
     {draft.editor}
     <DataTable
       label="Daftar pinjaman"

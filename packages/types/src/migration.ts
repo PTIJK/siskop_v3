@@ -135,3 +135,14 @@ export interface RatPublishReceipt {
   rows: { sourceRow: number; journalEntryNo: number | null }[];
   alreadyPublished: boolean;
 }
+
+export interface RatLoanPrincipalOpening {
+  cutoffDate: string;
+  receivableCode: string;
+  offsetCode: string;
+  sourceRows: number;
+  excelAmount: string;
+  neracaAmount: string;
+  difference: string;
+  journal: { id: string; entryNo: number; reversedOn: string | null } | null;
+}
