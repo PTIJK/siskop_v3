@@ -25,6 +25,7 @@ import {
   trialBalanceParamsSchema,
   neracaParamsSchema,
   periodParamsSchema,
+  shuDistributionParamsSchema,
   ratParamsSchema,
   rekapHarianKolektorParamsSchema,
   tunggakanAngsuranParamsSchema,
@@ -417,11 +418,20 @@ export function reportsRoutes(): Router {
     requireAccountingEntitlement,
     requirePermission("reports", "read"),
     handle(async (req, res) => {
-      const { from, to } = periodParamsSchema.parse(req.query);
+      const { from, to, page, limit } = shuDistributionParamsSchema.parse(req.query);
       const { start, end } = resolvePeriod(from, to);
       assertValidPeriod(start, end);
       const data = await getShuDistribution(authClaims(req).tenantId, start, end);
-      res.json({ success: true, data, meta: res.locals.meta });
+      if (page === undefined && limit === undefined) {
+        res.json({ success: true, data, meta: res.locals.meta });
+        return;
+      }
+      const currentPage = page ?? 1;
+      const pageSize = limit ?? 50;
+      const total = data.anggota.length;
+      const offset = (currentPage - 1) * pageSize;
+      res.json({ success: true, data: { ...data, anggota: data.anggota.slice(offset, offset + pageSize) },
+        meta: { ...res.locals.meta, page: currentPage, limit: pageSize, total } });
     })
   );
 

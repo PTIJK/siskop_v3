@@ -1,6 +1,7 @@
 import { selectionEnabled } from "../tenant-access/config.js";
 import { firebaseUidFor } from "../tenant-access/identity.js";
 import bcrypt from "bcryptjs";
+import { verifyPassword } from "../../lib/password.js";
 import jwt from "jsonwebtoken";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -171,7 +172,7 @@ export async function login(
   // Hash a throwaway when the user is absent so the response time does not
   // reveal whether the address exists.
   const hash = user?.passwordHash ?? "$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinva";
-  const ok = await bcrypt.compare(password, hash);
+  const ok = await verifyPassword(password, hash);
 
   const auditActor = {
     tenantId: tenant.id,
@@ -270,7 +271,7 @@ export async function changePassword(
   if (!user) throw unauthorized();
 
   if (user.firebaseUid || user.identityId || !user.passwordHash) throw validationError("Gunakan Lupa kata sandi pada halaman masuk untuk akun Firebase.");
-  const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+  const ok = await verifyPassword(currentPassword, user.passwordHash);
   if (!ok) throw unauthorized("Password saat ini salah");
 
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);

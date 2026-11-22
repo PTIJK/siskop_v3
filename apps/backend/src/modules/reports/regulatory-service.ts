@@ -490,7 +490,7 @@ export async function getShuDistribution(tenantId: string, from: Date, to: Date)
   const members = await db.member.findMany({
     where: { tenantId, isActive: true },
     select: { id: true, memberId: true, fullName: true },
-    orderBy: { fullName: "asc" }
+    orderBy: [{ fullName: "asc" }, { id: "asc" }]
   });
 
   const payments = await db.loanPayment.findMany({
@@ -504,21 +504,55 @@ export async function getShuDistribution(tenantId: string, from: Date, to: Date)
     interestByMember.set(p.loan.memberId, round2((interestByMember.get(p.loan.memberId) ?? 0) + interest));
   }
 
-  const memberStats = await Promise.all(
-    members.map(async (m) => {
-      const breakdownAtFrom = await memberSavingsBreakdownAsOf(tenantId, m.id, from);
-      const breakdownAtTo = await memberSavingsBreakdownAsOf(tenantId, m.id, to);
-      return {
-        memberId: m.id,
-        memberCode: m.memberId,
-        fullName: m.fullName,
-        avgSavingsBalance: round2((breakdownAtFrom.total + breakdownAtTo.total) / 2),
-        avgPokokWajibBalance: round2((breakdownAtFrom.pokokWajib + breakdownAtTo.pokokWajib) / 2),
-        avgSukarelaBalance: round2((breakdownAtFrom.sukarela + breakdownAtTo.sukarela) / 2),
-        interestPaid: interestByMember.get(m.id) ?? 0
-      };
+  const [savings, futureTxns] = await Promise.all([
+    db.saving.findMany({
+      where: { tenantId, member: { isActive: true } },
+      select: { id: true, memberId: true, balance: true, savingConfig: { select: { type: true } } }
+    }),
+    db.savingTransaction.findMany({
+      where: { tenantId, createdAt: { gt: from }, saving: { tenantId, member: { isActive: true } } },
+      select: { savingId: true, type: true, amount: true, createdAt: true }
     })
-  );
+  ]);
+  const adjustments = new Map<string, { from: number; to: number }>();
+  for (const transaction of futureTxns) {
+    const delta = (transaction.type === "WITHDRAWAL" ? 1 : -1) * Number(transaction.amount);
+    const totals = adjustments.get(transaction.savingId) ?? { from: 0, to: 0 };
+    totals.from += delta;
+    if (transaction.createdAt > to) totals.to += delta;
+    adjustments.set(transaction.savingId, totals);
+  }
+  const balances = new Map<string, { fromTotal: number; toTotal: number; fromPokok: number; toPokok: number; fromSukarela: number; toSukarela: number }>();
+  for (const saving of savings) {
+    const totals = balances.get(saving.memberId) ?? { fromTotal: 0, toTotal: 0, fromPokok: 0, toPokok: 0, fromSukarela: 0, toSukarela: 0 };
+    const adjustment = adjustments.get(saving.id);
+    const fromBalance = Number(saving.balance) + (adjustment?.from ?? 0);
+    const toBalance = Number(saving.balance) + (adjustment?.to ?? 0);
+    totals.fromTotal += fromBalance;
+    totals.toTotal += toBalance;
+    if (saving.savingConfig.type === "SUKARELA") {
+      totals.fromSukarela += fromBalance;
+      totals.toSukarela += toBalance;
+    } else {
+      totals.fromPokok += fromBalance;
+      totals.toPokok += toBalance;
+    }
+    balances.set(saving.memberId, totals);
+  }
+  const memberStats = members.map((m) => {
+    const b = balances.get(m.id) ?? { fromTotal: 0, toTotal: 0, fromPokok: 0, toPokok: 0, fromSukarela: 0, toSukarela: 0 };
+    const fromTotal = round2(b.fromTotal);
+    const toTotal = round2(b.toTotal);
+    return {
+      memberId: m.id,
+      memberCode: m.memberId,
+      fullName: m.fullName,
+      avgSavingsBalance: round2((fromTotal + toTotal) / 2),
+      avgPokokWajibBalance: round2((round2(b.fromPokok) + round2(b.toPokok)) / 2),
+      avgSukarelaBalance: round2((round2(b.fromSukarela) + round2(b.toSukarela)) / 2),
+      interestPaid: interestByMember.get(m.id) ?? 0
+    };
+  });
 
   const totalAvgSavings = round2(memberStats.reduce((sum, m) => sum + m.avgSavingsBalance, 0));
   const totalInterestPaid = round2(memberStats.reduce((sum, m) => sum + m.interestPaid, 0));

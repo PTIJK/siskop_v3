@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ShuDistribution } from "@siskop/types";
-import { apiFetch, ApiRequestError } from "@/api/client";
+import { apiFetchPage, ApiRequestError } from "@/api/client";
 import { formatRupiahSingkat } from "@/lib/format";
 import { EntitlementNotice } from "@/components/shared/EntitlementNotice";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
@@ -10,17 +10,6 @@ import { FileText, Info, ChevronLeft, ChevronRight } from "lucide-react";
 
 const PAGE_SIZE = 15;
 
-// Fixes the read-only technical debt flagged before Fase 2 started
-// (docs/06-PRD-SISKOP-Mobile-Version.md §12): desktop's ShuDistribusiTab.tsx
-// renders every active member's row in one unbounded <table> —
-// getShuDistribution() computes and returns the full roster with no backend
-// pagination (it can't easily paginate anyway: alokasi/shuBerjalan are
-// aggregates over the whole set). The fix here is client-side: the full
-// array is still fetched once, but rendered in pages instead of all at once,
-// so a tenant with hundreds of members doesn't hand the phone hundreds of
-// DOM nodes in a single paint. Demo data only has 10 members, so this can't
-// be stress-tested for real here — the slicing logic itself is what's being
-// fixed, independent of how many rows exist.
 export function ShuDistribusiTab() {
   const [from, setFrom] = useState(defaultPeriodFrom());
   const [to, setTo] = useState(defaultPeriodTo());
@@ -28,13 +17,16 @@ export function ShuDistribusiTab() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<{ message: string; notEntitled: boolean } | null>(null);
   const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
-  const fetchReport = async () => {
+  const fetchReport = async (nextPage = 1, periodFrom = from, periodTo = to) => {
     setIsLoading(true);
     setError(null);
-    setPage(1);
     try {
-      setData(await apiFetch<ShuDistribution>(`/reports/regulatory/shu-distribution?from=${from}&to=${to}`));
+      const result = await apiFetchPage<ShuDistribution>(`/reports/regulatory/shu-distribution?from=${periodFrom}&to=${periodTo}&page=${nextPage}&limit=${PAGE_SIZE}`);
+      setData(result.items);
+      setTotal(result.meta.total ?? result.items.anggota.length);
+      setPage(nextPage);
     } catch (err) {
       const message = err instanceof ApiRequestError ? err.message : "Gagal memuat pembagian SHU";
       const notEntitled = err instanceof ApiRequestError && err.code === "FEATURE_NOT_ENTITLED";
@@ -48,12 +40,12 @@ export function ShuDistribusiTab() {
     void fetchReport();
   }, []);
 
-  const totalPages = data ? Math.ceil(data.anggota.length / PAGE_SIZE) : 0;
-  const pageRows = data ? data.anggota.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) : [];
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const pageRows = data?.anggota ?? [];
 
   return (
     <div className="space-y-4">
-      <PeriodRangeControls from={from} to={to} onFromChange={setFrom} onToChange={setTo} onSubmit={fetchReport} isLoading={isLoading} />
+      <PeriodRangeControls from={from} to={to} onFromChange={setFrom} onToChange={setTo} onSubmit={() => void fetchReport(1)} isLoading={isLoading} />
 
       {isLoading ? (
         <PageLoading />
@@ -132,19 +124,19 @@ export function ShuDistribusiTab() {
               <div className="mt-3 flex items-center justify-center gap-3 border-t pt-3 text-xs text-muted-foreground">
                 <button
                   disabled={page <= 1}
-                  onClick={() => setPage((p) => p - 1)}
-                  className="rounded-md border p-1.5 disabled:opacity-40"
+                  onClick={() => void fetchReport(page - 1, data.periode.from, data.periode.to)}
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border disabled:opacity-40"
                   aria-label="Halaman sebelumnya"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <span>
-                  {page} / {totalPages} ({data.anggota.length} anggota)
+                  {page} / {totalPages} ({total} anggota)
                 </span>
                 <button
                   disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                  className="rounded-md border p-1.5 disabled:opacity-40"
+                  onClick={() => void fetchReport(page + 1, data.periode.from, data.periode.to)}
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border disabled:opacity-40"
                   aria-label="Halaman berikutnya"
                 >
                   <ChevronRight className="h-4 w-4" />

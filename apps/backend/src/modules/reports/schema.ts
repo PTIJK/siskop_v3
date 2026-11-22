@@ -27,6 +27,11 @@ export const periodParamsSchema = z.object({
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal: YYYY-MM-DD").optional()
 });
 
+export const shuDistributionParamsSchema = periodParamsSchema.extend({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional()
+});
+
 export const unitPeriodParamsSchema = periodParamsSchema.extend({ unitId: unitIdParam });
 
 export const comparablePeriodParamsSchema = unitPeriodParamsSchema.extend({ compare: compareParam });
