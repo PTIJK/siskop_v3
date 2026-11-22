@@ -21,6 +21,7 @@
     "backfill:loan-installments": "tsx scripts/backfill-loan-installments.ts"
   },
   "dependencies": {
+    "@node-rs/bcrypt": "2.0.0",
     "@prisma/client": "^5.13.0",
     "@siskop/types": "workspace:*",
     "bcryptjs": "^2.4.3",

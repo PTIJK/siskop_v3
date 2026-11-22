@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { verifyPassword } from "../../lib/password.js";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import type { MemberAuthClaims, MemberProfile } from "@siskop/types";
@@ -91,7 +92,7 @@ export async function loginMember(host: string | undefined, nik: string, passwor
   // Hash a throwaway when the member is absent, or portal access was never
   // activated, so the response time does not reveal which case applies.
   const hash = member?.passwordHash ?? "$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinva";
-  const ok = await bcrypt.compare(password, hash);
+  const ok = await verifyPassword(password, hash);
 
   if (!member || !ok || !member.isActive || !member.passwordHash) throw unauthorized();
   // After the password check, so a wrong password never reveals the package.
@@ -143,7 +144,7 @@ export async function changeMemberPassword(
   const member = await db.member.findFirst({ where: { id: memberId, tenantId } });
   if (!member || !member.passwordHash) throw unauthorized();
 
-  const ok = await bcrypt.compare(currentPassword, member.passwordHash);
+  const ok = await verifyPassword(currentPassword, member.passwordHash);
   // A wrong form value must not trigger the client's 401 refresh/logout flow.
   if (!ok) throw validationError("Kata sandi saat ini salah. Masukkan kata sandi yang digunakan untuk masuk.");
 

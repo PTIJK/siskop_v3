@@ -135,7 +135,7 @@ export async function getCapitalDashboard(tenantId: string, unitId?: string): Pr
   const now = new Date();
   const monthEnds = [...Array.from({ length: 11 }, (_, i) => endOfMonth(subMonths(now, 11 - i))), now];
 
-  const [modalSendiri, totalAset, memberCount, hasKspUnit, trend, loanGroups, capitalGroups] = await Promise.all([
+  const [modalSendiri, totalAset, memberCount, hasKspUnit, trend, loanGroups] = await Promise.all([
     getModalSendiri(tenantId, now, unitId),
     getTotalAset(tenantId, now, unitId),
     db.member.count({ where: { tenantId, isActive: true, ...s.member } }),
@@ -145,17 +145,19 @@ export async function getCapitalDashboard(tenantId: string, unitId?: string): Pr
       by: ["memberId"],
       where: { tenantId, status: "ACTIVE", ...s.loan },
       _sum: { principalAmount: true }
-    }),
-    db.saving.groupBy({
-      by: ["memberId"],
-      where: { tenantId, isActive: true, ...s.saving, savingConfig: { type: { in: [...EQUITY_SAVING_TYPES] } } },
-      _sum: { balance: true }
     })
   ]);
   const ms = modalSendiri.total;
+  const concentrationFloor = ms.mul(MEMBER_CAPITAL_CONCENTRATION_PCT).div(100);
+  const concentratedGroups = ms.isZero() ? [] : await db.saving.groupBy({
+    by: ["memberId"],
+    where: { tenantId, isActive: true, ...s.saving, savingConfig: { type: { in: [...EQUITY_SAVING_TYPES] } } },
+    _sum: { balance: true },
+    having: { balance: { _sum: { gt: concentrationFloor } } }
+  });
 
   const members = await db.member.findMany({
-    where: { tenantId, id: { in: [...new Set([...loanGroups, ...capitalGroups].map((g) => g.memberId))] } },
+    where: { tenantId, id: { in: [...new Set([...loanGroups, ...concentratedGroups].map((g) => g.memberId))] } },
     select: { id: true, fullName: true, isPengurus: true, isPengawas: true }
   });
   const memberById = new Map(members.map((m) => [m.id, m]));
@@ -185,19 +187,15 @@ export async function getCapitalDashboard(tenantId: string, unitId?: string): Pr
       : new Prisma.Decimal(b.principal).cmp(a.principal)
   );
 
-  const concentrationFloor = ms.mul(MEMBER_CAPITAL_CONCENTRATION_PCT).div(100);
-  const konsentrasiSimpanan = ms.isZero()
-    ? []
-    : capitalGroups
-        .map((g) => ({ memberId: g.memberId, amount: g._sum.balance ?? ZERO }))
-        .filter((g) => g.amount.gt(concentrationFloor))
-        .sort((a, b) => b.amount.cmp(a.amount))
-        .map((g) => ({
-          memberId: g.memberId,
-          memberName: memberById.get(g.memberId)?.fullName ?? "-",
-          amount: g.amount.toString(),
-          pctOfModalSendiri: g.amount.div(ms).mul(100).toFixed(2)
-        }));
+  const konsentrasiSimpanan = concentratedGroups
+    .map((g) => ({ memberId: g.memberId, amount: g._sum.balance ?? ZERO }))
+    .sort((a, b) => b.amount.cmp(a.amount))
+    .map((g) => ({
+      memberId: g.memberId,
+      memberName: memberById.get(g.memberId)?.fullName ?? "-",
+      amount: g.amount.toString(),
+      pctOfModalSendiri: g.amount.div(ms).mul(100).toFixed(2)
+    }));
 
   return {
     modalSendiri: ms.toString(),
@@ -296,37 +294,43 @@ export async function getPasarDashboard(tenantId: string): Promise<PasarDashboar
 // ── Pertumbuhan ──────────────────────────────────────────────────────────────
 
 export async function getGrowthDashboard(tenantId: string, unitId?: string): Promise<GrowthPoint[]> {
-  const s = scope(unitId);
   const now = new Date();
   const months = Array.from({ length: 12 }, (_, i) => subMonths(now, 11 - i));
+  const periods = Prisma.sql`WITH periods (idx, start_at, end_at) AS (VALUES ${Prisma.join(
+    months.map((date, index) => Prisma.sql`(${index}::int, (${startOfMonth(date).toISOString()}::timestamptz AT TIME ZONE 'UTC'), (${endOfMonth(date).toISOString()}::timestamptz AT TIME ZONE 'UTC'))`)
+  )})`;
 
-  return Promise.all(
-    months.map(async (date) => {
-      const range = { gte: startOfMonth(date), lte: endOfMonth(date) };
-      const [newMembers, flows, disbursement, repayment] = await Promise.all([
-        db.member.count({ where: { tenantId, createdAt: range, ...s.member } }),
-        db.savingTransaction.groupBy({
-          by: ["type"],
-          where: { tenantId, createdAt: range, ...(unitId ? { saving: { unitId } } : {}) },
-          _sum: { amount: true }
-        }),
-        db.loan.aggregate({ where: { tenantId, disbursedAt: range, ...s.loan }, _sum: { principalAmount: true } }),
-        db.loanPayment.aggregate({
-          where: { tenantId, paidAt: range, ...(unitId ? { loan: { unitId } } : {}) },
-          _sum: { amount: true }
-        })
-      ]);
-      const netFlow = flows.reduce(
-        (sum, f) => (f.type === "WITHDRAWAL" ? sum.sub(f._sum.amount ?? ZERO) : sum.add(f._sum.amount ?? ZERO)),
-        ZERO
-      );
-      return {
-        month: format(date, "MMM yyyy"),
-        newMembers,
-        savingsNetFlow: netFlow.toString(),
-        disbursement: (disbursement._sum.principalAmount ?? ZERO).toString(),
-        repayment: (repayment._sum.amount ?? ZERO).toString()
-      };
-    })
-  );
+  // Every raw query carries an explicit tenant filter; unit filters follow the Prisma relations.
+  const [members, flows, loans, payments] = await Promise.all([
+    db.$queryRaw<Array<{ idx: number; total: number }>>(Prisma.sql`${periods}
+      SELECT p.idx, count(*)::int AS total FROM periods p
+      JOIN "Member" m ON m."createdAt" >= p.start_at AND m."createdAt" <= p.end_at
+        AND m."tenantId" = ${tenantId}
+        ${unitId ? Prisma.sql`AND EXISTS (SELECT 1 FROM "UnitMembership" u WHERE u."memberId" = m.id AND u."unitId" = ${unitId})` : Prisma.empty}
+      GROUP BY p.idx`),
+    db.$queryRaw<Array<{ idx: number; total: Prisma.Decimal }>>(Prisma.sql`${periods}
+      SELECT p.idx, sum(CASE WHEN t.type = 'WITHDRAWAL' THEN -t.amount ELSE t.amount END) AS total FROM periods p
+      JOIN "SavingTransaction" t ON t."createdAt" >= p.start_at AND t."createdAt" <= p.end_at
+        AND t."tenantId" = ${tenantId}
+        ${unitId ? Prisma.sql`AND EXISTS (SELECT 1 FROM "Saving" s WHERE s.id = t."savingId" AND s."tenantId" = ${tenantId} AND s."unitId" = ${unitId})` : Prisma.empty}
+      GROUP BY p.idx`),
+    db.$queryRaw<Array<{ idx: number; total: Prisma.Decimal }>>(Prisma.sql`${periods}
+      SELECT p.idx, sum(l."principalAmount") AS total FROM periods p
+      JOIN "Loan" l ON l."disbursedAt" >= p.start_at AND l."disbursedAt" <= p.end_at
+        AND l."tenantId" = ${tenantId} ${unitId ? Prisma.sql`AND l."unitId" = ${unitId}` : Prisma.empty}
+      GROUP BY p.idx`),
+    db.$queryRaw<Array<{ idx: number; total: Prisma.Decimal }>>(Prisma.sql`${periods}
+      SELECT p.idx, sum(t.amount) AS total FROM periods p
+      JOIN "LoanPayment" t ON t."paidAt" >= p.start_at AND t."paidAt" <= p.end_at
+        AND t."tenantId" = ${tenantId}
+        ${unitId ? Prisma.sql`AND EXISTS (SELECT 1 FROM "Loan" l WHERE l.id = t."loanId" AND l."tenantId" = ${tenantId} AND l."unitId" = ${unitId})` : Prisma.empty}
+      GROUP BY p.idx`)
+  ]);
+  return months.map((date, index) => ({
+    month: format(date, "MMM yyyy"),
+    newMembers: members.find((row) => row.idx === index)?.total ?? 0,
+    savingsNetFlow: (flows.find((row) => row.idx === index)?.total ?? ZERO).toString(),
+    disbursement: (loans.find((row) => row.idx === index)?.total ?? ZERO).toString(),
+    repayment: (payments.find((row) => row.idx === index)?.total ?? ZERO).toString()
+  }));
 }

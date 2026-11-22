@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import bcrypt from 'bcryptjs'
+import { verifyPassword } from '../../lib/password.js'
 import type { Prisma } from '@prisma/client'
 import type { MemberAccessResult } from '@siskop/types'
 import { db } from '../../lib/db.js'
@@ -36,9 +36,9 @@ export async function login(
   )
   if (candidates.length > 100) throw validationError('Silakan masuk melalui alamat koperasi Anda.')
   const matches: typeof candidates = []
-  if (!candidates.length) await bcrypt.compare(password, dummy)
+  if (!candidates.length) await verifyPassword(password, dummy)
   for (const member of candidates) {
-    if (await bcrypt.compare(password, member.passwordHash!)) matches.push(member)
+    if (await verifyPassword(password, member.passwordHash!)) matches.push(member)
   }
   if (!matches.length) throw invalid()
   const token = secret()

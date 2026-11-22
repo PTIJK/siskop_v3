@@ -7,10 +7,13 @@ import { Info } from "lucide-react";
 import { ExportMenu } from "@/components/reports/ExportMenu";
 import { ReportFilterCard } from "@/components/reports/ReportFilterCard";
 import { ReportResultCard } from "@/components/reports/ReportResultCard";
+import { ReportPager } from "@/components/reports/ReportPager";
 import { ReportAmount, STICKY_HEAD, STICKY_TABLE_CONTAINER } from "@/components/reports/ReportTable";
 import { useReport } from "@/components/reports/useReport";
 import { useReportFilter } from "@/components/reports/useReportFilter";
 import { defaultPeriodFrom, defaultPeriodTo } from "./period";
+
+const PAGE_SIZE = 50;
 
 export function ShuDistribusiTab() {
   // Cooperative-level statement: no unit filter.
@@ -19,7 +22,11 @@ export function ShuDistribusiTab() {
   const report = useReport<ShuDistribution>("Gagal memuat pembagian SHU");
 
   const query = `from=${f.from}&to=${f.to}`;
+  const load = (page: number, periodQuery: string) => {
+    void report.run(`/reports/regulatory/shu-distribution?${periodQuery}&page=${page}&limit=${PAGE_SIZE}`);
+  };
   const data = report.data;
+  const appliedQuery = data ? `from=${data.periode.from}&to=${data.periode.to}` : query;
 
   return (
     <div className="space-y-5">
@@ -28,7 +35,7 @@ export function ShuDistribusiTab() {
         from={f.from}
         to={f.to}
         onChange={filter.update}
-        onApply={() => void report.run(`/reports/regulatory/shu-distribution?${query}`)}
+        onApply={() => load(1, query)}
         onReset={() => {
           filter.reset();
           report.clear();
@@ -55,7 +62,7 @@ export function ShuDistribusiTab() {
           reportName="Pembagian SHU"
           title="Pembagian SHU"
           subtitle={data ? formatPeriode(data.periode.from, data.periode.to) : undefined}
-          actions={data && <ExportMenu report="shu-distribution" query={query} stem={`pembagian-shu-${data.periode.from}_${data.periode.to}`} pdfPath={`/reports/regulatory/shu-distribution/pdf?${query}`} />}
+          actions={data && <ExportMenu report="shu-distribution" query={appliedQuery} stem={`pembagian-shu-${data.periode.from}_${data.periode.to}`} pdfPath={`/reports/regulatory/shu-distribution/pdf?${appliedQuery}`} />}
           isLoading={report.isLoading}
           hasRun={report.hasRun}
           hasData={!!data && (data.anggota.length > 0 || !!data.alokasi)}
@@ -115,6 +122,10 @@ export function ShuDistribusiTab() {
                       )}
                     </TableBody>
                   </Table>
+                  <div className="mt-3">
+                    <ReportPager page={report.meta.page ?? 1} limit={PAGE_SIZE} total={report.meta.total ?? 0}
+                      onPage={(page) => load(page, appliedQuery)} disabled={report.isLoading} />
+                  </div>
                 </CardContent>
               </Card>
             </>
