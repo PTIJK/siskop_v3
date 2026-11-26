@@ -22,7 +22,7 @@ import { Plus } from "lucide-react";
 
 const schema = z.object({
   name: z.string().min(2, "Nama minimal 2 karakter"),
-  type: z.enum(["POKOK", "WAJIB", "SUKARELA"]),
+  type: z.enum(["POKOK", "WAJIB", "SUKARELA", "POKOK_WAJIB"]),
   rateType: z.enum(["BUNGA", "BAGI_HASIL", "MARGIN"]),
   rate: z.coerce.number().min(0).max(100),
   periodUnit: z.enum(["DAILY", "MONTHLY", "YEARLY"])
@@ -162,6 +162,7 @@ export function SavingConfigsTab() {
                   <SelectContent>
                     <SelectItem value="POKOK">Pokok</SelectItem>
                     <SelectItem value="WAJIB">Wajib</SelectItem>
+                    <SelectItem value="POKOK_WAJIB">Simpanan Pokok + Wajib</SelectItem>
                     <SelectItem value="SUKARELA">Sukarela</SelectItem>
                   </SelectContent>
                 </Select>

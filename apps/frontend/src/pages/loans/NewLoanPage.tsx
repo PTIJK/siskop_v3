@@ -1,3 +1,4 @@
+import { isPokokSavingType } from "@siskop/types";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -124,7 +125,7 @@ export function NewLoanPage() {
         const member = await apiFetch<MemberWithSavings>(`/members/${encodeURIComponent(selectedMemberId)}`, { signal: controller.signal });
         if (!isCurrent()) return;
         setSelectedMember({ id: member.id, memberId: member.memberId, fullName: member.fullName, accountNumber: member.accountNumber });
-        setHasPokokSaving(member.savings?.some((saving) => saving.savingConfig.type === "POKOK" && saving.isActive) ?? false);
+        setHasPokokSaving(member.savings?.some((saving) => isPokokSavingType(saving.savingConfig.type) && saving.isActive) ?? false);
         // BMPP is advisory here; the server recalculates and enforces it on submission.
         try {
           const headroom = await apiFetch<BmppHeadroom>(`/loans/bmpp-headroom?memberId=${encodeURIComponent(member.id)}`, { signal: controller.signal });

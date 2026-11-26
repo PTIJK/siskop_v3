@@ -1,3 +1,4 @@
+import { isPokokSavingType } from "@siskop/types";
 import { digitsToNumber } from "@/lib/money-input";
 import { formatRupiah } from "@/lib/format";
 
@@ -25,14 +26,14 @@ export const MODE_LABEL: Record<FlowMode, { noun: string; verb: string; posted: 
  */
 export function defaultAccountId(accounts: readonly AccountOption[], mode: FlowMode): string | null {
   if (accounts.length === 0) return null;
-  const rank = (type: string) => ["SUKARELA", "WAJIB", "POKOK"].indexOf(type);
+  const rank = (type: string) => ["SUKARELA", "WAJIB", "POKOK", "POKOK_WAJIB"].indexOf(type);
   const ordered = [...accounts].sort((a, b) => {
     const ra = rank(a.type) === -1 ? 9 : rank(a.type);
     const rb = rank(b.type) === -1 ? 9 : rank(b.type);
     return ra - rb;
   });
   if (mode === "tarik") {
-    const withBalance = ordered.find((a) => a.type !== "POKOK" && Number(a.balance) > 0);
+    const withBalance = ordered.find((a) => !isPokokSavingType(a.type) && Number(a.balance) > 0);
     if (withBalance) return withBalance.id;
   }
   return ordered[0]?.id ?? null;

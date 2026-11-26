@@ -27,6 +27,7 @@ interface MemberDetail extends Member {
 const TYPE_TERM: Record<string, GlossaryKey | undefined> = {
   POKOK: "Simpanan Pokok",
   WAJIB: "Simpanan Wajib",
+  POKOK_WAJIB: "Simpanan Pokok + Wajib",
   SUKARELA: "Simpanan Sukarela"
 };
 

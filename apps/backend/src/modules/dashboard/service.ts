@@ -15,7 +15,7 @@ import { MODAL_DISETOR_AUDIT_THRESHOLD_RP, REGULATORY_CAPS, classifyKsp } from "
 import { getModalSendiri, getTotalAset, komposisiModalSendiri } from "../reports/capital-service.js";
 
 const ZERO = new Prisma.Decimal(0);
-const EQUITY_SAVING_TYPES = ["POKOK", "WAJIB"] as const;
+const EQUITY_SAVING_TYPES = ["POKOK", "WAJIB", "POKOK_WAJIB"] as const;
 const KOL_ORDER = ["LANCAR", "DALAM_PERHATIAN", "KURANG_LANCAR", "DIRAGUKAN", "MACET"] as const;
 const NPL_KOL = new Set<string>(["KURANG_LANCAR", "DIRAGUKAN", "MACET"]);
 /** Pasal 63(6): one member's pokok + wajib may be at most 20% of Modal Sendiri. */

@@ -1,3 +1,4 @@
+import { isPokokSavingType } from "@siskop/types";
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -77,7 +78,7 @@ export function SavingDetailPage() {
     );
   }
 
-  const isPOKOK = saving.savingConfig.type === "POKOK";
+  const isPOKOK = isPokokSavingType(saving.savingConfig.type);
 
   return (
     <div className="space-y-6">

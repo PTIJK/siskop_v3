@@ -300,6 +300,7 @@ export async function generateStandardCoaInTx(tx: TxClient, tenantId: string): P
   const pendapatanLain = accountIdFor("pendapatan_lain");
   const equityOrLiabilityBySavingType: Record<string, string> = {
     POKOK: accountIdFor("simpanan_pokok"),
+    POKOK_WAJIB: accountIdFor("simpanan_pokok"),
     WAJIB: accountIdFor("simpanan_wajib"),
     SUKARELA: accountIdFor("simpanan_sukarela")
   };

@@ -75,8 +75,10 @@ describe("loan member eligibility", () => {
     expect(button("Coba lagi")).toBeDefined();
   });
 
-  it("enables continuation after an active principal savings account is confirmed", async () => {
-    mocks.fetch.mockImplementation(async (path: string) => path.startsWith("/members/") ? member("budi", [pokok]) : []);
+  it.each(["POKOK", "POKOK_WAJIB"])("enables continuation for an active %s account", async (type) => {
+    mocks.fetch.mockImplementation(async (path: string) =>
+      path.startsWith("/members/") ? member("budi", [{ ...pokok, savingConfig: { type } }]) : []
+    );
     await render(); await select();
     expect(button("Lanjut").props.disabled).toBe(false);
   });

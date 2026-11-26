@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { SAVING_TYPES } from "@siskop/types";
 import { differenceInCalendarDays, format, parseISO, startOfMonth } from "date-fns";
 
 export const createSavingConfigSchema = z.object({
   name: z.string().min(2, "Nama minimal 2 karakter"),
-  type: z.enum(["POKOK", "WAJIB", "SUKARELA"]),
+  type: z.enum(SAVING_TYPES),
   rateType: z.enum(["BUNGA", "BAGI_HASIL", "MARGIN"]),
   rate: z.coerce.number().min(0).max(100),
   periodUnit: z.enum(["DAILY", "MONTHLY", "YEARLY"])
@@ -27,7 +28,7 @@ export const listSavingsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().optional(),
   memberId: z.string().optional(),
-  type: z.enum(["POKOK", "WAJIB", "SUKARELA"]).optional()
+  type: z.enum(SAVING_TYPES).optional()
 });
 
 export const listSavingTransactionsQuerySchema = z.object({

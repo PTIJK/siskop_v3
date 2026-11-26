@@ -19,6 +19,7 @@ enum SavingType {
   POKOK
   WAJIB
   SUKARELA
+  POKOK_WAJIB
 }
 
 enum RateType {

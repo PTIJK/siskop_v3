@@ -1,0 +1,1 @@
+ALTER TYPE "SavingType" ADD VALUE 'POKOK_WAJIB';

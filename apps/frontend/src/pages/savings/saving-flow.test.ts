@@ -15,6 +15,7 @@ describe("defaultAccountId", () => {
   it("picks a withdrawable account with money, never pokok if there is another choice", () => {
     expect(defaultAccountId([pokok, wajib, sukarela], "tarik")).toBe("s");
     expect(defaultAccountId([pokok, wajib, { ...sukarela, balance: "0" }], "tarik")).toBe("w");
+    expect(defaultAccountId([{ ...pokok, type: "POKOK_WAJIB" }, wajib], "tarik")).toBe("w");
   });
 
   it("falls back to the first account when nothing has a balance, and to null when there are none", () => {
