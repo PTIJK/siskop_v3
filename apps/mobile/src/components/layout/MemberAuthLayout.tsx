@@ -1,13 +1,7 @@
 import type { ReactNode } from "react";
 
-/** Interlocked-rings mark, same shape as the staff app's sidebar logo. */
 export function BrandMark({ className = "h-8 w-8" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={className} fill="none" aria-hidden="true">
-      <circle cx="12" cy="16" r="8" stroke="hsl(var(--primary))" strokeWidth="3" />
-      <circle cx="20" cy="16" r="8" stroke="hsl(var(--brand))" strokeWidth="3" />
-    </svg>
-  );
+  return <img src="/nexcoop-mark.png" width={32} height={32} alt="" className={className} />;
 }
 
 /** Centered card shell shared by every unauthenticated member screen. */

@@ -18,7 +18,7 @@ import {
 import type { BillingCycle } from "@siskop/types";
 import { track } from "@/lib/analytics";
 import { MarketingShell } from "../components/MarketingShell";
-import { Definition, Faq, LastUpdated, PricingTable } from "../components/LandingSeo";
+import { Definition, Faq, LastUpdated } from "../components/LandingSeo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CycleToggle } from "../components/PackagePicker";
@@ -194,14 +194,14 @@ export default function LandingPage() {
           <div className='lp-actions'>
             <Button asChild size='lg'>
               <a href='#paket' onClick={() => track("cta_pricing_click", { location: "hero", label: "mulai_sekarang" })}>
-                Mulai sekarang <ArrowUpRight />
+                Lihat paket <ArrowUpRight />
               </a>
             </Button>
             <a className='lp-ghost' href='#fitur'>
               Lihat fitur
             </a>
           </div>
-          <p className='lp-micro'>Tersedia paket gratis. Tanpa kartu kredit.</p>
+          <p className='lp-micro'>Sudah mendaftar? <Link className='underline underline-offset-4' to='/login'>Masuk</Link></p>
           <div className='lp-preview-wrap'>
             <ProductPreview />
           </div>
@@ -263,11 +263,11 @@ export default function LandingPage() {
 
         <section id='paket' className='catalog-section content-width'>
           <div className='section-heading reveal'>
-            <h2>Pilih ruang tumbuh Anda.</h2>
+            <h2>Pilih paket untuk koperasi Anda</h2>
             <p>
-              Paket sesuai kebutuhan koperasi.
+              Pilih periode tagihan, lalu lanjutkan dengan paket yang sesuai.
               <br />
-              {catalog.data ? (formatTaxRate(catalog.data.settings.taxRate) ? `Harga belum termasuk PPN ${formatTaxRate(catalog.data.settings.taxRate)}.` : "Harga belum termasuk PPN.") : "Harga transparan, tanpa biaya tersembunyi."}
+              {catalog.data ? (formatTaxRate(catalog.data.settings.taxRate) ? `Harga belum termasuk PPN ${formatTaxRate(catalog.data.settings.taxRate)}.` : "Harga belum termasuk PPN.") : null}
             </p>
           </div>
           {catalog.isPending ? (
@@ -296,7 +296,7 @@ export default function LandingPage() {
                 saving={Math.max(0, ...catalog.data.packages.map((p) => yearlySaving(p) ?? 0))}
               />
               <div className='package-list'>
-                {catalog.data.packages.map((pkg) => {
+                {catalog.data.packages.filter((pkg) => !pkg.isCustom || catalog.data.settings.customEnabled).map((pkg) => {
                   const shown = catalog.data.settings.enabledCycles.includes(cycle) ? cycle : (catalog.data.settings.enabledCycles[0] ?? "MONTHLY");
                   const price = priceOf(pkg, shown);
                   return (
@@ -316,7 +316,7 @@ export default function LandingPage() {
                             to={referralLink(`/register?package=${encodeURIComponent(pkg.code)}&cycle=${shown.toLowerCase()}`, referralCode)}
                             onClick={() => track("cta_signup_click", { location: "pricing", label: "pilih_paket", package: pkg.code, cycle: shown })}
                           >
-                            Pilih paket <ArrowUpRight />
+                            Daftar dengan paket ini <ArrowUpRight />
                           </Link>
                         </Button>
                         <span>{price === null && !pkg.isCustom ? "Aktif segera setelah mendaftar." : "Aktif setelah pembayaran dikonfirmasi."}</span>
@@ -325,20 +325,19 @@ export default function LandingPage() {
                   );
                 })}
               </div>
-              <PricingTable />
             </>
           )}
         </section>
 
         <section id='cara-bergabung' className='how-section content-width reveal'>
-          <h2>Dari rencana, jadi langkah nyata.</h2>
+          <h2>Cara mendaftarkan koperasi</h2>
           <ol>
             {[
-              ["Pilih paket", "Pilih paket yang sesuai, atau susun sendiri paket Custom."],
-              ["Daftarkan koperasi", "Isi data koperasi dan buat akun pengelola Anda."],
+              ["Pilih paket", "Tentukan paket dan periode tagihan. Pilihan Anda dibawa ke formulir."],
+              ["Isi data koperasi", "Lengkapi data badan hukum dan buat akun pengurus."],
               [
-                "Bayar, lalu mulai",
-                "Paket berbayar: transfer sesuai faktur. Dashboard aktif setelah pembayaran dikonfirmasi. Paket Free langsung aktif."
+                "Periksa dan kirim",
+                "Paket gratis langsung aktif. Untuk paket berbayar, ikuti petunjuk pada tagihan pertama."
               ]
             ].map(([title, description], index) => (
               <li key={title}>

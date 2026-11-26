@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Lock, X } from "lucide-react";
+import { ChevronRight, Lock, X } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useIsMultiUnit } from "@/hooks/useIsMultiUnit";
 import { useEntitlements, useSubscription } from "@/hooks/useEntitlements";
@@ -76,7 +76,7 @@ function SidebarContent({ rail, onNavigate, onClose }: SidebarContentProps) {
   return (
     <div className="flex h-full flex-col gap-1.5 overflow-y-auto border-r bg-sidebar px-3 py-4 text-sidebar-foreground">
       <div className={cn("flex items-center gap-2.5 px-2 pb-3.5 pt-1", rail && "justify-center px-0")}>
-        <BrandMark />
+        <BrandMark alt={rail ? "NexCoop" : ""} />
         {!rail && <span className="flex-1 text-[17px] font-extrabold tracking-[-0.01em]">SISKOP</span>}
         {onClose && (
           <button
@@ -91,17 +91,25 @@ function SidebarContent({ rail, onNavigate, onClose }: SidebarContentProps) {
       </div>
 
       <nav aria-label="Menu utama" className="flex flex-col gap-1">
-        {sections.map((section, index) => (
+        {sections.map((section, index) => rail ? (
           <div key={section.group} role="group" aria-label={section.label} className="flex flex-col gap-0.5">
-            {rail ? (
-              index > 0 && <div aria-hidden="true" className="mx-1.5 my-2.5 h-px bg-border" />
-            ) : (
-              <p className={cn("px-2.5 pb-1 text-xs font-bold text-muted-foreground", index > 0 ? "mt-3" : "mt-1")}>{section.label}</p>
-            )}
+            {index > 0 && <div aria-hidden="true" className="mx-1.5 my-2.5 h-px bg-border" />}
             {section.items.map((item) => (
               <NavItem key={item.id} item={item} rail={rail} onNavigate={onNavigate} />
             ))}
           </div>
+        ) : (
+          <details key={section.group} className="group/section">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-[10px] px-2.5 py-2 text-sm font-bold hover:bg-sidebar-active/70 active:bg-sidebar-active focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0">{section.label}</span>
+              <ChevronRight className="h-4 w-4 shrink-0 group-open/section:rotate-90" aria-hidden="true" />
+            </summary>
+            <div className="flex flex-col gap-0.5 pl-2">
+              {section.items.map((item) => (
+                <NavItem key={item.id} item={item} rail={false} onNavigate={onNavigate} />
+              ))}
+            </div>
+          </details>
         ))}
       </nav>
 

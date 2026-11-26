@@ -15,10 +15,7 @@ import "../styles.css";
 export function Brand() {
   return (
     <Link to='/' className='brand' aria-label='SISKOP beranda'>
-      <span className='brand-symbol' aria-hidden='true'>
-        <i />
-        <i />
-      </span>
+      <img src='/nexcoop-mark.png' className='brand-symbol' width={43} height={31} alt='' />
       <span>
         siskop<span className='brand-dot'>.</span>
       </span>
@@ -54,7 +51,7 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
               <Link to='/login'>Masuk</Link>
               <Button asChild size='lg'>
                 <a href='#paket' onClick={() => track("cta_pricing_click", { location: "navbar", label: "mulai_sekarang" })}>
-                  Mulai sekarang <ArrowUpRight />
+                  Lihat paket <ArrowUpRight />
                 </a>
               </Button>
             </div>
@@ -106,17 +103,5 @@ export function MarketingShell({ children, landing = false }: { children: ReactN
         {workspace ? <a href={`${central}/checkout/resume`}>Lanjutkan pendaftaran</a> : <Link to='/checkout/resume' onClick={() => track("cta_signup_click", { location: "footer", label: "lanjutkan_pendaftaran" })}>Lanjutkan pendaftaran</Link>}
       </footer>
     </div>
-  );
-}
-export function Steps({ active }: { active: 2 | 3 }) {
-  return (
-    <ol className='signup-steps' aria-label='Tahapan pendaftaran'>
-      {["Paket", "Pendaftaran", "Pembayaran"].map((label, index) => (
-        <li key={label} aria-current={active === index + 1 ? "step" : undefined}>
-          <span>{String(index + 1).padStart(2, "0")}</span>
-          {label}
-        </li>
-      ))}
-    </ol>
   );
 }

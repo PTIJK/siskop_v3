@@ -95,27 +95,10 @@
   color: var(--lime);
 }
 :where(.marketing) .brand-symbol {
-  position: relative;
   display: block;
   width: 43px;
   height: 31px;
-  transform: rotate(25deg);
-}
-:where(.marketing) .brand-symbol i {
-  width: 28px;
-  height: 28px;
-  border: 6px solid var(--lime);
-  border-radius: 50%;
-  position: absolute;
-  top: 1px;
-}
-:where(.marketing) .brand-symbol i:first-child {
-  left: 0;
-  border-right-color: transparent;
-}
-:where(.marketing) .brand-symbol i:last-child {
-  right: 0;
-  border-left-color: transparent;
+  object-fit: contain;
 }
 :where(.marketing) .desktop-nav {
   display: flex;
@@ -310,7 +293,7 @@
 }
 :where(.marketing) .catalog-section {
   padding: 8px 0 30px;
-  scroll-margin-top: 35px;
+  scroll-margin-top: 104px;
 }
 :where(.marketing) .section-heading {
   display: flex;
@@ -540,7 +523,7 @@
   font-weight: 700;
 }
 :where(.marketing) .registration {
-  padding-bottom: 85px;
+  padding-block: 28px 85px;
   max-width: 1140px;
 }
 :where(.marketing) .registration-grid {
@@ -553,6 +536,7 @@
   line-height: 1.17;
   font-weight: 600;
   letter-spacing: -0.04em;
+  scroll-margin-top: 100px;
 }
 :where(.marketing) .page-intro {
   margin-top: 18px;
@@ -842,7 +826,6 @@
     gap: 9px;
   }
   :where(.marketing) .brand-symbol {
-    transform: rotate(25deg) scale(0.8);
     width: 39px;
   }
   :where(.marketing) .desktop-nav,
@@ -1113,7 +1096,7 @@
 .marketing .auth-notice { color: #212736; }
 
 /* ── Pricing V2 registration: wizard, package picker, quote, status ─────────── */
-:where(.marketing) .wizard-steps { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 28px 0 0; padding: 0; list-style: none; }
+:where(.marketing) .wizard-steps { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 24px; padding: 0; list-style: none; }
 :where(.marketing) .wizard-steps li { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--muted-mint); }
 :where(.marketing) .wizard-steps li > span { display: grid; place-items: center; height: 26px; width: 26px; border: 1px solid #aeb4c7; border-radius: 50%; font-size: 11px; color: var(--mint); }
 :where(.marketing) .wizard-steps li[data-done] > span { background: #e8ebf5; border-color: #d5d9e6; }
@@ -1121,11 +1104,12 @@
 :where(.marketing) .wizard-steps li[aria-current] > span { background: var(--lime); color: var(--forest); border-color: var(--lime); font-weight: 700; }
 :where(.marketing) .wizard-nav { display: flex; gap: 12px; flex-wrap: wrap; }
 
-:where(.marketing) .cycle-toggle { display: inline-flex; border: 1px solid #d5d9e6; border-radius: 999px; padding: 4px; gap: 4px; margin: 0 0 24px; }
-:where(.marketing) .cycle-toggle button { border: 0; background: transparent; color: var(--muted-mint); padding: 9px 20px; border-radius: 999px; font-size: 14px; cursor: pointer; display: inline-flex; flex-direction: column; align-items: center; line-height: 1.2; }
-:where(.marketing) .cycle-toggle button small { font-size: 10px; color: var(--lime); }
+:where(.marketing) .billing-choice { display: grid; justify-items: start; gap: 8px; }
+:where(.marketing) .catalog-section .billing-choice { margin-bottom: 22px; }
+:where(.marketing) .cycle-toggle { display: inline-grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--rule); border-radius: 12px; padding: 4px; gap: 4px; }
+:where(.marketing) .cycle-toggle button { min-height: 44px; border: 0; background: transparent; color: var(--muted-mint); padding: 8px 18px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+:where(.marketing) .cycle-toggle button[aria-pressed="false"]:hover { background: #eef0fa; }
 :where(.marketing) .cycle-toggle button[aria-pressed="true"] { background: var(--lime); color: var(--forest); font-weight: 600; }
-:where(.marketing) .cycle-toggle button[aria-pressed="true"] small { color: var(--forest); }
 :where(.marketing) .cycle-toggle button:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
 
 :where(.marketing) .package-picker { display: flex; flex-direction: column; gap: 26px; }
@@ -1163,8 +1147,25 @@
 :where(.marketing) .unit-choice { text-align: left; border: 1px solid #d5d9e6; border-radius: 12px; padding: 18px; background: #ffffff; color: var(--mint); cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
 :where(.marketing) .unit-choice span { font-size: 13px; color: var(--muted-mint); }
 :where(.marketing) .unit-choice small { font-size: 11px; color: var(--muted-mint); }
-:where(.marketing) .unit-choice[aria-checked="true"] { border-color: var(--lime); box-shadow: 0 0 0 1px var(--lime); }
-:where(.marketing) .unit-choice:focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; }
+:where(.marketing) .unit-choice input { accent-color: var(--lime); margin-inline-end: 5px; }
+:where(.marketing) .unit-choice:has(input:checked) { border-color: var(--lime); background: #eef0fa; }
+:where(.marketing) .unit-choice:has(input:focus-visible) { outline: 2px solid var(--lime); outline-offset: 3px; }
+:where(.marketing) .registration-kind legend { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+:where(.marketing) .registration-kind .unit-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+:where(.marketing) .registration-callout { position: relative; border: 1px solid var(--rule); border-radius: 12px; padding: 16px; }
+:where(.marketing) .registration-callout-title { font-size: 14px; font-weight: 700; }
+:where(.marketing) .registration-callout .registration-upload { display: inline-flex; align-items: center; align-self: flex-start; gap: 8px; min-height: 44px; border: 1px solid var(--rule); border-radius: 8px; padding-inline: 12px; font-size: 14px; cursor: pointer; }
+:where(.marketing) .registration-upload:hover { background: #eef0fa; }
+:where(.marketing) input:focus-visible + .registration-upload { outline: 2px solid var(--lime); outline-offset: 3px; }
+:where(.marketing) input:disabled + .registration-upload { cursor: wait; opacity: 0.7; }
+:where(.marketing) .registration-callout p:empty { display: none; }
+:where(.marketing) .registration-plan-note { margin-top: 10px; }
+:where(.marketing) .registration-review { display: grid; justify-items: start; gap: 16px; }
+:where(.marketing) .registration-review > dl,
+:where(.marketing) .registration-review > div { width: 100%; min-width: 0; }
+:where(.marketing) .registration-review dd { text-align: right; overflow-wrap: anywhere; min-width: 0; }
+:where(.marketing) .registration-mobile-quote { display: none; }
+:where(.marketing) .wizard-nav button { white-space: normal; height: auto; min-height: 44px; padding-block: 10px; }
 
 :where(.marketing) .review-list { display: grid; gap: 8px; border-top: 1px solid var(--rule); padding-top: 16px; font-size: 13px; }
 :where(.marketing) .review-list div { display: flex; justify-content: space-between; gap: 16px; }
@@ -1184,6 +1185,8 @@
 @media (max-width: 860px) {
   :where(.marketing) .registration-grid { grid-template-columns: minmax(0, 1fr); gap: 36px; }
   :where(.marketing) .form-fields { grid-template-columns: minmax(0, 1fr); }
+  :where(.marketing) .registration-aside { display: none; }
+  :where(.marketing) .registration-mobile-quote { display: block; }
 }
 
 /* The hero render is green; shift it to the indigo brand hue instead of keeping the old palette. */

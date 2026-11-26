@@ -32,6 +32,7 @@
     "@siskop/types": "workspace:*",
     "@splinetool/runtime": "^2.0.41",
     "@tanstack/react-query": "^5.36.0",
+    "@tesseract.js-data/ind": "1.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
@@ -45,6 +46,8 @@
     "react-router-dom": "^6.23.0",
     "recharts": "^3.10.1",
     "tailwind-merge": "^3.6.0",
+    "tesseract.js": "7.0.0",
+    "tesseract.js-core": "7.0.0",
     "zod": "^3.23.0",
     "zustand": "^4.5.0"
   },

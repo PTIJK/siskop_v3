@@ -105,7 +105,7 @@ export function headTags(site: Site): string {
     `<title>${esc(PAGE_TITLE)}</title>`,
     `<meta name="description" content="${esc(PAGE_DESCRIPTION)}" />`,
     `<meta name="theme-color" content="#0d0f15" />`,
-    `<link rel="icon" type="image/png" href="/logo.png" />`,
+    `<link rel="icon" type="image/png" href="/nexcoop-mark.png" />`,
     `<meta property="og:type" content="website" />`,
     `<meta property="og:site_name" content="${SITE_NAME}" />`,
     `<meta property="og:locale" content="${LOCALE}" />`,

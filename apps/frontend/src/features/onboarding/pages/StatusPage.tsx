@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowUpRight, Check, Clock3, Loader2, RefreshCw } from "lucide-react";
 import type { RegistrationStatus } from "@siskop/types";
-import { MarketingShell, Steps } from "../components/MarketingShell";
+import { MarketingShell } from "../components/MarketingShell";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/stores/auth";
 import { ApiRequestError } from "@/api/client";
@@ -70,16 +70,15 @@ export default function StatusPage() {
   return (
     <MarketingShell>
       <main id='main-content' className='checkout-main content-width'>
-        <Steps active={3} />
         <section className='checkout-panel' aria-live='polite'>
           <div className='status-icon'>{active ? <Check /> : <Clock3 />}</div>
-          <h1>{needsResume ? "Lanjutkan langkah Anda." : active ? "Koperasi Anda sudah aktif." : !status ? "Memeriksa pendaftaran…" : "Satu langkah lagi."}</h1>
+          <h1>{needsResume ? "Lanjutkan pendaftaran" : active ? "Koperasi Anda sudah aktif" : error && !status ? "Status pendaftaran belum tersedia" : !status ? "Memeriksa pendaftaran…" : "Selesaikan pembayaran"}</h1>
           <p className='checkout-description'>
             {needsResume
               ? "Masuk dengan akun yang Anda gunakan saat mendaftar untuk melihat tagihan Anda."
               : active
                 ? "Masuk untuk membuka dashboard koperasi Anda."
-                : "Selesaikan pembayaran faktur di bawah. Koperasi aktif setelah pembayaran dikonfirmasi."}
+                : status ? "Bayar sesuai rincian di bawah. Koperasi aktif setelah pembayaran dikonfirmasi." : null}
           </p>
 
           {status ? (
@@ -154,7 +153,6 @@ export default function StatusPage() {
             )}
           </div>
         </section>
-        <p className='checkout-bottom'>Dari anggota, untuk masa depan yang lebih baik.</p>
       </main>
     </MarketingShell>
   );
