@@ -1,4 +1,9 @@
-export type SavingType = "POKOK" | "WAJIB" | "SUKARELA";
+export const SAVING_TYPES = ["POKOK", "WAJIB", "SUKARELA", "POKOK_WAJIB"] as const;
+export type SavingType = (typeof SAVING_TYPES)[number];
+export const POKOK_SAVING_TYPES = ["POKOK", "POKOK_WAJIB"] as const;
+export function isPokokSavingType(type: string | undefined): boolean {
+  return type === "POKOK" || type === "POKOK_WAJIB";
+}
 export type RateType = "BUNGA" | "BAGI_HASIL" | "MARGIN" | "HARIAN";
 export type SavingPeriodUnit = "DAILY" | "MONTHLY" | "YEARLY";
 export type SavingTransactionType = "DEPOSIT" | "WITHDRAWAL" | "INTEREST";

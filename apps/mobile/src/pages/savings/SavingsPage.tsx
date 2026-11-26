@@ -20,6 +20,7 @@ const TYPE_OPTIONS = [
   { value: "", label: "Semua Jenis" },
   { value: "POKOK", label: "Simpanan Pokok" },
   { value: "WAJIB", label: "Simpanan Wajib" },
+  { value: "POKOK_WAJIB", label: "Simpanan Pokok + Wajib" },
   { value: "SUKARELA", label: "Simpanan Sukarela" }
 ];
 

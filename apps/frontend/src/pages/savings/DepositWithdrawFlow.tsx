@@ -1,3 +1,4 @@
+import { isPokokSavingType } from "@siskop/types";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -191,7 +192,7 @@ export function DepositWithdrawFlow() {
 
   if (receipt) return <SavingReceipt receipt={receipt} onNext={reset} />;
 
-  const pokokWithdraw = mode === "tarik" && account?.type === "POKOK";
+  const pokokWithdraw = mode === "tarik" && isPokokSavingType(account?.type);
 
   return (
     <form

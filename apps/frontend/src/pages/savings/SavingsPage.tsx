@@ -139,6 +139,7 @@ export function SavingsPage() {
             <SelectItem value="all">Semua Jenis</SelectItem>
             <SelectItem value="POKOK">Simpanan Pokok</SelectItem>
             <SelectItem value="WAJIB">Simpanan Wajib</SelectItem>
+            <SelectItem value="POKOK_WAJIB">Simpanan Pokok + Wajib</SelectItem>
             <SelectItem value="SUKARELA">Simpanan Sukarela</SelectItem>
           </SelectContent>
         </Select>

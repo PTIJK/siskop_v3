@@ -1,6 +1,6 @@
 import { Prisma, type TransactionType } from "@prisma/client";
 import { endOfDay, parseISO, startOfDay } from "date-fns";
-import { ErrorCode, type MemberSavingsSummary, type SavingStatement } from "@siskop/types";
+import { ErrorCode, isPokokSavingType, POKOK_SAVING_TYPES, type MemberSavingsSummary, type SavingStatement } from "@siskop/types";
 import { db } from "../../lib/db.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { postSavingTransaction } from "../../lib/journal.js";
@@ -356,7 +356,7 @@ export async function depositToSaving(
 ) {
   return db.$transaction(async (tx) => {
     const saving = await tx.saving.findUnique({ where: { id: savingId } });
-    if (!saving || saving.tenantId !== tenantId) throw notFound("Rekening simpanan tidak ditemukan");
+    if (!saving?.isActive || saving.tenantId !== tenantId) throw notFound("Rekening simpanan tidak ditemukan");
 
     await tx.saving.update({ where: { id: savingId, tenantId }, data: { balance: { increment: data.amount } } });
 
@@ -409,13 +409,15 @@ export async function withdrawFromSaving(
     });
     if (!saving || saving.tenantId !== tenantId) throw notFound("Rekening simpanan tidak ditemukan");
 
+    if (!saving.isActive) throw notFound("Rekening simpanan tidak aktif");
+
     if (Number(saving.balance) < data.amount) {
       throw new AppError(ErrorCode.INSUFFICIENT_BALANCE, "Saldo tidak mencukupi");
     }
 
     // Simpanan pokok (mandatory principal savings) cannot be withdrawn while
     // the member still has an active loan.
-    if (saving.savingConfig.type === "POKOK") {
+    if (isPokokSavingType(saving.savingConfig.type)) {
       const activeLoan = await tx.loan.findFirst({
         where: { tenantId, memberId: saving.memberId, status: "ACTIVE" }
       });
@@ -459,7 +461,7 @@ export async function withdrawFromSaving(
 /** Cross-module dependency: Loans requires this before issuing a loan. */
 export async function hasPokokSaving(tenantId: string, memberId: string): Promise<boolean> {
   const count = await db.saving.count({
-    where: { tenantId, memberId, isActive: true, savingConfig: { type: "POKOK" } }
+    where: { tenantId, memberId, isActive: true, savingConfig: { type: { in: [...POKOK_SAVING_TYPES] } } }
   });
   return count > 0;
 }

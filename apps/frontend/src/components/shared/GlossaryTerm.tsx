@@ -10,6 +10,7 @@ export const GLOSSARY = {
   "Modal Sendiri": "Modal yang berasal dari anggota dan cadangan koperasi, bukan dari pinjaman pihak luar.",
   "Simpanan Pokok": "Setoran satu kali saat menjadi anggota, jumlahnya sama untuk semua anggota.",
   "Simpanan Wajib": "Setoran rutin anggota dengan jumlah dan jadwal tetap yang ditentukan koperasi.",
+  "Simpanan Pokok + Wajib": "Simpanan pokok dan wajib yang dicatat dalam satu rekening modal anggota.",
   "Simpanan Sukarela": "Simpanan yang boleh disetor dan ditarik anggota kapan saja sesuai aturan koperasi."
 } as const;
 
