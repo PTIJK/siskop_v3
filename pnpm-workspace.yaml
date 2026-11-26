@@ -10,3 +10,4 @@ allowBuilds:
   prisma: true
   protobufjs: false
   puppeteer: true
+  tesseract.js: false

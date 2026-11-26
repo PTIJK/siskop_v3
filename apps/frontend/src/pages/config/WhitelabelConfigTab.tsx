@@ -130,7 +130,7 @@ export function WhitelabelConfigTab() {
             </div>
             <p id="wl-color-msg" className={colorCheck && !colorCheck.ok ? "flex items-start gap-1.5 text-[12.5px] font-semibold text-destructive" : "flex items-start gap-1.5 text-[12.5px] text-muted-foreground"}>
               {colorCheck ? (colorCheck.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />) : null}
-              {colorCheck ? brandCheckMessage(colorCheck) : "Satu warna menggantikan warna aksen (tombol aksi, fokus, logo). Warna terlalu terang akan ditolak agar teks tetap terbaca."}
+              {colorCheck ? brandCheckMessage(colorCheck) : "Satu warna menggantikan warna aksen pada tombol aksi dan indikator fokus. Warna terlalu terang akan ditolak agar teks tetap terbaca."}
             </p>
           </div>
 

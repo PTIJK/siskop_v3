@@ -109,7 +109,7 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
       {workspace ? <p className="mt-1 text-sm font-semibold">Masuk ke {workspace.name}</p> : null}
       <p className="mt-1 text-sm text-muted-foreground">
         {search.get("registered") === "1" ? "Pembayaran berhasil. Koperasi Anda sudah aktif. Silakan masuk untuk membuka beranda." :
-          resume ? "Masuk dengan akun pendaftaran untuk melanjutkan pembayaran." : "Masuk dengan metode yang Anda pilih saat mendaftar."}
+          resume ? "Masuk dengan email atau akun Google yang Anda gunakan saat mendaftar untuk melihat status dan tagihan." : "Masuk dengan metode yang Anda pilih saat mendaftar."}
       </p>
 
       {!resume && (
@@ -131,7 +131,7 @@ export default function AuthPage({ resume = false }: { resume?: boolean }) {
         </div>
       )}
 
-      <div id="who-panel" role="tabpanel" aria-labelledby={`who-${who}`} className="mt-5">
+      <div id="who-panel" role={resume ? undefined : "tabpanel"} aria-labelledby={resume ? undefined : `who-${who}`} className="mt-5">
         {who === "anggota" && !resume ? (
           <div className="space-y-4 rounded-[14px] border p-4">
             <p className="text-sm font-bold">Masuk sebagai anggota</p>

@@ -51,11 +51,11 @@ export interface NavEntry {
 }
 
 export const NAV_GROUP_LABEL: Record<NavGroupId, string> = {
-  harian: "Harian",
-  anggota: "Anggota",
-  keuangan: "Keuangan",
-  laporan: "Laporan",
-  pengaturan: "Pengaturan",
+  harian: "Operasional harian",
+  anggota: "Anggota, simpanan & pinjaman",
+  keuangan: "Keuangan & pembukuan",
+  laporan: "Laporan & analisis",
+  pengaturan: "Pengaturan & langganan",
   platform: "Platform Admin"
 };
 

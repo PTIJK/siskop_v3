@@ -24,6 +24,16 @@ const memberAppRedirect = {
 export default defineConfig({
   plugins: [react(), seoPlugin(), memberAppRedirect],
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
+  build: {
+    rollupOptions: {
+      output: {
+        // Tesseract appends the language filename itself; cache-bust its directory.
+        assetFileNames: (asset) => asset.names?.includes("ind.traineddata.gz")
+          ? "assets/ocr-[hash]/ind.traineddata.gz"
+          : "assets/[name]-[hash][extname]"
+      }
+    }
+  },
   server: {
     port: 3000,
     // Tenants are addressed by subdomain (demo.localhost:3000), and *.localhost

@@ -30,7 +30,9 @@ const labels = (c: NavContext) => buildNav(c).flatMap((s) => s.items.map((i) => 
 
 describe("buildNav", () => {
   it("groups entries by task in the designed order", () => {
-    expect(buildNav(ctx(MANAGER)).map((s) => s.label)).toEqual(["Harian", "Anggota", "Keuangan", "Laporan", "Pengaturan"]);
+    expect(buildNav(ctx(MANAGER)).map((s) => s.label)).toEqual([
+      "Operasional harian", "Anggota, simpanan & pinjaman", "Keuangan & pembukuan", "Laporan & analisis", "Pengaturan & langganan"
+    ]);
   });
 
   it("hides entries the role has no permission for", () => {
