@@ -152,12 +152,22 @@ export function stepProblems(step: 1 | 2 | 3 | 4, form: RegistrationForm, quote:
   return problems;
 }
 
+export function normalizeRegistrationNo(value: string): string {
+  const normalized = value.trim().toUpperCase().replace(/\s*([/.–-])\s*/g, "$1").replace(/\s+/g, " ");
+  const legacy = /^\d+ BH(?: [A-Z0-9]+(?:\.[A-Z0-9]+)*){0,2} (?:\d{2}|\d{4})$/;
+  if (legacy.test(normalized)) return normalized.replaceAll(" ", "/");
+  return normalized.replace(
+    /^AHU (\d+) AH (\d{2}) (\d{2}) (?:TAHUN )?(\d{4})$/,
+    "AHU-$1.AH.$2.$3.TAHUN $4"
+  );
+}
+
 /** The request body: a package selection and the koperasi's details. No amount is ever sent. */
 export function buildRegistration(form: RegistrationForm, selection: PricingSelection, idToken: string): OnboardingRegistration {
   return {
     subscription: selection,
-    tenantName: form.tenantName.trim(),
-    registrationNo: form.registrationNo.trim(),
+    tenantName: form.tenantName.trim().replace(/\s*\r?\n\s*/g, " "),
+    registrationNo: normalizeRegistrationNo(form.registrationNo),
     address: form.address.trim(),
     type: form.type,
     adminName: form.adminName.trim(),

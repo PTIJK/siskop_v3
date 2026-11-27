@@ -67,17 +67,6 @@ interface DataTableProps<T> {
   label?: string;
 }
 
-type Density = "comfortable" | "compact";
-const DENSITY_KEY = "siskop.table.density";
-
-function readDensity(): Density {
-  try {
-    return localStorage.getItem(DENSITY_KEY) === "compact" ? "compact" : "comfortable";
-  } catch {
-    return "comfortable";
-  }
-}
-
 export function DataTable<T>({
   columns,
   data,
@@ -103,7 +92,6 @@ export function DataTable<T>({
   const [searchInput, setSearchInput] = useState(search?.value ?? "");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [density, setDensity] = useState<Density>(readDensity);
 
   // A new page/filter replaces the rows — stale expansion keys would never match again.
   // Returning `prev` when already empty matters: callers pass `data?.items ?? []`, a fresh
@@ -136,18 +124,8 @@ export function DataTable<T>({
     // Same reasoning as above — `search` itself is a new object every render.
   }, [search?.value]);
 
-  const chooseDensity = (next: Density) => {
-    setDensity(next);
-    try {
-      localStorage.setItem(DENSITY_KEY, next);
-    } catch {
-      // Not remembered when storage is blocked.
-    }
-  };
-
   const totalPages = pagination ? Math.ceil(pagination.total / pagination.limit) : 1;
-  const compact = density === "compact";
-  const cellPad = compact ? "px-3 py-2 text-[13px]" : "px-4 py-3.5";
+  const cellPad = "px-4 py-3.5";
   const shown = data.length;
 
   const activateRow = (row: T, key: string, expandable: boolean) => {
@@ -208,7 +186,7 @@ export function DataTable<T>({
                 <TableHead
                   key={i}
                   scope="col"
-                  className={cn("sticky top-[60px] z-10 h-11 bg-muted px-4 text-[12.5px] font-bold", compact && "px-3", col.className)}
+                  className={cn("sticky top-[60px] z-10 h-11 bg-muted px-4 text-[12.5px] font-bold", col.className)}
                 >
                   {col.header}
                 </TableHead>
@@ -336,19 +314,6 @@ export function DataTable<T>({
               </p>
             )
           )}
-          <div role="group" aria-label="Kepadatan tabel" className="inline-flex rounded-[11px] bg-muted p-[3px]">
-            {(["comfortable", "compact"] as const).map((d) => (
-              <button
-                key={d}
-                type="button"
-                aria-pressed={density === d}
-                onClick={() => chooseDensity(d)}
-                className="rounded-[8px] px-3 py-1 text-[12.5px] font-bold text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-sm"
-              >
-                {d === "comfortable" ? "Nyaman" : "Padat"}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="flex items-center gap-2">

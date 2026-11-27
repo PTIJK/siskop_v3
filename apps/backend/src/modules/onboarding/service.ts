@@ -1,3 +1,5 @@
+import { matchesCooperativeRegistry } from "@siskop/types";
+import { lookupCooperative } from "./ods.js";
 import { randomBytes } from "node:crypto";
 import { addDays } from "date-fns";
 import { Prisma } from "@prisma/client";
@@ -53,6 +55,8 @@ async function createRegistration(input: unknown): Promise<{ tenantId: string; i
   assertFirstUnitAllowed(firstUnit.type, priced.effectiveFeatures);
 
   const identity = await verifyFirebaseIdentity(data.idToken);
+  const odsMatch = data.cooperativeNik ? await lookupCooperative(data.cooperativeNik).catch(() => null) : null;
+  const odsVerified = odsMatch && matchesCooperativeRegistry(odsMatch, data.tenantName, data.registrationNo);
   const slug = workspaceSlug(data.tenantName, data.slug);
   const free = new Prisma.Decimal(priced.subtotal).isZero();
   const settings = published.snapshot.settings;
@@ -73,7 +77,12 @@ async function createRegistration(input: unknown): Promise<{ tenantId: string; i
         cooperativeType: firstUnit.type,
         firstUnit
       });
-      await tx.tenant.update({ where: { id: tenant.id }, data: { isActive: free, packageId: pkg.id } });
+      await tx.tenant.update({ where: { id: tenant.id }, data: {
+        isActive: free,
+        setupStep: "CAPITAL",
+        packageId: pkg.id,
+        ...(odsVerified ? { odsVerifiedAt: new Date(), odsCooperativeNik: data.cooperativeNik } : {})
+      } });
 
       const role = roles.find((r) => r.name === "Super Admin");
       if (!role) throw new Error("Missing provisioned admin role");
@@ -175,6 +184,7 @@ export async function status(tenantId: string): Promise<RegistrationStatus> {
 
   return {
     tenantName: tenant.name,
+    odsVerifiedAt: tenant.odsVerifiedAt?.toISOString() ?? null,
     slug: tenant.slug,
     status: sub.status,
     packageName: (sub.snapshot as { packageName?: string }).packageName ?? "",

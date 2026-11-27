@@ -9,12 +9,12 @@ import { FormError } from "@/components/shared/FormError";
 import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { RupiahInput } from "@/components/ui/rupiah-input";
 import { Label } from "@/components/ui/label";
 
 const QUERY_KEY = ["config", "modal-disetor"] as const;
 
-export function ModalDisetorConfigTab() {
+export function ModalDisetorConfigTab({ onSetupSaved }: { onSetupSaved?: () => Promise<void> }) {
   const { can } = usePermissions();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -40,10 +40,11 @@ export function ModalDisetorConfigTab() {
     setIsSaving(true);
     try {
       // Sent as the raw decimal string — money never round-trips through a JS float.
-      const body: UpdateModalDisetorRequest = { modalDisetor: value.trim() === "" ? null : value.trim() };
+      const body: UpdateModalDisetorRequest = { modalDisetor: value === "" ? null : value.replace(/\.$/, "") };
       const saved = await apiPut<ModalDisetorInfo>("/config/modal-disetor", body);
       queryClient.setQueryData(QUERY_KEY, saved);
       toast({ title: "Modal disetor disimpan" });
+      if (onSetupSaved) await onSetupSaved();
     } catch (err) {
       setApiError(err instanceof ApiRequestError ? err.message : "Terjadi kesalahan");
     } finally {
@@ -56,7 +57,7 @@ export function ModalDisetorConfigTab() {
   const threshold = data ? formatRupiah(data.auditThreshold) : "";
 
   return (
-    <Card className="max-w-xl">
+    <Card data-setup-target={onSetupSaved ? "form" : undefined} tabIndex={onSetupSaved ? -1 : undefined} className="max-w-xl">
       <CardHeader>
         <CardTitle className="text-base">Modal Disetor</CardTitle>
       </CardHeader>
@@ -64,19 +65,20 @@ export function ModalDisetorConfigTab() {
         <form onSubmit={onSubmit} className="space-y-4">
           {apiError && <FormError error={apiError} />}
           <p className="text-sm text-muted-foreground">
-            Nilai modal disetor koperasi — field kepatuhan Permenkop UKM No. 2/2024 Pasal 12. Koperasi dengan modal
-            disetor ≥ {threshold} wajib diaudit akuntan publik.
+            Masukkan total modal yang sudah disetor sesuai catatan koperasi.
           </p>
 
           <div className="space-y-1.5 max-w-xs">
-            <Label>Modal Disetor (Rp)</Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
+            <Label htmlFor="modal-disetor-value">Modal disetor (Rp)</Label>
+            <RupiahInput
+              id="modal-disetor-value"
+              required={Boolean(onSetupSaved)}
+              maxIntegerDigits={13}
+              placeholder="0"
+              className={onSetupSaved ? "border-primary" : undefined}
               disabled={!canEdit}
               value={value}
-              onChange={(e) => setValue(e.target.value)}
+              onValueChange={setValue}
             />
           </div>
 

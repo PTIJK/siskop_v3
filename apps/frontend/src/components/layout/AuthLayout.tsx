@@ -18,9 +18,9 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         Lewati ke konten
       </a>
       <div className="flex flex-col px-5 py-6 min-[901px]:px-12">
-        <Link to="/" aria-label="SISKOP beranda" className="inline-flex w-fit items-center gap-2.5 rounded-md">
+        <Link to="/" aria-label="NexCoop beranda" className="inline-flex w-fit items-center gap-2.5 rounded-md">
           <BrandMark />
-          <span className="text-[17px] font-extrabold tracking-tight">SISKOP</span>
+          <span className="text-[17px] font-extrabold tracking-tight">NexCoop</span>
         </Link>
         <main id="konten" tabIndex={-1} className="mx-auto flex w-full max-w-[420px] flex-1 flex-col justify-center py-10 outline-none">
           {children}

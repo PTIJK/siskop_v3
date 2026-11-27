@@ -5,10 +5,11 @@ import { ApiRequestError } from "@/api/client";
 
 // Public onboarding has its own cookie and must never refresh or clear a
 // signed-in dashboard session when an onboarding cookie expires.
-async function publicCall<T>(url: string, body?: unknown): Promise<T> {
+async function publicCall<T>(url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, {
     method: body === undefined ? "GET" : "POST",
     credentials: "same-origin",
+    signal,
     headers: { "Content-Type": "application/json" },
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
@@ -27,7 +28,7 @@ async function publicCall<T>(url: string, body?: unknown): Promise<T> {
   return result.data;
 }
 
-export const onboardingApi = <T>(path: string, body?: unknown) => publicCall<T>(`/api/onboarding${path}`, body);
+export const onboardingApi = <T>(path: string, body?: unknown, signal?: AbortSignal) => publicCall<T>(`/api/onboarding${path}`, body, signal);
 export const partnersApi = <T>(path: string, body?: unknown) => publicCall<T>(`/api/partners${path}`, body);
 export const pricingApi = <T>(path: string, body?: unknown) => publicCall<T>(`/api/public/pricing${path}`, body);
 

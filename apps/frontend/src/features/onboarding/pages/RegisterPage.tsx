@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, BadgeCheck, ChevronDown, Loader2 } from "lucide-react";
+import { matchesCooperativeRegistry, type CooperativeRegistryMatch } from "@siskop/types";
+import { Badge } from "@/components/ui/badge";
 import type { PricingQuote, PricingSelection, PublicPricingCatalog, RegistrationStatus } from "@siskop/types";
 import { MarketingShell } from "../components/MarketingShell";
 import { Button } from "@/components/ui/button";
@@ -17,6 +19,7 @@ import { errorMessage, onboardingApi, pricingApi, usePublicPricing, useReferralC
 import { clearFirebaseIdentity, firebaseError, identityToken } from "../firebase";
 import {
   buildRegistration,
+  normalizeRegistrationNo,
   parseDeepLink,
   recalledReferral,
   rememberReferral,
@@ -71,9 +74,12 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
   const [form, setForm] = useState<RegistrationForm>(() => ({ ...EMPTY, referralCode: link.referralCode ?? recalledReferral() ?? "" }));
   const [typeChosen, setTypeChosen] = useState(false);
   const [cooperativeKind, setCooperativeKind] = useState<"KSP" | "KSU">("KSP");
+  const [cooperativeNik, setCooperativeNik] = useState("");
+  const [registryRecord, setRegistryRecord] = useState<CooperativeRegistryMatch>();
   const [nik, setNik] = useState("");
   const [nikTouched, setNikTouched] = useState(false);
   const [editingPlan, setEditingPlan] = useState(false);
+  const [returnToConfirmation, setReturnToConfirmation] = useState(false);
   const referral = useReferralCheck(form.referralCode);
   useEffect(() => {
     if (link.referralCode) rememberReferral(link.referralCode);
@@ -84,8 +90,11 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
   const [error, setError] = useState("");
   const submitting = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
+  const packageHeading = useRef<HTMLHeadingElement>(null);
+  const packageButton = useRef<HTMLButtonElement>(null);
   const problemSummary = useRef<HTMLUListElement>(null);
   const nikInvalid = nik !== "" && !/^\d{16}$/.test(nik);
+  const registryVerified = registryRecord && matchesCooperativeRegistry(registryRecord, form.tenantName, form.registrationNo);
   const copy = STEP_COPY[step - 1]!;
 
   useEffect(() => {
@@ -131,16 +140,22 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
       const found = stepProblems(step === 1 ? 1 : 4, form, features);
       if (step === 2 && nikInvalid) found.unshift("Masukkan 16 digit NIK pengurus atau kosongkan kolom ini.");
       if (found.length) setProblems(found);
-      else go(step === 1 ? 2 : 3);
+      else {
+        go(returnToConfirmation || step === 2 ? 3 : 2);
+        setReturnToConfirmation(false);
+      }
       return;
     }
-    if (editingPlan || !quote.data || quote.isError || quote.isFetching || !unitAllowed(form.unitType, features.effectiveFeatures)) return;
+    if (!quote.data || quote.isError || quote.isFetching || !unitAllowed(form.unitType, features.effectiveFeatures)) return;
     setError("");
     setPending(true);
     submitting.current = true;
     try {
       const idToken = await identityToken(form.method, form.email.trim(), form.password, true);
-      await onboardingApi<RegistrationStatus>("/register", buildRegistration({ ...form, type: operationType }, selection, idToken));
+      await onboardingApi<RegistrationStatus>("/register", {
+        ...buildRegistration({ ...form, type: operationType }, selection, idToken),
+        ...(cooperativeNik ? { cooperativeNik } : {})
+      });
       track("form_submit", { form: "register", package: selection.packageCode });
       navigate("/checkout", { replace: true });
     } catch (err) {
@@ -158,20 +173,28 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
   const unit = UNIT_CHOICES.find((u) => u.type === form.unitType);
   const quoteDetails = (
     <>
-      <QuoteSummary quote={quote.data} taxRate={catalog.settings.taxRate} loading={quote.isFetching} />
+      <QuoteSummary quote={quote.data} taxRate={catalog.settings.taxRate} loading={quote.isFetching} compact={step === 3} />
       {quote.isError ? <div><p className='form-error' role='alert'>{errorMessage(quote.error)}</p><Button type='button' variant='outline' onClick={() => void quote.refetch()}>Hitung ulang tagihan</Button></div> : null}
       {quote.data ? <p className='payment-note'>{free ? "Paket ini langsung aktif setelah pendaftaran." : "Paket aktif setelah pembayaran dikonfirmasi."}</p> : null}
     </>
   );
+  const editDetails = (next: 1 | 2) => {
+    setReturnToConfirmation(true);
+    go(next);
+  };
+  const togglePlan = () => {
+    setEditingPlan(!editingPlan);
+    if (!editingPlan) requestAnimationFrame(() => packageHeading.current?.focus());
+  };
 
   return (
-    <div className='registration-grid'>
+    <div className={step === 3 ? "registration-grid registration-confirmation" : "registration-grid"}>
       <div>
         <WizardSteps active={step} />
         <h1 ref={heading} tabIndex={-1}>{copy.title}</h1>
         <p className='page-intro'>{copy.description}</p>
         {step < 3 && chosen ? <p className='form-note registration-plan-note'>Paket pilihan Anda: {chosen.name} · {cycle}</p> : null}
-        <form onSubmit={submit} className='registration-form' noValidate>
+        <form id='cooperative-registration' onSubmit={submit} className='registration-form' noValidate>
           <fieldset disabled={pending} className='form-fieldset'>
             <legend className='sr-only'>{STEPS[step - 1]}</legend>
 
@@ -199,29 +222,39 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
                     <p className='form-note'>Mulai dengan satu unit. Unit lain dapat ditambahkan setelah koperasi aktif, sesuai cakupan paket.</p>
                   </div>
                 ) : null}
-                <DocumentAutofill kind='cooperative' onRead={(fields) => {
-                  if ("tenantName" in fields) setForm((previous) => ({
+                <DocumentAutofill kind='cooperative' onRead={(fields, match) => {
+                  setCooperativeNik(fields.cooperativeNik ?? "");
+                  setRegistryRecord(match);
+                  setForm((previous) => ({
                     ...previous,
-                    tenantName: fields.tenantName ?? previous.tenantName,
-                    registrationNo: fields.registrationNo ?? previous.registrationNo,
+                    tenantName: match?.name ?? fields.tenantName ?? previous.tenantName,
+                    registrationNo: normalizeRegistrationNo(match?.registrationNo ?? fields.registrationNo ?? previous.registrationNo),
                     address: fields.address ?? previous.address
                   }));
                 }} />
-                <div className='field'>
+                {registryVerified ? (
+                  <div className='field field-wide'><Badge variant='outline' className='self-start text-success'><BadgeCheck size={16} aria-hidden='true' /> Terverifikasi di ODS</Badge></div>
+                ) : null}
+                <div className='field field-wide'>
                   <Label htmlFor='tenantName'>Nama koperasi</Label>
-                  <Input id='tenantName' value={form.tenantName} maxLength={150} placeholder='Koperasi Sejahtera Bersama' autoComplete='organization' onChange={(e) => set("tenantName", e.target.value)} />
+                  <Textarea id='tenantName' rows={2} className='resize-y' value={form.tenantName} maxLength={150} placeholder='Koperasi Sejahtera Bersama' autoComplete='organization' onChange={(e) => set("tenantName", e.target.value)} />
                 </div>
                 <div className='field'>
                   <Label htmlFor='registrationNo'>Nomor badan hukum</Label>
-                  <Input id='registrationNo' value={form.registrationNo} maxLength={100} placeholder='123/BH/2026' onChange={(e) => set("registrationNo", e.target.value)} />
+                  <Input id='registrationNo' value={form.registrationNo} maxLength={100} aria-describedby='registration-no-hint' autoCapitalize='characters' spellCheck={false} onChange={(e) => set("registrationNo", e.target.value)} onBlur={(e) => set("registrationNo", normalizeRegistrationNo(e.target.value))} />
+                  <p id='registration-no-hint' className='form-note'>Ketik sesuai dokumen. Untuk format lama, Anda bisa mengetik 7615 BH II 93. Garis miring ditambahkan otomatis. Untuk AHU, contoh isian AHU 0042968 AH 01 29 2025.</p>
                 </div>
                 <div className='field field-wide'>
                   <Label htmlFor='type'>Prinsip operasional</Label>
-                  <select id='type' aria-describedby={!typeChosen && inferredType === "SYARIAH" ? "cooperative-type-hint" : undefined}
-                    value={operationType} onChange={(e) => { setTypeChosen(true); set("type", e.target.value as RegistrationForm["type"]); }}>
-                    <option value='KONVENSIONAL'>Konvensional</option>
-                    <option value='SYARIAH'>Syariah</option>
-                  </select>
+                  <div className='relative'>
+                    <select id='type' className='appearance-none !pr-10 [color-scheme:light]'
+                      aria-describedby={!typeChosen && inferredType === "SYARIAH" ? "cooperative-type-hint" : undefined}
+                      value={operationType} onChange={(e) => { setTypeChosen(true); set("type", e.target.value as RegistrationForm["type"]); }}>
+                      <option value='KONVENSIONAL'>Konvensional</option>
+                      <option value='SYARIAH'>Syariah</option>
+                    </select>
+                    <ChevronDown aria-hidden='true' size={16} className='pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground' />
+                  </div>
                   {!typeChosen && inferredType === "SYARIAH" && <p id='cooperative-type-hint' className='form-note'>Disarankan dari nama koperasi. Cocokkan dengan dokumen badan hukum.</p>}
                 </div>
                 <div className='field field-wide'>
@@ -289,45 +322,39 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
             ) : null}
 
             {step === 3 ? (
-              <div className='registration-review'>
-                <dl className='review-list'>
-                  <div>
-                    <dt>Koperasi</dt>
-                    <dd>{form.tenantName}</dd>
+              <div className='confirmation-details'>
+                <section className='confirmation-section' aria-labelledby='review-cooperative'>
+                  <div className='confirmation-section-head'>
+                    <h2 id='review-cooperative'>Data koperasi</h2>
+                    <Button type='button' variant='outline' aria-label='Ubah data koperasi' onClick={() => editDetails(1)}>Ubah</Button>
                   </div>
-                  <div>
-                    <dt>Nomor badan hukum</dt>
-                    <dd>{form.registrationNo}</dd>
+                  <p className='confirmation-name'>{form.tenantName}</p>
+                  {registryVerified ? <Badge variant='outline' className='text-success'><BadgeCheck size={16} aria-hidden='true' /> Terverifikasi di ODS</Badge> : null}
+                  <dl className='confirmation-facts'>
+                    <div><dt>Nomor badan hukum</dt><dd>{form.registrationNo}</dd></div>
+                    <div><dt>Prinsip operasional</dt><dd>{operationType === "SYARIAH" ? "Syariah" : "Konvensional"}</dd></div>
+                    <div><dt>Jenis koperasi</dt><dd>{cooperativeKind}</dd></div>
+                    {cooperativeKind === "KSU" && <div><dt>Unit usaha pertama</dt><dd>{unit?.label}</dd></div>}
+                    <div className='confirmation-address'><dt>Alamat koperasi</dt><dd>{form.address}</dd></div>
+                  </dl>
+                </section>
+                <section className='confirmation-section' aria-labelledby='review-admin'>
+                  <div className='confirmation-section-head'>
+                    <h2 id='review-admin'>Akun pengurus</h2>
+                    <Button type='button' variant='outline' aria-label='Ubah akun pengurus' onClick={() => editDetails(2)}>Ubah</Button>
                   </div>
-                  <div>
-                    <dt>Prinsip operasional</dt>
-                    <dd>{operationType === "SYARIAH" ? "Syariah" : "Konvensional"}</dd>
-                  </div>
-                  <div>
-                    <dt>Jenis koperasi</dt>
-                    <dd>{cooperativeKind}{cooperativeKind === "KSU" ? ` · Unit awal: ${unit?.label ?? ""}` : ""}</dd>
-                  </div>
-                  <div>
-                    <dt>Pengurus</dt>
-                    <dd>{form.adminName}{form.method === "password" ? ` · ${form.email}` : " · Masuk dengan Google"}</dd>
-                  </div>
-                  <div>
-                    <dt>Paket</dt>
-                    <dd>
-                      {chosen?.name} · {cycle}
-                    </dd>
-                  </div>
-                </dl>
-                <p className='form-note'>Nomor badan hukum dicek terhadap pendaftaran yang sudah ada di SISKOP saat Anda mengirim formulir.</p>
-                <Button type='button' variant='outline' aria-expanded={editingPlan} aria-controls='registration-plan-editor'
-                  onClick={() => setEditingPlan((current) => !current)}>
-                  {editingPlan ? "Selesai mengubah paket" : "Ubah paket atau periode"}
-                </Button>
-                <div id='registration-plan-editor' hidden={!editingPlan}>
-                  {editingPlan ? <PackagePicker catalog={catalog} selection={selection} onChange={setSelection} unitType={form.unitType} /> : null}
-                </div>
-                {quote.data && !compatible ? <p className='form-error' role='alert'>Paket ini belum mendukung unit {unit?.label}. Pilih paket lain atau ubah unit pertama.</p> : null}
-                <div className='registration-mobile-quote order-summary'>{quoteDetails}</div>
+                  <p className='confirmation-name'>{form.adminName}</p>
+                  <p className='confirmation-contact'>{form.method === "password" ? form.email : "Masuk dengan Google"}</p>
+                </section>
+                <section id='registration-plan-editor' className='confirmation-section' hidden={!editingPlan} aria-labelledby='review-edit-package'>
+                  {editingPlan && <>
+                    <div className='confirmation-section-head'>
+                      <h2 id='review-edit-package' ref={packageHeading} tabIndex={-1}>Paket dan periode</h2>
+                      <Button type='button' variant='outline' onClick={() => { setEditingPlan(false); packageButton.current?.focus(); }}>Tutup pilihan</Button>
+                    </div>
+                    <PackagePicker catalog={catalog} selection={selection} onChange={setSelection} unitType={form.unitType} />
+                  </>}
+                </section>
               </div>
             ) : null}
           </fieldset>
@@ -339,52 +366,44 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
               ))}
             </ul>
           ) : null}
-          {error ? (
-            <p className='form-error' role='alert'>
-              {error}
-            </p>
-          ) : null}
-
-          <div className='wizard-nav'>
-            {step > 1 ? (
-              <Button type='button' variant='outline' size='lg' disabled={pending} onClick={() => go(step === 3 ? 2 : 1)}>
+          {step < 3 && <>
+            <div className='wizard-nav'>
+              {step === 2 && !returnToConfirmation && <Button type='button' variant='outline' size='lg' onClick={() => go(1)}>
                 <ArrowLeft /> Kembali
-              </Button>
-            ) : null}
-            {step < 3 ? (
+              </Button>}
               <Button type='submit' size='lg'>
-                {step === 1 ? "Lanjut ke akun pengurus" : "Periksa pendaftaran"} <ArrowRight />
+                {returnToConfirmation ? "Simpan dan kembali ke konfirmasi" : step === 1 ? "Lanjut ke akun pengurus" : "Periksa pendaftaran"} <ArrowRight />
               </Button>
-            ) : (
-              <Button size='lg' type='submit' disabled={pending || editingPlan || quote.isFetching || quote.isError || !compatible}>
-                {pending ? (
-                  <>
-                    <Loader2 className='animate-spin' /> Menyiapkan akun…
-                  </>
-                ) : free ? (
-                  <>
-                    Daftarkan koperasi <ArrowRight />
-                  </>
-                ) : (
-                  <>
-                    Daftarkan koperasi dan lihat tagihan <ArrowRight />
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
-          <p className='form-note'>
-            Sudah mendaftar? <Link to='/login'>Masuk</Link>
-          </p>
+            </div>
+            <p className='form-note'>Sudah mendaftar? <Link to='/login'>Masuk</Link></p>
+          </>}
         </form>
       </div>
 
       <aside className='registration-aside'>
-        <div className='order-summary'>
+        {step === 3 ? <section className='confirmation-summary' aria-labelledby='confirmation-package'>
+          <div className='confirmation-section-head'>
+            <h2 id='confirmation-package'>Ringkasan paket</h2>
+            <Button ref={packageButton} type='button' variant='outline' aria-expanded={editingPlan} aria-controls='registration-plan-editor'
+              aria-label='Ubah paket atau periode' disabled={pending} onClick={togglePlan}>Ubah</Button>
+          </div>
+          <div className='confirmation-plan' aria-live='polite'>
+            <strong>{chosen?.name}</strong>
+            <span>{cycle}</span>
+          </div>
+          {quoteDetails}
+          {quote.data && !compatible && <p className='form-error' role='alert'>Paket ini belum mendukung unit {unit?.label}. Pilih paket lain atau ubah unit pertama.</p>}
+          {error && <p className='form-error' role='alert'>{error}</p>}
+          <Button form='cooperative-registration' type='submit' size='lg' className='confirmation-submit'
+            disabled={pending || quote.isFetching || quote.isError || !compatible}>
+            {pending ? <><Loader2 className='motion-safe:animate-spin' aria-hidden='true' /> Menyiapkan akun…</> :
+              <>{free ? "Daftarkan koperasi" : "Daftar dan lihat tagihan"} <ArrowRight aria-hidden='true' /></>}
+          </Button>
+        </section> : <div className='order-summary'>
           <h2>Ringkasan paket</h2>
           {chosen ? <h3>{chosen.name} · {cycle}</h3> : null}
           {quoteDetails}
-        </div>
+        </div>}
       </aside>
     </div>
   );

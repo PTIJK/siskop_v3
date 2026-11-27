@@ -3,6 +3,7 @@ import type { PublicPricingCatalog } from "@siskop/types";
 import {
   buildRegistration,
   formatTaxRate,
+  normalizeRegistrationNo,
   parseDeepLink,
   priceOf,
   recalledReferral,
@@ -257,5 +258,19 @@ describe("formatTaxRate", () => {
     expect(formatTaxRate("0.1100")).toBe("11%");
     expect(formatTaxRate("0.115")).toBe("11,5%");
     expect(formatTaxRate(null)).toBeNull();
+  });
+});
+
+
+describe("legal registration number formatting", () => {
+  it.each([
+    [" 7615 / bh / II / 93 ", "7615/BH/II/93"],
+    ["7615 bh ii 93", "7615/BH/II/93"],
+    ["013 BH XVI.1 I 2016", "013/BH/XVI.1/I/2016"],
+    ["ahu 0042968 ah 01 29 tahun 2025", "AHU-0042968.AH.01.29.TAHUN 2025"],
+    ["123 / A / 2025", "123/A/2025"],
+    [" ahu-0012345. ah.01.29 tahun   2025 ", "AHU-0012345.AH.01.29 TAHUN 2025"]
+  ])("formats the identifier in %s", (value, expected) => {
+    expect(normalizeRegistrationNo(value)).toBe(expected);
   });
 });

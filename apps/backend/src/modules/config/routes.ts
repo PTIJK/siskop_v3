@@ -30,6 +30,7 @@ import {
   deleteRole,
   generateStandardCoa,
   getModalDisetor,
+  getWorkspaceSetup,
   getSelfRegistrationConfig,
   getShuDistributionConfig,
   getUnpostedJournalSummary,
@@ -67,6 +68,16 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
 export function configRoutes(): Router {
   const router = Router();
   router.use(requireAuth);
+
+  router.get(
+    "/setup",
+    requirePermission("config", "update"),
+    handle(async (req, res) => {
+      const setup = await getWorkspaceSetup(authClaims(req).tenantId);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ success: true, data: setup, meta: res.locals.meta });
+    })
+  );
 
   // ── Subscription (Pricing V2) ──────────────────────────────────────────────
   // Every signed-in user needs this for nav locks and usage meters, so there is

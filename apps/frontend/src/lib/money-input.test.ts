@@ -1,3 +1,4 @@
+import { parseRupiahEdit, parseRupiahPaste } from "./money-input";
 import { describe, expect, it } from "vitest";
 import { digitsToNumber, formatMoneyInput, groupThousands, MONEY_MAX_DIGITS, reformatWithCaret, toDigits } from "./money-input";
 
@@ -53,5 +54,26 @@ describe("money input helpers", () => {
 
   it("handles deleting everything", () => {
     expect(reformatWithCaret("", 0)).toEqual({ digits: "", display: "", caret: 0 });
+  });
+});
+
+describe("rupiah decimal edits", () => {
+  it("keeps a typed decimal point after a grouped balance", () => {
+    expect(parseRupiahEdit("1.000.", 13, 5)).toBe("1000.");
+    expect(parseRupiahEdit("1.000,5", 13)).toBe("1000.5");
+    expect(parseRupiahEdit("1.000,50", 13)).toBe("1000.50");
+  });
+
+  it("pastes decimals without shifting their value", () => {
+    expect(parseRupiahPaste("1000.50", 13)).toBe("1000.50");
+    expect(parseRupiahPaste("1,000.50", 13)).toBe("1000.50");
+    expect(parseRupiahPaste("1.000,50", 13)).toBe("1000.50");
+    expect(parseRupiahPaste("1.000.50", 13)).toBeUndefined();
+  });
+
+  it("keeps localized whole amounts and rejects excess precision", () => {
+    expect(parseRupiahEdit("1.000", 13)).toBe("1000");
+    expect(parseRupiahEdit("1.000,555", 13)).toBeUndefined();
+    expect(parseRupiahEdit("1.000", 3)).toBeUndefined();
   });
 });

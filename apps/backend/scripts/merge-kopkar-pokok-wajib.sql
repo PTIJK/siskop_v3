@@ -10,7 +10,8 @@ DECLARE
   pokok_id text;
   wajib_id text;
 BEGIN
-  SELECT id INTO STRICT tenant_id FROM "Tenant" WHERE slug = 'kopkar-umsurabaya';
+  SELECT id INTO STRICT tenant_id FROM "Tenant"
+    WHERE slug = 'koperasi-universitas-muhammadiyah-fbe31f83bda9';
   SELECT id INTO STRICT pokok_id FROM "SavingConfig"
     WHERE "tenantId" = tenant_id AND type = 'POKOK' AND "isActive" AND rate = 0;
   SELECT id INTO STRICT wajib_id FROM "SavingConfig"

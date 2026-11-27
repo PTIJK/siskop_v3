@@ -5,7 +5,7 @@ import { flushMetrics, startMetricsFlush } from "./modules/platform-dashboard/re
 const port = Number(process.env.PORT ?? 3001);
 
 startMetricsFlush();
-createApp().listen(port, () => {
+createApp().listen({ port, host: process.env.BIND_HOST || undefined }, () => {
   console.warn(`SISKOP backend listening on http://localhost:${port}`);
 });
 

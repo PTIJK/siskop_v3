@@ -1,27 +1,29 @@
 .marketing {
-  --background: 0 0% 100%;
-  --foreground: 228 30% 10%;
-  --primary: 233 70% 52%;
+  --background: 220 43% 97%;
+  --foreground: 226 76% 18%;
+  --primary: 216 100% 43%;
   --primary-foreground: 0 0% 100%;
-  --muted: 228 25% 96%;
+  --muted: 214 32% 94%;
   --card: 0 0% 100%;
-  --card-foreground: 228 30% 10%;
-  --muted-foreground: 228 12% 38%;
-  --border: 228 20% 89%;
-  --input: 228 20% 80%;
-  --ring: 233 70% 52%;
-  --accent: 228 25% 95%;
-  --accent-foreground: 228 30% 10%;
-  --forest: #ffffff;
-  --mint: #0f1220;
-  --lime: #4f5fd9;
-  --muted-mint: #4b5266;
-  --rule: #e4e7ef;
+  --card-foreground: 226 76% 18%;
+  --muted-foreground: 215 19% 35%;
+  --border: 216 24% 86%;
+  --input: 215 19% 46%;
+  --ring: 216 100% 43%;
+  --accent: 202 87% 94%;
+  --accent-foreground: 216 100% 43%;
+  --forest: #f5f7fb;
+  --mint: #0b1b4f;
+  --lime: #0057d9;
+  --muted-mint: #475569;
+  --rule: #d5dfec;
   min-height: 100vh;
   overflow-x: clip;
   background: var(--forest);
   color: var(--mint);
   font-family: Manrope, sans-serif;
+  font-size: 17px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 .marketing *,
@@ -1156,11 +1158,65 @@
 :where(.marketing) .registration-callout-title { font-size: 14px; font-weight: 700; }
 :where(.marketing) .registration-callout p:empty { display: none; }
 :where(.marketing) .registration-plan-note { margin-top: 10px; }
-:where(.marketing) .registration-review { display: grid; justify-items: start; gap: 16px; }
-:where(.marketing) .registration-review > dl,
-:where(.marketing) .registration-review > div { width: 100%; min-width: 0; }
-:where(.marketing) .registration-review dd { text-align: right; overflow-wrap: anywhere; min-width: 0; }
-:where(.marketing) .registration-mobile-quote { display: none; }
+:where(.marketing) .confirmation-details { display: grid; gap: 14px; }
+:where(.marketing) .confirmation-section,
+:where(.marketing) .confirmation-summary {
+  min-width: 0;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: clamp(16px, 2vw, 24px);
+}
+:where(.marketing) .confirmation-section { background: hsl(var(--card)); }
+:where(.marketing) .confirmation-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+:where(.marketing) .confirmation-section-head h2 { font-size: 16px; font-weight: 750; }
+:where(.marketing) .confirmation-section-head button { min-height: 44px; }
+:where(.marketing) .confirmation-name { overflow-wrap: anywhere; font-size: 19px; font-weight: 750; line-height: 1.35; }
+:where(.marketing) .confirmation-contact { overflow-wrap: anywhere; color: var(--muted-mint); font-size: 14px; margin-top: 4px; }
+:where(.marketing) .confirmation-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+  margin-top: 16px;
+  border-top: 1px solid var(--rule);
+  padding-top: 16px;
+}
+:where(.marketing) .confirmation-facts dt { font-size: 12px; color: var(--muted-mint); }
+:where(.marketing) .confirmation-facts dd { margin-top: 3px; font-size: 14px; overflow-wrap: anywhere; }
+:where(.marketing) .confirmation-address { grid-column: 1 / -1; }
+:where(.marketing) #review-edit-package { scroll-margin-top: 100px; }
+:where(.marketing) .registration-confirmation .registration-aside { display: block; order: 0; position: sticky; top: 96px; align-self: start; width: 100%; }
+:where(.marketing) .confirmation-summary { background: hsl(var(--card)); }
+:where(.marketing) .confirmation-plan {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: hsl(var(--accent));
+}
+:where(.marketing) .confirmation-plan strong { font-size: 20px; letter-spacing: -0.025em; overflow-wrap: anywhere; }
+:where(.marketing) .confirmation-plan span { color: var(--muted-mint); font-size: 13px; }
+:where(.marketing) .confirmation-summary .quote-summary dd { text-align: right; font-variant-numeric: tabular-nums; }
+:where(.marketing) .confirmation-summary .quote-total dd { white-space: nowrap; }
+:where(.marketing) .confirmation-summary .payment-note { color: var(--muted-mint); font-size: 13px; }
+:where(.marketing) .confirmation-submit {
+  width: 100%;
+  min-height: 46px;
+  height: auto;
+  margin-top: 16px;
+  padding-block: 10px;
+  white-space: normal;
+  text-align: center;
+}
 :where(.marketing) .wizard-nav button { white-space: normal; height: auto; min-height: 44px; padding-block: 10px; }
 
 :where(.marketing) .review-list { display: grid; gap: 8px; border-top: 1px solid var(--rule); padding-top: 16px; font-size: 13px; }
@@ -1182,7 +1238,10 @@
   :where(.marketing) .registration-grid { grid-template-columns: minmax(0, 1fr); gap: 36px; }
   :where(.marketing) .form-fields { grid-template-columns: minmax(0, 1fr); }
   :where(.marketing) .registration-aside { display: none; }
-  :where(.marketing) .registration-mobile-quote { display: block; }
+}
+
+@media (max-width: 1020px) {
+  :where(.marketing) .registration-confirmation .registration-aside { position: static; }
 }
 
 /* The hero render is green; shift it to the indigo brand hue instead of keeping the old palette. */
@@ -1191,4 +1250,72 @@
 }
 .marketing .spline-canvas {
   filter: hue-rotate(112deg) saturate(0.95);
+}
+
+:where(.marketing) .checkout-main:has(.checkout-status) {
+  padding-top: clamp(24px, 5vw, 56px);
+}
+:where(.marketing) .checkout-panel.checkout-status {
+  max-width: 624px;
+  padding: clamp(20px, 5vw, 40px);
+  border-color: var(--rule);
+  border-radius: 20px;
+  background: white;
+  box-shadow: 0 12px 32px rgb(11 27 79 / 6%);
+  text-align: left;
+}
+:where(.marketing) .checkout-status .status-icon {
+  width: 44px;
+  height: 44px;
+  margin: 0 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: hsl(var(--accent));
+}
+:where(.marketing) .checkout-status .status-icon svg {
+  width: 22px;
+  height: 22px;
+}
+:where(.marketing) .checkout-status .checkout-description {
+  margin-top: 6px;
+}
+:where(.marketing) .checkout-status .checkout-total {
+  gap: 4px;
+  margin: 24px 0 16px;
+  padding: clamp(14px, 4vw, 24px);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--forest);
+}
+:where(.marketing) .checkout-status .checkout-total strong {
+  font-size: clamp(26px, 7vw, 40px);
+  font-variant-numeric: tabular-nums;
+}
+:where(.marketing) .checkout-status .checkout-total .quote-summary {
+  margin: 10px 0 12px;
+}
+:where(.marketing) .checkout-status .checkout-account {
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+:where(.marketing) .checkout-status .checkout-account p {
+  color: var(--mint);
+  font-size: 14px;
+  font-weight: 700;
+}
+:where(.marketing) .checkout-status .checkout-account span,
+:where(.marketing) .checkout-status .checkout-due {
+  color: var(--muted-mint);
+  font-size: 13px;
+}
+:where(.marketing) .checkout-status .checkout-due {
+  margin-top: 8px;
+}
+:where(.marketing) .checkout-status .payment-instructions {
+  margin: 0;
+  border-color: var(--rule);
+  overflow-wrap: anywhere;
+}
+:where(.marketing) .checkout-status .payment-instructions h2 {
+  font-weight: 700;
 }

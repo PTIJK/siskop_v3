@@ -1,6 +1,7 @@
 import type { EquityClass } from "./accounting.js";
 
 export interface DashboardSummary {
+  odsVerifiedAt?: string | null;
   totalSavings: string;
   /** Simpanan pokok + wajib — equity (Modal Sendiri), not money owed to members. */
   savingsEquity: string;

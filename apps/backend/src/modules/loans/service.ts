@@ -52,8 +52,8 @@ export async function listLoanConfigs(tenantId: string) {
 export async function createLoanConfig(tenantId: string, data: CreateLoanConfigInput) {
   validateRegulatoryRate("LOAN", data.rate);
   assertFrequencyMethodCompatible(data);
-  return withQuota(tenantId, "LOAN_TYPES", (tx) =>
-    tx.loanConfig.create({
+  return withQuota(tenantId, "LOAN_TYPES", async (tx) => {
+    const config = await tx.loanConfig.create({
       data: {
         tenantId,
         name: data.name,
@@ -65,8 +65,10 @@ export async function createLoanConfig(tenantId: string, data: CreateLoanConfigI
         maxInstallments: data.maxInstallments,
         isActive: true
       }
-    })
-  );
+    });
+    await tx.tenant.updateMany({ where: { id: tenantId, setupStep: "LOANS" }, data: { setupStep: null } });
+    return config;
+  });
 }
 
 export async function updateLoanConfig(tenantId: string, id: string, data: UpdateLoanConfigInput) {

@@ -4,7 +4,8 @@ import { readCooperativeCertificate, readRegistrationFields } from "./document-a
 describe("readRegistrationFields", () => {
   it("maps the certificate table and keeps its NIK separate from the legal number", () => {
     expect(readCooperativeCertificate([
-      "Nomor Induk Koperasi (NIK) 0000000000000",
+      "Nomor Induk Koperasi (NIK)",
+      "0000000000000",
       "NAMA KOPERASI KOPERASI CONTOH",
       "NOMOR BADAN HUKUM 123/BH/II/93",
       "ALAMAT JALAN CONTOH",
@@ -12,10 +13,16 @@ describe("readRegistrationFields", () => {
       "KABUPATEN/KOTA KOTA CONTOH",
       "PROVINSI PROVINSI CONTOH"
     ].join("\n"))).toEqual({
-      tenantName: "KOPERASI CONTOH", registrationNo: "123/BH/II/93",
+      cooperativeNik: "0000000000000", tenantName: "KOPERASI CONTOH", registrationNo: "123/BH/II/93",
       address: "JALAN CONTOH, KECAMATAN CONTOH, KOTA CONTOH, PROVINSI CONTOH"
     });
   });
+  it("reads the certificate NIK from the full photo when OCR crops the table", () => {
+    expect(readCooperativeCertificate("NAMA KOPERASI KOPERASI CONTOH", "NIK – : 0000 0000 00000\r\n"))
+      .toMatchObject({ tenantName: "KOPERASI CONTOH", cooperativeNik: "0000000000000" });
+    expect(readCooperativeCertificate("NIK: 0000000000000000").cooperativeNik).toBeUndefined();
+  });
+
   it("reads the decree heading without guessing an address", () => {
     expect(readRegistrationFields("cooperative", [
       "KEPUTUSAN MENTERI", "NOMOR AHU - 0000123.AH.01.26.TAHUN 2026", "TENTANG",

@@ -29,7 +29,7 @@ export function PageHeader({ title, description, help, actions, breadcrumb }: Pa
       <div className="min-w-0">
         {breadcrumb && breadcrumb.length > 0 && (
           <nav aria-label="Breadcrumb" className="mb-1.5">
-            <ol className="flex flex-wrap items-center gap-1.5 text-[12.5px] font-semibold text-muted-foreground">
+            <ol className="flex flex-wrap items-center gap-1.5 text-[13.5px] font-semibold text-muted-foreground">
               {breadcrumb.map((item, i) => {
                 const last = i === breadcrumb.length - 1;
                 return (
@@ -52,13 +52,13 @@ export function PageHeader({ title, description, help, actions, breadcrumb }: Pa
         )}
         {help ? (
           <div className="flex items-center gap-2">
-            <Heading className={level === 1 ? "text-[26px] font-extrabold leading-[1.15] tracking-[-0.02em]" : "text-xl font-extrabold leading-tight tracking-tight"}>{title}</Heading>
+            <Heading className={level === 1 ? "text-[28px] font-extrabold leading-[1.15] tracking-[-0.02em]" : "text-[22px] font-extrabold leading-tight tracking-tight"}>{title}</Heading>
             <HelpHint label={`Bantuan: ${title}`}>{help}</HelpHint>
           </div>
         ) : (
-          <Heading className={level === 1 ? "text-[26px] font-extrabold leading-[1.15] tracking-[-0.02em]" : "text-xl font-extrabold leading-tight tracking-tight"}>{title}</Heading>
+          <Heading className={level === 1 ? "text-[28px] font-extrabold leading-[1.15] tracking-[-0.02em]" : "text-[22px] font-extrabold leading-tight tracking-tight"}>{title}</Heading>
         )}
-        {description && <p className="mt-1 max-w-prose text-sm text-muted-foreground">{description}</p>}
+        {description && <p className="mt-1 max-w-prose text-[15px] text-muted-foreground">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </div>

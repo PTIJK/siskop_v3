@@ -45,6 +45,8 @@ export interface UpsertWhitelabelConfigRequest {
 }
 
 /** Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp5 miliar) compliance field. */
+export type TenantSetupStep = "CAPITAL" | "SAVINGS" | "LOANS";
+
 export interface ModalDisetorInfo {
   /** Decimal string, e.g. "5000000000". */
   modalDisetor: string | null;

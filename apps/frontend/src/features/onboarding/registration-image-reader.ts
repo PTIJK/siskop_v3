@@ -53,7 +53,9 @@ export async function readRegistrationPhoto(file: File, kind: Parameters<typeof 
     signal.throwIfAborted();
     await Promise.race([worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK }), stopped]);
     const first = await recognize(canvas, "reading");
-    if (kind === "cooperative" && /nomor\s+induk\s+koperasi/i.test(first)) {
+    let certificateRows = "";
+    const isCertificate = kind === "cooperative" && /nomor\s+induk\s+koperasi/i.test(first);
+    if (isCertificate) {
       // The certificate's center table excludes decorative borders, seals and the QR code.
       const table = document.createElement("canvas");
       const left = Math.round(canvas.width * 0.19);
@@ -66,20 +68,20 @@ export async function readRegistrationPhoto(file: File, kind: Parameters<typeof 
       if (context) {
         context.filter = "grayscale(1) contrast(1.5)";
         context.drawImage(canvas, left, top, width, height, 0, 0, table.width, table.height);
-        const rows = await recognize(table, "checking_table");
+        certificateRows = await recognize(table, "checking_table");
         onProgress({ stage: "extracting" });
-        const fields = readCooperativeCertificate(rows);
-        if (Object.values(fields).some(Boolean)) return { fields, recognizedText: rows.trim() };
+        const fields = readCooperativeCertificate(certificateRows, first);
+        if (fields.cooperativeNik && fields.tenantName && fields.registrationNo && fields.address) return fields;
       }
     }
     onProgress({ stage: "extracting" });
     const fields = readRegistrationFields(kind, first);
-    if (Object.values(fields).every(Boolean)) return { fields, recognizedText: "" };
+    if (!certificateRows && Object.values(fields).every(Boolean) && (!isCertificate || fields.cooperativeNik)) return fields;
 
     await Promise.race([worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT }), stopped]);
     const retry = await recognize(canvas, "retrying");
     onProgress({ stage: "extracting" });
-    return { fields: readRegistrationFields(kind, first, retry), recognizedText: first.trim() || retry.trim() };
+    return certificateRows ? readCooperativeCertificate(certificateRows, `${first}\n${retry}`) : readRegistrationFields(kind, first, retry);
   } finally {
     signal.removeEventListener("abort", abort);
     await worker.terminate();

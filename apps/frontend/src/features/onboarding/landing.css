@@ -43,8 +43,8 @@
   height: 900px;
   pointer-events: none;
   background:
-    radial-gradient(60% 55% at 50% 0%, #4f5fd91f, transparent 70%),
-    radial-gradient(35% 40% at 85% 25%, #7b88f51a, transparent 70%);
+    radial-gradient(60% 55% at 50% 0%, #0a6cff1f, transparent 70%),
+    radial-gradient(35% 40% at 85% 25%, #12b8f524, transparent 70%);
 }
 .landing h1,
 .landing h2,
@@ -68,35 +68,37 @@
   padding: 5px 16px 5px 5px;
   border: 1px solid var(--rule);
   border-radius: 999px;
-  background: #ffffffcc;
+  background: #ffffffe6;
   color: var(--muted-mint);
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
 }
 .lp-eyebrow span {
   padding: 4px 12px;
   border-radius: 999px;
-  background: var(--lime);
-  color: var(--forest);
+  background: #e2f3fd;
+  color: #0057d9;
   font-weight: 700;
-  font-size: 12px;
+  font-size: 13px;
 }
 .lp-hero h1 {
   max-width: 980px;
   margin: 28px 0 22px;
   font-size: clamp(40px, 6vw, 84px);
-  font-weight: 600;
-  line-height: 1.06;
-  letter-spacing: -0.055em;
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.05em;
+  color: #0b1b4f;
 }
 .lp-hero h1 span {
-  background: linear-gradient(100deg, #2b3a9e, #4f5fd9 55%, #7b88f5);
+  background: linear-gradient(100deg, #0b1b4f, #0a6cff 55%, #12b8f5);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 .lp-sub {
-  max-width: 660px;
-  font-size: clamp(16px, 1.5vw, 20px);
+  max-width: 680px;
+  font-size: clamp(17px, 1.6vw, 21px);
   line-height: 1.7;
   color: var(--muted-mint);
 }
@@ -109,9 +111,9 @@
 .marketing .lp-actions [class*="bg-primary"] {
   height: 56px;
   padding: 0 28px;
-  font-size: 16px;
-  font-weight: 600;
-  box-shadow: 0 8px 40px -8px #4f5fd959;
+  font-size: 17px;
+  font-weight: 700;
+  box-shadow: 0 8px 40px -8px #0a6cff59;
 }
 .lp-ghost {
   display: inline-flex;

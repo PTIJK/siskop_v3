@@ -20,22 +20,24 @@ export function useNavSections(): NavSection[] {
   return buildNav({ can, isLocked, isPlatformAdmin, isMultiUnit });
 }
 
-function NavItem({ item, rail, onNavigate }: { item: ResolvedNavEntry; rail: boolean; onNavigate?: () => void }) {
+function NavItem({ item, rail, onNavigate, highlighted }: { item: ResolvedNavEntry; rail: boolean; onNavigate?: () => void; highlighted?: boolean }) {
   const Icon = item.icon;
   return (
     <NavLink
       to={item.to}
+      data-setup-target={highlighted ? "settings-link" : undefined}
       end={item.href === "/dashboard" || item.href === "/loans" || item.href === "/reports" || item.href === "/savings" || item.href === "/members"}
       onClick={onNavigate}
       title={rail ? item.label : item.locked ? "Belum termasuk paket Anda" : undefined}
       aria-label={rail ? (item.locked ? `${item.label} (terkunci)` : item.label) : undefined}
       className={({ isActive }) =>
         cn(
-          "relative flex min-h-[40px] items-center gap-[11px] rounded-[10px] px-2.5 py-2 text-[13.5px] font-semibold transition-colors duration-150 hover:bg-sidebar-active/70 max-[900px]:min-h-[44px]",
+          "relative flex min-h-[44px] items-center gap-[11px] rounded-[10px] px-2.5 py-2 text-[15px] font-semibold transition-colors duration-150 hover:bg-sidebar-active/70",
           rail && "justify-center",
           // An entry that is locked is never "the current page": it goes to Langganan instead.
           isActive && !item.locked && "bg-sidebar-active shadow-[inset_3px_0_0_hsl(var(--primary))]",
-          item.locked && "text-muted-foreground"
+          item.locked && "text-muted-foreground",
+          highlighted && "bg-accent text-accent-foreground ring-2 ring-inset ring-primary"
         )
       }
       // NavLink sets aria-current="page" itself while active.
@@ -57,8 +59,8 @@ function TenantCard() {
   const isPlatformAdmin = useAuth((s) => s.user?.role === "super_admin");
   if (!data || isPlatformAdmin) return null;
   return (
-    <div className="mt-auto rounded-[12px] border bg-card p-3 text-[12.5px]">
-      <p className="truncate text-[13.5px] font-extrabold">Paket {data.packageName}</p>
+    <div className="mt-auto rounded-[12px] border bg-card p-3 text-[13.5px]">
+      <p className="truncate text-[14.5px] font-extrabold">Paket {data.packageName}</p>
       <p className="mb-2 text-muted-foreground">{data.status === "ACTIVE" ? "Langganan aktif" : "Perlu perhatian"}</p>
       <QuotaMeter label="Anggota aktif" used={data.usage.members} limit={data.limits.members} />
     </div>
@@ -69,15 +71,16 @@ interface SidebarContentProps {
   rail: boolean;
   onNavigate?: () => void;
   onClose?: () => void;
+  highlightSettings?: boolean;
 }
 
-function SidebarContent({ rail, onNavigate, onClose }: SidebarContentProps) {
+function SidebarContent({ rail, onNavigate, onClose, highlightSettings }: SidebarContentProps) {
   const sections = useNavSections();
   return (
     <div className="flex h-full flex-col gap-1.5 overflow-y-auto border-r bg-sidebar px-3 py-4 text-sidebar-foreground">
       <div className={cn("flex items-center gap-2.5 px-2 pb-3.5 pt-1", rail && "justify-center px-0")}>
         <BrandMark alt={rail ? "NexCoop" : ""} />
-        {!rail && <span className="flex-1 text-[17px] font-extrabold tracking-[-0.01em]">SISKOP</span>}
+        {!rail && <span className="flex-1 text-[17px] font-extrabold tracking-[-0.01em]">NexCoop</span>}
         {onClose && (
           <button
             type="button"
@@ -95,18 +98,19 @@ function SidebarContent({ rail, onNavigate, onClose }: SidebarContentProps) {
           <div key={section.group} role="group" aria-label={section.label} className="flex flex-col gap-0.5">
             {index > 0 && <div aria-hidden="true" className="mx-1.5 my-2.5 h-px bg-border" />}
             {section.items.map((item) => (
-              <NavItem key={item.id} item={item} rail={rail} onNavigate={onNavigate} />
+              <NavItem key={item.id} item={item} rail={rail} onNavigate={onNavigate} highlighted={highlightSettings && item.href === "/config"} />
             ))}
           </div>
         ) : (
           <details key={section.group} className="group/section">
-            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-[10px] px-2.5 py-2 text-sm font-bold hover:bg-sidebar-active/70 active:bg-sidebar-active focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+            <summary data-setup-target={highlightSettings && section.group === "pengaturan" ? "settings-group" : undefined} className={cn("flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-[10px] px-2.5 py-2 text-[15px] font-bold hover:bg-sidebar-active/70 active:bg-sidebar-active focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden",
+              highlightSettings && section.group === "pengaturan" && "bg-accent text-accent-foreground ring-2 ring-inset ring-primary")}>
               <span className="min-w-0">{section.label}</span>
               <ChevronRight className="h-4 w-4 shrink-0 group-open/section:rotate-90" aria-hidden="true" />
             </summary>
             <div className="flex flex-col gap-0.5 pl-2">
               {section.items.map((item) => (
-                <NavItem key={item.id} item={item} rail={false} onNavigate={onNavigate} />
+                <NavItem key={item.id} item={item} rail={false} onNavigate={onNavigate} highlighted={highlightSettings && item.href === "/config"} />
               ))}
             </div>
           </details>
@@ -122,13 +126,14 @@ interface SidebarProps {
   rail: boolean;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
+  highlightSettings?: boolean;
 }
 
 /**
  * Desktop: sticky 248px column (72px rail). At 900px and below it becomes a
  * drawer from the left with a scrim; Esc and the scrim close it.
  */
-export function Sidebar({ rail, mobileOpen, onMobileOpenChange }: SidebarProps) {
+export function Sidebar({ rail, mobileOpen, onMobileOpenChange, highlightSettings }: SidebarProps) {
   const { pathname } = useLocation();
 
   useEffect(() => {
@@ -146,7 +151,7 @@ export function Sidebar({ rail, mobileOpen, onMobileOpenChange }: SidebarProps) 
 
   return (
     <>
-      {mobileOpen && (
+      {mobileOpen && !highlightSettings && (
         <div
           aria-hidden="true"
           className="fixed inset-0 z-scrim bg-foreground/50 min-[901px]:hidden"
@@ -162,16 +167,16 @@ export function Sidebar({ rail, mobileOpen, onMobileOpenChange }: SidebarProps) 
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
         // A closed drawer must not be tabbable or read by assistive tech.
-        {...(mobileOpen ? { role: "dialog", "aria-modal": true } : { inert: "" as unknown as undefined, "aria-hidden": true })}
+        {...(mobileOpen ? { role: "dialog", "aria-modal": !highlightSettings } : { inert: "" as unknown as undefined, "aria-hidden": true })}
       >
-        <SidebarContent rail={false} onNavigate={() => onMobileOpenChange(false)} onClose={() => onMobileOpenChange(false)} />
+        <SidebarContent highlightSettings={highlightSettings} rail={false} onNavigate={() => onMobileOpenChange(false)} onClose={() => onMobileOpenChange(false)} />
       </aside>
 
       <aside
         aria-label="Navigasi"
         className={cn("sticky top-0 z-sidebar hidden h-screen shrink-0 min-[901px]:block", rail ? "w-[72px]" : "w-[248px]")}
       >
-        <SidebarContent rail={rail} />
+        <SidebarContent rail={rail} highlightSettings={highlightSettings} />
       </aside>
     </>
   );

@@ -1,3 +1,4 @@
+import { RupiahInput } from "@/components/ui/rupiah-input";
 import { isPokokSavingType } from "@siskop/types";
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -11,7 +12,6 @@ import { PageLoading } from "@/components/shared/LoadingSpinner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -133,8 +133,8 @@ export function SavingDetailPage() {
               </div>
             )}
             <div className="space-y-1.5">
-              <Label>Nominal</Label>
-              <Input type="number" placeholder="0" min="1" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <Label htmlFor="transaction-amount">Nominal (Rp)</Label>
+              <RupiahInput id="transaction-amount" placeholder="0" value={amount} onValueChange={setAmount} />
             </div>
             <div className="space-y-1.5">
               <Label>Catatan (opsional)</Label>

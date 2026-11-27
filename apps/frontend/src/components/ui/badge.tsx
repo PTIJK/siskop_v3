@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
  * distinct marker shape (circle, diamond, triangle, square) plus text.
  */
 const badgeVariants = cva(
-  "inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-[7px] border px-2.5 text-xs font-bold transition-colors",
+  "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[7px] border px-2.5 text-[13px] font-bold transition-colors",
   {
     variants: {
       variant: {

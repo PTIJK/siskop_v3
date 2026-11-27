@@ -34,13 +34,16 @@ function priceLabel(pkg: Package, cycle: BillingCycle): string {
 }
 
 /** The quote the server computed for this selection. The browser never adds prices up itself. */
-export function QuoteSummary({ quote, taxRate, loading }: { quote: PricingQuote | undefined; taxRate: string | null; loading?: boolean }) {
+export function QuoteSummary({ quote, taxRate, loading, compact = false }: {
+  quote: PricingQuote | undefined; taxRate: string | null; loading?: boolean; compact?: boolean;
+}) {
   if (!quote) return <p className='form-note'>{loading ? "Menghitung harga…" : "Pilih paket untuk melihat harga."}</p>;
   const tax = formatTaxRate(quote.taxRate ?? taxRate);
   const free = Number(quote.total) === 0;
+  const packageOnly = compact && quote.lines.length === 1 && quote.lines[0]?.kind === "PACKAGE";
   return (
     <dl className='quote-summary' aria-live='polite'>
-      {quote.lines.map((line) => (
+      {(!packageOnly || (!free && quote.taxRate === null)) && quote.lines.map((line) => (
         <div key={`${line.kind}-${line.key}`}>
           <dt>{line.label}</dt>
           <dd>{Number(line.amount) === 0 && line.kind === "PACKAGE" ? "Gratis" : rupiah(line.amount)}</dd>
@@ -50,7 +53,7 @@ export function QuoteSummary({ quote, taxRate, loading }: { quote: PricingQuote 
       {!free && quote.taxRate !== null ? (
         <>
           <div>
-            <dt>Subtotal</dt>
+            <dt>{packageOnly ? "Harga paket" : "Subtotal"}</dt>
             <dd>{rupiah(quote.subtotal)}</dd>
           </div>
           <div>

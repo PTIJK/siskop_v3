@@ -45,3 +45,27 @@ export function reformatWithCaret(raw: string, caret: number): { digits: string;
   }
   return { digits, display, caret: position };
 }
+
+/** Converts the displayed rupiah edit to a decimal string for the API. */
+export function parseRupiahEdit(display: string, maxIntegerDigits: number, typedDecimalAt?: number): string | undefined {
+  if (typedDecimalAt !== undefined && display[typedDecimalAt] === ".") {
+    display = display.slice(0, typedDecimalAt) + "," + display.slice(typedDecimalAt + 1);
+  }
+  const raw = display.replaceAll(".", "");
+  if (!/^\d*(?:,\d{0,2})?$/.test(raw)) return undefined;
+  const [integer = "", fraction] = raw.split(",");
+  if (integer.length > maxIntegerDigits) return undefined;
+  return fraction === undefined ? integer : `${integer || "0"}.${fraction}`;
+}
+
+/** Accept localized rupiah or a canonical decimal, and reject ambiguous pasted amounts. */
+export function parseRupiahPaste(text: string, maxIntegerDigits: number): string | undefined {
+  const amount = text.trim();
+  if (/^(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/.test(amount)) {
+    return parseRupiahEdit(amount, maxIntegerDigits);
+  }
+  if (/^(?:\d+|\d{1,3}(?:,\d{3})+)\.\d{1,2}$/.test(amount)) {
+    return parseRupiahEdit(amount.replaceAll(",", "").replace(".", ","), maxIntegerDigits);
+  }
+  return undefined;
+}

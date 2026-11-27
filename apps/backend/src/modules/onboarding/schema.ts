@@ -3,6 +3,8 @@ import { CooperativeType } from "@siskop/types";
 import { slugSchema } from "../tenants/provision.js";
 import { quoteRequestSchema } from "../pricing/schema.js";
 
+import { cooperativeNikSchema } from "./ods.js";
+
 const RESERVED = new Set(["www", "api", "admin", "app", "static", "cdn", "localhost"]);
 
 /**
@@ -17,6 +19,7 @@ export const registrationSchema = z
     // Accept older clients while the current form generates this value server-side.
     slug: slugSchema.refine((value) => !RESERVED.has(value), "Alamat workspace ini tidak tersedia").optional(),
     registrationNo: z.string().trim().min(1).max(100),
+    cooperativeNik: cooperativeNikSchema.optional(),
     address: z.string().trim().min(5).max(500),
     type: z.enum(["SYARIAH", "KONVENSIONAL"]),
     adminName: z.string().trim().min(2).max(100),
