@@ -7,7 +7,7 @@ import { useTenantAccessConfig } from "@/features/tenant-access/api";
 import { tenantSlug } from "@/features/workspace-domain/host";
 import { Outlet, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/stores/auth";
-import { SetupSpotlight } from "./SetupSpotlight";
+import { SetupTimeline } from "./SetupTimeline";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { AccessBanner } from "./AccessBanner";
@@ -18,25 +18,11 @@ import { HandoffSessionGate } from "@/features/tenant-access/HandoffSessionGate"
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { PageLoading } from "../shared/LoadingSpinner";
 
-const setupSteps = {
-  CAPITAL: { tab: "modal-disetor", label: "Modal disetor", number: 1, instruction: "Isi dan simpan modal disetor koperasi." },
-  SAVINGS: { tab: "savings", label: "Simpanan", number: 2, instruction: "Klik Tambah Simpanan, lalu isi dan simpan pengaturannya." },
-  LOANS: { tab: "loans", label: "Pinjaman", number: 3, instruction: "Klik Tambah Pinjaman, lalu isi dan simpan pengaturannya." }
-} as const;
-
 const RAIL_KEY = "siskop.sidebar.rail";
 
 function readRail(): boolean {
   try {
     return localStorage.getItem(RAIL_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function readSkippedGuide(key: string): boolean {
-  try {
-    return localStorage.getItem(key) === "1";
   } catch {
     return false;
   }
@@ -49,10 +35,7 @@ export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [skippedGuideKey, setSkippedGuideKey] = useState<string>();
-  const guideKey = user ? `siskop.setup.skipped.${user.tenantId}.${user.id}` : "";
-  const skippedGuide = Boolean(guideKey && (guideKey === skippedGuideKey || readSkippedGuide(guideKey)));
-  const checkingSetup = Boolean(user?.permissions?.config?.update) && !isPlatformAdmin && !skippedGuide;
+  const checkingSetup = Boolean(user?.permissions?.config?.update) && !isPlatformAdmin;
   const setup = useQuery({
     queryKey: ["workspace-setup", user?.tenantId],
     queryFn: async () => {
@@ -80,17 +63,6 @@ export function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const closeMobile = useCallback((open: boolean) => setMobileOpen(open), []);
-
-  function skipGuide() {
-    setSkippedGuideKey(guideKey);
-    setMobileOpen(false);
-    try {
-      localStorage.setItem(guideKey, "1");
-    } catch {
-      // The in-memory choice still applies for this visit.
-    }
-    requestAnimationFrame(() => document.getElementById("konten")?.focus());
-  }
 
   useEffect(() => {
     // Ctrl/Cmd+K from anywhere in the shell; the palette itself closes on Esc.
@@ -145,9 +117,10 @@ export function AppLayout() {
   }
 
   const setupStep = checkingSetup ? setup.data?.setupStep : null;
-  const guide = setupStep ? setupSteps[setupStep] : null;
-  const inSettings = location.pathname === "/config";
-  const onGuideTab = inSettings && (new URLSearchParams(location.search).get("tab") ?? "savings") === guide?.tab;
+
+  if (setupStep && location.pathname !== "/dashboard") {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return (
     <div data-setup-shell className="flex min-h-screen bg-background">
@@ -157,7 +130,7 @@ export function AppLayout() {
       >
         Lewati ke konten
       </a>
-      <Sidebar rail={rail} mobileOpen={mobileOpen} onMobileOpenChange={closeMobile} highlightSettings={Boolean(guide && !inSettings)} />
+      <Sidebar rail={rail} mobileOpen={mobileOpen} onMobileOpenChange={closeMobile} setupLocked={Boolean(setupStep)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           rail={rail}
@@ -167,36 +140,23 @@ export function AppLayout() {
         />
         <AccessBanner />
         <main id="konten" tabIndex={-1} className="w-full max-w-[1500px] flex-1 px-4 pb-10 pt-[22px] outline-none min-[901px]:px-6">
-          {guide && (
-            <section aria-label="Panduan pengaturan awal" className="relative z-[52] mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/50 bg-accent px-4 py-3 text-accent-foreground">
-              <div aria-live="polite">
-                <p className="text-sm font-bold">Panduan pengaturan awal · {guide.number}/3 · {guide.label}</p>
-                <p className="mt-1 text-sm">
-                  {onGuideTab ? guide.instruction : inSettings ? `Pilih ${guide.label} untuk melanjutkan.` : `Buka Pengaturan, lalu pilih ${guide.label}.`}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {!inSettings && <Button data-setup-target="menu" size="sm" variant="outline" className="min-[901px]:hidden" onClick={() => setMobileOpen(true)}>Buka menu</Button>}
-                <Button data-setup-skip type="button" size="sm" variant="outline" onClick={skipGuide}>
-                  Lewati panduan
-                </Button>
-              </div>
-            </section>
-          )}
           {checkingSetup && setup.isError && (
             <div role="status" className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
               Panduan pengaturan awal belum dapat dimuat.
               <Button size="sm" variant="outline" onClick={() => void setup.refetch()}>Coba lagi</Button>
             </div>
           )}
-          <Suspense fallback={<PageLoading />}>
-            <Outlet context={guide ? { tab: guide.tab, refreshSetup } : undefined} />
-          </Suspense>
+          {setupStep ? (
+            <SetupTimeline setupStep={setupStep} onRefresh={refreshSetup} />
+          ) : (
+            <Suspense fallback={<PageLoading />}>
+              <Outlet />
+            </Suspense>
+          )}
         </main>
       </div>
       <BrandStyle />
-      {guide && !setup.isError && <SetupSpotlight routeKey={`${location.key}:${guide.tab}`} inSettings={inSettings} onGuideTab={onGuideTab} />}
-      <CommandPalette open={!guide && paletteOpen} onOpenChange={setPaletteOpen} />
+      <CommandPalette open={!setupStep && paletteOpen} onOpenChange={setPaletteOpen} />
       <Toaster />
     </div>
   );

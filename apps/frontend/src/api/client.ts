@@ -62,7 +62,14 @@ async function withAuthRetry(
   path: string,
   doRequest: (token: string | null) => Promise<Response>
 ): Promise<Response> {
-  const token = getAccessToken();
+  let token = getAccessToken();
+  if (!token && !NO_REFRESH_PATHS.includes(path) && useAuth.getState().user) {
+    try {
+      token = await refreshAccessToken();
+    } catch {
+      // Let the request run so a dead session still clears auth below.
+    }
+  }
   const res = await doRequest(token);
 
   if (res.status !== 401 || NO_REFRESH_PATHS.includes(path)) {

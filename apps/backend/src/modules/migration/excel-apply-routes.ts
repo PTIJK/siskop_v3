@@ -134,11 +134,12 @@ export function excelApplyRoutes() {
         } else {
           const contract = candidate.contract;
           const overdue = Math.max(0, Math.floor((businessDate().getTime() - parseDateKey(contract.schedule[0]!.dueDate).getTime()) / 86400000));
+          const customRate = Number(contract.rate) !== Number(candidate.productRate);
           const loan = await tx.loan.create({ data: {
             tenantId, unitId, memberId: candidate.memberId, loanConfigId: candidate.productId,
             principalAmount: contract.principalAmount, totalAmount: contract.totalAmount, remainingAmount: contract.remainingAmount,
             termMonths: contract.termMonths, monthlyPayment: contract.installmentAmount, installmentAmount: contract.installmentAmount,
-            rate: contract.rate, rateNote: "Tarif kontrak yang diverifikasi", disbursedAt: parseDateKey(contract.disbursedAt),
+            rate: contract.rate, rateNote: customRate ? `Tarif kontrak ${contract.rate}%` : null, disbursedAt: parseDateKey(contract.disbursedAt),
             maturityDate: parseDateKey(contract.schedule.at(-1)!.dueDate), daysOverdue: overdue, kolCategory: getKOLCategory(overdue),
             notes: loanImportNote(contract.contractRef)
           }, select: { id: true } });

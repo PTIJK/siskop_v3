@@ -11,7 +11,8 @@ export const createUnitSchema = z.object({
 export const updateUnitSchema = z.object({
   type: z.nativeEnum(CooperativeType).optional(),
   name: z.string().min(1).optional(),
-  isActive: z.boolean().optional()
+  isActive: z.boolean().optional(),
+  isHidden: z.boolean().optional()
 });
 
 // ── Roles ────────────────────────────────────────────────────────────────────

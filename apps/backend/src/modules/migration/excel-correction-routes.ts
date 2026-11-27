@@ -9,7 +9,7 @@ import { businessDate, dateKey } from "../../lib/operating-calendar.js";
 import { handle } from "../../lib/public-guards.js";
 import { authClaims } from "../../middleware/auth.js";
 import { recordAudit } from "../audit-log/service.js";
-import { savingsFields } from "./excel-apply-plan.js";
+import { loanEntries, resolveLoanContract, savingsFields } from "./excel-apply-plan.js";
 import { correctedLoan, editableIdentity, excelCorrection, excelDate, field, importGroups, loanIssue, locateSourceMember,
   memberNumber, normalize, rowBasis, sourceMemberName, type DraftCorrections } from "./excel-corrections.js";
 import { validateLoanOpening } from "./kopkar-publish.js";
@@ -91,8 +91,13 @@ export function excelCorrectionRoutes() {
     const linked = member?.mode === "link" ? await db.member.findFirst({
       where: { ...selectableMember(tenantId, input.unitId), id: member.memberId }, select: memberSelect
     }) : null;
-    const products = key.group === "simpanan" ? await db.savingConfig.findMany({ where: { tenantId, isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } })
-      : key.group === "pinjaman" ? await db.loanConfig.findMany({ where: loanProducts(tenantId), select: { id: true, name: true }, orderBy: { name: "asc" } }) : [];
+    const products = key.group === "simpanan"
+      ? (await db.savingConfig.findMany({ where: { tenantId, isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }))
+          .map((p) => ({ ...p, rate: undefined }))
+      : key.group === "pinjaman"
+        ? (await db.loanConfig.findMany({ where: loanProducts(tenantId), select: { id: true, name: true, rate: true }, orderBy: { name: "asc" } }))
+            .map((p) => ({ id: p.id, name: p.name, rate: String(p.rate) }))
+        : [];
     const savingFields = key.group === "simpanan" ? savingsFields(record) : undefined;
     const savingEntries = savingFields && (savingFields.length ? savingFields : [{ label: "", value: "" }]).map((entry) => {
       const slot = normalize(entry.label);
@@ -102,14 +107,32 @@ export function excelCorrectionRoutes() {
     });
     const saving = savingEntries?.find((entry) => entry.slot === input.slot);
     const ref = field(record, "Kode pinjaman", "Nomor kontrak");
-    const contract = key.group === "pinjaman" ? edited?.loan?.contract ?? {
+    const loanSlot = key.group === "pinjaman"
+      ? (loanEntries(record).find((entry) => entry.loanSlot?.slot === input.slot)?.loanSlot ?? loanEntries(record)[0]?.loanSlot)
+      : undefined;
+    const defaultLoanRate = products.length === 1 && products[0]?.rate ? products[0].rate : "0";
+    const autoContract = key.group === "pinjaman" && !edited?.loan?.contract
+      ? resolveLoanContract(record, loanSlot, new Map(), dateKey(businessDate()), defaultLoanRate, key.index)
+      : undefined;
+    const contract = key.group === "pinjaman" ? edited?.loan?.contract ?? (autoContract ? {
+      contractRef: autoContract.contractRef,
+      disbursedAt: autoContract.disbursedAt,
+      principalAmount: autoContract.principalAmount,
+      totalAmount: autoContract.totalAmount,
+      remainingPrincipal: autoContract.remainingPrincipal,
+      remainingAmount: autoContract.remainingAmount,
+      termMonths: autoContract.termMonths,
+      rate: autoContract.rate,
+      installmentAmount: autoContract.installmentAmount,
+      schedule: autoContract.schedule
+    } : {
       contractRef: ref, disbursedAt: field(record, "Tanggal cair"), principalAmount: field(record, "Pokok awal"),
       totalAmount: field(record, "Total kewajiban"), remainingPrincipal: field(record, "Sisa pokok"), remainingAmount: field(record, "Sisa kewajiban"),
       termMonths: Number(field(record, "Tenor", "Tenor (bulan)")), rate: field(record, "Tarif"), installmentAmount: field(record, "Angsuran per periode"),
       schedule: ref ? records.pinjaman.filter((line) => /(?:jadwal|angsuran)/i.test(line.sheet) && field(line, "Kode pinjaman", "Nomor kontrak") === ref)
         .map((line) => ({ dueDate: field(line, "Jatuh tempo"), principal: field(line, "Pokok tagihan"),
           margin: field(line, "Bunga tagihan", "Margin tagihan", "Infaq tagihan") })) : []
-    } : undefined;
+    }) : undefined;
     const data: ExcelCorrectionDetail = {
       revision, identity: member?.mode === "identity" ? member.identity : editableIdentity(related ?? record),
       member: linked ? { id: linked.id, memberNumber: linked.memberId, fullName: linked.fullName } : undefined,

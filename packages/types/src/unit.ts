@@ -14,6 +14,7 @@ export interface CooperativeUnit {
   type: CooperativeType;
   name: string;
   isActive: boolean;
+  isHidden?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,6 +28,7 @@ export interface UpdateUnitRequest {
   type?: CooperativeType;
   name?: string;
   isActive?: boolean;
+  isHidden?: boolean;
 }
 
 export interface UnitMembership {
@@ -40,5 +42,5 @@ export interface UnitMembership {
 // CooperativeType. Deriving it here keeps the type information in one place and
 // keeps `if (type === 'KSU')` out of reporting, SHU distribution, and RBAC.
 export function isMultiUnit(units: readonly CooperativeUnit[]): boolean {
-  return units.filter((u) => u.isActive).length > 1;
+  return units.filter((u) => u.isActive && !u.isHidden).length > 1;
 }

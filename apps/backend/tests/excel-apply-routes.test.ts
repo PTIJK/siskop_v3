@@ -84,13 +84,13 @@ it("reviews and applies verified members, savings and loan openings once, with b
     expect((await auth(request(server).post(correctionPath)).send(correction)).status).toBe(200);
     expect((await auth(request(server).post(correctionPath)).send(correction)).status).toBe(409);
     const memberReview = await preview(member);
-    expect(memberReview.items.map((item: { status: string }) => item.status)).toEqual(["ready", "review"]);
+    expect(memberReview.items.map((item: { status: string }) => item.status)).toEqual(["ready", "ready"]);
     expect(await db.member.count({ where: { tenantId } })).toBe(0);
     expect((await apply(saving, memberReview.token)).status).toBe(409);
     const added = await apply(member, memberReview.token);
     expect(added.status, JSON.stringify(added.body)).toBe(200);
     expect((await apply(member, memberReview.token)).body.data.id).toBe(added.body.data.id);
-    expect(await db.member.count({ where: { tenantId } })).toBe(1);
+    expect(await db.member.count({ where: { tenantId } })).toBe(2);
     const memberSearch = await auth(request(server).get(endpoint + "/member-candidates")).query({ unitId: unit.id, q: "Anggota Uji" });
     expect(memberSearch.body.data).toMatchObject([{ fullName: "Anggota Uji" }]);
     expect((await preview(member)).items[0].status).toBe("existing");
@@ -133,6 +133,99 @@ it("reviews and applies verified members, savings and loan openings once, with b
       expect(journal.lines.reduce((sum, line) => sum + Number(line.debit) - Number(line.credit), 0)).toBe(0);
     }
     expect((await auth(request(server).get(endpoint))).body.data.receipts).toHaveLength(3);
+  } finally {
+    await db.tenant.delete({ where: { id: tenantId } });
+  }
+});
+
+it("auto-fills missing member identity fields, matches existing members by name, and builds stacked/summary loan schedules without estimation warnings", async () => {
+  testDatabaseUrl(process.env.DATABASE_URL ?? "");
+  const slug = "excel-autofill-loan-test";
+  const admin = await setupTenant({ slug, registrationNo: slug, adminEmail: slug + "@example.test" });
+  const tenantId = admin.user.tenantId;
+  try {
+    const unit = await db.cooperativeUnit.findFirstOrThrow({ where: { tenantId } });
+    const [offset, loanAccount, marginAccount] = await Promise.all([
+      db.account.create({ data: { tenantId, code: "3-9901", name: "Penampung uji", category: "EKUITAS", normalBalance: "KREDIT" } }),
+      db.account.create({ data: { tenantId, code: "1-9901", name: "Piutang uji", category: "ASET", normalBalance: "DEBIT" } }),
+      db.account.create({ data: { tenantId, code: "4-9901", name: "Margin uji", category: "PENDAPATAN", normalBalance: "KREDIT" } })
+    ]);
+    const loanProduct = await db.loanConfig.create({
+      data: { tenantId, name: "Pembiayaan Murabahah", type: "SYARIAH", rateType: "MARGIN", rate: 10, maxTermMonths: 96 }
+    });
+    await db.accountMapping.createMany({ data: [
+      { tenantId, sourceType: "LOAN_CONFIG", sourceId: loanProduct.id, transactionKind: "DISBURSEMENT", debitAccountId: loanAccount.id, creditAccountId: offset.id },
+      { tenantId, sourceType: "LOAN_CONFIG", sourceId: loanProduct.id, transactionKind: "PAYMENT_PRINCIPAL", debitAccountId: offset.id, creditAccountId: loanAccount.id },
+      { tenantId, sourceType: "LOAN_CONFIG", sourceId: loanProduct.id, transactionKind: "PAYMENT_INTEREST", debitAccountId: offset.id, creditAccountId: marginAccount.id }
+    ] });
+
+    // Pre-existing verified member with TMP-style ID and different legacy number in Excel
+    const existingMember = await db.member.create({
+      data: {
+        tenantId, memberId: "TMP-0001", accountNumber: "9000000001", fullName: "Drs. Asror",
+        nik: "3578990000000001", address: "Surabaya", birthPlace: "Surabaya", birthDate: new Date("1985-01-01"),
+        occupation: "Dosen", isActive: true, identityUnverified: false
+      }
+    });
+    await db.unitMembership.create({ data: { memberId: existingMember.id, unitId: unit.id } });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet("nama untuk undian").addRows([
+      ["No. Anggota", "Nama Anggota"],
+      [170, "Drs. Asror"],
+      [221, "Khusaini, S.E"]
+    ]);
+    workbook.addWorksheet("Pembiayaan").addRows([
+      ["Saldo per 31 Desember 2025"],
+      ["No", "No Ang gota", "Nama", "Pembiayaan 1", undefined, undefined, undefined, "Pembiayaan 2"],
+      [undefined, undefined, undefined, "Jml Bulan", "Pokok", "Infaq", "Jumlah", "Jml Bulan", "Pokok", "Infaq", "Jumlah"],
+      [1, 170, "Drs. Asror", 2, 1388900, 458350, 2777800, 3, 1027800, 565300, 3083400],
+      [2, 221, "Khusaini, S.E", 2, 1595300, 877400, 3190600, undefined, undefined, undefined, 0]
+    ]);
+    workbook.addWorksheet("Pinjaman Lain").addRows([
+      ["Nama", "Sisa pokok", "Tenor", "Catatan"],
+      ["Khusaini, S.E", 1200000, 3, "Data saldo berjalan. Jadwal hasil migrasi adalah estimasi; verifikasi kontrak dan KOL sebelum digunakan untuk penagihan."]
+    ]);
+
+    const server = app();
+    const auth = (req: request.Test) => req.auth(admin.accessToken, { type: "bearer" });
+    const uploaded = await auth(request(server).post("/api/excel-imports"))
+      .attach("file", Buffer.from(await workbook.xlsx.writeBuffer()), "rat.xlsx");
+    expect(uploaded.status, JSON.stringify(uploaded.body)).toBe(200);
+    const draftId = uploaded.body.data.id as string;
+    const draftBody = (await auth(request(server).get("/api/excel-imports/" + draftId))).body.data;
+    expect(JSON.stringify(draftBody)).not.toContain("Jadwal hasil migrasi adalah estimasi");
+
+    const endpoint = "/api/excel-imports/" + draftId + "/apply";
+    const memberSettings = { group: "anggota", unitId: unit.id };
+    const memberPlan = (await auth(request(server).post(endpoint + "/preview")).send(memberSettings)).body.data;
+    expect(memberPlan.items.map((item: { status: string }) => item.status)).toEqual(["existing", "ready"]);
+    const committedMembers = await auth(request(server).post(endpoint + "/commit")).send({ settings: memberSettings, token: memberPlan.token });
+    expect(committedMembers.status, JSON.stringify(committedMembers.body)).toBe(200);
+
+    const khusaini = await db.member.findFirstOrThrow({ where: { tenantId, fullName: "Khusaini, S.E" } });
+    expect(khusaini.nik).toMatch(/^\d{16}$/);
+    expect(khusaini.identityUnverified).toBe(false);
+    expect(khusaini.address.length).toBeGreaterThan(0);
+
+    const loanSettings = { group: "pinjaman", unitId: unit.id, cutoffDate: "2025-12-31" };
+    const loanPlan = (await auth(request(server).post(endpoint + "/preview")).send(loanSettings)).body.data;
+    expect(loanPlan.ready).toBe(4);
+    expect(loanPlan.total).toBe("10251800.00");
+    const committedLoans = await auth(request(server).post(endpoint + "/commit")).send({ settings: loanSettings, token: loanPlan.token });
+    expect(committedLoans.status, JSON.stringify(committedLoans.body)).toBe(200);
+
+    const createdLoans = await db.loan.findMany({ where: { tenantId }, include: { installments: { orderBy: { seq: "asc" } } } });
+    expect(createdLoans).toHaveLength(4);
+    for (const item of createdLoans) {
+      expect(item.notes ?? "").not.toMatch(/estimasi|verifikasi kontrak/i);
+      expect(item.rateNote).toBeNull();
+      expect(item.installments.length).toBe(item.termMonths);
+      const principalSum = item.installments.reduce((sum, inst) => sum + Number(inst.principalDue), 0);
+      const totalSum = item.installments.reduce((sum, inst) => sum + Number(inst.principalDue) + Number(inst.interestDue), 0);
+      expect(principalSum).toBe(Number(item.principalAmount));
+      expect(totalSum).toBe(Number(item.remainingAmount));
+    }
   } finally {
     await db.tenant.delete({ where: { id: tenantId } });
   }

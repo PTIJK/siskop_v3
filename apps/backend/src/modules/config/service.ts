@@ -49,8 +49,8 @@ export async function updateUnit(tenantId: string, id: string, data: UpdateUnitI
       action: "unit.update",
       entityType: "CooperativeUnit",
       entityId: id,
-      before: { name: unit.name, type: unit.type, isActive: unit.isActive },
-      after: { name: updated.name, type: updated.type, isActive: updated.isActive }
+      before: { name: unit.name, type: unit.type, isActive: unit.isActive, isHidden: unit.isHidden },
+      after: { name: updated.name, type: updated.type, isActive: updated.isActive, isHidden: updated.isHidden }
     });
     return updated;
   });

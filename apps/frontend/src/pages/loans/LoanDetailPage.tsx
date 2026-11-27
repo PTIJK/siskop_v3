@@ -139,75 +139,89 @@ export function LoanDetailPage() {
     );
   }
 
+  const principal = parseFloat(loan.principalAmount);
   const total = parseFloat(loan.totalAmount);
+  const marginTotal = Math.max(0, total - principal);
   const remaining = parseFloat(loan.remainingAmount);
-  const paid = total - remaining;
-  const progress = total > 0 ? Math.round((paid / total) * 100) : 0;
+  const paid = loan.payments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+  const progressBase = remaining + paid;
+  const progress = progressBase > 0 ? Math.min(100, Math.round((paid / progressBase) * 100)) : 0;
+  const marginLabel = loan.loanConfig.rateType === "MARGIN"
+    ? "Infaq / Margin"
+    : loan.loanConfig.rateType === "BAGI_HASIL"
+      ? "Bagi Hasil / Infaq"
+      : "Infaq / Margin / Bunga";
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Detail pinjaman" breadcrumb={[{ label: "Pinjaman", href: "/loans" }, { label: loan.loanConfig.name }]} />
+      <PageHeader
+        title="Detail pinjaman"
+        breadcrumb={[{ label: "Pinjaman", href: "/loans" }, { label: loan.loanConfig.name }]}
+        actions={
+          loan.status === "ACTIVE" && can("loans", "update") ? (
+            <Button variant="brand" onClick={() => setPayDialog(true)}>
+              <CreditCard className="h-4 w-4" /> Catat Pembayaran
+            </Button>
+          ) : undefined
+        }
+      />
 
       <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <p className="text-sm font-medium">{loan.member.fullName}</p>
-              <p className="font-mono text-xs text-muted-foreground">{loan.member.memberId}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Badge>{loan.loanConfig.name}</Badge>
+        <CardContent className="space-y-6 pt-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1.5">
+              <h2 className="text-xl font-extrabold tracking-tight">{loan.member.fullName}</h2>
+              <p className="font-mono text-sm text-muted-foreground">{loan.member.memberId}</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Badge variant="accent">{loan.loanConfig.name}</Badge>
                 <Badge variant="outline">{loan.status}</Badge>
-                <Badge variant="outline">{FREQUENCY_LABEL[loan.installmentFrequency]}</Badge>
+                <Badge variant="outline">{FREQUENCY_LABEL[loan.installmentFrequency]} · {loan.termMonths} bln</Badge>
                 <KOLBadge category={loan.kolCategory} />
               </div>
-              {loan.disbursedAt && <p className="mt-2 text-xs text-muted-foreground">Cair: {formatTanggalPendek(loan.disbursedAt)}</p>}
-              {loan.rateNote && loan.rate != null && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Rate diubah menjadi {loan.rate}%: {loan.rateNote}
-                </p>
-              )}
-              {loan.notes && <p className="mt-1 text-xs text-muted-foreground">Catatan: {loan.notes}</p>}
             </div>
-            <div className="space-y-3">
-              <dl className="grid grid-cols-3 gap-2 text-sm">
-                <div>
-                  <dt className="text-xs text-muted-foreground">Pokok</dt>
-                  <dd className="font-semibold">{formatRupiah(loan.principalAmount)}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Total</dt>
-                  <dd className="font-semibold">{formatRupiah(loan.totalAmount)}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Angsuran</dt>
-                  <dd className="font-semibold">{formatRupiah(loan.monthlyPayment)}</dd>
-                </div>
-              </dl>
-              <div>
-                <div className="mb-1 flex justify-between text-xs">
-                  <span>Dibayar: {formatRupiah(paid)}</span>
-                  <span className="text-warning">Sisa: {formatRupiah(remaining)}</span>
-                </div>
-                <Progress value={progress} className="h-2" />
-                <p className="mt-0.5 text-right text-xs text-muted-foreground">{progress}% lunas</p>
-              </div>
+            <div className="space-y-1 text-sm text-muted-foreground sm:text-right">
+              {loan.disbursedAt && <p>Tanggal cair: <span className="font-semibold text-foreground">{formatTanggalPendek(loan.disbursedAt)}</span></p>}
+              {loan.rateNote && loan.rate != null && (
+                <p>Tarif: <span className="font-semibold text-foreground">{loan.rate}%</span> ({loan.rateNote})</p>
+              )}
+              {loan.notes && <p>Catatan: <span className="text-foreground">{loan.notes}</span></p>}
             </div>
           </div>
 
-          {loan.status === "ACTIVE" && can("loans", "update") && (
-            <div className="mt-4 border-t pt-4">
-              <Button onClick={() => setPayDialog(true)}>
-                <CreditCard className="mr-2 h-4 w-4" /> Catat Pembayaran
-              </Button>
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border bg-muted/35 p-4">
+              <dt className="text-sm font-semibold text-muted-foreground">Pokok</dt>
+              <dd className="money mt-1 text-xl font-extrabold">{formatRupiah(loan.principalAmount)}</dd>
             </div>
-          )}
+            <div className="rounded-xl border bg-accent/60 p-4">
+              <dt className="text-sm font-semibold text-accent-foreground">{marginLabel}</dt>
+              <dd className="money mt-1 text-xl font-extrabold text-accent-foreground">{formatRupiah(marginTotal)}</dd>
+            </div>
+            <div className="rounded-xl border bg-muted/35 p-4">
+              <dt className="text-sm font-semibold text-muted-foreground">Total Kewajiban</dt>
+              <dd className="money mt-1 text-xl font-extrabold">{formatRupiah(loan.totalAmount)}</dd>
+            </div>
+            <div className="rounded-xl border bg-muted/35 p-4">
+              <dt className="text-sm font-semibold text-muted-foreground">Angsuran / bln</dt>
+              <dd className="money mt-1 text-xl font-extrabold">{formatRupiah(loan.monthlyPayment)}</dd>
+            </div>
+          </dl>
+
+          <div className="rounded-xl border bg-card p-4">
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 text-sm">
+              <span className="text-muted-foreground">Sudah dibayar: <strong className="money text-foreground">{formatRupiah(paid)}</strong></span>
+              <span className="font-bold text-warning">Sisa: <span className="money">{formatRupiah(remaining)}</span></span>
+            </div>
+            <Progress value={progress} className="h-2.5" />
+            <p className="mt-1.5 text-right text-sm font-semibold text-muted-foreground">{progress}% lunas</p>
+          </div>
         </CardContent>
       </Card>
 
       {loan.installments.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Jadwal Cicilan</CardTitle>
+            <CardTitle>Jadwal Cicilan</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -215,7 +229,9 @@ export function LoanDetailPage() {
                 <TableRow>
                   <TableHead>#</TableHead>
                   <TableHead>Jatuh Tempo</TableHead>
-                  <TableHead className="text-right">Nominal</TableHead>
+                  <TableHead className="text-right">Pokok</TableHead>
+                  <TableHead className="text-right">{marginLabel}</TableHead>
+                  <TableHead className="text-right">Total Tagihan</TableHead>
                   <TableHead className="text-right">Terbayar</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -223,12 +239,14 @@ export function LoanDetailPage() {
               <TableBody>
                 {loan.installments.map((inst) => (
                   <TableRow key={inst.id}>
-                    <TableCell>{inst.seq}</TableCell>
+                    <TableCell className="font-semibold">{inst.seq}</TableCell>
                     <TableCell>{formatTanggalPendek(inst.dueDate)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="money text-right">{formatRupiah(inst.principalDue)}</TableCell>
+                    <TableCell className="money text-right text-muted-foreground">{formatRupiah(inst.interestDue)}</TableCell>
+                    <TableCell className="money text-right font-semibold">
                       {formatRupiah(Number(inst.principalDue) + Number(inst.interestDue))}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="money text-right">
                       {formatRupiah(Number(inst.principalPaid) + Number(inst.interestPaid))}
                     </TableCell>
                     <TableCell>
