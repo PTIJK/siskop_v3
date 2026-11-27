@@ -4,6 +4,8 @@ export type ThemeChoice = "light" | "dark";
 
 const KEY = "siskop.theme";
 const listeners = new Set<() => void>();
+const darkPreference = "(prefers-color-scheme: dark)";
+let temporaryChoice: ThemeChoice | null = null;
 
 function storedTheme(): ThemeChoice | null {
   try {
@@ -16,9 +18,9 @@ function storedTheme(): ThemeChoice | null {
 
 /** Saved choice, else the OS preference. */
 export function resolveTheme(): ThemeChoice {
-  const saved = storedTheme();
+  const saved = temporaryChoice ?? storedTheme();
   if (saved) return saved;
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return typeof window !== "undefined" && window.matchMedia?.(darkPreference).matches ? "dark" : "light";
 }
 
 export function applyTheme(theme: ThemeChoice): void {
@@ -29,11 +31,20 @@ export function applyTheme(theme: ThemeChoice): void {
 export function setTheme(theme: ThemeChoice): void {
   try {
     localStorage.setItem(KEY, theme);
+    temporaryChoice = null;
   } catch {
-    // Storage can be blocked; the choice then lasts for this page view only.
+    temporaryChoice = theme;
   }
   applyTheme(theme);
   listeners.forEach((notify) => notify());
+}
+
+export function followSystemTheme(): void {
+  window.matchMedia?.(darkPreference).addEventListener?.("change", () => {
+    if (temporaryChoice || storedTheme()) return;
+    applyTheme(resolveTheme());
+    listeners.forEach((notify) => notify());
+  });
 }
 
 function subscribe(notify: () => void): () => void {

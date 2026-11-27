@@ -1154,10 +1154,6 @@
 :where(.marketing) .registration-kind .unit-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 :where(.marketing) .registration-callout { position: relative; border: 1px solid var(--rule); border-radius: 12px; padding: 16px; }
 :where(.marketing) .registration-callout-title { font-size: 14px; font-weight: 700; }
-:where(.marketing) .registration-callout .registration-upload { display: inline-flex; align-items: center; align-self: flex-start; gap: 8px; min-height: 44px; border: 1px solid var(--rule); border-radius: 8px; padding-inline: 12px; font-size: 14px; cursor: pointer; }
-:where(.marketing) .registration-upload:hover { background: #eef0fa; }
-:where(.marketing) input:focus-visible + .registration-upload { outline: 2px solid var(--lime); outline-offset: 3px; }
-:where(.marketing) input:disabled + .registration-upload { cursor: wait; opacity: 0.7; }
 :where(.marketing) .registration-callout p:empty { display: none; }
 :where(.marketing) .registration-plan-note { margin-top: 10px; }
 :where(.marketing) .registration-review { display: grid; justify-items: start; gap: 16px; }

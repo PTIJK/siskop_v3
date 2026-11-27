@@ -124,6 +124,12 @@ export interface RegistrationForm {
   referralCode: string;
 }
 
+export function typeFromCooperativeName(name: string): RegistrationForm["type"] {
+  const words = name.toLowerCase().replace(/['’‘]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  if (/\b(?:konvensional|non\s*(?:syariah|shariah?))\b/.test(words)) return "KONVENSIONAL";
+  return /\b(?:syariah|shariah?|kspps|uspps|bmt|baitul\s+maal\s+(?:wat|wa)\s+tamwil)\b/.test(words) ? "SYARIAH" : "KONVENSIONAL";
+}
+
 /** What is wrong with a wizard step, in the user's words. Empty means the step may continue. */
 export function stepProblems(step: 1 | 2 | 3 | 4, form: RegistrationForm, quote: { effectiveFeatures: readonly string[] }): string[] {
   const problems: string[] = [];

@@ -8,6 +8,10 @@
 @tailwind components;
 @tailwind utilities;
 
+.dark .workspace-brand-mark {
+  filter: brightness(1.55) drop-shadow(0 0 1px rgb(141 204 255 / 55%));
+}
+
 @layer base {
   /* UI v3 tokens: docs/ui-v3/design.md §2. HSL channels only; use as hsl(var(--x)). */
   :root {

@@ -23,6 +23,7 @@ import {
   requiredCustomFeatures,
   startingSelection,
   stepProblems,
+  typeFromCooperativeName,
   unitAllowed,
   UNIT_CHOICES,
   type RegistrationForm,
@@ -68,6 +69,7 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState<RegistrationForm>(() => ({ ...EMPTY, referralCode: link.referralCode ?? recalledReferral() ?? "" }));
+  const [typeChosen, setTypeChosen] = useState(false);
   const [cooperativeKind, setCooperativeKind] = useState<"KSP" | "KSU">("KSP");
   const [nik, setNik] = useState("");
   const [nikTouched, setNikTouched] = useState(false);
@@ -91,6 +93,8 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
   }, [problems]);
 
   const set = <K extends keyof RegistrationForm>(key: K, value: RegistrationForm[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const inferredType = typeFromCooperativeName(form.tenantName);
+  const operationType = typeChosen ? form.type : inferredType;
 
   const body = { ...selection, featureKeys: selection.featureKeys ?? [] };
   const quote = useQuery({
@@ -136,7 +140,7 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
     submitting.current = true;
     try {
       const idToken = await identityToken(form.method, form.email.trim(), form.password, true);
-      await onboardingApi<RegistrationStatus>("/register", buildRegistration(form, selection, idToken));
+      await onboardingApi<RegistrationStatus>("/register", buildRegistration({ ...form, type: operationType }, selection, idToken));
       track("form_submit", { form: "register", package: selection.packageCode });
       navigate("/checkout", { replace: true });
     } catch (err) {
@@ -213,10 +217,12 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
                 </div>
                 <div className='field field-wide'>
                   <Label htmlFor='type'>Prinsip operasional</Label>
-                  <select id='type' value={form.type} onChange={(e) => set("type", e.target.value as RegistrationForm["type"])}>
+                  <select id='type' aria-describedby={!typeChosen && inferredType === "SYARIAH" ? "cooperative-type-hint" : undefined}
+                    value={operationType} onChange={(e) => { setTypeChosen(true); set("type", e.target.value as RegistrationForm["type"]); }}>
                     <option value='KONVENSIONAL'>Konvensional</option>
                     <option value='SYARIAH'>Syariah</option>
                   </select>
+                  {!typeChosen && inferredType === "SYARIAH" && <p id='cooperative-type-hint' className='form-note'>Disarankan dari nama koperasi. Cocokkan dengan dokumen badan hukum.</p>}
                 </div>
                 <div className='field field-wide'>
                   <Label htmlFor='address'>Alamat koperasi</Label>
@@ -292,6 +298,10 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
                   <div>
                     <dt>Nomor badan hukum</dt>
                     <dd>{form.registrationNo}</dd>
+                  </div>
+                  <div>
+                    <dt>Prinsip operasional</dt>
+                    <dd>{operationType === "SYARIAH" ? "Syariah" : "Konvensional"}</dd>
                   </div>
                   <div>
                     <dt>Jenis koperasi</dt>

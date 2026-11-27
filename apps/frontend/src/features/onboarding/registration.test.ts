@@ -11,10 +11,24 @@ import {
   requiredCustomFeatures,
   startingSelection,
   stepProblems,
+  typeFromCooperativeName,
   unitAllowed,
   yearlySaving,
   type RegistrationForm
 } from "./registration";
+
+describe("cooperative operating principle suggestion", () => {
+  it.each([
+    ["Koperasi Simpan Pinjam Syari’ah Amanah", "SYARIAH"],
+    ["KSPPS Sejahtera", "SYARIAH"],
+    ["KSU Baitul Maal wat Tamwil Sejahtera", "SYARIAH"],
+    ["Koperasi Non-Syariah Sejahtera", "KONVENSIONAL"],
+    ["KSP Karyawan Muhammadiyah", "KONVENSIONAL"],
+    ["KSU Amanah", "KONVENSIONAL"]
+  ] as const)("suggests %s based on explicit name terms", (name, expected) => {
+    expect(typeFromCooperativeName(name)).toBe(expected);
+  });
+});
 
 const pkg = (code: string, monthly: string | null, yearly: string | null, isCustom = false): PublicPricingCatalog["packages"][number] => ({
   code,
