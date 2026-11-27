@@ -36,6 +36,23 @@ function workspaceSlug(tenantName: string, requested: string | undefined): strin
   return tenantDomainsEnabled() ? generated : (requested ?? generated);
 }
 
+export function duplicateRegistrationMessage(target: unknown): string {
+  const fields = Array.isArray(target) ? target.map(String).join(",") : String(target ?? "");
+  if (/nik/i.test(fields)) {
+    return "NIK koperasi ini sudah terdaftar. Jika koperasi Anda sudah pernah mendaftar, gunakan Lanjutkan pendaftaran.";
+  }
+  if (/registrationNo/i.test(fields)) {
+    return "Nomor badan hukum ini sudah terdaftar. Periksa kembali nomor badan hukum Anda atau gunakan Lanjutkan pendaftaran.";
+  }
+  if (/email|firebaseUid|identityId/i.test(fields)) {
+    return "Email atau akun ini sudah terdaftar. Silakan masuk atau gunakan Lanjutkan pendaftaran.";
+  }
+  if (/slug/i.test(fields)) {
+    return "Alamat workspace untuk koperasi ini sudah digunakan. Silakan coba lagi atau hubungi dukungan.";
+  }
+  return "Data yang Anda masukkan sudah terdaftar sebelumnya. Gunakan Lanjutkan pendaftaran jika sebelumnya sudah mendaftar.";
+}
+
 /**
  * Creates the koperasi, its first admin, its subscription and, when money is
  * owed, its first invoice, all in one transaction. The package arrives as a
@@ -148,9 +165,7 @@ async function createRegistration(input: unknown): Promise<{ tenantId: string; i
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw conflict(
-        "Akun, alamat workspace, atau nomor badan hukum sudah terdaftar. Gunakan Lanjutkan pendaftaran jika sebelumnya sudah mendaftar."
-      );
+      throw conflict(duplicateRegistrationMessage(error.meta?.target));
     }
     throw error;
   }

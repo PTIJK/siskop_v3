@@ -22,7 +22,8 @@ export function UnitsPage() {
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["config", "units"],
-    queryFn: () => apiFetch<CooperativeUnit[]>("/config/units")
+    queryFn: () => apiFetch<CooperativeUnit[]>("/config/units"),
+    select: (units) => units.filter((u) => !u.isHidden)
   });
 
   return (

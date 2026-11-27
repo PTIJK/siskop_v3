@@ -94,23 +94,45 @@ export function UnitsTab() {
     }
   };
 
+  const toggleHidden = async (unit: CooperativeUnit) => {
+    try {
+      await apiPut(`/config/units/${unit.id}`, { isHidden: !unit.isHidden });
+      toast({ title: unit.isHidden ? "Unit ditampilkan kembali" : "Unit disembunyikan" });
+      void invalidateUnitQueries(queryClient);
+    } catch (err) {
+      toast({
+        title: "Gagal mengubah visibilitas unit",
+        description: err instanceof ApiRequestError ? err.message : "Terjadi kesalahan",
+        variant: "destructive"
+      });
+    }
+  };
+
   const columns: ColumnDef<CooperativeUnit>[] = [
     { header: "Nama Unit", accessorKey: "name" },
     { header: "Jenis", cell: ({ row }) => <Badge variant="outline">{row.original.type}</Badge> },
     {
       header: "Status",
-      cell: ({ row }) => <Badge variant={row.original.isActive ? "default" : "secondary"}>{row.original.isActive ? "Aktif" : "Nonaktif"}</Badge>
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant={row.original.isActive ? "default" : "secondary"}>{row.original.isActive ? "Aktif" : "Nonaktif"}</Badge>
+          {row.original.isHidden && <Badge variant="outline">Tersembunyi</Badge>}
+        </div>
+      )
     },
     {
       header: "Aksi",
       cell: ({ row }) =>
         can("config", "update") && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={() => openEdit(row.original)}>
               Edit
             </Button>
             <Button size="sm" variant="outline" onClick={() => toggleActive(row.original)}>
               {row.original.isActive ? "Nonaktifkan" : "Aktifkan"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => toggleHidden(row.original)}>
+              {row.original.isHidden ? "Tampilkan" : "Sembunyikan"}
             </Button>
           </div>
         )

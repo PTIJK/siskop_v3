@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, BadgeCheck, ChevronDown, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowRight, BadgeCheck, ChevronDown, Loader2 } from "lucide-react";
 import { matchesCooperativeRegistry, type CooperativeRegistryMatch } from "@siskop/types";
 import { Badge } from "@/components/ui/badge";
 import type { PricingQuote, PricingSelection, PublicPricingCatalog, RegistrationStatus } from "@siskop/types";
@@ -233,15 +233,101 @@ function Wizard({ catalog, link }: { catalog: PublicPricingCatalog; link: Return
                   }));
                 }} />
                 {registryVerified ? (
-                  <div className='field field-wide'><Badge variant='outline' className='self-start text-success'><BadgeCheck size={16} aria-hidden='true' /> Terverifikasi di ODS</Badge></div>
+                  <div
+                    role="status"
+                    className="field field-wide flex flex-row items-start gap-3.5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-100"
+                  >
+                    <div
+                      aria-hidden="true"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white"
+                    >
+                      <BadgeCheck className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-bold">Terverifikasi di ODS Kemenkop</p>
+                        <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-900 dark:text-emerald-200">
+                          NIK Valid
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-emerald-800 dark:text-emerald-200/90">
+                        Data koperasi ditemukan di database ODS. Nama dan nomor badan hukum telah diisi otomatis.
+                      </p>
+                      {cooperativeNik && (
+                        <dl className="grid grid-cols-1 gap-2 border-t border-emerald-200 pt-2.5 text-xs sm:grid-cols-2 dark:border-emerald-900/60">
+                          <div>
+                            <dt className="text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-300">NIK Koperasi</dt>
+                            <dd className="mt-0.5 font-bold">{cooperativeNik}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Status ODS</dt>
+                            <dd className="mt-0.5 font-bold">Aktif · Terdaftar</dd>
+                          </div>
+                        </dl>
+                      )}
+                    </div>
+                  </div>
+                ) : cooperativeNik ? (
+                  <div
+                    role="status"
+                    className="field field-wide flex flex-row items-start gap-3.5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+                  >
+                    <div
+                      aria-hidden="true"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-600 text-white"
+                    >
+                      <AlertCircle className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p className="text-sm font-bold">Belum ditemukan di ODS</p>
+                      <p className="text-xs text-amber-900 dark:text-amber-200/90">
+                        NIK {cooperativeNik} belum terdaftar di ODS. Anda tetap bisa melanjutkan pendaftaran dengan data dari foto.
+                      </p>
+                    </div>
+                  </div>
                 ) : null}
                 <div className='field field-wide'>
-                  <Label htmlFor='tenantName'>Nama koperasi</Label>
-                  <Textarea id='tenantName' rows={2} className='resize-y' value={form.tenantName} maxLength={150} placeholder='Koperasi Sejahtera Bersama' autoComplete='organization' onChange={(e) => set("tenantName", e.target.value)} />
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor='tenantName'>Nama koperasi</Label>
+                    {registryVerified && (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                        <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                        Terverifikasi ODS
+                      </span>
+                    )}
+                  </div>
+                  <Textarea
+                    id='tenantName'
+                    rows={2}
+                    className={registryVerified ? "resize-y border-emerald-400 bg-emerald-50/40 dark:border-emerald-800 dark:bg-emerald-950/20" : "resize-y"}
+                    value={form.tenantName}
+                    maxLength={150}
+                    placeholder='Koperasi Sejahtera Bersama'
+                    autoComplete='organization'
+                    onChange={(e) => set("tenantName", e.target.value)}
+                  />
                 </div>
                 <div className='field'>
-                  <Label htmlFor='registrationNo'>Nomor badan hukum</Label>
-                  <Input id='registrationNo' value={form.registrationNo} maxLength={100} aria-describedby='registration-no-hint' autoCapitalize='characters' spellCheck={false} onChange={(e) => set("registrationNo", e.target.value)} onBlur={(e) => set("registrationNo", normalizeRegistrationNo(e.target.value))} />
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor='registrationNo'>Nomor badan hukum</Label>
+                    {registryVerified && (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                        <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                        Terverifikasi ODS
+                      </span>
+                    )}
+                  </div>
+                  <Input
+                    id='registrationNo'
+                    className={registryVerified ? "border-emerald-400 bg-emerald-50/40 dark:border-emerald-800 dark:bg-emerald-950/20" : undefined}
+                    value={form.registrationNo}
+                    maxLength={100}
+                    aria-describedby='registration-no-hint'
+                    autoCapitalize='characters'
+                    spellCheck={false}
+                    onChange={(e) => set("registrationNo", e.target.value)}
+                    onBlur={(e) => set("registrationNo", normalizeRegistrationNo(e.target.value))}
+                  />
                   <p id='registration-no-hint' className='form-note'>Ketik sesuai dokumen. Untuk format lama, Anda bisa mengetik 7615 BH II 93. Garis miring ditambahkan otomatis. Untuk AHU, contoh isian AHU 0042968 AH 01 29 2025.</p>
                 </div>
                 <div className='field field-wide'>

@@ -66,7 +66,8 @@ export function UsersTab() {
   // Same ["config","units"] cache RolesTab/UnitsPage/UnitLayout already share.
   const { data: units } = useQuery({
     queryKey: ["config", "units"],
-    queryFn: () => apiFetch<CooperativeUnit[]>("/config/units")
+    queryFn: () => apiFetch<CooperativeUnit[]>("/config/units"),
+    select: (list) => list.filter((u) => !u.isHidden)
   });
 
   const createForm = useForm<CreateValues>({ resolver: zodResolver(createSchema) });

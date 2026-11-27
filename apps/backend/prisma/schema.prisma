@@ -874,6 +874,7 @@ model CooperativeUnit {
   type      String // KSP | KONSUMEN | PRODUSEN | JASA | PEMASARAN
   name      String
   isActive  Boolean  @default(true)
+  isHidden  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

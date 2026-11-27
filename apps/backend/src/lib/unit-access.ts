@@ -75,5 +75,5 @@ export async function resolveReadableUnitId(tenantId: string, userId: string, un
 /** The full unit rows behind getReadableUnitIds, oldest first — what the UI offers as "my units". */
 export async function listReadableUnits(tenantId: string, userId: string) {
   const ids = await getReadableUnitIds(userId, tenantId);
-  return db.cooperativeUnit.findMany({ where: { tenantId, id: { in: ids } }, orderBy: { createdAt: "asc" } });
+  return db.cooperativeUnit.findMany({ where: { tenantId, id: { in: ids }, isHidden: false }, orderBy: { createdAt: "asc" } });
 }
