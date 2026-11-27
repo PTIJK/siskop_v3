@@ -14,10 +14,10 @@ import "../styles.css";
 
 export function Brand() {
   return (
-    <Link to='/' className='brand' aria-label='SISKOP beranda'>
+    <Link to='/' className='brand' aria-label='NexCoop beranda'>
       <img src='/nexcoop-mark.png' className='brand-symbol' width={43} height={31} alt='' />
       <span>
-        siskop<span className='brand-dot'>.</span>
+        NexCoop<span className='brand-dot'>.</span>
       </span>
     </Link>
   );

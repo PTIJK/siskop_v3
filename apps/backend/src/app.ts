@@ -22,6 +22,7 @@ import { savingsRoutes } from "./modules/savings/routes.js";
 import { loansRoutes } from "./modules/loans/routes.js";
 import { dashboardRoutes } from "./modules/dashboard/routes.js";
 import { configRoutes } from "./modules/config/routes.js";
+import { excelDraftRoutes } from "./modules/migration/excel-draft-routes.js";
 import { publicPricingRoutes } from "./modules/pricing/routes.js";
 import { usersRoutes } from "./modules/users/routes.js";
 import { reportsRoutes } from "./modules/reports/routes.js";
@@ -113,6 +114,7 @@ export function createApp(): Express {
   app.use("/api/loans", loansRoutes());
   app.use("/api/dashboard", dashboardRoutes());
   app.use("/api/config", configRoutes());
+  app.use("/api/excel-imports", excelDraftRoutes());
   app.use("/api/users", usersRoutes());
   app.use("/api/reports", reportsRoutes());
   app.use("/api/platform", platformRoutes());

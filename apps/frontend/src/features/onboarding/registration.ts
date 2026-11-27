@@ -124,6 +124,12 @@ export interface RegistrationForm {
   referralCode: string;
 }
 
+export function typeFromCooperativeName(name: string): RegistrationForm["type"] {
+  const words = name.toLowerCase().replace(/['’‘]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  if (/\b(?:konvensional|non\s*(?:syariah|shariah?))\b/.test(words)) return "KONVENSIONAL";
+  return /\b(?:syariah|shariah?|kspps|uspps|bmt|baitul\s+maal\s+(?:wat|wa)\s+tamwil)\b/.test(words) ? "SYARIAH" : "KONVENSIONAL";
+}
+
 /** What is wrong with a wizard step, in the user's words. Empty means the step may continue. */
 export function stepProblems(step: 1 | 2 | 3 | 4, form: RegistrationForm, quote: { effectiveFeatures: readonly string[] }): string[] {
   const problems: string[] = [];
@@ -146,12 +152,22 @@ export function stepProblems(step: 1 | 2 | 3 | 4, form: RegistrationForm, quote:
   return problems;
 }
 
+export function normalizeRegistrationNo(value: string): string {
+  const normalized = value.trim().toUpperCase().replace(/\s*([/.–-])\s*/g, "$1").replace(/\s+/g, " ");
+  const legacy = /^\d+ BH(?: [A-Z0-9]+(?:\.[A-Z0-9]+)*){0,2} (?:\d{2}|\d{4})$/;
+  if (legacy.test(normalized)) return normalized.replaceAll(" ", "/");
+  return normalized.replace(
+    /^AHU (\d+) AH (\d{2}) (\d{2}) (?:TAHUN )?(\d{4})$/,
+    "AHU-$1.AH.$2.$3.TAHUN $4"
+  );
+}
+
 /** The request body: a package selection and the koperasi's details. No amount is ever sent. */
 export function buildRegistration(form: RegistrationForm, selection: PricingSelection, idToken: string): OnboardingRegistration {
   return {
     subscription: selection,
-    tenantName: form.tenantName.trim(),
-    registrationNo: form.registrationNo.trim(),
+    tenantName: form.tenantName.trim().replace(/\s*\r?\n\s*/g, " "),
+    registrationNo: normalizeRegistrationNo(form.registrationNo),
     address: form.address.trim(),
     type: form.type,
     adminName: form.adminName.trim(),

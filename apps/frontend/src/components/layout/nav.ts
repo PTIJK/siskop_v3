@@ -86,6 +86,7 @@ export const TENANT_NAV: readonly NavEntry[] = [
   { id: "laporan-pasar", label: "Laporan pasar", href: "/reports/pasar", icon: ShoppingCart, group: "laporan", permission: { module: "reports", action: "read" }, feature: "reports_market" },
   { id: "konsolidasi", label: "Laporan konsolidasi", href: "/ksu/report", icon: PieChart, group: "laporan", permission: { module: "reports", action: "read" }, feature: "reports_consolidated", requiresMultiUnit: true, keywords: "unit usaha ksu" },
 
+  { id: "impor-excel", label: "Impor Data Excel", href: "/impor-excel", icon: FileUp, group: "pengaturan", permission: { module: "config", action: "update" }, keywords: "unggah migrasi anggota simpanan pinjaman neraca kas" },
   { id: "langganan", label: "Langganan", href: "/langganan", icon: PackageIcon, group: "pengaturan", keywords: "paket tagihan faktur kuota" },
   {
     id: "pengaturan",

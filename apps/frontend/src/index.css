@@ -8,91 +8,99 @@
 @tailwind components;
 @tailwind utilities;
 
+.dark .workspace-brand-mark {
+  filter: brightness(1.55) drop-shadow(0 0 1px rgb(141 204 255 / 55%));
+}
+
 @layer base {
   /* UI v3 tokens: docs/ui-v3/design.md §2. HSL channels only; use as hsl(var(--x)). */
   :root {
-    --background: 220 20% 98%;
-    --foreground: 224 30% 11%;
+    --background: 220 43% 97%;
+    --foreground: 226 76% 18%;
     --card: 0 0% 100%;
-    --card-foreground: 224 30% 11%;
+    --card-foreground: 226 76% 18%;
     --popover: 0 0% 100%;
-    --popover-foreground: 224 30% 11%;
-    --primary: 224 30% 12%;
+    --popover-foreground: 226 76% 18%;
+    --primary: 226 76% 18%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 16% 95%;
-    --secondary-foreground: 224 30% 12%;
-    --muted: 220 16% 95%;
-    --muted-foreground: 220 10% 38%;
-    --accent: 233 80% 96%;
-    --accent-foreground: 233 55% 32%;
-    --brand: 233 62% 50%;
+    --secondary: 214 32% 94%;
+    --secondary-foreground: 226 76% 18%;
+    --muted: 214 32% 94%;
+    --muted-foreground: 215 19% 35%;
+    --accent: 202 87% 94%;
+    --accent-foreground: 216 100% 43%;
+    --brand: 216 100% 43%;
     --brand-foreground: 0 0% 100%;
+    --brand-cyan: 196 92% 52%;
+    --brand-gradient: linear-gradient(135deg, #0A6CFF 0%, #12B8F5 100%);
     --destructive: 4 66% 42%;
     --destructive-foreground: 0 0% 100%;
     --success: 150 62% 26%;
     --warning: 34 92% 30%;
-    --info: 212 62% 36%;
-    --border: 220 14% 90%;
-    /* design.md says 78%; that is only 1.7:1 on a card, below WCAG 1.4.11 (3:1) for a field boundary. 56% gives 3.4:1. */
-    --input: 220 10% 56%;
-    --ring: 233 62% 50%;
+    --info: 216 100% 43%;
+    --border: 216 24% 86%;
+    /* WCAG 1.4.11 (>= 3:1) field boundary contrast on white card and #F5F7FB background. */
+    --input: 215 19% 46%;
+    --ring: 216 100% 43%;
     --radius: 14px;
 
     --hero: 0 0% 100%;
-    --hero-foreground: 224 30% 11%;
-    --hero-muted: 220 10% 40%;
-    --hero-line: 220 14% 91%;
+    --hero-foreground: 226 76% 18%;
+    --hero-muted: 215 19% 35%;
+    --hero-line: 216 24% 88%;
 
     --sidebar: 0 0% 100%;
-    --sidebar-foreground: 224 30% 14%;
-    --sidebar-active: 220 20% 96%;
+    --sidebar-foreground: 226 76% 18%;
+    --sidebar-active: 202 87% 94%;
 
-    --chart-1: 224 30% 12%;
-    --chart-2: 30 85% 38%;
-    --chart-3: 233 62% 50%;
-    --chart-4: 150 62% 26%;
+    --chart-1: 226 76% 18%;
+    --chart-2: 196 92% 52%;
+    --chart-3: 216 100% 43%;
+    --chart-4: 215 19% 35%;
     --chart-5: 4 66% 42%;
   }
 
   .dark {
-    --background: 224 22% 7%;
-    --foreground: 220 20% 94%;
-    --card: 224 20% 10%;
-    --card-foreground: 220 20% 94%;
-    --popover: 224 20% 10%;
-    --popover-foreground: 220 20% 94%;
-    --primary: 0 0% 96%;
-    --primary-foreground: 224 30% 10%;
-    --secondary: 224 16% 15%;
-    --secondary-foreground: 220 20% 94%;
-    --muted: 224 16% 15%;
-    --muted-foreground: 220 12% 68%;
-    --accent: 233 40% 20%;
-    --accent-foreground: 233 85% 88%;
-    --brand: 233 85% 74%;
-    --brand-foreground: 224 30% 10%;
+    --background: 226 42% 8%;
+    --foreground: 214 32% 95%;
+    --card: 226 36% 11%;
+    --card-foreground: 214 32% 95%;
+    --popover: 226 36% 11%;
+    --popover-foreground: 214 32% 95%;
+    --primary: 196 92% 58%;
+    --primary-foreground: 226 76% 12%;
+    --secondary: 226 26% 17%;
+    --secondary-foreground: 214 32% 95%;
+    --muted: 226 26% 17%;
+    --muted-foreground: 214 20% 72%;
+    --accent: 206 52% 20%;
+    --accent-foreground: 198 92% 85%;
+    --brand: 196 92% 58%;
+    --brand-foreground: 226 76% 12%;
+    --brand-cyan: 196 92% 58%;
+    --brand-gradient: linear-gradient(135deg, #0A6CFF 0%, #12B8F5 100%);
     --destructive: 4 80% 68%;
-    --destructive-foreground: 224 30% 10%;
+    --destructive-foreground: 226 76% 12%;
     --success: 150 55% 60%;
     --warning: 38 90% 62%;
-    --info: 208 80% 72%;
-    --border: 224 14% 19%;
-    --input: 224 12% 46%;
-    --ring: 233 85% 74%;
+    --info: 198 92% 72%;
+    --border: 226 24% 21%;
+    --input: 220 18% 48%;
+    --ring: 196 92% 58%;
 
-    --hero: 224 20% 10%;
-    --hero-foreground: 220 20% 94%;
-    --hero-muted: 220 12% 68%;
-    --hero-line: 224 14% 19%;
+    --hero: 226 36% 11%;
+    --hero-foreground: 214 32% 95%;
+    --hero-muted: 214 20% 72%;
+    --hero-line: 226 24% 20%;
 
-    --sidebar: 224 22% 8%;
-    --sidebar-foreground: 220 18% 90%;
-    --sidebar-active: 224 18% 14%;
+    --sidebar: 226 40% 9%;
+    --sidebar-foreground: 214 28% 92%;
+    --sidebar-active: 206 48% 18%;
 
-    --chart-1: 233 85% 78%;
-    --chart-2: 36 90% 62%;
-    --chart-3: 233 85% 74%;
-    --chart-4: 150 55% 60%;
+    --chart-1: 196 92% 58%;
+    --chart-2: 213 100% 64%;
+    --chart-3: 202 87% 78%;
+    --chart-4: 215 20% 65%;
     --chart-5: 4 80% 68%;
   }
 }
@@ -103,11 +111,15 @@
   }
   html {
     font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 106.25%;
     -webkit-font-smoothing: antialiased;
   }
   body {
     @apply bg-background text-foreground;
-    line-height: 1.45;
+    line-height: 1.55;
+  }
+  .bg-brand-gradient {
+    background: var(--brand-gradient);
   }
   :focus-visible {
     outline: 2px solid hsl(var(--ring));

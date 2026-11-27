@@ -128,6 +128,45 @@ describe("free registration", () => {
     expect(ent?.limits).toEqual({ members: 50, users: 1, savingTypes: 2, loanTypes: 2 });
   });
 
+  it.each([false, true])("advances the guide with products prefilled = %s", async (prefilled) => {
+    const app = createApp();
+    const created = await register({}, app);
+    expect(created.status).toBe(201);
+    const login = await request(app).post("/api/onboarding/login").send({ idToken: "verified-test-token" });
+    expect(login.status).toBe(200);
+    const authorization = `Bearer ${login.body.data.session.accessToken}`;
+    const getStep = async () => {
+      const res = await request(app).get("/api/config/setup").set("Authorization", authorization);
+      expect(res.status).toBe(200);
+      return res.body.data.setupStep;
+    };
+
+    const createSaving = (name: string) => request(app).post("/api/savings/configs").set("Authorization", authorization)
+      .send({ name, type: "SUKARELA", rateType: "BUNGA", rate: 9, periodUnit: "MONTHLY" }).expect(201);
+    const createLoan = (name: string) => request(app).post("/api/loans/configs").set("Authorization", authorization)
+      .send({ name, type: "KONVENSIONAL", rateType: "BUNGA", rate: 12, maxTermMonths: 12 }).expect(201);
+
+    if (prefilled) {
+      await createSaving("Sukarela 1");
+      await createSaving("Sukarela 2");
+      await createLoan("Pinjaman Anggota 1");
+      await createLoan("Pinjaman Anggota 2");
+    }
+    expect(await getStep()).toBe("CAPITAL");
+    await request(app).put("/api/config/modal-disetor").set("Authorization", authorization)
+      .send({ modalDisetor: null }).expect(200);
+    expect(await getStep()).toBe("CAPITAL");
+    await request(app).put("/api/config/modal-disetor").set("Authorization", authorization)
+      .send({ modalDisetor: "1000000" }).expect(200);
+    if (!prefilled) {
+      expect(await getStep()).toBe("SAVINGS");
+      await createSaving("Sukarela");
+      expect(await getStep()).toBe("LOANS");
+      await createLoan("Pinjaman Anggota");
+    }
+    expect(await getStep()).toBeNull();
+  });
+
   it("lets the new admin sign in straight away", async () => {
     await register();
 
@@ -147,6 +186,7 @@ describe("paid registration", () => {
     expect(res.body.data.status).toBe("PENDING_PAYMENT");
     const tenant = await tenantBySlug(res);
     expect(tenant.isActive).toBe(false);
+    expect(tenant.setupStep).toBe("CAPITAL");
     expect(tenant.nextBillingDate).toBeNull();
     const s = await subscriptionOf({ tenantId: tenant.id });
     expect(s.status).toBe("PENDING_PAYMENT");

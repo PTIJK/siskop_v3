@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ArrowUpRight, Check, Clock3, Loader2, RefreshCw } from "lucide-react";
 import type { RegistrationStatus } from "@siskop/types";
 import { MarketingShell } from "../components/MarketingShell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/stores/auth";
 import { ApiRequestError } from "@/api/client";
@@ -65,23 +66,26 @@ export default function StatusPage() {
 
   const active = status?.status === "ACTIVE";
   const invoice = status?.invoice ?? null;
+  const pendingInvoice = status?.status === "PENDING_PAYMENT" && invoice;
   const tax = formatTaxRate(invoice?.taxRate ?? null);
 
   return (
     <MarketingShell>
       <main id='main-content' className='checkout-main content-width'>
-        <section className='checkout-panel' aria-live='polite'>
-          <div className='status-icon'>{active ? <Check /> : <Clock3 />}</div>
-          <h1>{needsResume ? "Lanjutkan pendaftaran" : active ? "Koperasi Anda sudah aktif" : error && !status ? "Status pendaftaran belum tersedia" : !status ? "Memeriksa pendaftaran…" : "Selesaikan pembayaran"}</h1>
+        <section className='checkout-panel checkout-status' aria-live='polite'>
+          <div className='status-icon' aria-hidden='true'>{active ? <Check /> : <Clock3 />}</div>
+          <h1>{needsResume ? "Lanjutkan pendaftaran" : active ? "Koperasi Anda sudah aktif" : error && !status ? "Status pendaftaran belum tersedia" : !status ? "Memeriksa pendaftaran…" : pendingInvoice ? "Selesaikan pembayaran" : "Tagihan belum tersedia"}</h1>
           <p className='checkout-description'>
             {needsResume
               ? "Masuk dengan akun yang Anda gunakan saat mendaftar untuk melihat tagihan Anda."
               : active
                 ? "Masuk untuk membuka dashboard koperasi Anda."
-                : status ? "Bayar sesuai rincian di bawah. Koperasi aktif setelah pembayaran dikonfirmasi." : null}
+                : pendingInvoice
+                  ? "Koperasi Anda akan aktif setelah pembayaran dikonfirmasi."
+                  : status ? "Rincian tagihan belum tersedia. Periksa kembali status pendaftaran Anda." : null}
           </p>
 
-          {status ? (
+          {status && !needsResume ? (
             <div className='checkout-total'>
               {invoice ? (
                 <>
@@ -100,26 +104,29 @@ export default function StatusPage() {
                     ) : null}
                   </dl>
                 </>
-              ) : (
-                <strong>Gratis</strong>
-              )}
-              <h2>{status.packageName}</h2>
-              <p>
-                {status.tenantName} · {status.slug}
-              </p>
-              {invoice && !active ? <small>Jatuh tempo {date(invoice.dueDate)}. Pendaftaran yang belum dibayar akan dihapus setelahnya.</small> : null}
+              ) : active ? <strong>Gratis</strong> : null}
+              <div className='checkout-account'>
+                <p>{status.tenantName}</p>
+                {status.odsVerifiedAt ? <Badge variant='ok' className='my-1'>Terverifikasi di ODS</Badge> : null}
+                <span>Paket {status.packageName}</span>
+              </div>
+              {pendingInvoice ? (
+                <p className='checkout-due'>Bayar paling lambat <b>{date(pendingInvoice.dueDate)}</b>. Pendaftaran yang belum dibayar akan dihapus setelah tenggat.</p>
+              ) : null}
             </div>
           ) : null}
 
-          {status && !active && invoice ? (
+          {status && pendingInvoice && !needsResume ? (
             <div className='payment-instructions'>
-              <h2>Cara pembayaran</h2>
+              <h2>{status.paymentInstructions ? "Bayar melalui transfer" : "Petunjuk transfer belum tersedia"}</h2>
               {status.paymentInstructions ? (
-                <p>{status.paymentInstructions}</p>
+                <>
+                  <p>{status.paymentInstructions}</p>
+                  <small>Cantumkan nomor faktur {pendingInvoice.number} saat transfer.</small>
+                </>
               ) : (
-                <p>Petunjuk pembayaran belum tersedia. Tim SISKOP akan menghubungi Anda melalui email pendaftaran.</p>
+                <p>Tunggu petunjuk pembayaran dari tim SISKOP melalui email pendaftaran.</p>
               )}
-              <small>Cantumkan nomor faktur {invoice.number} saat transfer.</small>
             </div>
           ) : null}
 

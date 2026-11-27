@@ -65,16 +65,16 @@ export function StatCard({
     <CardContent className="p-[18px]">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-muted-foreground">{title}</p>
-          <p className={cn("mt-1 text-2xl font-extrabold leading-tight tracking-[-0.02em] tabular-nums", alert && "text-destructive")} title={valueLabel}>
+          <p className="text-[14.5px] font-semibold text-muted-foreground">{title}</p>
+          <p className={cn("mt-1 text-[26px] font-extrabold leading-tight tracking-[-0.02em] tabular-nums", alert && "text-destructive")} title={valueLabel}>
             <span aria-hidden={valueLabel ? true : undefined}>{value}</span>
             {valueLabel ? <span className="sr-only">{valueLabel}</span> : null}
           </p>
           {(subtitle || TrendIcon) && (
             <div className="mt-1 flex items-center gap-1">
-              {TrendIcon && <TrendIcon className={cn("h-3.5 w-3.5", trend ? TREND_COLORS[trend] : "")} aria-hidden="true" />}
+              {TrendIcon && <TrendIcon className={cn("h-4 w-4", trend ? TREND_COLORS[trend] : "")} aria-hidden="true" />}
               {subtitle && (
-                <span className={cn("text-[12.5px] font-semibold", trend ? TREND_COLORS[trend] : "text-muted-foreground")}>
+                <span className={cn("text-[13.5px] font-semibold", trend ? TREND_COLORS[trend] : "text-muted-foreground")}>
                   {subtitle}
                 </span>
               )}

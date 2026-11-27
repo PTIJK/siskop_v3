@@ -3,6 +3,7 @@ import type { PublicPricingCatalog } from "@siskop/types";
 import {
   buildRegistration,
   formatTaxRate,
+  normalizeRegistrationNo,
   parseDeepLink,
   priceOf,
   recalledReferral,
@@ -11,10 +12,24 @@ import {
   requiredCustomFeatures,
   startingSelection,
   stepProblems,
+  typeFromCooperativeName,
   unitAllowed,
   yearlySaving,
   type RegistrationForm
 } from "./registration";
+
+describe("cooperative operating principle suggestion", () => {
+  it.each([
+    ["Koperasi Simpan Pinjam Syari’ah Amanah", "SYARIAH"],
+    ["KSPPS Sejahtera", "SYARIAH"],
+    ["KSU Baitul Maal wat Tamwil Sejahtera", "SYARIAH"],
+    ["Koperasi Non-Syariah Sejahtera", "KONVENSIONAL"],
+    ["KSP Karyawan Muhammadiyah", "KONVENSIONAL"],
+    ["KSU Amanah", "KONVENSIONAL"]
+  ] as const)("suggests %s based on explicit name terms", (name, expected) => {
+    expect(typeFromCooperativeName(name)).toBe(expected);
+  });
+});
 
 const pkg = (code: string, monthly: string | null, yearly: string | null, isCustom = false): PublicPricingCatalog["packages"][number] => ({
   code,
@@ -243,5 +258,19 @@ describe("formatTaxRate", () => {
     expect(formatTaxRate("0.1100")).toBe("11%");
     expect(formatTaxRate("0.115")).toBe("11,5%");
     expect(formatTaxRate(null)).toBeNull();
+  });
+});
+
+
+describe("legal registration number formatting", () => {
+  it.each([
+    [" 7615 / bh / II / 93 ", "7615/BH/II/93"],
+    ["7615 bh ii 93", "7615/BH/II/93"],
+    ["013 BH XVI.1 I 2016", "013/BH/XVI.1/I/2016"],
+    ["ahu 0042968 ah 01 29 tahun 2025", "AHU-0042968.AH.01.29.TAHUN 2025"],
+    ["123 / A / 2025", "123/A/2025"],
+    [" ahu-0012345. ah.01.29 tahun   2025 ", "AHU-0012345.AH.01.29 TAHUN 2025"]
+  ])("formats the identifier in %s", (value, expected) => {
+    expect(normalizeRegistrationNo(value)).toBe(expected);
   });
 });

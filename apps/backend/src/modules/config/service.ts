@@ -622,6 +622,28 @@ export async function upsertWhitelabelConfig(tenantId: string, data: UpsertWhite
   });
 }
 
+export async function getWorkspaceSetup(tenantId: string) {
+  const where = { id: tenantId };
+  const select = { setupStep: true } as const;
+  const current = await db.tenant.findUniqueOrThrow({ where, select });
+  if (current.setupStep !== "SAVINGS" && current.setupStep !== "LOANS") return current;
+
+  // Products can already exist when an administrator returns to the guide.
+  return db.$transaction(async (tx) => {
+    if (current.setupStep === "SAVINGS") {
+      await tx.tenant.updateMany({
+        where: { ...where, setupStep: "SAVINGS", savingConfigs: { some: { isActive: true } } },
+        data: { setupStep: "LOANS" }
+      });
+    }
+    await tx.tenant.updateMany({
+      where: { ...where, setupStep: "LOANS", loanConfigs: { some: { isActive: true } } },
+      data: { setupStep: null }
+    });
+    return tx.tenant.findUniqueOrThrow({ where, select });
+  });
+}
+
 // ── Modal Disetor ────────────────────────────────────────────────────────────
 // Permenkop UKM No. 2/2024 Pasal 12 mandatory-audit threshold (Rp5 miliar)
 // compliance field — a general tenant field, independent of the "accounting"
@@ -647,15 +669,21 @@ export async function getModalDisetor(tenantId: string) {
 export async function updateModalDisetor(tenantId: string, data: UpdateModalDisetorInput) {
   const modalDisetor = data.modalDisetor === null ? null : new Prisma.Decimal(data.modalDisetor);
 
-  const tenant = await db.tenant.update({
-    where: { id: tenantId },
-    data: {
-      modalDisetor,
-      // Dropping below the threshold re-arms the reminder, so a later
-      // re-crossing in the same year notifies again instead of staying silent.
-      ...(isModalDisetorAuditRequired(modalDisetor) ? {} : { auditThresholdNotifiedAt: null })
-    },
-    select: { modalDisetor: true, auditThresholdNotifiedAt: true }
+  const tenant = await db.$transaction(async (tx) => {
+    const saved = await tx.tenant.update({
+      where: { id: tenantId },
+      data: {
+        modalDisetor,
+        // Dropping below the threshold re-arms the reminder, so a later
+        // re-crossing in the same year notifies again instead of staying silent.
+        ...(isModalDisetorAuditRequired(modalDisetor) ? {} : { auditThresholdNotifiedAt: null })
+      },
+      select: { modalDisetor: true, auditThresholdNotifiedAt: true }
+    });
+    if (modalDisetor !== null) {
+      await tx.tenant.updateMany({ where: { id: tenantId, setupStep: "CAPITAL" }, data: { setupStep: "SAVINGS" } });
+    }
+    return saved;
   });
   return serializeModalDisetor(tenant);
 }

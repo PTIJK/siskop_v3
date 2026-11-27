@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider, hydrate } from "@tanstack/react-query
 import App from "./App";
 import { WorkspaceBoundary } from "./features/workspace-domain/WorkspaceBoundary";
 import "./index.css";
-import { applyTheme, resolveTheme } from "./lib/theme";
+import { applyTheme, followSystemTheme, resolveTheme } from "./lib/theme";
 import { initAnalytics } from "./lib/analytics";
 import { workspaceSlug } from "./features/onboarding/workspace";
 
@@ -13,6 +13,7 @@ if (workspaceSlug() === null) initAnalytics();
 
 // Before first paint, so a dark-theme user never sees a white flash.
 applyTheme(resolveTheme());
+followSystemTheme();
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } }

@@ -45,7 +45,7 @@ export async function getDashboardSummary(tenantId: string, unitId?: string): Pr
   const s = scope(unitId);
   const now = new Date();
   const lastMonth = subMonths(now, 1);
-  const [totalSavings, savingsEquity, totalActiveLoans, memberCount, monthlyPayments, overdueCount, previousMembers, lastMonthPayments] =
+  const [totalSavings, savingsEquity, totalActiveLoans, memberCount, monthlyPayments, overdueCount, previousMembers, lastMonthPayments, tenant] =
     await Promise.all([
       db.saving.aggregate({ where: { tenantId, isActive: true, ...s.saving }, _sum: { balance: true } }),
       db.saving.aggregate({
@@ -71,12 +71,14 @@ export async function getDashboardSummary(tenantId: string, unitId?: string): Pr
           ...(unitId ? { loan: { unitId } } : {})
         },
         _sum: { amount: true }
-      })
+      }),
+      db.tenant.findUnique({ where: { id: tenantId }, select: { odsVerifiedAt: true } })
     ]);
 
   const total = totalSavings._sum.balance ?? ZERO;
   const equity = savingsEquity._sum.balance ?? ZERO;
   return {
+    odsVerifiedAt: tenant?.odsVerifiedAt?.toISOString() ?? null,
     totalSavings: total.toString(),
     savingsEquity: equity.toString(),
     savingsLiability: total.sub(equity).toString(),

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="id">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup pendaftaran koperasi</title>
+<style>
+  *{box-sizing:border-box}body{margin:0;background:#f6f7fc;color:#191b2c;font:16px/1.55 system-ui,sans-serif}
+  header,main{width:min(760px,100% - 32px);margin:auto}header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:20px 0}
+  main{padding:12px 0 40px}.panel{background:#fff;border:1px solid #dce0ef;border-radius:18px;padding:clamp(18px,5vw,36px)}
+  h1{font-size:clamp(26px,6vw,38px);line-height:1.12;margin:8px 0 12px}h2{font-size:19px;margin:4px 0}
+  p{margin:8px 0 16px;color:#4b5168}.muted,small{color:#4b5168}.steps{font-size:14px;font-weight:700;color:#414fbe}
+  button,input,select{font:inherit}button{min-height:44px;border:1px solid #b9bfd7;border-radius:9px;background:white;color:#24284b;padding:8px 14px;cursor:pointer}
+  button:hover{background:#eff0fa}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #4f5fd9;outline-offset:2px}
+  .primary{background:#414fbe;color:white;border-color:#414fbe;font-weight:700}.primary:hover{background:#303d9d}
+  .actions,.cycle{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px}
+  [aria-pressed="true"]{background:#eceeff;border-color:#414fbe;color:#303d9d;font-weight:700}
+  .card{border:1px solid #dce0ef;border-radius:12px;padding:14px;margin:14px 0}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  label{display:block;font-weight:600;margin:8px 0}input:not([type=radio]),select{display:block;width:100%;min-height:44px;border:1px solid #aab2d0;border-radius:8px;padding:8px;background:#fff;color:inherit}
+  fieldset{border:0;padding:0;margin:14px 0}legend{font-weight:700}.choice{border:1px solid #dce0ef;border-radius:10px;padding:10px;margin:0;cursor:pointer}.choice span{display:block;font-weight:400}
+  .status{font-size:14px;color:#303d9d;margin:10px 0}.status:empty{display:none}
+  @media(max-width:480px){.grid{grid-template-columns:1fr}header{align-items:flex-start}}
+</style>
+<header><strong>SISKOP</strong><button data-go="resume">Lanjutkan pendaftaran</button></header>
+<main>
+  <small>Mockup interaktif · data contoh · tanpa pengiriman data</small>
+  <section class="panel" id="landing">
+    <h1 tabindex="-1">Daftarkan koperasi Anda</h1>
+    <p>Pilih paket dan periode tagihan untuk memulai.</p>
+    <div class="cycle" role="group" aria-label="Periode tagihan">
+      <button data-cycle="Bulanan" aria-pressed="true">Bulanan</button>
+      <button data-cycle="Tahunan" aria-pressed="false">Tahunan</button>
+    </div>
+    <div class="card" aria-live="polite">
+      <label for="plan">Paket contoh</label>
+      <select id="plan"><option>Gratis</option><option>Medium</option></select>
+      <p id="billing">Ditagihkan setiap bulan untuk paket berbayar.</p>
+    </div>
+    <button class="primary" data-go="cooperative">Daftar dengan paket ini</button>
+    <p>Sudah mendaftar? Gunakan tombol <strong>Lanjutkan pendaftaran</strong>.</p>
+  </section>
+  <section class="panel" id="cooperative" hidden>
+    <div class="steps">Langkah 1 dari 3 · Data koperasi</div>
+    <h1 tabindex="-1">Lengkapi data koperasi</h1>
+    <div class="card">
+      <h2>Isi dari foto dokumen</h2>
+      <p>Foto KTP pengurus mengisi nama dan NIK. Foto dokumen badan hukum mengisi data koperasi. Periksa setiap hasil sebelum lanjut.</p>
+      <div class="actions"><button id="scan-ktp">Coba foto KTP contoh</button><button id="scan-coop">Coba dokumen koperasi contoh</button></div>
+      <div id="scan-status" class="status" role="status"></div>
+    </div>
+    <div class="grid">
+      <label>Nama pengurus<input id="admin" placeholder="Contoh nama pengurus"></label>
+      <label>NIK pengurus<input id="nik" placeholder="NIK contoh disamarkan" readonly></label>
+      <label>Nama koperasi<input id="coop" placeholder="Contoh nama koperasi"></label>
+      <label>Nomor badan hukum<input id="legal" placeholder="Contoh nomor badan hukum"></label>
+      <label>Prinsip operasional<select><option>Konvensional</option><option>Syariah</option></select></label>
+      <label>Alamat koperasi<input id="address" placeholder="Contoh alamat koperasi"></label>
+    </div>
+    <fieldset><legend>Jenis koperasi</legend><div class="grid">
+      <label class="choice"><input type="radio" name="type" value="KSP" checked> KSP <span>Koperasi Simpan Pinjam</span></label>
+      <label class="choice"><input type="radio" name="type" value="KSU"> KSU <span>Koperasi Serba Usaha</span></label>
+    </div></fieldset>
+    <div class="actions">
+      <button data-go="landing">Kembali</button><button class="primary" data-go="verify">Lanjut ke pengecekan</button>
+    </div>
+  </section>
+  <section class="panel" id="verify" hidden>
+    <div class="steps">Langkah 2 dari 3 · Pengecekan</div>
+    <h1 tabindex="-1">Periksa NIK dan koperasi</h1>
+    <p>Simulasikan hasil pengecekan untuk melihat pilihan selanjutnya.</p>
+    <label>Hasil pengecekan contoh<select id="outcome">
+      <option value="pass">Data sesuai</option><option value="fix">Data perlu diperiksa</option><option value="resume">Pendaftaran sudah dimulai</option><option value="retry">Pengecekan sementara gagal</option>
+    </select></label>
+    <div id="check-status" class="card" role="status"></div>
+    <div class="actions"><button data-go="cooperative">Kembali ke data</button><button class="primary" id="check-next">Lanjut ke akun</button></div>
+  </section>
+  <section class="panel" id="account" hidden>
+    <div class="steps">Langkah 3 dari 3 · Akun & ringkasan</div>
+    <h1 tabindex="-1">Buat akun pengurus</h1>
+    <p>Gunakan email atau akun Google untuk menyelesaikan pendaftaran.</p>
+    <div class="card"><h2>Paket pilihan Anda</h2><p id="summary"></p><button data-go="landing">Ubah paket atau periode</button></div>
+    <label>Metode akun contoh<select id="method"><option>Email dan kata sandi</option><option>Google</option></select></label>
+    <p>Untuk paket berbayar, total tagihan dan pajak ditampilkan sebelum konfirmasi.</p>
+    <div class="actions"><button data-go="verify">Kembali</button><button id="finish" class="primary">Simulasikan penyelesaian</button></div>
+    <p id="finish-status" class="status" role="status"></p>
+  </section>
+  <section class="panel" id="resume" hidden>
+    <h1 tabindex="-1">Lanjutkan pendaftaran</h1>
+    <p>Masuk dengan akun yang Anda gunakan saat mendaftar untuk melanjutkan pembayaran.</p>
+    <div class="actions"><button data-go="landing">Kembali ke pilihan paket</button><button id="resume-demo" class="primary">Lihat contoh kelanjutan</button></div>
+    <p id="resume-status" class="status" role="status"></p>
+  </section>
+</main>
+<script>
+  const el = id => document.getElementById(id);
+  const screens = [...document.querySelectorAll("main > section")];
+  let cycle = "Bulanan";
+  let editingPlan = false;
+  function go(id) {
+    screens.forEach(screen => { screen.hidden = screen.id !== id; });
+    el("summary").textContent = [el("plan").value, cycle, document.querySelector('input[name="type"]:checked').value].join(" · ");
+    el(id).querySelector("h1").focus();
+  }
+  document.querySelectorAll("[data-go]").forEach(button => button.onclick = () => {
+    const target = button.dataset.go;
+    if (button.closest("#account") && target === "landing") editingPlan = true;
+    if (button.closest("#landing") && target === "cooperative" && editingPlan) {
+      editingPlan = false;
+      return go("account");
+    }
+    go(target);
+  });
+  document.querySelectorAll("[data-cycle]").forEach(button => button.onclick = () => {
+    cycle = button.dataset.cycle;
+    document.querySelectorAll("[data-cycle]").forEach(item => item.setAttribute("aria-pressed", item === button));
+    el("billing").textContent = cycle === "Bulanan" ? "Ditagihkan setiap bulan untuk paket berbayar." : "Ditagihkan sekaligus untuk 12 bulan pada paket berbayar.";
+  });
+  el("scan-ktp").onclick = () => {
+    el("admin").value = "Pengurus Contoh";
+    el("nik").value = "•••• •••• •••• 0000";
+    el("scan-status").textContent = "Nama dan NIK contoh sudah terisi. Periksa kembali hasil pembacaan.";
+  };
+  el("scan-coop").onclick = () => {
+    el("coop").value = "Koperasi Contoh";
+    el("legal").value = "DOKUMEN-CONTOH";
+    el("address").value = "Alamat Contoh";
+    el("scan-status").textContent = "Data koperasi contoh sudah terisi. Periksa kembali hasil pembacaan.";
+  };
+  const outcomes = {
+    pass: ["Contoh: NIK pengurus dan nomor badan hukum sesuai.", "Lanjut ke akun", "account"],
+    fix: ["Contoh: periksa kembali NIK pengurus dan nomor badan hukum.", "Perbaiki data", "cooperative"],
+    resume: ["Pendaftaran mungkin sudah dimulai. Masuk dengan akun Anda untuk memeriksa status.", "Lanjutkan pendaftaran", "resume"],
+    retry: ["Pengecekan belum dapat diselesaikan. Coba lagi tanpa mengisi ulang data.", "Coba lagi", "verify"]
+  };
+  function showOutcome() {
+    const [message, label, target] = outcomes[el("outcome").value];
+    el("check-status").textContent = message;
+    el("check-next").textContent = label;
+    el("check-next").onclick = () => {
+      if (target === "verify") {
+        el("outcome").value = "pass";
+        showOutcome();
+      } else go(target);
+    };
+  }
+  el("outcome").onchange = showOutcome;
+  showOutcome();
+  el("finish").onclick = () => {
+    el("finish-status").textContent = el("plan").value === "Gratis" ? "Simulasi: akun siap dibuat." : "Simulasi: tagihan siap ditampilkan.";
+  };
+  el("resume-demo").onclick = () => { el("resume-status").textContent = "Simulasi: setelah masuk, rincian tagihan Anda ditampilkan."; };
+</script>
+</html>

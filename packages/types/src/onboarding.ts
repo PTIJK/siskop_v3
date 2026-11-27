@@ -11,7 +11,19 @@ export type OnboardingRegistration = Omit<RegisterTenantRequest, "adminEmail" | 
   idToken: string;
   /** Optional partner code; the server rejects one that is unknown or inactive. */
   referralCode?: string;
+  cooperativeNik?: string;
 };
+
+export interface CooperativeRegistryMatch {
+  name: string;
+  registrationNo: string;
+}
+
+export function matchesCooperativeRegistry(record: CooperativeRegistryMatch, name: string, registrationNo: string): boolean {
+  const normalize = (value: string) => value.trim().toUpperCase().replace(/\s+/g, " ");
+  const legalNo = (value: string) => normalize(value).replace(/\s*([/.-])\s*/g, "$1");
+  return normalize(record.name) === normalize(name) && legalNo(record.registrationNo) === legalNo(registrationNo);
+}
 
 export interface FirebaseSignInRequest {
   idToken: string;
@@ -30,6 +42,7 @@ export interface RegistrationInvoice {
 
 /** Where a new koperasi's registration stands. Free registrations are ACTIVE at once. */
 export interface RegistrationStatus {
+  odsVerifiedAt?: string | null;
   tenantName: string;
   slug: string;
   status: "PENDING_PAYMENT" | "ACTIVE" | "PAST_DUE" | "CANCELLED";

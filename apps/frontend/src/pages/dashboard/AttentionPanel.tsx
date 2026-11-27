@@ -25,11 +25,11 @@ function Task({ item }: { item: AttentionItem }) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2">
-          <h3 className="text-[14px] font-extrabold leading-tight">{item.title}</h3>
-          <span className={cn("text-[12px] font-bold", TONE_TILE[item.tone].split(" ")[1])}>{TONE_WORD[item.tone]}</span>
+          <h3 className="text-[15.5px] font-extrabold leading-tight">{item.title}</h3>
+          <span className={cn("text-[13px] font-bold", TONE_TILE[item.tone].split(" ")[1])}>{TONE_WORD[item.tone]}</span>
         </div>
-        <p className="mt-0.5 text-[12.5px] leading-snug text-hero-muted">{item.detail}</p>
-        <Button asChild size="sm" variant="outline" className="mt-1.5">
+        <p className="mt-0.5 text-[14px] leading-snug text-hero-muted">{item.detail}</p>
+        <Button asChild size="sm" variant="outline" className="mt-2">
           <Link to={item.to}>
             {item.actionLabel}
             <ArrowRight aria-hidden="true" />

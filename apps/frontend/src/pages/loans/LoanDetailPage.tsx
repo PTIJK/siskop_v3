@@ -1,3 +1,4 @@
+import { RupiahInput } from "@/components/ui/rupiah-input";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -286,12 +287,12 @@ export function LoanDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Nominal Bayar</Label>
-              <Input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} min="1" />
+              <Label htmlFor="loan-payment-amount">Nominal bayar (Rp)</Label>
+              <RupiahInput id="loan-payment-amount" value={payAmount} onValueChange={setPayAmount} />
             </div>
             <div className="space-y-1.5">
-              <Label>Denda (jika ada)</Label>
-              <Input type="number" value={penalty} onChange={(e) => setPenalty(e.target.value)} min="0" />
+              <Label htmlFor="loan-late-fee">Denda (Rp, jika ada)</Label>
+              <RupiahInput id="loan-late-fee" value={penalty} onValueChange={setPenalty} />
             </div>
             <div className="space-y-1.5">
               <Label>Tanggal Bayar</Label>

@@ -1,9 +1,10 @@
-import { useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Settings } from "lucide-react";
+import { ChevronDown, ChevronRight, Landmark, Monitor, Settings, ShieldCheck, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SavingConfigsTab } from "./SavingConfigsTab";
 import { LoanConfigsTab } from "./LoanConfigsTab";
@@ -22,11 +23,11 @@ import { WorkspaceDomainSettings } from "@/features/workspace-domain/WorkspaceDo
 
 type GroupId = "koperasi" | "akuntansi" | "akses" | "tampilan";
 
-const GROUP_LABEL: Record<GroupId, string> = {
-  koperasi: "Koperasi",
-  akuntansi: "Akuntansi",
-  akses: "Akses dan keamanan",
-  tampilan: "Tampilan dan alamat"
+const GROUPS = {
+  koperasi: { label: "Operasional koperasi", icon: Landmark },
+  akuntansi: { label: "Pembukuan", icon: Wallet },
+  akses: { label: "Akses dan keamanan", icon: ShieldCheck },
+  tampilan: { label: "Tampilan dan alamat", icon: Monitor }
 };
 const GROUP_ORDER: readonly GroupId[] = ["koperasi", "akuntansi", "akses", "tampilan"];
 
@@ -38,13 +39,15 @@ const GROUP_ORDER: readonly GroupId[] = ["koperasi", "akuntansi", "akses", "tamp
 export function ConfigPage() {
   const { can } = usePermissions();
   const [params, setParams] = useSearchParams();
+  const [savingActions, setSavingActions] = useState<HTMLDivElement | null>(null);
+  const setup = useOutletContext<{ tab: string; refreshSetup: () => Promise<void> } | undefined>();
 
   const sections = [
-    { value: "savings", group: "koperasi" as const, label: "Simpanan", show: can("config", "read") || can("savings", "read"), content: <SavingConfigsTab /> },
-    { value: "loans", group: "koperasi" as const, label: "Pinjaman", show: can("config", "read") || can("loans", "read"), content: <LoanConfigsTab /> },
+    { value: "savings", group: "koperasi" as const, label: "Simpanan", show: can("config", "read") || can("savings", "read"), content: <SavingConfigsTab actionsTarget={savingActions} onSetupSaved={setup?.tab === "savings" ? setup.refreshSetup : undefined} /> },
+    { value: "loans", group: "koperasi" as const, label: "Pinjaman", show: can("config", "read") || can("loans", "read"), content: <LoanConfigsTab onSetupSaved={setup?.tab === "loans" ? setup.refreshSetup : undefined} /> },
     { value: "units", group: "koperasi" as const, label: "Unit koperasi", show: can("config", "read"), content: <UnitsTab /> },
     { value: "calendar", group: "koperasi" as const, label: "Hari libur", show: can("config", "read"), content: <OperatingCalendarTab /> },
-    { value: "modal-disetor", group: "koperasi" as const, label: "Modal disetor", show: can("config", "read"), content: <ModalDisetorConfigTab /> },
+    { value: "modal-disetor", group: "koperasi" as const, label: "Modal disetor", show: can("config", "read"), content: <ModalDisetorConfigTab onSetupSaved={setup?.tab === "modal-disetor" ? setup.refreshSetup : undefined} /> },
     { value: "self-registration", group: "koperasi" as const, label: "Pendaftaran mandiri", show: can("config", "read"), content: <SelfRegistrationConfigTab /> },
     { value: "accounts", group: "akuntansi" as const, label: "Chart of Accounts", show: can("accounting", "read"), content: <AccountsTab /> },
     { value: "mappings", group: "akuntansi" as const, label: "Pemetaan akun", show: can("accounting", "read"), content: <AccountMappingsTab /> },
@@ -67,57 +70,70 @@ export function ConfigPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Pengaturan" description="Simpanan, pinjaman, unit, akuntansi, akses pengguna, dan tampilan koperasi." />
+      <PageHeader
+        title="Pengaturan"
+        description="Kelola operasional, pembukuan, dan akses workspace koperasi."
+        actions={active === "savings" && can("config", "update") ? <div ref={setSavingActions} /> : undefined}
+      />
 
       {sections.length === 0 ? (
         <EmptyState icon={Settings} title="Anda tidak memiliki akses ke pengaturan apa pun" description="Hubungi manajer jika Anda perlu mengubah pengaturan koperasi." />
       ) : (
-        <Tabs value={active} onValueChange={select} orientation="vertical" className="grid items-start gap-5 min-[901px]:grid-cols-[220px_minmax(0,1fr)]">
-          {/* Phone and tablet: one native picker instead of a long column. */}
-          <div className="min-[901px]:hidden">
+        <Tabs value={active} onValueChange={select} orientation="vertical" activationMode="manual" className="grid items-start gap-4 min-[1080px]:grid-cols-[240px_minmax(0,1fr)] min-[1080px]:gap-6">
+          <div className="min-[1080px]:hidden">
             <label htmlFor="config-section" className="mb-1.5 block text-[13px] font-bold">
               Bagian pengaturan
             </label>
-            <select
-              id="config-section"
-              value={active}
-              onChange={(e) => select(e.target.value)}
-              className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {GROUP_ORDER.map((group) => {
-                const items = sections.filter((s) => s.group === group);
-                return items.length === 0 ? null : (
-                  <optgroup key={group} label={GROUP_LABEL[group]}>
-                    {items.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                );
-              })}
-            </select>
+            <div className="relative">
+              <select
+                id="config-section"
+                data-setup-target={setup ? "tab-select" : undefined}
+                value={active}
+                onChange={(e) => select(e.target.value)}
+                className={cn("h-11 w-full appearance-none rounded-lg border border-input bg-card pl-3 pr-10 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  setup && active !== setup.tab && "ring-2 ring-primary")}
+              >
+                {GROUP_ORDER.map((group) => {
+                  const items = sections.filter((s) => s.group === group);
+                  return items.length === 0 ? null : (
+                    <optgroup key={group} label={GROUPS[group].label}>
+                      {items.map((s) => (
+                        <option key={s.value} value={s.value} disabled={Boolean(setup && s.value !== setup.tab)}>
+                          {s.label}{setup?.tab === s.value ? " (panduan)" : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            </div>
           </div>
 
-          <TabsList aria-label="Bagian pengaturan" className="hidden h-auto w-full flex-col items-stretch justify-start gap-0.5 bg-transparent p-0 min-[901px]:sticky min-[901px]:top-[84px] min-[901px]:flex">
+          <TabsList aria-label="Bagian pengaturan" className="hidden h-auto max-h-[calc(100dvh-106px)] w-full flex-col items-stretch justify-start gap-3 overflow-y-auto overscroll-contain rounded-2xl border border-border bg-card p-2.5 min-[1080px]:sticky min-[1080px]:top-[84px] min-[1080px]:flex">
             {GROUP_ORDER.map((group) => {
               const items = sections.filter((s) => s.group === group);
               if (items.length === 0) return null;
+              const { icon: Icon, label } = GROUPS[group];
               return (
-                <div key={group} role="presentation" className="flex flex-col gap-0.5 pb-3">
-                  <p role="presentation" className="px-3 pb-1 text-xs font-bold text-muted-foreground">
-                    {GROUP_LABEL[group]}
-                  </p>
+                <div key={group} role="group" aria-label={label} className="flex shrink-0 flex-col gap-0.5 border-b border-border pb-3 last:border-0 last:pb-0">
+                  <div aria-hidden="true" className="flex items-center gap-2 px-2.5 pb-1.5 pt-1 text-xs font-bold text-muted-foreground">
+                    <Icon className="size-4" />
+                    {label}
+                  </div>
                   {items.map((s) => (
                     <TabsTrigger
                       key={s.value}
                       value={s.value}
+                      data-setup-target={setup?.tab === s.value ? "tab" : undefined}
                       className={cn(
-                        "w-full justify-start rounded-[10px] px-3 py-2 text-left text-[13.5px] font-semibold text-foreground shadow-none transition-colors hover:bg-sidebar-active/70",
-                        "data-[state=active]:bg-sidebar-active data-[state=active]:shadow-[inset_3px_0_0_hsl(var(--primary))]"
+                        "group w-full justify-between gap-2 whitespace-normal rounded-lg px-2.5 py-2 text-left font-semibold shadow-none hover:bg-muted",
+                        "data-[state=active]:bg-accent data-[state=active]:font-bold data-[state=active]:text-accent-foreground data-[state=active]:shadow-none",
+                        setup?.tab === s.value && "bg-accent text-accent-foreground ring-2 ring-inset ring-primary"
                       )}
                     >
-                      {s.label}
+                      <span>{s.label}</span>
+                      <ChevronRight className="size-4 shrink-0 opacity-0 group-data-[state=active]:opacity-100" aria-hidden="true" />
                     </TabsTrigger>
                   ))}
                 </div>
@@ -127,7 +143,7 @@ export function ConfigPage() {
 
           <div className="min-w-0">
             {sections.map((s) => (
-              <TabsContent key={s.value} value={s.value} className="mt-0">
+              <TabsContent key={s.value} value={s.value} aria-label={s.label} className="mt-0">
                 {s.content}
               </TabsContent>
             ))}

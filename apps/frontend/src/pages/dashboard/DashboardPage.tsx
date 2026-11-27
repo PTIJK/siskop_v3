@@ -19,6 +19,7 @@ import { formatAngkaRingkas, formatRupiah, formatRupiahRingkas } from "@/lib/for
 import { buildAiSuggestions, type SuggestionTone } from "@/lib/aiSuggestions";
 import { ALL_UNITS } from "@/lib/unit";
 import { useUnitScope } from "@/stores/unit-scope";
+import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatCard } from "@/components/shared/StatCard";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -168,7 +169,11 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Beranda" description="Yang perlu diputuskan hari ini, lalu ringkasan keadaan koperasi." />
+      <PageHeader
+        title="Beranda"
+        description="Yang perlu diputuskan hari ini, lalu ringkasan keadaan koperasi."
+        actions={summaryQuery.data?.odsVerifiedAt ? <Badge variant="ok">Terverifikasi di ODS</Badge> : undefined}
+      />
 
       <div className="grid grid-cols-1 gap-4 min-[1181px]:grid-cols-[5fr_7fr]">
         <AttentionPanel

@@ -31,8 +31,8 @@ export async function listSavingConfigs(tenantId: string) {
 
 export async function createSavingConfig(tenantId: string, data: CreateSavingConfigInput) {
   validateRegulatoryRate("SAVING", data.rate);
-  return withQuota(tenantId, "SAVING_TYPES", (tx) =>
-    tx.savingConfig.create({
+  return withQuota(tenantId, "SAVING_TYPES", async (tx) => {
+    const config = await tx.savingConfig.create({
       data: {
         tenantId,
         name: data.name,
@@ -43,8 +43,10 @@ export async function createSavingConfig(tenantId: string, data: CreateSavingCon
         isDefault: false,
         isActive: true
       }
-    })
-  );
+    });
+    await tx.tenant.updateMany({ where: { id: tenantId, setupStep: "SAVINGS" }, data: { setupStep: "LOANS" } });
+    return config;
+  });
 }
 
 export async function updateSavingConfig(tenantId: string, id: string, data: UpdateSavingConfigInput) {

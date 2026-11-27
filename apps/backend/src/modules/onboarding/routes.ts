@@ -4,6 +4,7 @@ import { handle, limiter, publicJsonGuard } from "../../lib/public-guards.js";
 import { clearRefreshCookie, setRefreshCookie } from "../auth/refresh-cookie.js";
 import { selectionEnabled } from "../tenant-access/config.js";
 import { clearRegistrationCookie, setRegistrationCookie, tenantFromRegistrationCookie } from "./cookie.js";
+import { cooperativeNikSchema, lookupCooperative } from "./ods.js";
 import { checkReferralCode, firebaseSignIn, register, status } from "./service.js";
 
 /**
@@ -14,6 +15,24 @@ import { checkReferralCode, firebaseSignIn, register, status } from "./service.j
 export function onboardingRoutes(): Router {
   const router = Router();
   router.use(...publicJsonGuard());
+
+  router.post(
+    "/cooperative-registry",
+    limiter(12),
+    handle(async (req, res) => {
+      const nik = cooperativeNikSchema.parse(req.body?.nik);
+      try {
+        const match = await lookupCooperative(nik);
+        res.json({ success: true, data: { match }, meta: res.locals.meta });
+      } catch {
+        res.status(503).json({
+          success: false,
+          error: { code: "INTERNAL_ERROR", message: "ODS Koperasi belum dapat dihubungi. Coba lagi atau lanjutkan pendaftaran." },
+          meta: res.locals.meta
+        });
+      }
+    })
+  );
 
   router.post(
     "/register",
