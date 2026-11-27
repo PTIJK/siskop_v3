@@ -5,8 +5,12 @@ import { AppLayout } from "./AppLayout";
 
 vi.mock("react-router-dom", () => ({
   useLocation: () => ({ pathname: "/members", search: "" }),
+  useNavigate: () => vi.fn(),
   Navigate: () => null,
   Outlet: () => { throw new Promise(() => {}); }
+}));
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: () => ({ data: undefined, isPending: false, refetch: vi.fn() })
 }));
 vi.mock("@/stores/auth", () => ({
   useAuth: (select: (state: { user: { role: string } }) => unknown) => select({ user: { role: "admin" } })
