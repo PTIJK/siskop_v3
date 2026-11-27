@@ -28,20 +28,55 @@ let refreshPromise: Promise<string> | null = null;
  * memory (see stores/auth.ts), a page reload has none, and this is what
  * restores the session from the cookie without redirecting to /login first.
  */
+const REFRESH_TIMEOUT_MS = 4000;
+const REFRESH_MAX_ATTEMPTS = 3;
+
+function backoffDelay(attempt: number): number {
+  const base = 400 * 2 ** attempt;
+  const jitter = Math.floor(Math.random() * 250);
+  return base + jitter;
+}
+
 export async function refreshAccessToken(): Promise<string> {
   refreshPromise ??= (async () => {
-    const res = await fetch("/api/auth/refresh", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" }
-    });
-    const body = (await res.json()) as ApiResponse<{ accessToken: string }>;
-    if (!res.ok || !body.success || body.data === undefined) {
-      throw new ApiRequestError(body.error?.message ?? "Session expired", body.error?.code ?? "UNAUTHORIZED", res.status);
-    }
+    let lastError: unknown;
+    for (let attempt = 0; attempt < REFRESH_MAX_ATTEMPTS; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
+      try {
+        const res = await fetch("/api/auth/refresh", {
+          method: "POST",
+          credentials: "include",
+          signal: controller.signal,
+          headers: { "Content-Type": "application/json" }
+        });
+        const body = (await res.json()) as ApiResponse<{ accessToken: string }>;
+        if (!res.ok || !body.success || body.data === undefined) {
+          const err = new ApiRequestError(
+            body.error?.message ?? "Session expired",
+            body.error?.code ?? "UNAUTHORIZED",
+            res.status
+          );
+          // Real auth failure (401/403) — fail fast, do not retry.
+          if (res.status === 401 || res.status === 403) throw err;
+          throw err;
+        }
 
-    useAuth.getState().setAccessToken(body.data.accessToken);
-    return body.data.accessToken;
+        useAuth.getState().setAccessToken(body.data.accessToken);
+        return body.data.accessToken;
+      } catch (err) {
+        lastError = err;
+        if (err instanceof ApiRequestError && (err.status === 401 || err.status === 403)) {
+          throw err;
+        }
+        if (attempt < REFRESH_MAX_ATTEMPTS - 1) {
+          await new Promise((resolve) => setTimeout(resolve, backoffDelay(attempt)));
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw lastError;
   })().finally(() => {
     refreshPromise = null;
   });
@@ -51,12 +86,8 @@ export async function refreshAccessToken(): Promise<string> {
 
 /**
  * Retries once with a refreshed token on a 401; falls through to the original
- * response on any other failure. Also covers a *missing* token (not just a
- * rejected one) — the access token lives only in memory (stores/auth.ts), so
- * it's always null right after a page reload, and the app deliberately
- * doesn't block rendering on a separate bootstrap step waiting for one (see
- * AppLayout.tsx): the first query fired with no token yet just 401s here and
- * transparently refreshes-and-retries, same as a token that expired mid-session.
+ * response on any other failure. Pre-refreshes when the in-memory token is
+ * missing after a reload so requests don't fire a burst of 401s.
  */
 async function withAuthRetry(
   path: string,
@@ -66,8 +97,11 @@ async function withAuthRetry(
   if (!token && !NO_REFRESH_PATHS.includes(path) && useAuth.getState().user) {
     try {
       token = await refreshAccessToken();
-    } catch {
-      // Let the request run so a dead session still clears auth below.
+    } catch (err) {
+      if (err instanceof ApiRequestError && (err.status === 401 || err.status === 403)) {
+        useAuth.getState().clear();
+      }
+      throw err;
     }
   }
   const res = await doRequest(token);
@@ -79,23 +113,40 @@ async function withAuthRetry(
   try {
     const newToken = await refreshAccessToken();
     return await doRequest(newToken);
-  } catch {
-    useAuth.getState().clear();
-    return res;
+  } catch (err) {
+    if (err instanceof ApiRequestError && (err.status === 401 || err.status === 403)) {
+      useAuth.getState().clear();
+      return res;
+    }
+    // Network drop or timeout during refresh: fail this request, keep the session.
+    throw err;
   }
 }
 
+const REQUEST_TIMEOUT_MS = 15000;
+
 async function envelope<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
-  const res = await withAuthRetry(path, (token) =>
-    fetch(`/api${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(init.headers ?? {})
-      }
-    })
-  );
+  const res = await withAuthRetry(path, async (token) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const onCallerAbort = () => controller.abort();
+    if (init.signal?.aborted) controller.abort();
+    init.signal?.addEventListener("abort", onCallerAbort, { once: true });
+    try {
+      return await fetch(`/api${path}`, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(init.headers ?? {})
+        }
+      });
+    } finally {
+      clearTimeout(timer);
+      init.signal?.removeEventListener("abort", onCallerAbort);
+    }
+  });
 
   const body = (await res.json()) as ApiResponse<T>;
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiFetchPage } from "@/api/client";
 import { formatRupiah } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -10,8 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronRight, PiggyBank } from "lucide-react";
-import { appendPage } from "@/components/shared/directory-pagination";
-import { draftAmount, useFinancialDraftRows, type FinancialListRow } from "@/pages/rat/FinancialDraftRows";
 import type { MemberSavingsSummary } from "@siskop/types";
 
 const LIMIT = 20;
@@ -25,6 +23,7 @@ export function SavingsPage() {
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["savings", { page, search, typeFilter }],
+    placeholderData: keepPreviousData,
     queryFn: () =>
       apiFetchPage<MemberSavingsSummary[]>(
         `/savings/by-member?page=${page}&limit=${LIMIT}${search ? `&search=${encodeURIComponent(search)}` : ""}${
@@ -33,40 +32,33 @@ export function SavingsPage() {
       )
   });
 
-  const draft = useFinancialDraftRows("saving", !typeFilter, search);
   const live = data?.items ?? [];
   const total = data?.meta.total ?? 0;
-  const rows: FinancialListRow<MemberSavingsSummary>[] = [
-    ...live.map((row) => ({ live: row })),
-    ...appendPage(draft.rows, total, live.length, page, LIMIT).map((row) => ({ draft: row }))
-  ];
-  const columns: ColumnDef<FinancialListRow<MemberSavingsSummary>>[] = [
+  const columns: ColumnDef<MemberSavingsSummary>[] = [
     {
       header: "Anggota",
-      cell: ({ row: { original } }) => original.draft ? (
-        <div><p className="font-medium">{original.draft.name}</p><p className="font-mono text-xs text-muted-foreground">{original.draft.ownerRef}</p></div>
-      ) : (
+      cell: ({ row: { original } }) => (
         <div>
           <button
             type="button"
             className="font-medium hover:underline"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/members/${original.live.memberId}`);
+              navigate(`/members/${original.memberId}`);
             }}
           >
-            {original.live.fullName}
+            {original.fullName}
           </button>
-          <p className="font-mono text-xs text-muted-foreground">{original.live.memberNumber}</p>
+          <p className="font-mono text-xs text-muted-foreground">{original.memberNumber}</p>
         </div>
       )
     },
-    { header: "No. Rekening", cell: ({ row }) => <span className="font-mono text-xs">{row.original.live?.accountNumber}</span> },
+    { header: "No. Rekening", cell: ({ row }) => <span className="font-mono text-xs">{row.original.accountNumber}</span> },
     {
       header: "Rekening Simpanan",
-      cell: ({ row: { original } }) => original.draft ? draft.productName(original.draft) : (
+      cell: ({ row: { original } }) => (
         <div className="flex flex-wrap gap-1">
-          {original.live.savings.map((s) => (
+          {original.savings.map((s) => (
             <Badge key={s.id} variant="secondary" className="text-xs">
               {s.type}
             </Badge>
@@ -77,15 +69,9 @@ export function SavingsPage() {
     {
       header: "Total Saldo",
       className: "text-right",
-      cell: ({ row: { original } }) => <span className="font-semibold">{original.draft
-        ? draftAmount(original.draft, "balance") : formatRupiah(original.live.totalBalance)}</span>
+      cell: ({ row: { original } }) => <span className="font-semibold">{formatRupiah(original.totalBalance)}</span>
     }
   ];
-
-  if (draft.enabled || live.some((member) => member.identityUnverified)) {
-    columns.push({ header: "Status", cell: ({ row }) => (row.original.draft || row.original.live?.identityUnverified) ? draft.status : null },
-      { header: "Aksi", cell: ({ row }) => row.original.draft ? draft.action(row.original.draft) : null });
-  }
   const renderAccounts = (row: MemberSavingsSummary) => (
     <ul className="divide-y">
       {row.savings.map((s) => (
@@ -145,28 +131,26 @@ export function SavingsPage() {
         </Select>
       </div>
 
-      {draft.editor}
       <DataTable
         label="Daftar simpanan"
         columns={columns}
-        data={rows}
-        isLoading={isPending || draft.loading}
-        isError={isError || Boolean(draft.error)}
-        errorMessage={(error ?? draft.error)?.message}
-        onRetry={() => { void refetch(); draft.refetch(); }}
+        data={live}
+        isLoading={isPending}
+        isError={isError}
+        errorMessage={error?.message}
+        onRetry={() => { void refetch(); }}
         search={{
           value: search,
           onChange: (v) => {
             setSearch(v);
             setPage(1);
           },
-          placeholder: draft.enabled ? "Cari nama atau ID anggota..." : "Cari nama anggota..."
+          placeholder: "Cari nama anggota..."
         }}
-        pagination={{ page, limit: LIMIT, total: total + draft.rows.length, onPageChange: setPage }}
-        getRowKey={(row) => row.draft ? "rat-" + row.draft.sourceRow : row.live.memberId}
-        canExpandRow={(row) => Boolean(row.live)}
-        onRowClick={(row) => { if (row.draft) draft.open(row.draft); }}
-        renderExpanded={(row) => row.live ? renderAccounts(row.live) : null}
+        pagination={{ page, limit: LIMIT, total, onPageChange: setPage }}
+        getRowKey={(row) => row.memberId}
+        canExpandRow={() => true}
+        renderExpanded={renderAccounts}
         emptyMessage="Belum ada rekening simpanan"
       />
     </div>

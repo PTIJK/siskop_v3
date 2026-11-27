@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { LoanConfig } from "@siskop/types";
 import { apiFetch, apiFetchPage } from "@/api/client";
 import { formatRupiah } from "@/lib/format";
@@ -45,6 +45,7 @@ function LoansTable({
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["loans", { page, search, status, loanConfigId }],
+    placeholderData: keepPreviousData,
     queryFn: () =>
       apiFetchPage<LoanRow[]>(
         `/loans?page=${page}&limit=${LIMIT}${search ? `&search=${encodeURIComponent(search)}` : ""}${

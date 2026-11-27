@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider, hydrate } from "@tanstack/react-query
 import App from "./App";
 import { WorkspaceBoundary } from "./features/workspace-domain/WorkspaceBoundary";
 import "./index.css";
-import { applyTheme, followSystemTheme, resolveTheme } from "./lib/theme";
+import { followSystemTheme, syncRouteTheme } from "./lib/theme";
 import { initAnalytics } from "./lib/analytics";
 import { workspaceSlug } from "./features/onboarding/workspace";
 
@@ -12,7 +12,7 @@ import { workspaceSlug } from "./features/onboarding/workspace";
 if (workspaceSlug() === null) initAnalytics();
 
 // Before first paint, so a dark-theme user never sees a white flash.
-applyTheme(resolveTheme());
+syncRouteTheme(window.location.pathname);
 followSystemTheme();
 
 const queryClient = new QueryClient({
@@ -41,3 +41,5 @@ if (prerendered) {
   rootElement.textContent = "";
   ReactDOM.createRoot(rootElement).render(app);
 }
+// Set by public/theme-init.js so the prerendered landing page never flashes on other routes.
+document.documentElement.removeAttribute("data-boot");

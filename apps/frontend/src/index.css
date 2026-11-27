@@ -118,6 +118,10 @@
     @apply bg-background text-foreground;
     line-height: 1.55;
   }
+  /* public/theme-init.js: hide the prerendered landing page off "/" until main.tsx clears #root. */
+  html[data-boot] #root {
+    visibility: hidden;
+  }
   .bg-brand-gradient {
     background: var(--brand-gradient);
   }
