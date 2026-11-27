@@ -56,6 +56,7 @@ const MarketPage = lazy(() =>
 const ConfigPage = lazy(() =>
   import("@/pages/config/ConfigPage").then((module) => ({ default: module.ConfigPage }))
 );
+const ExcelImportPage = lazy(() => import("@/pages/config/ExcelImportPage"));
 const SubscriptionPage = lazy(() =>
   import("@/pages/config/SubscriptionPage").then((module) => ({ default: module.SubscriptionPage }))
 );
@@ -221,6 +222,8 @@ export default function App() {
               <Route path='/journal/close' element={<YearClosePage />} />
 
               <Route path='/config' element={<ConfigPage />} />
+              <Route path='/impor-excel' element={<ExcelImportPage />} />
+              <Route path='/impor-excel/:id' element={<ExcelImportPage />} />
               <Route path='/langganan' element={<SubscriptionPage />} />
               <Route path='/profile' element={<ProfilePage />} />
 

@@ -781,6 +781,40 @@ model Tenant {
   kopkarRatPublications   KopkarRatPublication[]
   kopkarRatMemberCorrections KopkarRatMemberCorrection[]
   kopkarRatFinancialCorrections KopkarRatFinancialCorrection[]
+  excelImportDrafts       ExcelImportDraft[]
+  excelImportReceipts     ExcelImportReceipt[]
+}
+
+model ExcelImportDraft {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  fileName   String
+  fileHash   String
+  records    Json
+  counts     Json
+  balanceDates Json?
+  corrections Json?
+  limited    Boolean
+  createdAt  DateTime @default(now())
+  receipts   ExcelImportReceipt[]
+
+  @@unique([tenantId, fileHash])
+  @@index([tenantId, createdAt, id])
+}
+
+model ExcelImportReceipt {
+  id         String           @id @default(cuid())
+  tenantId   String
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  draftId    String
+  draft      ExcelImportDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  group      String
+  reviewKey  String
+  createdAt  DateTime         @default(now())
+  result     Json
+
+  @@unique([tenantId, draftId, reviewKey])
 }
 
 // A tenant's own non-collection day (public holiday, market closure). Loan

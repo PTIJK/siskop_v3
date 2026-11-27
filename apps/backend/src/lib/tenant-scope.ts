@@ -53,6 +53,8 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   "KopkarRatPublication",
   "KopkarRatMemberCorrection",
   "KopkarRatFinancialCorrection",
+  "ExcelImportDraft",
+  "ExcelImportReceipt",
   "TenantHoliday",
   // Koperasi pasar plan F2 — LoanPaymentAllocation deliberately NOT added,
   // same reasoning as POSSaleLine above (no tenantId column of its own).
