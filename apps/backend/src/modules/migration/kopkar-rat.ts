@@ -40,18 +40,32 @@ export async function getKopkarRatWorkbookFile(kind: KopkarRatFileKind) {
   return { name: file.name, bytes: Buffer.from(file.workbook) };
 }
 
-async function loadKopkarRat(kind: KopkarRatFileKind, tx: TxClient = db) {
-  const archive = await readArchive(kind, tx);
-  const files = archive.map(({ kind, name, sheetCount }) => ({ kind, name, sheetCount }));
-  if (!archive.length) return { files, wb: null, reviewNotes: [] };
-  const file = archive.find((entry) => entry.kind === kind);
-  if (!file?.workbook) throw new AppError(ErrorCode.NOT_FOUND, "File arsip tidak ditemukan");
+const archiveCache = new Map<KopkarRatFileKind, Promise<{ files: KopkarRatArchive["files"]; wb: ExcelJS.Workbook | null; reviewNotes: { sheet: string; row: number; note: string }[] }>>();
 
-  // Only the fixed, administrator-loaded Kopkar archive is read by these views.
-  if (file.workbook.byteLength > 1024 * 1024) throw new AppError(ErrorCode.MIGRATION_FILE_INVALID, "File arsip melebihi batas 1 MB");
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(Buffer.from(file.workbook) as unknown as ExcelJS.Buffer);
-  return { files, wb, reviewNotes: file.reviewNotes ?? [] };
+async function loadKopkarRat(kind: KopkarRatFileKind, tx: TxClient = db) {
+  const useCache = tx === db && process.env.NODE_ENV !== "test";
+  if (useCache) {
+    const cached = archiveCache.get(kind);
+    if (cached) return cached;
+  }
+  const promise = (async () => {
+    const archive = await readArchive(kind, tx);
+    const files = archive.map(({ kind, name, sheetCount }) => ({ kind, name, sheetCount }));
+    if (!archive.length) return { files, wb: null, reviewNotes: [] };
+    const file = archive.find((entry) => entry.kind === kind);
+    if (!file?.workbook) throw new AppError(ErrorCode.NOT_FOUND, "File arsip tidak ditemukan");
+
+    // Only the fixed, administrator-loaded Kopkar archive is read by these views.
+    if (file.workbook.byteLength > 1024 * 1024) throw new AppError(ErrorCode.MIGRATION_FILE_INVALID, "File arsip melebihi batas 1 MB");
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(file.workbook) as unknown as ExcelJS.Buffer);
+    return { files, wb, reviewNotes: file.reviewNotes ?? [] };
+  })();
+  if (useCache) {
+    archiveCache.set(kind, promise);
+    promise.then((res) => { if (!res.wb) archiveCache.delete(kind); }, () => archiveCache.delete(kind));
+  }
+  return promise;
 }
 
 export async function listProvisionalKopkarMembers(tenantId: string, tx: TxClient = db): Promise<ProvisionalMember[]> {
