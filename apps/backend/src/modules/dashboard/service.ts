@@ -90,44 +90,46 @@ export async function getDashboardSummary(tenantId: string, unitId?: string): Pr
   };
 }
 
-export async function getLoanChart(tenantId: string, months: number): Promise<ChartPoint[]> {
-  const result: ChartPoint[] = [];
+/**
+ * One query for a whole chart: sums `amountCol` per month bucket. Month bounds are
+ * computed here (server time zone, same as before) and passed in, so buckets match
+ * the old per-month aggregates exactly. Table/column names are constants, never input.
+ */
+async function monthlySums(
+  tenantId: string,
+  months: number,
+  table: "Loan" | "LoanPayment",
+  dateCol: "disbursedAt" | "paidAt",
+  amountCol: "principalAmount" | "amount"
+): Promise<ChartPoint[]> {
   const now = new Date();
+  const dates = Array.from({ length: months }, (_, idx) => subMonths(now, months - 1 - idx));
+  const starts = dates.map((d) => startOfMonth(d).toISOString());
+  const ends = dates.map((d) => endOfMonth(d).toISOString());
 
-  for (let i = months - 1; i >= 0; i--) {
-    const date = subMonths(now, i);
-    const start = startOfMonth(date);
-    const end = endOfMonth(date);
+  const rows = await db.$queryRaw<{ idx: number; total: string }[]>`
+    SELECT b.idx::int AS idx, COALESCE(SUM(t.${Prisma.raw(`"${amountCol}"`)}), 0)::text AS total
+    FROM unnest(${starts}::text[], ${ends}::text[]) WITH ORDINALITY AS b(s, e, idx)
+    LEFT JOIN ${Prisma.raw(`"${table}"`)} t
+      ON t."tenantId" = ${tenantId}
+     AND t.${Prisma.raw(`"${dateCol}"`)} >= (b.s::timestamptz AT TIME ZONE 'UTC')
+     AND t.${Prisma.raw(`"${dateCol}"`)} <= (b.e::timestamptz AT TIME ZONE 'UTC')
+    GROUP BY b.idx
+    ORDER BY b.idx`;
 
-    const agg = await db.loan.aggregate({
-      where: { tenantId, disbursedAt: { gte: start, lte: end } },
-      _sum: { principalAmount: true }
-    });
-
-    result.push({ month: format(date, "MMM yyyy"), value: (agg._sum.principalAmount ?? 0).toString() });
-  }
-
-  return result;
+  const totals = new Map(rows.map((r) => [r.idx, r.total]));
+  return dates.map((date, i) => ({
+    month: format(date, "MMM yyyy"),
+    value: new Prisma.Decimal(totals.get(i + 1) ?? 0).toString()
+  }));
 }
 
-export async function getPaymentChart(tenantId: string, months: number): Promise<ChartPoint[]> {
-  const result: ChartPoint[] = [];
-  const now = new Date();
+export function getLoanChart(tenantId: string, months: number): Promise<ChartPoint[]> {
+  return monthlySums(tenantId, months, "Loan", "disbursedAt", "principalAmount");
+}
 
-  for (let i = months - 1; i >= 0; i--) {
-    const date = subMonths(now, i);
-    const start = startOfMonth(date);
-    const end = endOfMonth(date);
-
-    const agg = await db.loanPayment.aggregate({
-      where: { tenantId, paidAt: { gte: start, lte: end } },
-      _sum: { amount: true }
-    });
-
-    result.push({ month: format(date, "MMM yyyy"), value: (agg._sum.amount ?? 0).toString() });
-  }
-
-  return result;
+export function getPaymentChart(tenantId: string, months: number): Promise<ChartPoint[]> {
+  return monthlySums(tenantId, months, "LoanPayment", "paidAt", "amount");
 }
 
 // ── Permodalan (Permenkop UKM 8/2023, 2/2024) ────────────────────────────────
@@ -137,8 +139,7 @@ export async function getCapitalDashboard(tenantId: string, unitId?: string): Pr
   const now = new Date();
   const monthEnds = [...Array.from({ length: 11 }, (_, i) => endOfMonth(subMonths(now, 11 - i))), now];
 
-  const [modalSendiri, totalAset, memberCount, hasKspUnit, trend, loanGroups] = await Promise.all([
-    getModalSendiri(tenantId, now, unitId),
+  const [totalAset, memberCount, hasKspUnit, trend, loanGroups] = await Promise.all([
     getTotalAset(tenantId, now, unitId),
     db.member.count({ where: { tenantId, isActive: true, ...s.member } }),
     db.cooperativeUnit.count({ where: { tenantId, type: "KSP", isActive: true } }),
@@ -149,6 +150,7 @@ export async function getCapitalDashboard(tenantId: string, unitId?: string): Pr
       _sum: { principalAmount: true }
     })
   ]);
+  const modalSendiri = trend[trend.length - 1]!;
   const ms = modalSendiri.total;
   const concentrationFloor = ms.mul(MEMBER_CAPITAL_CONCENTRATION_PCT).div(100);
   const concentratedGroups = ms.isZero() ? [] : await db.saving.groupBy({

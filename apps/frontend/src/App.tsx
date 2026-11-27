@@ -1,8 +1,16 @@
-import { lazy, Suspense } from "react";
-import { Navigate, Route, BrowserRouter, Routes } from "react-router-dom";
+import { lazy, Suspense, useLayoutEffect } from "react";
+import { Navigate, Route, BrowserRouter, Routes, useLocation } from "react-router-dom";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { RequireMultiUnit } from "@/components/shared/RequireMultiUnit";
 import { onboardingRoutes } from "@/features/onboarding/routes";
+import { syncRouteTheme } from "@/lib/theme";
+
+/** Marketing pages stay light; app pages follow the saved theme. Runs before paint. */
+function RouteTheme() {
+  const { pathname } = useLocation();
+  useLayoutEffect(() => syncRouteTheme(pathname), [pathname]);
+  return null;
+}
 const HandoffPage = lazy(() => import("@/features/tenant-access/HandoffPage"));
 const InvitePage = lazy(() => import("@/features/tenant-access/InvitePage"));
 const PublicRegistrationPage = lazy(() =>
@@ -104,9 +112,6 @@ const KopkarRatPublishPage = lazy(() =>
 const KopkarRatArchivePage = lazy(() =>
   import("@/pages/reports/KopkarRatArchivePage").then((module) => ({ default: module.KopkarRatArchivePage }))
 );
-const PlatformPackagesPage = lazy(() =>
-  import("@/pages/platform/PlatformPackagesPage").then((module) => ({ default: module.PlatformPackagesPage }))
-);
 const PlatformPricingPage = lazy(() =>
   import("@/pages/platform/PlatformPricingPage").then((module) => ({ default: module.PlatformPricingPage }))
 );
@@ -159,7 +164,10 @@ const SalesReportPage = lazy(() =>
 export default function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
+      {/* startTransition keeps the current page on screen while the next lazy page loads,
+          instead of blanking to the Suspense fallback on every navigation. */}
+      <BrowserRouter future={{ v7_startTransition: true }}>
+        <RouteTheme />
         <Suspense
           fallback={
             <div role='status' className='p-8'>
@@ -281,7 +289,6 @@ export default function App() {
               <Route path='/platform/tenants' element={<PlatformTenantsPage />} />
               <Route path='/platform/migration' element={<PlatformMigrationPage />} />
               <Route path='/platform/migration/kopkar-rat' element={<KopkarRatArchivePage platform />} />
-              <Route path='/platform/packages' element={<PlatformPackagesPage />} />
               <Route path='/platform/pricing' element={<PlatformPricingPage />} />
               <Route path='/platform/invoices' element={<PlatformInvoicesPage />} />
               <Route path='/platform/partners' element={<PlatformPartnersPage />} />

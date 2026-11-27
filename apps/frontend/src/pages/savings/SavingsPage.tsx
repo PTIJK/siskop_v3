@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiFetchPage } from "@/api/client";
 import { formatRupiah } from "@/lib/format";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -23,6 +23,7 @@ export function SavingsPage() {
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["savings", { page, search, typeFilter }],
+    placeholderData: keepPreviousData,
     queryFn: () =>
       apiFetchPage<MemberSavingsSummary[]>(
         `/savings/by-member?page=${page}&limit=${LIMIT}${search ? `&search=${encodeURIComponent(search)}` : ""}${

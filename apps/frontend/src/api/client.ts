@@ -116,22 +116,37 @@ async function withAuthRetry(
   } catch (err) {
     if (err instanceof ApiRequestError && (err.status === 401 || err.status === 403)) {
       useAuth.getState().clear();
+      return res;
     }
-    return res;
+    // Network drop or timeout during refresh: fail this request, keep the session.
+    throw err;
   }
 }
 
+const REQUEST_TIMEOUT_MS = 15000;
+
 async function envelope<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
-  const res = await withAuthRetry(path, (token) =>
-    fetch(`/api${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(init.headers ?? {})
-      }
-    })
-  );
+  const res = await withAuthRetry(path, async (token) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const onCallerAbort = () => controller.abort();
+    if (init.signal?.aborted) controller.abort();
+    init.signal?.addEventListener("abort", onCallerAbort, { once: true });
+    try {
+      return await fetch(`/api${path}`, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(init.headers ?? {})
+        }
+      });
+    } finally {
+      clearTimeout(timer);
+      init.signal?.removeEventListener("abort", onCallerAbort);
+    }
+  });
 
   const body = (await res.json()) as ApiResponse<T>;
 

@@ -28,6 +28,15 @@ export function applyTheme(theme: ThemeChoice): void {
   document.documentElement.style.colorScheme = theme;
 }
 
+// Marketing and sign-in pages are always light. Keep in sync with public/theme-init.js.
+const MARKETING = /^\/(?:$|login|register|checkout|mitra)/;
+
+/** Applies the theme a route should show and tells useTheme() subscribers. */
+export function syncRouteTheme(pathname: string): void {
+  applyTheme(MARKETING.test(pathname) ? "light" : resolveTheme());
+  listeners.forEach((notify) => notify());
+}
+
 export function setTheme(theme: ThemeChoice): void {
   try {
     localStorage.setItem(KEY, theme);
@@ -42,8 +51,7 @@ export function setTheme(theme: ThemeChoice): void {
 export function followSystemTheme(): void {
   window.matchMedia?.(darkPreference).addEventListener?.("change", () => {
     if (temporaryChoice || storedTheme()) return;
-    applyTheme(resolveTheme());
-    listeners.forEach((notify) => notify());
+    syncRouteTheme(window.location.pathname);
   });
 }
 

@@ -95,6 +95,7 @@ interface SidebarContentProps {
 
 function SidebarContent({ rail, onNavigate, onClose, setupLocked }: SidebarContentProps) {
   const sections = useNavSections();
+  const isPlatformAdmin = useAuth((s) => s.user?.role === "super_admin");
   return (
     <div className="flex h-full flex-col gap-1.5 overflow-y-auto border-r bg-sidebar px-3 py-4 text-sidebar-foreground">
       <div className={cn("flex items-center gap-2.5 px-2 pb-3.5 pt-1", rail && "justify-center px-0")}>
@@ -118,6 +119,15 @@ function SidebarContent({ rail, onNavigate, onClose, setupLocked }: SidebarConte
             {index > 0 && <div aria-hidden="true" className="mx-1.5 my-2.5 h-px bg-border" />}
             {section.items.map((item) => (
               <NavItem key={item.id} item={item} rail={rail} onNavigate={onNavigate} setupLocked={setupLocked} />
+            ))}
+          </div>
+        ) : isPlatformAdmin ? (
+          <div key={section.group} role="group" aria-label={section.label} className="flex flex-col gap-0.5">
+            <p className="px-2.5 pb-1 pt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              {section.label}
+            </p>
+            {section.items.map((item) => (
+              <NavItem key={item.id} item={item} rail={false} onNavigate={onNavigate} setupLocked={setupLocked} />
             ))}
           </div>
         ) : (

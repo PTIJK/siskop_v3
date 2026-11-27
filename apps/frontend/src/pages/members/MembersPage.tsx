@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KOPKAR_RAT_TENANT_ID, type Member, type ProvisionalMember } from "@siskop/types";
 import { apiFetch, apiFetchPage } from "@/api/client";
 import { formatTanggalPendek } from "@/lib/format";
@@ -40,6 +40,7 @@ function MembersListTab({ tenantId, provisionalOnly = false }: { tenantId?: stri
   const provisionalKey = ["members", tenantId, "provisional-rat"];
   const registered = useQuery({
     queryKey: ["members", tenantId, { page, search: trimmed, provisionalOnly }],
+    placeholderData: keepPreviousData,
     queryFn: () => apiFetchPage<Member[]>(`/members?${new URLSearchParams({ page: String(page), limit: String(LIMIT), ...(trimmed && { search: trimmed }), ...(provisionalOnly && { identityUnverified: "true" }) })}`)
   });
   const provisional = useQuery({

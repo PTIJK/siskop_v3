@@ -75,7 +75,6 @@ describe("buildNav", () => {
       "/platform/dashboard",
       "/platform/tenants",
       "/platform/migration",
-      "/platform/packages",
       "/platform/pricing",
       "/platform/invoices",
       "/platform/partners",
