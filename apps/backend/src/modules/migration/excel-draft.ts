@@ -108,7 +108,7 @@ function readCells(row: ExcelJS.Row): Cell[] {
       : typeof result === "number" && Number.isFinite(result) ? result
       : typeof result === "object" && "richText" in result ? result.richText.map((t) => t.text).join("")
       : formula ? String(result) : cell.text;
-    const normalized = typeof content === "string" ? content.replace(/\u0000/g, "").trim() : content;
+    const normalized = typeof content === "string" ? content.replaceAll("\0", "").trim() : content;
     if (normalized !== "") cells.push({ column, value: normalized, unresolved: false, formula });
   });
   return cells;
@@ -288,7 +288,7 @@ export async function readExcelDraft(buffer: Buffer): Promise<{ records: ExcelIm
   const dates = { simpanan: new Set<string>(), pinjaman: new Set<string>() };
 
   for (const worksheet of workbook.worksheets) {
-    const sheet = worksheet.name.replace(/\u0000/g, "");
+    const sheet = worksheet.name.replaceAll("\0", "");
     if (/^(?:petunjuk|referensi)\b/.test(key(sheet))) continue;
     const hint = sheetGroup(sheet);
     let headers = new Map<number, Header>();

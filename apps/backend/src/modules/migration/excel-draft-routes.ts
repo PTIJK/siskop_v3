@@ -87,7 +87,7 @@ export function excelDraftRoutes() {
     } else {
       try {
         row = await db.excelImportDraft.create({
-          data: { ...where, fileName: file.originalname.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 240), ...parsed },
+          data: { ...where, fileName: [...file.originalname].filter((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) !== 127).join("").slice(0, 240), ...parsed },
           select: selectSummary
         });
       } catch (err) {
