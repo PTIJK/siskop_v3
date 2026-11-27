@@ -35,7 +35,8 @@ export function ExcelCorrectionDialog({ base, unitId, cutoffDate, item, onClose,
   restoreFocus: () => void;
 }) {
   const { fix } = item;
-  const [group, setGroup] = useState<ExcelApplyGroup>("anggota");
+  const loanOnly = fix.kind === "loan";
+  const [group, setGroup] = useState<ExcelApplyGroup>(fix.group);
   const [selectedRow, setSelectedRow] = useState<number>();
   const [selectedSlot, setSelectedSlot] = useState<string | undefined>(fix.slot);
   const path = (ref: Pick<typeof fix, "group" | "index">) => base + "/corrections/" + ref.group + "/" + ref.index;
@@ -78,11 +79,13 @@ export function ExcelCorrectionDialog({ base, unitId, cutoffDate, item, onClose,
           <Button type="button" variant="outline" onClick={() => void initial.refetch()}>Coba lagi</Button>
         </div>}
         {initial.data && <Tabs value={group} onValueChange={(value) => { save.reset(); setSelectedRow(undefined); setGroup(value as ExcelApplyGroup); }}>
-          <TabsList aria-label="Data anggota yang dipilih" className="grid w-full grid-cols-3">
-            {(Object.keys(sections) as ExcelApplyGroup[]).map((section) => (
-              <TabsTrigger key={section} value={section} disabled={save.isPending} className="min-h-11 px-2">{sections[section]}</TabsTrigger>
-            ))}
-          </TabsList>
+          {!loanOnly && (
+            <TabsList aria-label="Data anggota yang dipilih" className="grid w-full grid-cols-3">
+              {(Object.keys(sections) as ExcelApplyGroup[]).map((section) => (
+                <TabsTrigger key={section} value={section} disabled={save.isPending} className="min-h-11 px-2">{sections[section]}</TabsTrigger>
+              ))}
+            </TabsList>
+          )}
           {(Object.keys(sections) as ExcelApplyGroup[]).map((section) => <TabsContent key={section} value={section} className="space-y-4">
           {section === group && <>
           {!ref && <p className="text-sm text-muted-foreground">Tidak ada data {sections[group].toLowerCase()} yang cocok untuk anggota ini di draf.</p>}

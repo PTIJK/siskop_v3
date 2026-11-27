@@ -431,7 +431,7 @@ export function loanEntries(record: ExcelImportRecord): { label: string; value: 
   }];
 }
 
-function resolveLoanContract(
+export function resolveLoanContract(
   record: ExcelImportRecord,
   slot: LoanSlot | undefined,
   schedules: Map<string, ExcelImportRecord[]>,
