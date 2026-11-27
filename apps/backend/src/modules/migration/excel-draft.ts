@@ -181,9 +181,17 @@ function recordsFor(cells: Cell[], headers: Map<number, Header>, hint: Group | u
         reference = String(value).slice(0, MAX_TEXT);
       }
       if (typeof value === "string" && value.length > MAX_TEXT) notes.add("Ada teks panjang yang dipotong di draf ini.");
+      const cleanedValue = typeof value === "string"
+        ? value
+            .replace(/(?:Data saldo berjalan\.?\s*)?Jadwal hasil migrasi adalah estimasi[^.]*\.?/gi, "")
+            .replace(/Migrasi dari laporan RAT:\s*tenor dan tanggal cair estimasi\.?/gi, "")
+            .trim()
+            .slice(0, MAX_TEXT)
+        : value;
+      if (cleanedValue === "") continue;
       fields.push({
         label: header ? fieldLabels[header.key] ?? header.label : "Keterangan",
-        value: typeof value === "string" ? value.slice(0, MAX_TEXT) : value,
+        value: cleanedValue,
         kind: isNik ? "nik" as const : header && financialValue(header, group) ? "money" as const : "text" as const
       });
     }

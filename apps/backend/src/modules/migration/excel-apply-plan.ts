@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import type { ExcelApplyItem, ExcelImportData, ExcelImportRecord } from "@siskop/types";
 import { z } from "zod";
@@ -21,13 +22,47 @@ type VerifiedLoan = Parameters<typeof validateLoanOpening>[0];
 type Candidate =
   | { group: "anggota"; identity: Identity }
   | { group: "simpanan"; memberId: string; productId: string; accountId: string; amount: string; savingType: string }
-  | { group: "pinjaman"; memberId: string; productId: string; accountId: string; amount: string; contract: VerifiedLoan };
+  | { group: "pinjaman"; memberId: string; productId: string; productRate: string; accountId: string; amount: string; contract: VerifiedLoan };
 type Item = ExcelApplyItem & { candidate?: Candidate; keys?: string[]; productName?: string };
 
-const MAX_BATCH = 50;
+const MAX_BATCH = 500;
 const openingAccounts = { isActive: true, isHeader: false, isCashEquivalent: false, category: { in: ["ASET", "KEWAJIBAN", "EKUITAS"] } } satisfies Prisma.AccountWhereInput;
 const openingAccountName = "Saldo Awal Impor Excel";
 const loanSignature = (memberId: string, amount: string, date: string) => JSON.stringify([memberId, amount, date]);
+
+function generatedNik(seed: string, used: Set<string>): string {
+  const hash = createHash("sha256").update(seed).digest();
+  let num = hash.readBigUInt64BE(0) % 100_000_000_000_000n;
+  for (;;) {
+    const candidate = "99" + num.toString().padStart(14, "0");
+    if (!used.has(candidate)) {
+      used.add(candidate);
+      return candidate;
+    }
+    num = (num + 1n) % 100_000_000_000_000n;
+  }
+}
+
+function addMonthsDateKey(base: string, monthsToAdd: number): string {
+  const [y, m, d] = base.split("-").map(Number) as [number, number, number];
+  const totalMonths = y * 12 + (m - 1) + monthsToAdd;
+  const ny = Math.floor(totalMonths / 12);
+  const nm = (totalMonths % 12) + 1;
+  const maxDay = new Date(Date.UTC(ny, nm, 0)).getUTCDate();
+  const nd = Math.min(d, maxDay);
+  return `${ny}-${String(nm).padStart(2, "0")}-${String(nd).padStart(2, "0")}`;
+}
+
+function centsToDecimal(cents: bigint): string {
+  const whole = cents / 100n;
+  const frac = cents % 100n;
+  return `${whole}.${frac.toString().padStart(2, "0")}`;
+}
+
+function decimalToCents(value: string): bigint {
+  const [w = "0", f = "0"] = new Prisma.Decimal(value).toFixed(2).split(".");
+  return BigInt(w) * 100n + BigInt(f);
+}
 
 function decimal(value: string) {
   // shortcut: text balances must use an unambiguous decimal format; support locale-specific strings once the workbook supplies a locale.
@@ -82,7 +117,17 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
   const byNik = new Map(members.flatMap((member) => member.nik ? [[member.nik, member] as const] : []));
   const byId = new Map(members.map((member) => [member.id, member]));
   const byNumber = new Map(members.map((member) => [member.memberId, member]));
+  const nameCounts = new Map<string, number>();
+  for (const member of members) {
+    const k = normalize(member.fullName);
+    if (k) nameCounts.set(k, (nameCounts.get(k) ?? 0) + 1);
+  }
+  const uniqueByName = new Map(members.flatMap((member) => {
+    const k = normalize(member.fullName);
+    return k && nameCounts.get(k) === 1 ? [[k, member] as const] : [];
+  }));
   const liveNames = new Set(members.map((member) => normalize(member.fullName)));
+  const usedNiks = new Set<string>(byNik.keys());
   const sourceMembers = new Map<string, ExcelImportRecord[]>();
   for (const record of records.anggota) {
     const number = memberNumber(record);
@@ -100,8 +145,8 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
     const name = sourceMemberName(record);
     const source = relatedMember(record);
     const nik = edited?.identity.nik ?? (field(record, "NIK", "NIK Anggota") || (source ? field(source, "NIK", "NIK Anggota") : ""));
-    const member = nik ? byNik.get(nik) : byNumber.get(number);
     const sourceName = edited?.identity.fullName ?? name ?? source?.title;
+    const member = nik ? byNik.get(nik) : (byNumber.get(number) ?? (sourceName ? uniqueByName.get(normalize(sourceName)) : undefined));
     return member && (sourceName ? normalize(sourceName) === normalize(member.fullName) : Boolean(nik)) ? member : undefined;
   };
   const pending = (name: string, description: string, fix?: ExcelApplyItem["fix"]): Item => ({ name, description, status: "review", fix });
@@ -109,6 +154,7 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
   const items: Item[] = [];
   let offset: { id?: string; name: string; code: string } | undefined;
   let postingIssue: string | undefined;
+  const today = dateKey(businessDate());
 
   if (group === "anggota") {
     const memberDrafts = [...records.anggota, ...[...records.simpanan, ...records.pinjaman].filter(
@@ -116,16 +162,28 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
     )];
     for (const record of memberDrafts) {
       const name = record.title;
-      const fix = { ...refs.get(record)!, kind: "member" as const };
+      const ref = refs.get(record)!;
+      const fix = { ...ref, kind: "member" as const };
       const match = memberMatch(record);
       if (match && match.isActive && !match.identityUnverified && match.memberships.length) {
         items.push(exists(name, "Anggota " + match.memberId + " sudah terdaftar."));
         continue;
       }
       const edited = memberCorrection(record);
-      const parsed = createMemberSchema.safeParse(edited?.mode === "identity" ? edited.identity : draftMemberFields(record));
+      const raw = draftMemberFields(record);
+      const filled = edited?.mode === "identity"
+        ? edited.identity
+        : {
+            ...raw,
+            nik: /^\d{16}$/.test(raw.nik) ? raw.nik : generatedNik(`${tenantId}:${draftId}:${ref.basis}`, usedNiks),
+            address: raw.address.trim() || "Alamat belum dilengkapi",
+            birthPlace: raw.birthPlace.trim() || "Indonesia",
+            birthDate: raw.birthDate.trim() || "1990-01-01",
+            occupation: raw.occupation.trim() || "Anggota Koperasi"
+          };
+      const parsed = createMemberSchema.safeParse(filled);
       if (!parsed.success || !day.safeParse(parsed.data.birthDate).success ||
-          parsed.data.birthDate > dateKey(businessDate()) || edited?.mode === "link" || match ||
+          parsed.data.birthDate > today || edited?.mode === "link" || match ||
           liveNames.has(normalize(parsed.data.fullName)) || byNik.has(parsed.data.nik)) {
         const identityLabels: Record<string, string> = { fullName: "nama", nik: "NIK", address: "alamat", birthPlace: "tempat lahir",
           birthDate: "tanggal lahir", occupation: "pekerjaan", isPengurus: "status pengurus", isPengawas: "status pengawas" };
@@ -138,7 +196,6 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
       items.push({ name, description: "Anggota baru", status: "ready", fix, keys: [parsed.data.nik], candidate: { group, identity: parsed.data } });
     }
   } else {
-    const today = dateKey(businessDate());
     if (!settings.cutoffDate) postingIssue = "Isi tanggal saldo sebelum menerapkan data.";
     else if (settings.cutoffDate > today) postingIssue = "Tanggal saldo tidak boleh di masa depan.";
     else if (await tx.fiscalYearClose.findFirst({ where: { tenantId, year: Number(settings.cutoffDate.slice(0, 4)), reopenedAt: null }, select: { id: true } })) {
@@ -162,9 +219,11 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
     const accounts = new Map((await tx.account.findMany({
       where: { tenantId, ...openingAccounts }, select: { id: true, category: true, name: true, code: true }
     })).map((account) => [account.id, account]));
-    const products = group === "simpanan" ? await tx.savingConfig.findMany({ where: { tenantId, isActive: true }, select: { id: true, name: true, type: true } }) :
-      (await tx.loanConfig.findMany({ where: { tenantId, isActive: true, installmentFrequency: "MONTHLY" }, select: { id: true, name: true } }))
-        .map((product) => ({ ...product, type: undefined }));
+    const products = group === "simpanan"
+      ? (await tx.savingConfig.findMany({ where: { tenantId, isActive: true }, select: { id: true, name: true, type: true } }))
+          .map((product) => ({ ...product, rate: undefined }))
+      : (await tx.loanConfig.findMany({ where: { tenantId, isActive: true, installmentFrequency: "MONTHLY" }, select: { id: true, name: true, rate: true } }))
+          .map((product) => ({ ...product, type: undefined, rate: new Prisma.Decimal(product.rate).toString() }));
     const savings = group === "simpanan" ? await tx.saving.findMany({
       where: { tenantId, unitId }, select: { memberId: true, savingConfigId: true, savingConfig: { select: { type: true } } }
     }) : [];
@@ -174,7 +233,7 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
       where: { tenantId }, select: { notes: true, memberId: true, principalAmount: true, disbursedAt: true }
     }) : [];
     const liveContracts = new Set(liveLoans.map((loan) => loan.notes));
-    const liveSignatures = new Set(liveLoans.flatMap((loan) => loan.disbursedAt ?
+    const liveSignatures = new Set(liveLoans.flatMap((loan) => !loan.notes?.startsWith("Saldo awal Excel · Kontrak ") && loan.disbursedAt ?
       [loanSignature(loan.memberId, loan.principalAmount.toFixed(2), dateKey(loan.disbursedAt))] : []));
     const schedules = new Map<string, ExcelImportRecord[]>();
     if (group === "pinjaman") {
@@ -184,7 +243,7 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
         if (ref) schedules.set(ref, [...(schedules.get(ref) ?? []), line]);
       }
     }
-    for (const record of records[group]) {
+    for (const [rowIndex, record] of records[group].entries()) {
       if (group === "pinjaman" && /(?:jadwal|angsuran)/i.test(record.sheet) && field(record, "Jatuh tempo")) continue;
       const name = record.title;
       const member = memberMatch(record);
@@ -199,12 +258,12 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
       }
       const edited = correction(record);
       const parsedSavings = group === "simpanan" ? savingsFields(record) : [];
-      const incoming = group === "simpanan" ? (parsedSavings.length ? parsedSavings : [{ label: "", value: "", type: undefined }]) : [{
-        label: field(record, "Kode produk", "Nama produk", "Jenis pinjaman"),
-        value: field(record, "Sisa pokok"), type: undefined
-      }];
+      const parsedLoans = group === "pinjaman" ? loanEntries(record) : [];
+      const incoming = group === "simpanan"
+        ? (parsedSavings.length ? parsedSavings.map((s) => ({ ...s, loanSlot: undefined as LoanSlot | undefined })) : [{ label: "", value: "", type: undefined, loanSlot: undefined as LoanSlot | undefined }])
+        : parsedLoans;
       for (const entry of incoming) {
-        const slot = normalize(entry.label);
+        const slot = entry.loanSlot?.slot ?? normalize(entry.label);
         const fix = { ...refs.get(record)!, kind: group === "simpanan" ? "saving" as const : "loan" as const, slot };
         const savingEdit = group === "simpanan" ? edited?.savings?.find((item) => item.slot === slot) : undefined;
         const saved = group === "simpanan" ? savingEdit : edited?.loan;
@@ -212,7 +271,13 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
         const equivalentNames = productName === "tabungansukarela" ? ["tabungansukarela", "simpanansukarela", "sukarela"] : [productName];
         const exact = products.filter((p) => (!entry.type || entry.type === p.type) &&
           (p.id === entry.label || equivalentNames.includes(normalize(p.name))));
-        const options = exact.length || !entry.type || entry.type === "SUKARELA" ? exact : products.filter((p) => p.type === entry.type);
+        const fallbackLoanProduct = group === "pinjaman" && !exact.length && (!entry.label || /^pembiayaan [12]$/i.test(entry.label)) && products.length === 1
+          ? products
+          : [];
+        const options = exact.length ? exact
+          : fallbackLoanProduct.length ? fallbackLoanProduct
+          : !entry.type || entry.type === "SUKARELA" ? exact
+          : products.filter((p) => p.type === entry.type);
         const product = saved?.productId ? products.find((item) => item.id === saved.productId) : options.length === 1 ? options[0] : undefined;
         const amount = decimal(group === "simpanan" ? savingEdit?.amount ?? entry.value
           : edited?.loan?.contract.remainingPrincipal ?? entry.value);
@@ -242,12 +307,15 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
           });
           continue;
         }
-        const contract = edited?.loan ? correctedLoan(edited.loan.contract, product.id) : loanContract(record, schedules);
+        const cutoff = settings.cutoffDate ?? today;
+        const contract = edited?.loan
+          ? correctedLoan(edited.loan.contract, product.id)
+          : resolveLoanContract(record, entry.loanSlot, schedules, cutoff, product.rate ?? "0", rowIndex);
         if (!contract) {
           items.push(pending(name, "Rincian kontrak atau jadwal angsuran tersisa belum lengkap.", fix));
           continue;
         }
-        try { validateLoanOpening(contract, settings.cutoffDate ?? today); }
+        try { validateLoanOpening(contract, cutoff); }
         catch (error) { items.push(pending(name, loanIssue(error), fix)); continue; }
         if (!mappings.some((m) => m.sourceId === product.id && m.transactionKind === "PAYMENT_PRINCIPAL" && m.creditAccountId === account.id) ||
             (new Prisma.Decimal(contract.remainingAmount).gt(amount) && !mappings.some((m) => m.sourceId === product.id && m.transactionKind === "PAYMENT_INTEREST"))) {
@@ -258,8 +326,8 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
         const existing = liveContracts.has(loanImportNote(contract.contractRef)) || liveSignatures.has(signature);
         items.push(existing ? exists(name, "Kontrak atau pinjaman dengan pokok dan tanggal cair yang sama sudah ada.") : {
           name, description: description + " · " + contract.contractRef, amount, remainingAmount: contract.remainingAmount,
-          productName: product.name, status: "ready", fix, keys: [contract.contractRef, signature],
-          candidate: { group, amount, contract, productId: product.id, memberId: member.id, accountId: account.id }
+          productName: product.name, status: "ready", fix, keys: [contract.contractRef],
+          candidate: { group, amount, contract, productId: product.id, productRate: product.rate ?? "0", memberId: member.id, accountId: account.id }
         });
       }
     }
@@ -303,6 +371,153 @@ export async function planExcelApply(tx: TxClient, tenantId: string, draftId: st
 
 export function loanImportNote(contract: string) {
   return "Saldo awal Excel · Kontrak " + contract.toUpperCase();
+}
+
+type LoanSlot = {
+  slot: string;
+  slotIndex?: number;
+  remainingPrincipal: string;
+  termMonths?: string;
+  monthlyPrincipal?: string;
+  monthlyMargin?: string;
+};
+
+export function loanEntries(record: ExcelImportRecord): { label: string; value: string; type: undefined; loanSlot?: LoanSlot }[] {
+  const stacked: { label: string; value: string; type: undefined; loanSlot: LoanSlot }[] = [];
+  let hasStackedColumns = false;
+  for (const slotIndex of [1, 2]) {
+    const prefix = `Pembiayaan ${slotIndex}`;
+    const rawAmount = field(record, `${prefix} · Jumlah`);
+    const rawTerm = field(record, `${prefix} · Jml Bulan`);
+    const rawPokok = field(record, `${prefix} · Pokok`);
+    const rawInfaq = field(record, `${prefix} · Infaq`);
+    if (rawAmount || rawTerm || rawPokok || rawInfaq) hasStackedColumns = true;
+    const parsedAmount = decimal(rawAmount);
+    if (!parsedAmount || parsedAmount === "0.00") continue;
+    stacked.push({
+      label: prefix,
+      value: rawAmount,
+      type: undefined,
+      loanSlot: {
+        slot: `pembiayaan${slotIndex}`,
+        slotIndex,
+        remainingPrincipal: parsedAmount,
+        termMonths: rawTerm,
+        monthlyPrincipal: rawPokok,
+        monthlyMargin: rawInfaq
+      }
+    });
+  }
+  if (hasStackedColumns) {
+    return stacked;
+  }
+
+  const label = field(record, "Kode produk", "Nama produk", "Jenis pinjaman");
+  const value = field(record, "Sisa pokok", "Sisa pinjaman", "Pokok", "Jumlah", "Saldo");
+  const parsedAmount = decimal(value);
+  return [{
+    label,
+    value,
+    type: undefined,
+    ...(parsedAmount && parsedAmount !== "0.00" ? {
+      loanSlot: {
+        slot: normalize(label),
+        remainingPrincipal: parsedAmount,
+        termMonths: field(record, "Tenor", "Tenor (bulan)", "Jml Bulan", "Jumlah bulan"),
+        monthlyPrincipal: field(record, "Pokok cicilan", "Angsuran pokok"),
+        monthlyMargin: field(record, "Infaq", "Infak", "Bunga", "Margin", "Marjin", "Ujrah", "Bagi Hasil", "Jasa Pinjaman", "Bunga Pinjaman")
+      }
+    } : {})
+  }];
+}
+
+function resolveLoanContract(
+  record: ExcelImportRecord,
+  slot: LoanSlot | undefined,
+  schedules: Map<string, ExcelImportRecord[]>,
+  cutoffDate: string,
+  defaultRate: string,
+  rowIndex: number
+): VerifiedLoan | undefined {
+  const explicit = loanContract(record, schedules);
+  if (explicit) return explicit;
+  if (schedules.size > 0) return undefined;
+  if (!slot) return undefined;
+
+  const remainingPrincipal = slot.remainingPrincipal;
+  const termMonths = Number(slot.termMonths ?? "");
+  if (!Number.isInteger(termMonths) || termMonths < 1 || termMonths > 360) return undefined;
+
+  const totalPrincipalCents = decimalToCents(remainingPrincipal);
+  if (totalPrincipalCents <= 0n) return undefined;
+
+  const rawMonthlyPrincipal = slot.monthlyPrincipal ? decimal(slot.monthlyPrincipal) : undefined;
+  const explicitMonthlyPrincipalCents = rawMonthlyPrincipal ? decimalToCents(rawMonthlyPrincipal) : 0n;
+  const useExplicitPrincipal = explicitMonthlyPrincipalCents > 0n &&
+    (termMonths === 1 ? explicitMonthlyPrincipalCents === totalPrincipalCents : explicitMonthlyPrincipalCents * BigInt(termMonths - 1) < totalPrincipalCents);
+  const basePrincipalCents = useExplicitPrincipal ? explicitMonthlyPrincipalCents : totalPrincipalCents / BigInt(termMonths);
+  const lastPrincipalCents = totalPrincipalCents - basePrincipalCents * BigInt(termMonths - 1);
+  if (basePrincipalCents <= 0n || lastPrincipalCents <= 0n) return undefined;
+
+  const rawMonthlyMargin = slot.monthlyMargin ? decimal(slot.monthlyMargin) : undefined;
+  const rawRemainingObligation = !slot.slotIndex ? decimal(field(record, "Sisa kewajiban")) : undefined;
+  let baseMarginCents = 0n;
+  let lastMarginCents = 0n;
+  if (rawMonthlyMargin !== undefined) {
+    baseMarginCents = decimalToCents(rawMonthlyMargin);
+    lastMarginCents = baseMarginCents;
+  } else if (rawRemainingObligation && decimalToCents(rawRemainingObligation) > totalPrincipalCents) {
+    const totalMarginCents = decimalToCents(rawRemainingObligation) - totalPrincipalCents;
+    baseMarginCents = totalMarginCents / BigInt(termMonths);
+    lastMarginCents = totalMarginCents - baseMarginCents * BigInt(termMonths - 1);
+  }
+
+  const rawDisbursedAt = !slot.slotIndex ? field(record, "Tanggal cair") : "";
+  const disbursedAt = day.safeParse(rawDisbursedAt).success && rawDisbursedAt <= cutoffDate ? rawDisbursedAt : cutoffDate;
+
+  const schedule: VerifiedLoan["schedule"] = [];
+  let totalObligationCents = 0n;
+  for (let m = 1; m <= termMonths; m++) {
+    const pCents = m === termMonths ? lastPrincipalCents : basePrincipalCents;
+    const mCents = m === termMonths ? lastMarginCents : baseMarginCents;
+    totalObligationCents += pCents + mCents;
+    schedule.push({
+      dueDate: addMonthsDateKey(cutoffDate, m),
+      principal: centsToDecimal(pCents),
+      margin: centsToDecimal(mCents)
+    });
+  }
+
+  const remainingAmount = centsToDecimal(totalObligationCents);
+  const installmentAmount = centsToDecimal(basePrincipalCents + baseMarginCents);
+  const rawInitialPrincipal = !slot.slotIndex ? decimal(field(record, "Pokok awal")) : undefined;
+  const principalAmount = rawInitialPrincipal && decimalToCents(rawInitialPrincipal) >= totalPrincipalCents
+    ? rawInitialPrincipal
+    : remainingPrincipal;
+  const rawInitialTotal = !slot.slotIndex ? decimal(field(record, "Total kewajiban")) : undefined;
+  const minInitialTotalCents = decimalToCents(principalAmount) + (totalObligationCents - totalPrincipalCents);
+  const totalAmount = rawInitialTotal && decimalToCents(rawInitialTotal) >= minInitialTotalCents
+    ? rawInitialTotal
+    : centsToDecimal(minInitialTotalCents);
+  const rawRate = !slot.slotIndex ? field(record, "Tarif") : "";
+  const rate = /^\d{1,3}(?:\.\d{1,4})?$/.test(rawRate) ? rawRate : defaultRate;
+  const explicitRef = !slot.slotIndex ? field(record, "Kode pinjaman", "Nomor kontrak") : "";
+  const contractRef = (explicitRef || `IMP-${rowIndex + 1}${slot.slotIndex ? `-${slot.slotIndex}` : ""}`).slice(0, 64).toUpperCase();
+
+  return {
+    sourceRow: 4,
+    contractRef,
+    productId: "",
+    disbursedAt,
+    principalAmount,
+    totalAmount,
+    remainingPrincipal,
+    remainingAmount,
+    installmentAmount,
+    termMonths,
+    rate,
+    schedule
+  };
 }
 
 function loanContract(record: ExcelImportRecord, schedules: Map<string, ExcelImportRecord[]>): VerifiedLoan | undefined {

@@ -12,9 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { appendPage } from "@/components/shared/directory-pagination";
-import { draftAmount, useFinancialDraftRows, type FinancialListRow } from "@/pages/rat/FinancialDraftRows";
-import { LoanPrincipalOpening } from "@/pages/rat/LoanPrincipalOpening";
 import { AlertTriangle, Plus } from "lucide-react";
 
 interface LoanRow {
@@ -56,67 +53,47 @@ function LoansTable({
       )
   });
 
-  const draft = useFinancialDraftRows("loan", !status && !loanConfigId, search);
-  const live = data?.items ?? [];
+  const rows = data?.items ?? [];
   const total = data?.meta.total ?? 0;
-  const rows: FinancialListRow<LoanRow>[] = [
-    ...live.map((row) => ({ live: row })),
-    ...appendPage(draft.rows, total, live.length, page, LIMIT).map((row) => ({ draft: row }))
-  ];
-  const columns: ColumnDef<FinancialListRow<LoanRow>>[] = [
+  const columns: ColumnDef<LoanRow>[] = [
     {
       header: "Anggota",
       cell: ({ row: { original } }) => (
         <div>
-          <p className="font-medium">{original.draft?.name ?? original.live?.member.fullName}</p>
-          <p className="font-mono text-xs text-muted-foreground">{original.draft?.ownerRef ?? original.live?.member.memberId}</p>
-          {original.draft && <p className="font-mono text-xs text-muted-foreground">{original.draft.fields.contractRef || original.draft.reference}</p>}
+          <p className="font-medium">{original.member.fullName}</p>
+          <p className="font-mono text-xs text-muted-foreground">{original.member.memberId}</p>
         </div>
       )
     },
-    { header: "Jenis Pembiayaan", cell: ({ row: { original } }) => original.draft ? draft.productName(original.draft) : original.live.loanConfig.name },
-    { header: "Pokok", cell: ({ row: { original } }) => original.draft ? draftAmount(original.draft, "principalAmount") : formatRupiah(original.live.principalAmount) },
-    { header: "Total", cell: ({ row: { original } }) => original.draft ? draftAmount(original.draft, "totalAmount") : formatRupiah(original.live.totalAmount) },
-    { header: "Angsuran/bln", cell: ({ row: { original } }) => original.draft ? draftAmount(original.draft, "installmentAmount") : formatRupiah(original.live.monthlyPayment) },
+    { header: "Jenis Pembiayaan", cell: ({ row: { original } }) => original.loanConfig.name },
+    { header: "Pokok", cell: ({ row: { original } }) => formatRupiah(original.principalAmount) },
+    { header: "Total", cell: ({ row: { original } }) => formatRupiah(original.totalAmount) },
+    { header: "Angsuran/bln", cell: ({ row: { original } }) => formatRupiah(original.monthlyPayment) },
     {
       header: "Sisa",
-      cell: ({ row: { original } }) => original.draft ? (
-        <div className="text-sm">
-          <p className="font-semibold">{draftAmount(original.draft, "remainingPrincipal")} <span className="text-xs text-muted-foreground">pokok</span></p>
-          {draftAmount(original.draft, "remainingAmount") && <p>{draftAmount(original.draft, "remainingAmount")} <span className="text-xs text-muted-foreground">kewajiban</span></p>}
-        </div>
-      ) : <span className="font-semibold text-warning">{formatRupiah(original.live.remainingAmount)}</span>
+      cell: ({ row: { original } }) => <span className="font-semibold text-warning">{formatRupiah(original.remainingAmount)}</span>
     },
-    { header: "Tenor", cell: ({ row: { original } }) => original.draft
-      ? original.draft.fields.termMonths ? original.draft.fields.termMonths + " bln" :
-        original.draft.sourceFields.termMonths && "Sisa " + original.draft.sourceFields.termMonths + " bln"
-      : original.live.termMonths + " bln" },
-    { header: "Status", cell: ({ row: { original } }) => original.draft ? draft.status : <div className="flex flex-wrap gap-1">
-      <Badge variant="outline">{original.live.status}</Badge>
-      {original.live.member.identityUnverified && draft.status}
-    </div> },
-    { header: "KOL", cell: ({ row }) => row.original.live ? <KOLBadge category={row.original.live.kolCategory} /> : row.original.draft.sourceFields.kolCategory }
+    { header: "Tenor", cell: ({ row: { original } }) => original.termMonths + " bln" },
+    { header: "Status", cell: ({ row: { original } }) => <Badge variant="outline">{original.status}</Badge> },
+    { header: "KOL", cell: ({ row }) => <KOLBadge category={row.original.kolCategory} /> }
   ];
 
-  if (draft.enabled) columns.push({ header: "Aksi", cell: ({ row }) => row.original.draft ? draft.action(row.original.draft) : null });
-  return <>
-    {draft.enabled && <LoanPrincipalOpening />}
-    {draft.editor}
+  return (
     <DataTable
       label="Daftar pinjaman"
       columns={columns}
       data={rows}
-      isLoading={isPending || draft.loading}
-      isError={isError || Boolean(draft.error)}
-      errorMessage={(error ?? draft.error)?.message}
-      onRetry={() => { void refetch(); draft.refetch(); }}
-      pagination={{ page, limit: LIMIT, total: total + draft.rows.length, onPageChange: setPage }}
-      getRowKey={(row) => row.draft ? "rat-" + row.draft.sourceRow : row.live.id}
-      onRowClick={(row) => row.draft ? draft.open(row.draft) : navigate(`/loans/${row.live.id}`)}
+      isLoading={isPending}
+      isError={isError}
+      errorMessage={error?.message}
+      onRetry={() => { void refetch(); }}
+      pagination={{ page, limit: LIMIT, total, onPageChange: setPage }}
+      getRowKey={(row) => row.id}
+      onRowClick={(row) => navigate(`/loans/${row.id}`)}
       emptyMessage="Belum ada data pinjaman"
       search={{ value: search, onChange: (value) => { setPage(1); onSearchChange(value); }, placeholder: "Cari nama, ID anggota..." }}
     />
-  </>;
+  );
 }
 
 export function LoansDashboardPage() {
